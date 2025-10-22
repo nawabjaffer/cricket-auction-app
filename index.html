@@ -855,6 +855,220 @@
         box-shadow: 0 0 200px rgba(220, 0, 0, 0);
       }
     }
+    
+    /* Teams Info Overlay */
+    .teams-info-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.95);
+      backdrop-filter: blur(10px);
+      z-index: 20000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+      visibility: hidden;
+      transition: opacity 0.3s ease, visibility 0.3s ease;
+    }
+    
+    .teams-info-overlay.show {
+      opacity: 1;
+      visibility: visible;
+    }
+    
+    .teams-info-container {
+      background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
+      border-radius: 20px;
+      padding: 40px;
+      max-width: 1400px;
+      width: 90%;
+      max-height: 85vh;
+      overflow-y: auto;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.8),
+                  0 0 0 1px rgba(33, 150, 243, 0.3);
+      transform: scale(0.9);
+      opacity: 0;
+      transition: transform 0.3s ease, opacity 0.3s ease;
+    }
+    
+    .teams-info-overlay.show .teams-info-container {
+      transform: scale(1);
+      opacity: 1;
+    }
+    
+    .teams-info-header {
+      text-align: center;
+      margin-bottom: 40px;
+      border-bottom: 3px solid #2196F3;
+      padding-bottom: 20px;
+    }
+    
+    .teams-info-title {
+      font-size: 48px;
+      font-weight: 900;
+      color: #2196F3;
+      text-transform: uppercase;
+      letter-spacing: 4px;
+      margin: 0;
+      text-shadow: 0 0 20px rgba(33, 150, 243, 0.5);
+    }
+    
+    .teams-info-subtitle {
+      font-size: 18px;
+      color: #aaa;
+      margin-top: 10px;
+      letter-spacing: 2px;
+    }
+    
+    .teams-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 20px;
+    }
+    
+    .teams-table thead {
+      background: linear-gradient(135deg, #2196F3 0%, #1976D2 100%);
+    }
+    
+    .teams-table th {
+      padding: 20px 15px;
+      text-align: left;
+      font-size: 16px;
+      font-weight: 700;
+      color: #fff;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      border-bottom: 3px solid #1565C0;
+    }
+    
+    .teams-table th:first-child {
+      border-top-left-radius: 10px;
+    }
+    
+    .teams-table th:last-child {
+      border-top-right-radius: 10px;
+    }
+    
+    .teams-table tbody tr {
+      background: rgba(255, 255, 255, 0.03);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+      transition: all 0.3s ease;
+    }
+    
+    .teams-table tbody tr:hover {
+      background: rgba(33, 150, 243, 0.1);
+      transform: translateX(5px);
+    }
+    
+    .teams-table tbody tr:nth-child(even) {
+      background: rgba(255, 255, 255, 0.05);
+    }
+    
+    .teams-table tbody tr:nth-child(even):hover {
+      background: rgba(33, 150, 243, 0.1);
+    }
+    
+    .teams-table td {
+      padding: 20px 15px;
+      color: #fff;
+      font-size: 18px;
+    }
+    
+    .team-logo-cell {
+      width: 80px;
+      text-align: center;
+    }
+    
+    .team-logo-small {
+      width: 60px;
+      height: 60px;
+      border-radius: 50%;
+      object-fit: cover;
+      border: 3px solid #2196F3;
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+    }
+    
+    .team-name-cell {
+      font-weight: 700;
+      font-size: 22px;
+      color: #2196F3;
+      text-shadow: 0 0 10px rgba(33, 150, 243, 0.3);
+    }
+    
+    .team-stat-value {
+      font-weight: 600;
+      color: #4CAF50;
+    }
+    
+    .team-stat-value.warning {
+      color: #ff9800;
+    }
+    
+    .team-stat-value.danger {
+      color: #f44336;
+    }
+    
+    .team-captain {
+      font-style: italic;
+      color: #aaa;
+    }
+    
+    .close-teams-btn {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      width: 50px;
+      height: 50px;
+      background: rgba(244, 67, 54, 0.9);
+      border: none;
+      border-radius: 50%;
+      color: #fff;
+      font-size: 28px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.3s ease;
+      box-shadow: 0 4px 15px rgba(244, 67, 54, 0.4);
+    }
+    
+    .close-teams-btn:hover {
+      background: rgba(244, 67, 54, 1);
+      transform: rotate(90deg) scale(1.1);
+      box-shadow: 0 6px 20px rgba(244, 67, 54, 0.6);
+    }
+    
+    .teams-info-footer {
+      text-align: center;
+      margin-top: 30px;
+      padding-top: 20px;
+      border-top: 1px solid rgba(255, 255, 255, 0.1);
+      color: #888;
+      font-size: 14px;
+      letter-spacing: 1px;
+    }
+    
+    /* Scrollbar styling for teams container */
+    .teams-info-container::-webkit-scrollbar {
+      width: 10px;
+    }
+    
+    .teams-info-container::-webkit-scrollbar-track {
+      background: rgba(0, 0, 0, 0.3);
+      border-radius: 10px;
+    }
+    
+    .teams-info-container::-webkit-scrollbar-thumb {
+      background: #2196F3;
+      border-radius: 10px;
+    }
+    
+    .teams-info-container::-webkit-scrollbar-thumb:hover {
+      background: #1976D2;
+    }
   </style>
 </head>
 <body>
@@ -973,6 +1187,38 @@
                   transition: opacity 0.3s ease;
                   z-index: 15000;
                   box-shadow: 0 0 20px rgba(33, 150, 243, 0.8);" />
+    </div>
+  </div>
+
+  <!-- Teams Information Overlay -->
+  <div class="teams-info-overlay" id="teamsInfoOverlay">
+    <button class="close-teams-btn" onclick="hideTeamsInfo()">×</button>
+    <div class="teams-info-container">
+      <div class="teams-info-header">
+        <h1 class="teams-info-title">Team Statistics</h1>
+        <p class="teams-info-subtitle">Live Auction Dashboard</p>
+      </div>
+      
+      <table class="teams-table">
+        <thead>
+          <tr>
+            <th>Logo</th>
+            <th>Team Name</th>
+            <th>Players Bought</th>
+            <th>Remaining Players</th>
+            <th>Remaining Purse</th>
+            <th>Highest Bid</th>
+            <th>Captain</th>
+          </tr>
+        </thead>
+        <tbody id="teamsTableBody">
+          <!-- Teams will be populated dynamically -->
+        </tbody>
+      </table>
+      
+      <div class="teams-info-footer">
+        Press 'I' to close • Data updates in real-time from Google Sheets
+      </div>
     </div>
   </div>
 
@@ -1504,6 +1750,88 @@
       showItem(currentIndex + 1);
     }
     
+    // Teams Info Overlay Functions
+    function showTeamsInfo() {
+      const overlay = document.getElementById('teamsInfoOverlay');
+      populateTeamsTable();
+      overlay.classList.add('show');
+    }
+    
+    function hideTeamsInfo() {
+      const overlay = document.getElementById('teamsInfoOverlay');
+      overlay.classList.remove('show');
+    }
+    
+    function toggleTeamsInfo() {
+      const overlay = document.getElementById('teamsInfoOverlay');
+      if (overlay.classList.contains('show')) {
+        hideTeamsInfo();
+      } else {
+        showTeamsInfo();
+      }
+    }
+    
+    function populateTeamsTable() {
+      const tbody = document.getElementById('teamsTableBody');
+      tbody.innerHTML = ''; // Clear existing rows
+      
+      if (teams.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding: 40px; color: #888;">No teams data available</td></tr>';
+        return;
+      }
+      
+      teams.forEach(team => {
+        const row = document.createElement('tr');
+        
+        // Determine status colors
+        let purseClass = 'team-stat-value';
+        if (team.remainingPurse < 500) {
+          purseClass += ' danger';
+        } else if (team.remainingPurse < 2000) {
+          purseClass += ' warning';
+        }
+        
+        let playersClass = 'team-stat-value';
+        if (team.remainingPlayers <= 0) {
+          playersClass += ' danger';
+        } else if (team.remainingPlayers <= 2) {
+          playersClass += ' warning';
+        }
+        
+        // Create logo cell
+        const logoCell = document.createElement('td');
+        logoCell.className = 'team-logo-cell';
+        if (team.logoUrl && team.logoUrl.trim() !== '') {
+          const logoSrc = convertDriveLinkToDirect(team.logoUrl);
+          const logoImg = document.createElement('img');
+          logoImg.src = logoSrc;
+          logoImg.className = 'team-logo-small';
+          logoImg.alt = team.name;
+          logoImg.onerror = function() {
+            this.style.display = 'none';
+          };
+          logoCell.appendChild(logoImg);
+        } else {
+          logoCell.innerHTML = '<div style="width:60px;height:60px;background:#333;border-radius:50%;display:flex;align-items:center;justify-content:center;border:3px solid #2196F3;font-size:24px;">🏏</div>';
+        }
+        
+        // Create cells
+        row.innerHTML = `
+          <td class="team-name-cell">${team.name}</td>
+          <td><span class="team-stat-value">${team.playersBought}</span> / ${team.totalPlayerThreshold}</td>
+          <td><span class="${playersClass}">${team.remainingPlayers}</span></td>
+          <td><span class="${purseClass}">₹${team.remainingPurse.toLocaleString()}</span></td>
+          <td><span class="team-stat-value">₹${team.highestBid.toLocaleString()}</span></td>
+          <td><span class="team-captain">${team.captain || 'TBD'}</span></td>
+        `;
+        
+        // Insert logo cell at the beginning
+        row.insertBefore(logoCell, row.firstChild);
+        
+        tbody.appendChild(row);
+      });
+    }
+    
     // Save sold player data to Google Sheets
     async function saveSoldPlayer(playerData, bidAmount, teamName, teamData) {
       try {
@@ -1842,6 +2170,10 @@
       // Normal key handlers when input is not focused
       if (e.key === 'f' || e.key === 'F') {
         showJumpToPlayerInput();
+        e.preventDefault();
+      }
+      if (e.key === 'i' || e.key === 'I') {
+        toggleTeamsInfo();
         e.preventDefault();
       }
       if (e.key === 'n' || e.key === 'N') {
