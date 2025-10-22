@@ -1069,6 +1069,903 @@
     .teams-info-container::-webkit-scrollbar-thumb:hover {
       background: #1976D2;
     }
+    
+    /* Team Slots View - Apple Inspired Design */
+    .team-slots-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(135deg, rgba(0, 0, 0, 0.95) 0%, rgba(20, 20, 30, 0.95) 100%);
+      backdrop-filter: blur(20px) saturate(180%);
+      -webkit-backdrop-filter: blur(20px) saturate(180%);
+      z-index: 25000;
+      opacity: 0;
+      visibility: hidden;
+      transition: opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1), visibility 0.4s;
+    }
+    
+    /* Team color overlay background */
+    .team-slots-overlay::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: radial-gradient(ellipse at top center, var(--team-color, rgba(33, 150, 243, 0.15)) 0%, transparent 70%);
+      opacity: 0.6;
+      z-index: -1;
+    }
+    
+    .team-slots-overlay.show {
+      opacity: 1;
+      visibility: visible;
+    }
+    
+    .team-slots-container {
+      width: 100%;
+      max-width: 100vw;
+      height: 100vh;
+      margin: 0 auto;
+      padding: 20px 40px;
+      overflow: hidden;
+      transform: translateY(20px);
+      opacity: 0;
+      transition: transform 0.5s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.5s ease;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      box-sizing: border-box;
+    }
+    
+    /* Responsive design for smaller screens */
+    @media (max-width: 1600px) {
+      .team-slots-container {
+        padding: 18px 35px;
+      }
+    }
+    
+    @media (max-width: 1200px) {
+      .team-slots-container {
+        padding: 15px 25px;
+      }
+    }
+    
+    @media (max-width: 768px) {
+      .team-slots-container {
+        padding: 12px 15px;
+      }
+    }
+    
+    .team-slots-overlay.show .team-slots-container {
+      transform: translateY(0);
+      opacity: 1;
+    }
+    
+    /* Team Header Section */
+    .team-slots-header {
+      text-align: center;
+      margin-bottom: 15px;
+      animation: fadeInDown 0.6s ease-out 0.2s both;
+      flex-shrink: 0;
+      width: 100%;
+    }
+    
+    @media (max-width: 768px) {
+      .team-slots-header {
+        margin-bottom: 10px;
+      }
+    }
+    
+    @keyframes fadeInDown {
+      from {
+        opacity: 0;
+        transform: translateY(-30px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+    
+    .team-logo-large {
+      width: 80px;
+      height: 80px;
+      border-radius: 50%;
+      margin: 0 auto 10px;
+      border: 3px solid var(--team-color-border, rgba(255, 255, 255, 0.15));
+      box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5),
+                  0 0 40px var(--team-color-glow, rgba(33, 150, 243, 0.3)),
+                  inset 0 0 0 1px rgba(255, 255, 255, 0.1);
+      object-fit: cover;
+      background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 50px;
+      transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+      position: relative;
+    }
+    
+    .team-logo-large::after {
+      content: '';
+      position: absolute;
+      inset: -4px;
+      border-radius: 50%;
+      background: conic-gradient(from 0deg, 
+                  var(--team-color, rgba(33, 150, 243, 0.4)) 0%, 
+                  transparent 25%, 
+                  var(--team-color-light, rgba(33, 150, 243, 0.2)) 50%, 
+                  transparent 75%, 
+                  var(--team-color, rgba(33, 150, 243, 0.4)) 100%);
+      opacity: 0;
+      transition: opacity 0.4s ease;
+      z-index: -1;
+      animation: rotate 8s linear infinite;
+    }
+    
+    @keyframes rotate {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+    
+    .team-logo-large:hover {
+      transform: scale(1.08);
+      border-color: var(--team-color, rgba(33, 150, 243, 0.6));
+    }
+    
+    .team-logo-large:hover::after {
+      opacity: 1;
+    }
+    
+    @media (max-width: 768px) {
+      .team-logo-large {
+        width: 60px;
+        height: 60px;
+        margin-bottom: 8px;
+      }
+    }
+    
+    .team-slots-title {
+      font-size: 32px;
+      font-weight: 900;
+      color: #fff;
+      text-transform: uppercase;
+      letter-spacing: 3px;
+      margin: 0 0 8px 0;
+      text-shadow: 0 4px 30px rgba(0, 0, 0, 0.6),
+                   0 0 40px var(--team-color-glow, rgba(33, 150, 243, 0.4));
+      background: linear-gradient(135deg, 
+                  #fff 0%, 
+                  var(--team-color, #2196F3) 50%,
+                  var(--team-color-light, #00BCD4) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      animation: shimmer 3s ease-in-out infinite;
+    }
+    
+    @keyframes shimmer {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.9; }
+    }
+    
+    @media (max-width: 1200px) {
+      .team-slots-title {
+        font-size: 28px;
+        letter-spacing: 2.5px;
+      }
+    }
+    
+    @media (max-width: 768px) {
+      .team-slots-title {
+        font-size: 22px;
+        letter-spacing: 1.5px;
+        margin-bottom: 6px;
+      }
+    }
+    
+    .team-stats-summary {
+      display: flex;
+      justify-content: center;
+      gap: 30px;
+      margin-top: 8px;
+      flex-wrap: wrap;
+    }
+    
+    .team-stat-item {
+      text-align: center;
+      padding: 8px 18px;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid var(--team-color-border, rgba(255, 255, 255, 0.1));
+      border-radius: 10px;
+      backdrop-filter: blur(10px);
+      transition: all 0.3s ease;
+      min-width: 110px;
+    }
+    
+    .team-stat-item:hover {
+      background: rgba(255, 255, 255, 0.05);
+      border-color: var(--team-color, rgba(33, 150, 243, 0.4));
+      transform: translateY(-2px);
+      box-shadow: 0 8px 20px var(--team-color-glow, rgba(33, 150, 243, 0.2));
+    }
+    
+    .team-stat-label {
+      font-size: 9px;
+      color: rgba(255, 255, 255, 0.6);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-bottom: 4px;
+      font-weight: 600;
+    }
+    
+    .team-stat-number {
+      font-size: 18px;
+      font-weight: 800;
+      color: var(--team-color, #2196F3);
+      text-shadow: 0 0 20px var(--team-color-glow, rgba(33, 150, 243, 0.5));
+      letter-spacing: 0.5px;
+    }
+    
+    @media (max-width: 768px) {
+      .team-stats-summary {
+        gap: 12px;
+        margin-top: 6px;
+      }
+      
+      .team-stat-item {
+        padding: 6px 12px;
+        min-width: 85px;
+      }
+      
+      .team-stat-number {
+        font-size: 16px;
+      }
+    }
+    
+    /* Players Grid Wrapper */
+    .players-grid-wrapper {
+      width: 100%;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      flex: 1;
+      overflow: hidden;
+      padding: 0;
+    }
+    
+    /* Players Grid */
+    .players-grid {
+      display: grid;
+      grid-template-columns: repeat(6, 1fr);
+      gap: 24px;
+      max-width: 100%;
+      width: 100%;
+      margin: 0 auto;
+      animation: fadeInUp 0.6s ease-out 0.4s both;
+      align-content: center;
+      justify-content: center;
+      padding: 0;
+    }
+    
+    /* Grid variations for different player counts */
+    .players-grid.grid-4-cols {
+      grid-template-columns: repeat(4, 1fr);
+      gap: 28px;
+    }
+    
+    .players-grid.grid-6-cols {
+      grid-template-columns: repeat(6, 1fr);
+      gap: 24px;
+    }
+    
+    /* Responsive grid layout */
+    @media (max-width: 1600px) {
+      .players-grid {
+        gap: 20px;
+      }
+      .players-grid.grid-6-cols {
+        grid-template-columns: repeat(6, 1fr);
+        gap: 20px;
+      }
+      .players-grid.grid-4-cols {
+        grid-template-columns: repeat(4, 1fr);
+        gap: 24px;
+      }
+    }
+    
+    @media (max-width: 1200px) {
+      .players-grid {
+        gap: 18px;
+      }
+      .players-grid.grid-6-cols {
+        grid-template-columns: repeat(4, 1fr);
+        gap: 18px;
+      }
+      .players-grid.grid-4-cols {
+        grid-template-columns: repeat(3, 1fr);
+        gap: 20px;
+      }
+    }
+    
+    @media (max-width: 900px) {
+      .players-grid {
+        gap: 14px;
+      }
+      .players-grid.grid-6-cols {
+        grid-template-columns: repeat(3, 1fr);
+        gap: 14px;
+      }
+      .players-grid.grid-4-cols {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 16px;
+      }
+    }
+    
+    @media (max-width: 600px) {
+      .players-grid {
+        gap: 12px;
+      }
+      .players-grid.grid-6-cols,
+      .players-grid.grid-4-cols {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 12px;
+      }
+    }
+    
+    /* Player Card - Modern Card Holder Design */
+    .player-card {
+      background: linear-gradient(145deg, 
+                  rgba(20, 20, 30, 0.95) 0%, 
+                  rgba(10, 10, 20, 0.98) 100%);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 20px;
+      padding: 0;
+      text-align: center;
+      transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+      position: relative;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: space-between;
+      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6),
+                  0 0 0 1px rgba(255, 255, 255, 0.05) inset,
+                  0 2px 20px -5px var(--team-color-glow, rgba(33, 150, 243, 0.2));
+      width: 100%;
+      height: 100%;
+      aspect-ratio: 3/4;
+      transform-style: preserve-3d;
+      perspective: 1000px;
+      backdrop-filter: blur(10px);
+    }
+    
+    @media (max-width: 768px) {
+      .player-card {
+        border-radius: 16px;
+      }
+    }
+    
+    /* Player Card Background Image - Top Section */
+    .player-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 65%;
+      background: var(--player-image, linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%));
+      background-size: cover;
+      background-position: center 20%;
+      background-repeat: no-repeat;
+      transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+      z-index: 0;
+      border-radius: 20px 20px 0 0;
+    }
+    
+    /* No overlay gradient - clean separation */
+    .player-card::after {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 65%;
+      background: linear-gradient(to bottom, 
+                  rgba(0, 0, 0, 0.1) 0%,
+                  rgba(0, 0, 0, 0.2) 50%,
+                  rgba(0, 0, 0, 0.4) 100%);
+      z-index: 1;
+      pointer-events: none;
+      transition: opacity 0.5s ease;
+      border-radius: 20px 20px 0 0;
+    }
+    
+    .player-card:hover {
+      border-color: var(--team-color, rgba(33, 150, 243, 0.5));
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.8),
+                  0 0 0 1px var(--team-color, rgba(33, 150, 243, 0.3)) inset,
+                  0 5px 40px var(--team-color-glow, rgba(33, 150, 243, 0.4));
+      transform: translateY(-8px);
+    }
+    
+    .player-card:hover::before {
+      background-position: center 15%;
+      transform: scale(1.08);
+    }
+    
+    .player-card:hover::after {
+      opacity: 0.7;
+    }
+    
+    /* TBD Card - Modern Empty Slot Design */
+    .player-card.tbd {
+      background: linear-gradient(145deg, 
+                  rgba(30, 30, 40, 0.6) 0%, 
+                  rgba(20, 20, 30, 0.7) 100%);
+      backdrop-filter: blur(15px);
+      -webkit-backdrop-filter: blur(15px);
+      border-style: dashed;
+      border-color: rgba(255, 255, 255, 0.12);
+      border-width: 2px;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+    
+    .player-card.tbd::before {
+      display: none;
+    }
+    
+    .player-card.tbd::after {
+      display: none;
+    }
+    
+    .player-card.tbd:hover {
+      transform: translateY(-6px);
+      border-color: var(--team-color, rgba(33, 150, 243, 0.3));
+      background: linear-gradient(145deg, 
+                  rgba(35, 35, 45, 0.7) 0%, 
+                  rgba(25, 25, 35, 0.8) 100%);
+      box-shadow: 0 15px 50px rgba(0, 0, 0, 0.5),
+                  0 0 30px var(--team-color-glow, rgba(33, 150, 243, 0.2));
+    }
+    
+    /* Player Avatar - Hidden for sold players (image is in background) */
+    .player-avatar {
+      display: none;
+    }
+    
+    /* TBD Avatar - Visible only for TBD cards */
+    .player-avatar-tbd {
+      width: 100%;
+      max-width: 90px;
+      aspect-ratio: 1/1;
+      border-radius: 50%;
+      margin: 0 auto 16px;
+      border: 3px dashed rgba(255, 255, 255, 0.15);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(255, 255, 255, 0.03);
+      opacity: 0.35;
+      overflow: hidden;
+      flex-shrink: 0;
+      transition: all 0.4s ease;
+    }
+    
+    .player-avatar-tbd img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      opacity: 0.3;
+      filter: grayscale(100%) brightness(0.7);
+      transition: all 0.4s ease;
+    }
+    
+    .player-card.tbd:hover .player-avatar-tbd {
+      opacity: 0.5;
+      border-color: var(--team-color, rgba(33, 150, 243, 0.3));
+      transform: scale(1.05);
+    }
+    
+    .player-card.tbd:hover .player-avatar-tbd img {
+      filter: grayscale(80%) brightness(0.8);
+    }
+    
+    @media (max-width: 768px) {
+      .player-avatar-tbd {
+        max-width: 70px;
+        margin-bottom: 12px;
+        border-width: 2px;
+      }
+    }
+    
+    /* Player Info Container - Dark Background Section */
+    .player-card-info {
+      position: relative;
+      z-index: 2;
+      width: 100%;
+      height: 35%;
+      padding: 18px 14px 16px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(180deg, 
+                  rgba(10, 10, 20, 0.98) 0%,
+                  rgba(5, 5, 15, 1) 100%);
+      border-top: 1px solid rgba(255, 255, 255, 0.05);
+      transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+      gap: 6px;
+    }
+    
+    .player-card:hover .player-card-info {
+      background: linear-gradient(180deg, 
+                  rgba(15, 15, 25, 0.98) 0%,
+                  rgba(8, 8, 18, 1) 100%);
+      padding-top: 20px;
+      gap: 8px;
+    }
+    
+    /* Player Name - Dark background */
+    .player-card-name {
+      font-size: 16px;
+      font-weight: 900;
+      color: #fff;
+      margin: 0;
+      text-transform: uppercase;
+      letter-spacing: 1.2px;
+      line-height: 1.3;
+      text-align: center;
+      width: 100%;
+      text-shadow: 0 2px 10px rgba(0, 0, 0, 0.8);
+      transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+      z-index: 2;
+      position: relative;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+    
+    .player-card:hover .player-card-name {
+      letter-spacing: 1.5px;
+      color: var(--team-color, #2196F3);
+      text-shadow: 0 2px 15px var(--team-color-glow, rgba(33, 150, 243, 0.6)),
+                   0 0 30px var(--team-color-glow, rgba(33, 150, 243, 0.4));
+    }
+    
+    .player-card-role {
+      font-size: 12px;
+      color: rgba(255, 255, 255, 0.7);
+      margin: 0;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      font-weight: 600;
+      text-align: center;
+      z-index: 2;
+      position: relative;
+      transition: all 0.4s ease;
+      padding: 4px 12px;
+      background: rgba(255, 255, 255, 0.03);
+      border-radius: 6px;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    
+    .player-card:hover .player-card-role {
+      color: rgba(255, 255, 255, 0.9);
+      background: rgba(255, 255, 255, 0.05);
+      border-color: var(--team-color, rgba(33, 150, 243, 0.3));
+    }
+    
+    /* Price Badge - Bottom Left in Dark Section */
+    .player-card-price {
+      position: absolute;
+      bottom: 16px;
+      left: 14px;
+      padding: 6px 12px 6px 10px;
+      background: var(--team-color, rgba(33, 150, 243, 0.15));
+      border: 1px solid var(--team-color, rgba(33, 150, 243, 0.3));
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 800;
+      color: var(--team-color, #2196F3);
+      letter-spacing: 0.8px;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+      transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+      z-index: 3;
+      white-space: nowrap;
+      backdrop-filter: blur(10px);
+    }
+    
+    .player-card:hover .player-card-price {
+      background: var(--team-color, rgba(33, 150, 243, 0.25));
+      border-color: var(--team-color, rgba(33, 150, 243, 0.6));
+      color: #fff;
+      box-shadow: 0 4px 20px var(--team-color-glow, rgba(33, 150, 243, 0.4)),
+                  0 0 30px var(--team-color-glow, rgba(33, 150, 243, 0.3));
+      transform: scale(1.05);
+    }
+    
+    /* Role Icon - Bottom Right in Dark Section */
+    .player-role-icon {
+      position: absolute;
+      bottom: 16px;
+      right: 14px;
+      width: 34px;
+      height: 34px;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+      transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+      z-index: 3;
+      backdrop-filter: blur(10px);
+    }
+    
+    .player-card:hover .player-role-icon {
+      background: var(--team-color, rgba(33, 150, 243, 0.2));
+      border-color: var(--team-color, rgba(33, 150, 243, 0.5));
+      box-shadow: 0 4px 20px var(--team-color-glow, rgba(33, 150, 243, 0.4)),
+                  0 0 30px var(--team-color-glow, rgba(33, 150, 243, 0.3));
+      transform: rotate(15deg) scale(1.1);
+    }
+    
+    /* Captain Badge - Top Right on Image */
+    .player-captain-badge {
+      position: absolute;
+      top: 14px;
+      right: 14px;
+      width: 38px;
+      height: 38px;
+      background: linear-gradient(135deg, #FFD700 0%, #FFA500 100%);
+      border: 2px solid rgba(255, 255, 255, 0.95);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      font-weight: 900;
+      color: #000;
+      box-shadow: 0 4px 20px rgba(255, 215, 0, 0.6),
+                  0 0 30px rgba(255, 215, 0, 0.4),
+                  0 0 0 3px rgba(0, 0, 0, 0.3);
+      transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+      z-index: 3;
+      text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+    }
+    
+    .player-card:hover .player-captain-badge {
+      box-shadow: 0 6px 30px rgba(255, 215, 0, 0.9),
+                  0 0 50px rgba(255, 215, 0, 0.7),
+                  0 0 0 4px rgba(0, 0, 0, 0.4);
+      transform: rotate(360deg) scale(1.15);
+    }
+    
+    @media (max-width: 768px) {
+      .player-card-info {
+        padding: 14px 10px 12px;
+        gap: 4px;
+      }
+      
+      .player-card-name {
+        font-size: 13px;
+        letter-spacing: 0.8px;
+      }
+      
+      .player-card-role {
+        font-size: 10px;
+        padding: 3px 8px;
+      }
+      
+      .player-card-price {
+        padding: 5px 10px 5px 8px;
+        font-size: 12px;
+        bottom: 12px;
+        left: 10px;
+      }
+      
+      .player-role-icon {
+        width: 28px;
+        height: 28px;
+        font-size: 15px;
+        bottom: 12px;
+        right: 10px;
+      }
+      
+      .player-captain-badge {
+        width: 32px;
+        height: 32px;
+        font-size: 17px;
+        top: 10px;
+        right: 10px;
+      }
+    }
+    
+    /* TBD Card Specific Styling */
+    .player-card.tbd .player-card-info {
+      height: auto;
+      background: transparent;
+      border-top: none;
+      padding: 0;
+      gap: 0;
+    }
+    
+    .player-card.tbd .player-card-name {
+      position: relative;
+      z-index: 1;
+      text-shadow: none;
+      font-size: 13px;
+      letter-spacing: 1.5px;
+      color: rgba(255, 255, 255, 0.4);
+      font-weight: 700;
+      margin: 0;
+    }
+    
+    .player-card.tbd:hover .player-card-name {
+      color: rgba(255, 255, 255, 0.6);
+      letter-spacing: 2px;
+    }
+    
+    .player-card-tbd-text {
+      font-size: 10px;
+      color: rgba(255, 255, 255, 0.25);
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-top: auto;
+      padding-top: 8px;
+      position: relative;
+      z-index: 1;
+      text-align: center;
+    }
+    
+    @media (max-width: 768px) {
+      .player-card-tbd-text {
+        font-size: 10px;
+        padding-top: 6px;
+      }
+    }
+    
+    /* Close Button */
+    .close-team-slots-btn {
+      position: fixed;
+      top: 30px;
+      right: 30px;
+      width: 56px;
+      height: 56px;
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 50%;
+      color: #fff;
+      font-size: 28px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      z-index: 25001;
+    }
+    
+    .close-team-slots-btn:hover {
+      background: rgba(244, 67, 54, 0.9);
+      border-color: rgba(244, 67, 54, 1);
+      transform: rotate(90deg) scale(1.1);
+      box-shadow: 0 8px 25px rgba(244, 67, 54, 0.4);
+    }
+    
+    /* Team Selection Menu */
+    .team-selection-menu {
+      position: fixed;
+      top: 30px;
+      left: 30px;
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(20px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 15px;
+      padding: 15px;
+      z-index: 25001;
+      opacity: 0;
+      visibility: hidden;
+      transform: translateY(-10px);
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      min-width: 200px;
+    }
+    
+    .team-selection-menu.show {
+      opacity: 1;
+      visibility: visible;
+      transform: translateY(0);
+    }
+    
+    .team-selection-menu-title {
+      font-size: 12px;
+      color: rgba(255, 255, 255, 0.5);
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      margin-bottom: 10px;
+      font-weight: 600;
+    }
+    
+    .team-menu-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 12px;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      margin-bottom: 5px;
+    }
+    
+    .team-menu-item:hover {
+      background: rgba(33, 150, 243, 0.2);
+    }
+    
+    .team-menu-number {
+      width: 28px;
+      height: 28px;
+      background: rgba(33, 150, 243, 0.2);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      font-weight: 700;
+      color: #2196F3;
+    }
+    
+    .team-menu-name {
+      font-size: 15px;
+      color: #fff;
+      font-weight: 600;
+    }
+    
+    /* Section Title */
+    .section-title {
+      font-size: 16px;
+      color: rgba(255, 255, 255, 0.6);
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      margin: 20px 0 15px 0;
+      text-align: center;
+      font-weight: 700;
+    }
+    
+    .players-grid-wrapper {
+      flex: 1;
+      overflow-y: none;
+    }
+    
+    .players-grid-wrapper::-webkit-scrollbar {
+      width: 6px;
+    }
+    
+    .players-grid-wrapper::-webkit-scrollbar-track {
+      background: rgba(0, 0, 0, 0.2);
+    }
+    
+    .players-grid-wrapper::-webkit-scrollbar-thumb {
+      background: rgba(33, 150, 243, 0.5);
+      border-radius: 10px;
+    }
+    
+    .players-grid-wrapper::-webkit-scrollbar-thumb:hover {
+      background: rgba(33, 150, 243, 0.7);
+    }
   </style>
 </head>
 <body>
@@ -1219,6 +2116,21 @@
       <div class="teams-info-footer">
         Press 'I' to close • Data updates in real-time from Google Sheets
       </div>
+    </div>
+  </div>
+
+  <!-- Team Slots View Overlay -->
+  <div class="team-slots-overlay" id="teamSlotsOverlay">
+    <button class="close-team-slots-btn" onclick="hideTeamSlots()">×</button>
+    
+    <!-- Team Selection Menu -->
+    <div class="team-selection-menu" id="teamSelectionMenu">
+      <div class="team-selection-menu-title">Select Team</div>
+      <div id="teamMenuItems"></div>
+    </div>
+    
+    <div class="team-slots-container" id="teamSlotsContainer">
+      <!-- Content will be populated dynamically -->
     </div>
   </div>
 
@@ -1606,7 +2518,8 @@
 
       // Set profile circle image from Google Drive or fallback to placeholder
       const profileImg = document.getElementById('profileImg');
-      const fallbackUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(item.name)}&size=450&background=2196F3&color=fff&bold=true&font-size=0.4`;
+      const avatarConfig = CONFIG.ui.avatarPlaceholder;
+      const fallbackUrl = `${avatarConfig.baseUrl}?name=${encodeURIComponent(item.name)}&size=${avatarConfig.cardSize}&background=${avatarConfig.background}&color=${avatarConfig.color}&bold=${avatarConfig.bold}&font-size=${avatarConfig.fontSize}`;
       
       // Remove any existing error handler
       profileImg.onerror = null;
@@ -1832,6 +2745,286 @@
       });
     }
     
+    // Team Slots View Functions
+    let teamMenuVisible = false;
+    
+    function toggleTeamSelectionMenu() {
+      const menu = document.getElementById('teamSelectionMenu');
+      teamMenuVisible = !teamMenuVisible;
+      
+      if (teamMenuVisible) {
+        populateTeamMenu();
+        menu.classList.add('show');
+      } else {
+        menu.classList.remove('show');
+      }
+    }
+    
+    function hideTeamSelectionMenu() {
+      const menu = document.getElementById('teamSelectionMenu');
+      teamMenuVisible = false;
+      menu.classList.remove('show');
+    }
+    
+    function populateTeamMenu() {
+      const menuItems = document.getElementById('teamMenuItems');
+      menuItems.innerHTML = '';
+      
+      teams.forEach((team, index) => {
+        const item = document.createElement('div');
+        item.className = 'team-menu-item';
+        item.onclick = () => showTeamSlots(index);
+        
+        item.innerHTML = `
+          <div class="team-menu-number">${index + 1}</div>
+          <div class="team-menu-name">${team.name}</div>
+        `;
+        
+        menuItems.appendChild(item);
+      });
+    }
+    
+    // Extract dominant color from team logo
+    async function getTeamColorFromLogo(logoUrl) {
+      return new Promise((resolve) => {
+        const img = new Image();
+        img.crossOrigin = 'Anonymous';
+        
+        img.onload = () => {
+          try {
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            canvas.width = img.width;
+            canvas.height = img.height;
+            ctx.drawImage(img, 0, 0);
+            
+            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const data = imageData.data;
+            
+            let r = 0, g = 0, b = 0, count = 0;
+            
+            // Sample pixels (every 10th pixel for performance)
+            for (let i = 0; i < data.length; i += 40) {
+              const red = data[i];
+              const green = data[i + 1];
+              const blue = data[i + 2];
+              const alpha = data[i + 3];
+              
+              // Skip transparent or very light/dark pixels
+              if (alpha > 128 && (red + green + blue) > 100 && (red + green + blue) < 650) {
+                r += red;
+                g += green;
+                b += blue;
+                count++;
+              }
+            }
+            
+            if (count > 0) {
+              resolve({
+                r: Math.round(r / count),
+                g: Math.round(g / count),
+                b: Math.round(b / count)
+              });
+            } else {
+              // Fallback to default blue
+              resolve({ r: 33, g: 150, b: 243 });
+            }
+          } catch (err) {
+            console.warn('Color extraction failed:', err);
+            resolve({ r: 33, g: 150, b: 243 });
+          }
+        };
+        
+        img.onerror = () => {
+          console.warn('Logo failed to load for color extraction');
+          resolve({ r: 33, g: 150, b: 243 });
+        };
+        
+        img.src = logoUrl;
+      });
+    }
+    
+    // Apply team color theme to overlay
+    function applyTeamTheme(overlayElement, color) {
+      const { r, g, b } = color;
+      
+      // Base team color
+      overlayElement.style.setProperty('--team-color', `rgba(${r}, ${g}, ${b}, 0.6)`);
+      
+      // Lighter variant (increase RGB values by 20%)
+      const lightR = Math.min(255, Math.round(r * 1.2));
+      const lightG = Math.min(255, Math.round(g * 1.2));
+      const lightB = Math.min(255, Math.round(b * 1.2));
+      overlayElement.style.setProperty('--team-color-light', `rgba(${lightR}, ${lightG}, ${lightB}, 0.4)`);
+      
+      // Border color (medium opacity)
+      overlayElement.style.setProperty('--team-color-border', `rgba(${r}, ${g}, ${b}, 0.4)`);
+      
+      // Glow effect (low opacity for soft shadow)
+      overlayElement.style.setProperty('--team-color-glow', `rgba(${r}, ${g}, ${b}, 0.25)`);
+    }
+    
+    async function showTeamSlots(teamIndex) {
+      if (teamIndex < 0 || teamIndex >= teams.length) return;
+      
+      hideTeamSelectionMenu();
+      
+      const overlay = document.getElementById('teamSlotsOverlay');
+      const container = document.getElementById('teamSlotsContainer');
+      const team = teams[teamIndex];
+      
+      // Fetch sold players for this team
+      const soldPlayers = await fetchSoldPlayersForTeam(team.name);
+      
+      // Generate TBD slots
+      const remainingSlots = team.totalPlayerThreshold - soldPlayers.length;
+      
+      // Calculate total players and determine grid layout
+      const totalPlayers = soldPlayers.length + remainingSlots;
+      const gridClass = totalPlayers <= CONFIG.ui.teamSlotsGrid.maxPlayersPer6Cols ? 'grid-6-cols' : 'grid-4-cols';
+      
+      // Extract team color from logo and apply theme
+      if (team.logoUrl && team.logoUrl.trim() !== '') {
+        const teamColor = await getTeamColorFromLogo(convertDriveLinkToDirect(team.logoUrl));
+        applyTeamTheme(overlay, teamColor);
+      } else {
+        // Apply default theme if no logo
+        applyTeamTheme(overlay, { r: 33, g: 150, b: 243 });
+      }
+      
+      // Build the HTML
+      let html = `
+        <div class="team-slots-header">
+          <div class="team-logo-large">
+            ${team.logoUrl && team.logoUrl.trim() !== '' 
+              ? `<img src="${convertDriveLinkToDirect(team.logoUrl)}" alt="${team.name}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;" onerror="this.parentElement.innerHTML='🏏'">` 
+              : '🏏'}
+          </div>
+          <h1 class="team-slots-title">${team.name}</h1>
+          <div class="team-stats-summary">
+            <div class="team-stat-item">
+              <div class="team-stat-label">Players</div>
+              <div class="team-stat-number">${soldPlayers.length}/${team.totalPlayerThreshold}</div>
+            </div>
+            <div class="team-stat-item">
+              <div class="team-stat-label">Purse Left</div>
+              <div class="team-stat-number">₹${team.remainingPurse.toLocaleString()}</div>
+            </div>
+            <div class="team-stat-item">
+              <div class="team-stat-label">Highest Bid</div>
+              <div class="team-stat-number">₹${team.highestBid.toLocaleString()}</div>
+            </div>
+          </div>
+        </div>
+      `;
+      
+      html += '<div class="players-grid-wrapper">';
+      html += `<div class="players-grid ${gridClass}">`;
+      
+      // Add sold players
+      if (soldPlayers.length > 0) {
+        soldPlayers.forEach(player => {
+          const avatarConfig = CONFIG.ui.avatarPlaceholder;
+          const placeholderUrl = `${avatarConfig.baseUrl}?name=${encodeURIComponent(player.name)}&size=${avatarConfig.teamSlotSize}&background=${avatarConfig.background}&color=${avatarConfig.color}&bold=${avatarConfig.bold}&font-size=${avatarConfig.fontSize}`;
+          const avatarUrl = player.imageUrl 
+            ? convertDriveLinkToDirect(player.imageUrl)
+            : placeholderUrl;
+          
+          // Determine role icon
+          const role = (player.role || 'Player').toLowerCase();
+          let roleIcon = '🏏'; // Default cricket icon
+          if (role.includes('bowler') && role.includes('bat')) {
+            roleIcon = '🏏⚾'; // All-rounder: bat and ball
+          } else if (role.includes('bowl')) {
+            roleIcon = '⚾'; // Bowler: ball
+          } else if (role.includes('bat')) {
+            roleIcon = '🏏'; // Batsman: bat
+          } else if (role.includes('wicket') || role.includes('keeper') || role.includes('wk')) {
+            roleIcon = '🧤'; // Wicket Keeper: glove
+          }
+          
+          // Check if captain (you may need to add captain info to your data)
+          const isCaptain = player.captain === true || player.isCaptain === true;
+          const captainBadge = isCaptain ? '<div class="player-captain-badge">C</div>' : '';
+          
+          html += `
+            <div class="player-card" style="--player-image: url('${avatarUrl}')">
+              ${captainBadge}
+              <div class="player-card-info">
+                <h3 class="player-card-name">${player.name}</h3>
+                <p class="player-card-role">${player.role || 'Player'}</p>
+              </div>
+              <div class="player-card-price">₹${player.soldAmount.toLocaleString()}</div>
+              <div class="player-role-icon">${roleIcon}</div>
+            </div>
+          `;
+        });
+      }
+      
+      // Add TBD slots
+      if (remainingSlots > 0) {
+        for (let i = 0; i < remainingSlots; i++) {
+          html += `
+            <div class="player-card tbd">
+              <div class="player-avatar-tbd">
+                <img src="${CONFIG.assets.placeholderMan}" alt="TBD Player">
+              </div>
+              <h3 class="player-card-name">Slot ${soldPlayers.length + i + 1}</h3>
+              <p class="player-card-tbd-text">To Be Decided</p>
+            </div>
+          `;
+        }
+      }
+      
+      html += '</div>'; // Close players-grid
+      html += '</div>'; // Close players-grid-wrapper
+      
+      container.innerHTML = html;
+      overlay.classList.add('show');
+    }
+    
+    function hideTeamSlots() {
+      const overlay = document.getElementById('teamSlotsOverlay');
+      overlay.classList.remove('show');
+    }
+    
+    async function fetchSoldPlayersForTeam(teamName) {
+      try {
+        const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(SOLD_SHEET_RANGE)}?key=${API_KEY}`;
+        const resp = await fetch(url);
+        const data = await resp.json();
+        
+        if (!data.values || data.values.length === 0) {
+          return [];
+        }
+        
+        const cols = CONFIG.columnMappings.soldPlayers;
+        const soldPlayers = [];
+        
+        // Skip header row
+        for (let i = 1; i < data.values.length; i++) {
+          const row = data.values[i];
+          const playerTeam = row[cols.teamName] || '';
+          
+          if (playerTeam === teamName) {
+            soldPlayers.push({
+              id: row[cols.id] || '',
+              imageUrl: row[cols.imageUrl] || '',
+              name: row[cols.name] || 'Unknown',
+              role: row[cols.role] || 'Player',
+              soldAmount: parseFloat(row[cols.soldAmount]) || 0,
+              soldDate: row[cols.soldDate] || ''
+            });
+          }
+        }
+        
+        return soldPlayers;
+      } catch (error) {
+        console.error('Error fetching sold players:', error);
+        return [];
+      }
+    }
+    
     // Save sold player data to Google Sheets
     async function saveSoldPlayer(playerData, bidAmount, teamName, teamData) {
       try {
@@ -1997,16 +3190,17 @@
       void overlay.offsetWidth;
       
       // Show overlay first with smooth fade
+      const soldAnim = CONFIG.ui.animations.soldOverlay;
       setTimeout(() => {
         overlay.classList.add('show');
-      }, 50);
+      }, soldAnim.showDelay);
       
       // Start hammer animation after overlay is visible
       setTimeout(() => {
         hammer.classList.add('strike');
-      }, 150);
+      }, soldAnim.hammerStrike);
       
-      // Show impact and stamp when hammer hits center (at ~45% of 1.4s = 630ms)
+      // Show impact and stamp when hammer hits center
       setTimeout(() => {
         impact.classList.add('show');
         stamp.classList.add('stamping');
@@ -2015,8 +3209,8 @@
         // Remove impact shake after animation
         setTimeout(() => {
           overlay.classList.remove('impact');
-        }, 300);
-      }, 780);
+        }, soldAnim.impactDuration);
+      }, soldAnim.impactDelay);
       
       // Keep sold screen visible and show input after animation
       setTimeout(() => {
@@ -2031,7 +3225,7 @@
         
         // Show jump to player input - overlay stays visible
         showJumpToPlayerInput();
-      }, 4000);
+      }, soldAnim.totalDuration);
     }
 
     function unsoldAnimation() {
@@ -2047,19 +3241,20 @@
       // Show overlay
       overlay.classList.add('show');
       
-      // Trigger animations in sequence
+      // Trigger animations in sequence using config timings
+      const unsoldAnim = CONFIG.ui.animations.unsoldOverlay;
       setTimeout(() => {
         x.classList.add('animate');
-      }, 100);
+      }, unsoldAnim.xAnimationDelay);
       
       setTimeout(() => {
         text.classList.add('animate');
         playUnsoldSound();
-      }, 400);
+      }, unsoldAnim.textAnimationDelay);
       
       setTimeout(() => {
         subtext.classList.add('animate');
-      }, 700);
+      }, unsoldAnim.subtextDelay);
       
       // Keep unsold screen visible after animation
       setTimeout(() => {
@@ -2073,8 +3268,8 @@
         // Show jump to player input - overlay stays visible
         setTimeout(() => {
           showJumpToPlayerInput();
-        }, 500);
-      }, 3000);
+        }, unsoldAnim.inputDelay);
+      }, unsoldAnim.totalDuration);
     }
 
     function jumpToPlayer(playerId) {
@@ -2158,7 +3353,7 @@
           e.preventDefault();
           return;
         }
-        if (e.key === 'Escape') {
+        if (e.key === CONFIG.hotkeys.closeOverlay) {
           returnToCurrentPlayer();
           e.preventDefault();
           return;
@@ -2167,30 +3362,79 @@
         return;
       }
       
-      // Normal key handlers when input is not focused
-      if (e.key === 'f' || e.key === 'F') {
+      // Normal key handlers when input is not focused - using CONFIG.hotkeys
+      const key = e.key.toLowerCase();
+      
+      // Jump to player
+      if (key === CONFIG.hotkeys.jumpToPlayer.toLowerCase()) {
         showJumpToPlayerInput();
         e.preventDefault();
       }
-      if (e.key === 'i' || e.key === 'I') {
+      
+      // Show teams info
+      if (key === CONFIG.hotkeys.showTeamsInfo.toLowerCase()) {
         toggleTeamsInfo();
         e.preventDefault();
       }
-      if (e.key === 'n' || e.key === 'N') {
+      
+      // Show team menu
+      if (key === CONFIG.hotkeys.showTeamMenu.toLowerCase()) {
+        toggleTeamSelectionMenu();
+        e.preventDefault();
+      }
+      
+      // Team slots shortcuts (1-8)
+      const teamSlotsKeys = CONFIG.hotkeys.teamSlots;
+      for (let i = 1; i <= 8; i++) {
+        const teamKey = teamSlotsKeys[`team${i}`];
+        if (e.key === teamKey) {
+          const teamIndex = i - 1;
+          if (teamIndex < teams.length) {
+            showTeamSlots(teamIndex);
+            e.preventDefault();
+          }
+        }
+      }
+      
+      // Next player
+      if (key === CONFIG.hotkeys.nextPlayer.toLowerCase()) {
         nextItem();
       }
-      if (e.key === 's' || e.key === 'S') {
-        soldOutAnimation(); // This now shows team selection modal
+      
+      // Mark sold
+      if (key === CONFIG.hotkeys.markSold.toLowerCase()) {
+        soldOutAnimation();
       }
-      if (e.key === 'u' || e.key === 'U') {
+      
+      // Mark unsold
+      if (key === CONFIG.hotkeys.markUnsold.toLowerCase()) {
         unsoldAnimation();
       }
-      // Bid increment controls from config
-      if (e.key === '1') {
+      
+      // Bid increment controls
+      if (e.key === CONFIG.hotkeys.bidIncrements.small) {
         increaseBid(CONFIG.auction.bidIncrements.small);
       }
-      if (e.key === '2') {
+      if (e.key === CONFIG.hotkeys.bidIncrements.large) {
         increaseBid(CONFIG.auction.bidIncrements.large);
+      }
+      
+      // Close overlays with Escape key
+      if (e.key === CONFIG.hotkeys.closeOverlay) {
+        const teamsInfoOverlay = document.getElementById('teamsInfoOverlay');
+        const teamMenuOverlay = document.getElementById('teamMenuOverlay');
+        const teamSlotsOverlay = document.getElementById('teamSlotsOverlay');
+        
+        if (teamsInfoOverlay && teamsInfoOverlay.classList.contains('show')) {
+          toggleTeamsInfo();
+          e.preventDefault();
+        } else if (teamMenuOverlay && teamMenuOverlay.classList.contains('show')) {
+          hideTeamSelectionMenu();
+          e.preventDefault();
+        } else if (teamSlotsOverlay && teamSlotsOverlay.classList.contains('show')) {
+          hideTeamSlots();
+          e.preventDefault();
+        }
       }
     });
 
@@ -2209,7 +3453,7 @@
       setTimeout(() => {
         preloadAllPlayerImages();
         preloadTeamLogos();
-      }, 100);
+      }, CONFIG.ui.animations.imagePreload.startDelay);
       
       nextItem();
     })();

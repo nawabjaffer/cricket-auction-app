@@ -37,7 +37,83 @@ const CONFIG = {
   
   // Asset Paths
   assets: {
-    backgroundImage: './assets/BG.jpg'
+    backgroundImage: './assets/BG.jpg',
+    placeholderMan: './assets/man.jpg'
+  },
+  
+  // UI/UX Settings
+  ui: {
+    // Animation Timings (in milliseconds)
+    animations: {
+      soldOverlay: {
+        showDelay: 50,           // Delay before showing overlay
+        hammerStrike: 150,       // Delay before hammer animation
+        impactDelay: 780,        // Delay before impact/stamp (at ~45% of 1.4s)
+        impactDuration: 300,     // Duration of screen shake
+        totalDuration: 4000      // Total time before showing input
+      },
+      unsoldOverlay: {
+        xAnimationDelay: 100,    // Delay before X animation
+        textAnimationDelay: 400, // Delay before text animation
+        subtextDelay: 700,       // Delay before subtext
+        totalDuration: 3000,     // Total time before showing input
+        inputDelay: 500          // Extra delay before showing input
+      },
+      imagePreload: {
+        startDelay: 100          // Delay before starting image preloading
+      }
+    },
+    
+    // Avatar/Placeholder Settings
+    avatarPlaceholder: {
+      baseUrl: 'https://ui-avatars.com/api/',
+      cardSize: 450,             // Size for main player card
+      teamSlotSize: 300,         // Size for team slots view
+      background: '2196F3',      // Background color (hex without #)
+      color: 'fff',              // Text color (hex without #)
+      bold: true,
+      fontSize: 0.4
+    },
+    
+    // Grid Layout Breakpoints (in pixels)
+    breakpoints: {
+      desktop: 1600,    // Desktop and larger
+      laptop: 1200,     // Laptop screens
+      tablet: 900,      // Tablet screens
+      mobile: 768,      // Mobile devices
+      small: 600        // Small mobile devices
+    },
+    
+    // Team Slots Grid Configuration
+    teamSlotsGrid: {
+      maxPlayersPer6Cols: 12,   // Max players for 6-column grid
+      // Above this number, use 4-column grid
+    }
+  },
+  
+  // Keyboard Shortcuts / Hotkeys
+  hotkeys: {
+    nextPlayer: 'n',           // Next player
+    markSold: 's',             // Mark player as sold
+    markUnsold: 'u',           // Mark player as unsold
+    jumpToPlayer: 'f',         // Jump to specific player
+    showTeamsInfo: 'i',        // Show teams information overlay
+    showTeamMenu: 't',         // Show team selection menu
+    closeOverlay: 'Escape',    // Close any open overlay
+    teamSlots: {
+      team1: '1',              // Show Team 1 slots
+      team2: '2',              // Show Team 2 slots
+      team3: '3',              // Show Team 3 slots
+      team4: '4',              // Show Team 4 slots
+      team5: '5',              // Show Team 5 slots
+      team6: '6',              // Show Team 6 slots
+      team7: '7',              // Show Team 7 slots
+      team8: '8'               // Show Team 8 slots
+    },
+    bidIncrements: {
+      small: 'q',              // Add small bid increment (₹100)
+      large: 'w'               // Add large bid increment (₹200)
+    }
   },
   
   // Default Team Settings (used if fetch fails)
@@ -96,6 +172,17 @@ Object.freeze(CONFIG.auction.bidIncrements);
 Object.freeze(CONFIG.audio);
 Object.freeze(CONFIG.audio.files);
 Object.freeze(CONFIG.assets);
+Object.freeze(CONFIG.ui);
+Object.freeze(CONFIG.ui.animations);
+Object.freeze(CONFIG.ui.animations.soldOverlay);
+Object.freeze(CONFIG.ui.animations.unsoldOverlay);
+Object.freeze(CONFIG.ui.animations.imagePreload);
+Object.freeze(CONFIG.ui.avatarPlaceholder);
+Object.freeze(CONFIG.ui.breakpoints);
+Object.freeze(CONFIG.ui.teamSlotsGrid);
+Object.freeze(CONFIG.hotkeys);
+Object.freeze(CONFIG.hotkeys.teamSlots);
+Object.freeze(CONFIG.hotkeys.bidIncrements);
 Object.freeze(CONFIG.columnMappings);
 Object.freeze(CONFIG.columnMappings.players);
 Object.freeze(CONFIG.columnMappings.teams);
