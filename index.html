@@ -3,6 +3,18 @@
 <head>
   <meta charset="UTF-8">
   <title>Cricket Player Auction Card</title>
+  
+  <!-- DNS Prefetch for faster image loading -->
+  <link rel="dns-prefetch" href="//drive.google.com">
+  <link rel="dns-prefetch" href="//ui-avatars.com">
+  
+  <!-- Preconnect to image sources -->
+  <link rel="preconnect" href="https://drive.google.com">
+  <link rel="preconnect" href="https://ui-avatars.com">
+  
+  <!-- Preload critical background image -->
+  <link rel="preload" as="image" href="./assets/BG.jpg">
+  
   <style>
     /* Basic reset & container */
     body, html {
@@ -88,6 +100,14 @@
       height: 190%;
       object-fit: cover;
       margin-top: -70px;
+      opacity: 0;
+      animation: fadeInImage 0.3s ease-in forwards;
+    }
+    
+    @keyframes fadeInImage {
+      to {
+        opacity: 1;
+      }
     }
     
     .player-id-badge {
@@ -839,7 +859,12 @@
     <div class="profile-container">
       <!-- Circular Profile Image -->
       <div class="profile-circle">
-        <img id="profileImg" src="https://via.placeholder.com/450/2d5f3f/ffffff?text=Player" alt="Player Profile"/>
+        <img id="profileImg" 
+             src="https://via.placeholder.com/450/2d5f3f/ffffff?text=Player" 
+             alt="Player Profile"
+             loading="eager"
+             decoding="async"
+             fetchpriority="high"/>
       </div>
       
       <!-- Player Info -->
@@ -877,7 +902,7 @@
     <div class="bid-display" id="bidDisplay">
       <div class="bid-label">Current Bid</div>
       <div class="bid-amount" id="bidAmount">₹0</div>
-      <div class="bid-increment-info">Press 1: +100 | Press 2: +200</div>
+      <div class="bid-increment-info" id="bidIncrementInfo">Press 1: +100 | Press 2: +200</div>
     </div>
     
     <!-- <div class="footer">
@@ -941,27 +966,29 @@
                   box-shadow: 0 0 20px rgba(33, 150, 243, 0.8);" />
   </div>
 
+  <!-- Load Configuration First -->
+  <script src="./config.js"></script>
+  
   <audio id="soldSound" preload="auto">
-    <source src="./assets/sold.mp3" type="audio/mpeg">
+    <source id="soldSoundSource" src="./assets/sold.mp3" type="audio/mpeg">
   </audio>
   <audio id="unsoldSound" preload="auto">
-    <source src="./assets/unsold.mp3" type="audio/mpeg">
+    <source id="unsoldSoundSource" src="./assets/unsold.mp3" type="audio/mpeg">
   </audio>
-
+  
   <script>
-    // --- CONFIGURATION ---
-    const SHEET_ID = '1-ZcLNOcy-iAKsLVQelBXOaXX6DhgPevy4kx1nvT9WCs';
-    const SHEET_RANGE = 'BCC Tournament Registration!A2:U';
-    const TEAMS_SHEET_RANGE = 'Teams!A2:H'; // Teams sheet with all team data
-    const SOLD_SHEET_RANGE = 'Sold Players!A:I'; // Sheet to save sold data (added team column)
-    const API_KEY = 'AIzaSyC0sO4eAmfmi0QXqBUE912dpvVofuDrVHI';
-    // --- END CONFIG ---
+    // Configuration loaded from config.js
+    const SHEET_ID = CONFIG.googleSheets.sheetId;
+    const SHEET_RANGE = CONFIG.googleSheets.ranges.players;
+    const TEAMS_SHEET_RANGE = CONFIG.googleSheets.ranges.teams;
+    const SOLD_SHEET_RANGE = CONFIG.googleSheets.ranges.soldPlayers;
+    const API_KEY = CONFIG.googleSheets.apiKey;
     
     let items = [];
     let teams = [];
     let currentIndex = -1;
     let currentBid = 0;
-    let basePrice = 100;
+    let basePrice = CONFIG.auction.basePrice;
     
     // Track unsold players and sold players
     let unsoldPlayers = [];
@@ -973,46 +1000,222 @@
     let soldSound = null;
     let unsoldSound = null;
     
+    // Image preloading cache
+    const imageCache = new Map();
+    const preloadQueue = [];
+    
+    function preloadImage(url) {
+      if (!url || url.trim() === '' || imageCache.has(url)) {
+        return Promise.resolve();
+      }
+      
+      return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => {
+          imageCache.set(url, img);
+          console.log('✓ Preloaded image:', url.substring(0, 50) + '...');
+          resolve(img);
+        };
+        img.onerror = () => {
+          console.warn('⚠️ Failed to preload image:', url.substring(0, 50) + '...');
+          reject();
+        };
+        img.src = url;
+      });
+    }
+    
+    function preloadNextImages(currentIdx, count = 3) {
+      // Preload the next 'count' player images
+      for (let i = 1; i <= count; i++) {
+        const nextIndex = (currentIdx + i) % items.length;
+        if (items[nextIndex] && items[nextIndex].imageUrl) {
+          const imageUrl = convertDriveLinkToDirect(items[nextIndex].imageUrl);
+          preloadImage(imageUrl).catch(() => {});
+        }
+      }
+    }
+    
+    function preloadAllPlayerImages() {
+      console.log('Starting to preload all player images...');
+      const promises = items.map(item => {
+        if (item.imageUrl) {
+          const imageUrl = convertDriveLinkToDirect(item.imageUrl);
+          return preloadImage(imageUrl).catch(() => {});
+        }
+        return Promise.resolve();
+      });
+      
+      Promise.all(promises).then(() => {
+        console.log(`✓ Preloaded ${imageCache.size} player images`);
+      });
+    }
+    
+    function preloadTeamLogos() {
+      console.log('Preloading team logos...');
+      teams.forEach(team => {
+        if (team.logoUrl) {
+          const logoUrl = convertDriveLinkToDirect(team.logoUrl);
+          preloadImage(logoUrl).catch(() => {});
+        }
+      });
+    }
+    
     function initializeAudio() {
+      // Set audio sources from config
+      document.getElementById('soldSoundSource').src = CONFIG.audio.files.sold;
+      document.getElementById('unsoldSoundSource').src = CONFIG.audio.files.unsold;
+      
       soldSound = document.getElementById('soldSound');
       unsoldSound = document.getElementById('unsoldSound');
       
-      // Set volume
-      if (soldSound) soldSound.volume = 1.0;
-      if (unsoldSound) unsoldSound.volume = 1.0;
+      // Set volume from config BEFORE loading
+      if (soldSound) soldSound.volume = CONFIG.audio.volume;
+      if (unsoldSound) unsoldSound.volume = CONFIG.audio.volume;
+      
+      // Load audio files
+      soldSound.load();
+      unsoldSound.load();
       
       // Log audio readiness
       soldSound.addEventListener('canplaythrough', () => {
-        console.log('Sold sound ready to play');
+        console.log('✓ Sold sound ready to play (canplaythrough)');
+        console.log('  Ready state:', soldSound.readyState);
+        console.log('  Duration:', soldSound.duration);
       });
       unsoldSound.addEventListener('canplaythrough', () => {
-        console.log('Unsold sound ready to play');
+        console.log('✓ Unsold sound ready to play (canplaythrough)');
+      });
+      
+      soldSound.addEventListener('loadeddata', () => {
+        console.log('✓ Sold sound data loaded');
       });
       
       // Log errors
       soldSound.addEventListener('error', (e) => {
-        console.error('Sold sound error:', e, soldSound.error);
+        console.error('✗ Sold sound error:', e, soldSound.error);
+        if (soldSound.error) {
+          console.error('  Error code:', soldSound.error.code);
+          console.error('  Error message:', soldSound.error.message);
+        }
       });
       unsoldSound.addEventListener('error', (e) => {
-        console.error('Unsold sound error:', e, unsoldSound.error);
+        console.error('✗ Unsold sound error:', e, unsoldSound.error);
       });
+      
+      // Unlock audio on first user interaction (for browser autoplay policy)
+      const unlockAudio = () => {
+        console.log('Unlocking audio on user interaction...');
+        
+        // Unlock sold sound
+        const soldPromise = soldSound.play().then(() => {
+          soldSound.pause();
+          soldSound.currentTime = 0;
+          console.log('✓ Sold audio unlocked');
+        }).catch(e => {
+          console.warn('⚠️ Sold audio unlock failed:', e.name, e.message);
+        });
+        
+        // Unlock unsold sound
+        const unsoldPromise = unsoldSound.play().then(() => {
+          unsoldSound.pause();
+          unsoldSound.currentTime = 0;
+          console.log('✓ Unsold audio unlocked');
+        }).catch(e => {
+          console.warn('⚠️ Unsold audio unlock failed:', e.name, e.message);
+        });
+        
+        Promise.all([soldPromise, unsoldPromise]).then(() => {
+          console.log('✓ All audio unlocked successfully');
+        });
+      };
+      
+      // Listen for first user interaction
+      document.addEventListener('click', unlockAudio, { once: true });
+      document.addEventListener('touchstart', unlockAudio, { once: true });
     }
     
     function playSoldSound() {
-      if (soldSound) {
+      if (!soldSound) {
+        console.error('✗ Sold sound element not found');
+        return;
+      }
+      
+      console.log('Attempting to play sold sound...');
+      console.log('Audio ready state:', soldSound.readyState);
+      console.log('Audio source:', soldSound.src || soldSound.currentSrc);
+      console.log('Audio volume:', soldSound.volume);
+      console.log('Audio muted:', soldSound.muted);
+      
+      // Function to actually play the sound
+      const attemptPlay = () => {
         soldSound.currentTime = 0; // Reset to start
-        soldSound.play()
-          .then(() => console.log('Sold sound playing'))
-          .catch(e => console.error('Error playing sold sound:', e));
+        
+        const playPromise = soldSound.play();
+        
+        if (playPromise !== undefined) {
+          playPromise
+            .then(() => {
+              console.log('✓ Sold sound playing successfully');
+              console.log('Audio duration:', soldSound.duration);
+            })
+            .catch(e => {
+              console.error('✗ Error playing sold sound:', e);
+              console.error('Error name:', e.name);
+              console.error('Error message:', e.message);
+              if (soldSound.error) {
+                console.error('Audio error code:', soldSound.error.code);
+                console.error('Audio error message:', soldSound.error.message);
+              }
+              
+              // Try to provide helpful feedback
+              if (e.name === 'NotAllowedError') {
+                console.warn('⚠️ Audio playback blocked by browser. User interaction may be required.');
+                console.warn('💡 Try clicking anywhere on the page first to enable audio.');
+              } else if (e.name === 'NotSupportedError') {
+                console.error('⚠️ Audio format not supported or file cannot be loaded.');
+              }
+            });
+        }
+      };
+      
+      // Check if audio is ready to play (readyState >= 3 means HAVE_FUTURE_DATA)
+      if (soldSound.readyState >= 3) {
+        console.log('Audio is ready, playing immediately');
+        attemptPlay();
+      } else {
+        console.log('Audio not fully loaded, waiting for canplay event...');
+        // Wait for audio to be ready
+        soldSound.addEventListener('canplay', function onCanPlay() {
+          console.log('Audio now ready after waiting');
+          soldSound.removeEventListener('canplay', onCanPlay);
+          attemptPlay();
+        }, { once: true });
+        
+        // Also reload the audio to ensure it loads
+        soldSound.load();
       }
     }
     
     function playUnsoldSound() {
-      if (unsoldSound) {
-        unsoldSound.currentTime = 0; // Reset to start
-        unsoldSound.play()
-          .then(() => console.log('Unsold sound playing'))
-          .catch(e => console.error('Error playing unsold sound:', e));
+      if (!unsoldSound) {
+        console.error('✗ Unsold sound element not found');
+        return;
+      }
+      
+      console.log('Attempting to play unsold sound...');
+      unsoldSound.currentTime = 0; // Reset to start
+      
+      const playPromise = unsoldSound.play();
+      
+      if (playPromise !== undefined) {
+        playPromise
+          .then(() => console.log('✓ Unsold sound playing successfully'))
+          .catch(e => {
+            console.error('✗ Error playing unsold sound:', e);
+            if (e.name === 'NotAllowedError') {
+              console.warn('⚠️ Audio playback blocked by browser. User interaction may be required.');
+            }
+          });
       }
     }
 
@@ -1025,10 +1228,10 @@
         console.error('No data found in sheet');
         return;
       }
-      // Map sheet columns: 
-      // Column A(0)=ID, B(1)=ImageURL, C(2)=Name, D(3)=Age, E(4)=Role, F(5)=Matches, G(6)=BestFigures
+      // Map sheet columns using CONFIG.columnMappings.players
+      const cols = CONFIG.columnMappings.players;
       items = data.values.map((row, index) => {
-        const dateOfBirth = row[4] || '';
+        const dateOfBirth = row[cols.dateOfBirth] || '';
         let age = 'N/A';
 
         // Calculate age if date of birth is provided
@@ -1045,16 +1248,16 @@
         }
         
         return {
-          id: row[1] || `P${String(index + 1).padStart(3, '0')}`,
-          imageUrl: row[2] || '',
-          name: row[3] || 'Unknown Player',
+          id: row[cols.id] || `P${String(index + 1).padStart(3, '0')}`,
+          imageUrl: row[cols.imageUrl] || '',
+          name: row[cols.name] || 'Unknown Player',
           dateOfBirth: dateOfBirth,
           age: age,
-          role: row[9] || 'Player',
-          matches: row[18] || '0',
-          bowlingBestFigures: row[19] || 'N/A',
-          battingBestFigures: row[20] || 'N/A',
-          bestFigures: row[9] && row[9].toLowerCase().includes('Allrounder') ? (row[19] || 'N/A') : (row[18] || 'N/A')
+          role: row[cols.role] || 'Player',
+          matches: row[cols.matches] || '0',
+          bowlingBestFigures: row[cols.bowlingBest] || 'N/A',
+          battingBestFigures: row[cols.battingBest] || 'N/A',
+          bestFigures: row[cols.role] && row[cols.role].toLowerCase().includes('Allrounder') ? (row[cols.bowlingBest] || 'N/A') : (row[cols.matches] || 'N/A')
         };
       });
       console.log('Loaded items:', items);
@@ -1070,30 +1273,30 @@
           console.error('No teams found in sheet');
           return;
         }
-        // Map team columns:
-        // A(0)=Team Name, B(1)=Team Logo URL, C(2)=Player Bought, D(3)=Remaining Players, 
-        // E(4)=Allocated Amount, F(5)=Remaining Pursue, G(6)=Highest Bid Value, H(7)=Captain
-        teams = data.values.map((row, index) => ({
-          name: row[0] || `Team ${index + 1}`,
-          logoUrl: row[1] || '',
-          playersBought: parseInt(row[2]) || 0,
-          remainingPlayers: parseInt(row[3]) || 0,
-          allocatedAmount: parseFloat(row[4]) || 0,
-          remainingPurse: parseFloat(row[5]) || 0,
-          highestBid: parseFloat(row[6]) || 0,
-          captain: row[7] || ''
-        }));
+        // Map team columns using CONFIG.columnMappings.teams
+        const cols = CONFIG.columnMappings.teams;
+        teams = data.values.map((row, index) => {
+          const totalPlayerThreshold = parseInt(row[cols.totalPlayerThreshold]) || 11;
+          const playersBought = parseInt(row[cols.playersBought]) || 0;
+          
+          return {
+            name: row[cols.name] || `Team ${index + 1}`,
+            logoUrl: row[cols.logoUrl] || '',
+            playersBought: playersBought,
+            totalPlayerThreshold: totalPlayerThreshold,
+            remainingPlayers: totalPlayerThreshold - playersBought, // Calculate from threshold
+            allocatedAmount: parseFloat(row[cols.allocatedAmount]) || 0,
+            remainingPurse: parseFloat(row[cols.remainingPurse]) || 0,
+            highestBid: parseFloat(row[cols.highestBid]) || 0,
+            captain: row[cols.captain] || ''
+          };
+        });
         console.log('Loaded teams:', teams);
         populateTeamDropdown();
       } catch (error) {
         console.error('Error fetching teams:', error);
-        // Add default teams if fetch fails
-        teams = [
-          {name: 'Team A', logoUrl: '', playersBought: 0, remainingPlayers: 11, allocatedAmount: 100000, remainingPurse: 100000, highestBid: 0, captain: ''},
-          {name: 'Team B', logoUrl: '', playersBought: 0, remainingPlayers: 11, allocatedAmount: 100000, remainingPurse: 100000, highestBid: 0, captain: ''},
-          {name: 'Team C', logoUrl: '', playersBought: 0, remainingPlayers: 11, allocatedAmount: 100000, remainingPurse: 100000, highestBid: 0, captain: ''},
-          {name: 'Team D', logoUrl: '', playersBought: 0, remainingPlayers: 11, allocatedAmount: 100000, remainingPurse: 100000, highestBid: 0, captain: ''}
-        ];
+        // Load default teams from config if fetch fails
+        teams = CONFIG.defaultTeams.map(team => ({...team})); // Clone the default teams
         populateTeamDropdown();
       }
     }
@@ -1125,7 +1328,8 @@
         const fileId = idMatch[1];
         console.log('Converting Google Drive URL to direct link for ID:', fileId);
         // Use thumbnail format which works better for embedding and is more reliable
-        return `https://drive.google.com/thumbnail?id=${fileId}&sz=w1000`;
+        // Use w600 for faster loading (sufficient for 450px circle)
+        return `https://drive.google.com/thumbnail?id=${fileId}&sz=w600`;
       }
       
       return url; // fallback to original URL
@@ -1137,8 +1341,8 @@
       const item = items[currentIndex];
       
       const imageSrc = convertDriveLinkToDirect(item.imageUrl);
-      // Use the reference background image
-      const bgImageSrc = './assets/BG.jpg';
+      // Use background image from config
+      const bgImageSrc = CONFIG.assets.backgroundImage;
 
       // Set background image
       const card = document.getElementById('card');
@@ -1152,18 +1356,27 @@
       profileImg.onerror = null;
       
       if (imageSrc && imageSrc.trim() !== '') {
-        // Try to load the Google Drive image
-        profileImg.src = imageSrc;
-        // Set error handler for fallback
-        profileImg.onerror = function() {
-          console.warn('Failed to load image from Google Drive, using fallback for:', item.name);
-          this.onerror = null; // Prevent infinite loop
-          this.src = fallbackUrl;
-        };
+        // Check if image is already in cache
+        if (imageCache.has(imageSrc)) {
+          console.log('✓ Using cached image for:', item.name);
+          profileImg.src = imageSrc;
+        } else {
+          // Try to load the Google Drive image
+          profileImg.src = imageSrc;
+          // Set error handler for fallback
+          profileImg.onerror = function() {
+            console.warn('Failed to load image from Google Drive, using fallback for:', item.name);
+            this.onerror = null; // Prevent infinite loop
+            this.src = fallbackUrl;
+          };
+        }
       } else {
         // Use placeholder if no image URL provided
         profileImg.src = fallbackUrl;
       }
+      
+      // Preload next 3 player images in background
+      preloadNextImages(currentIndex, 3);
 
       // Update all player information - ID only shows number
       document.getElementById('playerId').textContent = String(item.id).padStart(2, '0');
@@ -1286,6 +1499,7 @@
       try {
         const soldData = {
           id: playerData.id,
+          imageUrl: playerData.imageUrl,
           name: playerData.name,
           role: playerData.role,
           age: playerData.age,
@@ -1294,23 +1508,26 @@
           soldAmount: bidAmount,
           teamName: teamName,
           soldDate: new Date().toISOString(),
-          // Team update data
+          // Team update data - send all the calculated values
           teamPlayersBought: teamData.playersBought + 1,
           teamRemainingPlayers: teamData.remainingPlayers - 1,
           teamRemainingPurse: teamData.remainingPurse - bidAmount,
-          teamHighestBid: Math.max(bidAmount, teamData.highestBid)
+          teamHighestBid: Math.max(bidAmount, teamData.highestBid),
+          // Also send the original team data for reference
+          originalTeamName: teamName,
+          originalRemainingPurse: teamData.remainingPurse,
+          originalPlayersBought: teamData.playersBought
         };
         
-        console.log('Saving sold player:', soldData);
+        console.log('=== SAVING SOLD PLAYER ===');
+        console.log('Player:', playerData.name);
+        console.log('Team:', teamName);
+        console.log('Bid Amount:', bidAmount);
+        console.log('Team Before - Purse:', teamData.remainingPurse, 'Players:', teamData.playersBought);
+        console.log('Team After - Purse:', soldData.teamRemainingPurse, 'Players:', soldData.teamPlayersBought);
+        console.log('Full data being sent:', JSON.stringify(soldData, null, 2));
         
-        // Note: Writing to Google Sheets requires OAuth2 or a service account
-        // For now, this will log the data. You'll need to set up Google Sheets API with write permissions
-        // Alternative: Use Google Apps Script as a webhook endpoint
-        
-        const webhookUrl = 'https://script.google.com/macros/s/AKfycbzHKGGwG-aYmyEWtxDdwbOk_sxWOcibLpXhu8lYksmEIdZ8p-sDH4YW5e4lL8ABiyj-vg/exec';
-        
-        // Log what we're sending
-        console.log('Sending to webhook:', JSON.stringify(soldData, null, 2));
+        const webhookUrl = CONFIG.webhook.url;
         
         const response = await fetch(webhookUrl, {
           method: 'POST',
@@ -1321,9 +1538,16 @@
           body: JSON.stringify(soldData)
         });
         
-        console.log('Player data saved successfully');
-        console.log('Team updated: ' + teamName);
-        console.log('New purse: ₹' + soldData.teamRemainingPurse);
+        console.log('Webhook request sent (no-cors mode)');
+        console.log(`Waiting ${CONFIG.webhook.updateDelay / 1000} seconds for Google Sheets to update...`);
+        
+        // Wait for Google Sheets to update, then refresh teams data
+        setTimeout(async () => {
+          console.log('Fetching updated teams data...');
+          await fetchTeamsData();
+          console.log('Teams data refreshed!');
+        }, CONFIG.webhook.updateDelay);
+        
         return true;
       } catch (error) {
         console.error('Error saving sold player:', error);
@@ -1356,6 +1580,9 @@
       // Hide team modal
       document.getElementById('teamModal').classList.remove('show');
       
+      // Play sound immediately when confirm is pressed
+      playSoldSound();
+      
       // Save to Google Sheets with team info
       if (items[currentIndex]) {
         saveSoldPlayer(items[currentIndex], currentBid, selectedTeam.name, selectedTeam);
@@ -1368,6 +1595,9 @@
       if (currentBid > selectedTeam.highestBid) {
         selectedTeam.highestBid = currentBid;
       }
+      
+      // Refresh the dropdown to show updated purse values
+      populateTeamDropdown();
       
       // Proceed with sold animation
       proceedWithSoldAnimation();
@@ -1416,12 +1646,9 @@
           console.log('No team logo URL provided, using default background');
           stamp.style.backgroundImage = 'linear-gradient(135deg, rgba(20, 20, 20, 0.85) 0%, rgba(10, 10, 10, 0.90) 100%)';
         }
-        
-        // Play sound immediately at the start
-        playSoldSound();
       } else {
         stampTeamName.textContent = 'TEAM';
-        stampTeamLogo.style.display = 'none';
+        stamp.style.backgroundImage = 'linear-gradient(135deg, rgba(20, 20, 20, 0.85) 0%, rgba(10, 10, 10, 0.90) 100%)';
         console.log('No team selected, using default');
       }
       
@@ -1616,19 +1843,32 @@
       if (e.key === 'u' || e.key === 'U') {
         unsoldAnimation();
       }
-      // Bid increment controls
+      // Bid increment controls from config
       if (e.key === '1') {
-        increaseBid(100);
+        increaseBid(CONFIG.auction.bidIncrements.small);
       }
       if (e.key === '2') {
-        increaseBid(200);
+        increaseBid(CONFIG.auction.bidIncrements.large);
       }
     });
 
     (async function init() {
+      // Update bid increment info from config
+      const bidInfoElement = document.getElementById('bidIncrementInfo');
+      if (bidInfoElement) {
+        bidInfoElement.textContent = `Press 1: +${CONFIG.auction.bidIncrements.small} | Press 2: +${CONFIG.auction.bidIncrements.large}`;
+      }
+      
       initializeAudio();
       await fetchSheetData();
       await fetchTeamsData();
+      
+      // Start preloading images in background (non-blocking)
+      setTimeout(() => {
+        preloadAllPlayerImages();
+        preloadTeamLogos();
+      }, 100);
+      
       nextItem();
     })();
   </script>
