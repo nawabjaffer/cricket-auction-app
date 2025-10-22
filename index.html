@@ -1,0 +1,1637 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Cricket Player Auction Card</title>
+  <style>
+    /* Basic reset & container */
+    body, html {
+      margin: 0;
+      padding: 0;
+      width:100%;
+      height:100%;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      background: #0a0a0a;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    }
+    
+    .card {
+      position: relative;
+      width: 2060px;
+      height: 1080px;
+      background-size: cover;
+      background-position: center;
+      background-repeat: no-repeat;
+      background-color: #0a0a0a;
+      border-radius: 0px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+      overflow: hidden;
+      display: flex;
+      align-items: flex-start;
+      justify-content: center;
+      padding-top: 80px;
+    }
+    
+    .card.blur-background .profile-container,
+    .card.blur-background .bid-display,
+    .card.blur-background .player-id-badge {
+      filter: blur(15px);
+      transition: filter 0.5s ease;
+    }
+    
+    .card.blur-background::before {
+      backdrop-filter: blur(10px);
+    }
+    
+    /* Dark overlay for better text visibility - removed */
+    .card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: transparent;
+      z-index: 1;
+    }
+    
+    /* Circular Profile Container */
+    .profile-container {
+      position: relative;
+      z-index: 2;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      gap: 40px;
+      width: 100%;
+      max-width: 800px;
+    }
+    
+    /* Circular Profile Image */
+    .profile-circle {
+      position: relative;
+      width: 590px;
+      height: 590px;
+      border-radius: 50%;
+      overflow: hidden;
+      box-shadow: 0 15px 40px rgba(33, 150, 243, 0.5),
+                  0 0 0 15px rgba(33, 150, 243, 0.15);
+      background: #1a1a1a;
+      flex-shrink: 0;
+    }
+    
+    .profile-circle img {
+      width: 100%;
+      height: 190%;
+      object-fit: cover;
+      margin-top: -70px;
+    }
+    
+    .player-id-badge {
+      position: absolute;
+      top: 190px;
+      right: 310px;
+      color: #FFF;
+      font-size: 128px;
+      font-weight: 900;
+      z-index: 10;
+      letter-spacing: 2px;
+      text-shadow: 2px 2px 8px rgba(0, 0, 0, 0.9), 0 0 20px rgba(33, 150, 243, 0.6);
+    }
+    
+    /* Player Info Section */
+    .player-info-section {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 25px;
+      width: 100%;
+      max-width: 750px;
+    }
+    
+    .player-name {
+      font-size: 60px;
+      font-weight: 900;
+      color: #2196F3;
+      margin: 0;
+      text-transform: uppercase;
+      letter-spacing: 3px;
+      text-shadow: 2px 2px 8px rgba(0, 0, 0, 0.9),
+                   0 0 25px rgba(33, 150, 243, 0.6);
+      line-height: 1.2;
+      text-align: center;
+    }
+    
+    .info-grid {
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      width: 100%;
+    }
+    
+    .info-item {
+      background: rgba(0, 0, 0, 0.75);
+      border-left: 6px solid #2196F3;
+      padding: 20px 35px;
+      border-radius: 10px;
+      transition: all 0.3s ease;
+      backdrop-filter: blur(5px);
+      text-align: center;
+    }
+    
+    .info-item:hover {
+      background: rgba(33, 150, 243, 0.25);
+      transform: scale(1.02);
+    }
+    
+    .info-label {
+      font-size: 24px;
+      color: #bbb;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      margin-bottom: 5px;
+      font-weight: 600;
+    }
+    
+    .info-value {
+      font-size: 40px;
+      color: #fff;
+      font-weight: 700;
+      letter-spacing: 1px;
+      text-shadow: 2px 2px 6px rgba(0, 0, 0, 0.8);
+    }
+    
+    .role-value {
+      color: #c9e7ff;
+      font-size: 40px;
+    }
+    
+    .stats-highlight {
+      display: flex;
+      gap: 25px;
+      width: 1440px;
+      height: 120px;
+    }
+    
+    .stat-box {
+      flex: 1;
+      text-align: center;
+      padding: 18px 20px;
+      border-radius: 15px;
+    }
+    
+    .stat-label {
+      font-size: 22px;
+      color: #fff;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+    
+    .stat-value {
+      font-size: 42px;
+      color: #fff;
+      font-weight: 900;
+      text-shadow: 2px 2px 6px rgba(0, 0, 0, 0.8);
+    }
+    
+    .footer {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      padding: 25px;
+      background: rgba(0,0,0,0.9);
+      text-align: center;
+      font-size: 28px;
+      font-weight: bold;
+      color: #2196F3;
+      letter-spacing: 2px;
+      border-top: 3px solid #2196F3;
+    }
+    
+    /* Bid Amount Display */
+    .bid-display {
+      position: absolute;
+      bottom: 220px;
+      right: 80px;
+      z-index: 100;
+      background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
+      border: 4px solid #2196F3;
+      border-radius: 20px;
+      padding: 30px 40px;
+      box-shadow: 0 10px 40px rgba(33, 150, 243, 0.4),
+                  0 0 0 8px rgba(33, 150, 243, 0.1);
+      min-width: 300px;
+      backdrop-filter: blur(10px);
+    }
+    
+    .bid-label {
+      font-size: 24px;
+      color: #aaa;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      margin-bottom: 10px;
+      text-align: center;
+      font-weight: 600;
+    }
+    
+    .bid-amount {
+      font-size: 72px;
+      color: #2196F3;
+      font-weight: 900;
+      text-align: center;
+      letter-spacing: 2px;
+      text-shadow: 0 0 20px rgba(33, 150, 243, 0.6);
+      line-height: 1;
+    }
+    
+    .bid-increment-info {
+      font-size: 18px;
+      color: #888;
+      text-align: center;
+      margin-top: 15px;
+      letter-spacing: 1px;
+    }
+    
+    .bid-display.pulse {
+      animation: bidPulse 0.3s ease-out;
+    }
+    
+    @keyframes bidPulse {
+      0%, 100% {
+        transform: scale(1);
+      }
+      50% {
+        transform: scale(1.05);
+        box-shadow: 0 10px 50px rgba(33, 150, 243, 0.8),
+                    0 0 0 8px rgba(33, 150, 243, 0.3);
+      }
+    }
+    
+    /* Team Selection Modal */
+    .team-selection-modal {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: rgba(0, 0, 0, 0.95);
+      padding: 40px;
+      z-index: 2000;
+      transform: translateY(100%);
+      transition: transform 0.4s ease-out;
+      backdrop-filter: blur(10px);
+      border-top: 4px solid #2196F3;
+    }
+    
+    .team-selection-modal.show {
+      transform: translateY(0);
+    }
+    
+    .team-modal-content {
+      max-width: 1200px;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 25px;
+    }
+    
+    .team-modal-title {
+      font-size: 42px;
+      color: #2196F3;
+      font-weight: 900;
+      text-align: center;
+      text-transform: uppercase;
+      letter-spacing: 3px;
+      margin-bottom: 10px;
+    }
+    
+    .team-dropdown-container {
+      display: flex;
+      align-items: center;
+      gap: 30px;
+      justify-content: center;
+    }
+    
+    .team-dropdown-label {
+      font-size: 32px;
+      color: #fff;
+      font-weight: 600;
+    }
+    
+    .team-dropdown {
+      flex: 1;
+      max-width: 600px;
+      padding: 20px 30px;
+      font-size: 28px;
+      background: rgba(33, 150, 243, 0.1);
+      color: #fff;
+      border: 3px solid #2196F3;
+      border-radius: 15px;
+      cursor: pointer;
+      outline: none;
+      font-weight: 600;
+      transition: all 0.3s ease;
+    }
+    
+    .team-dropdown option {
+      background: #1a1a1a;
+      color: #fff;
+      padding: 15px;
+    }
+    
+    .team-dropdown:hover {
+      background: rgba(33, 150, 243, 0.2);
+      box-shadow: 0 0 20px rgba(33, 150, 243, 0.5);
+    }
+    
+    .team-modal-buttons {
+      display: flex;
+      gap: 20px;
+      justify-content: center;
+      margin-top: 20px;
+    }
+    
+    .team-modal-btn {
+      padding: 18px 50px;
+      font-size: 28px;
+      font-weight: bold;
+      border: none;
+      border-radius: 15px;
+      cursor: pointer;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      transition: all 0.3s ease;
+    }
+    
+    .team-modal-btn.confirm {
+      background: #4CAF50;
+      color: white;
+      box-shadow: 0 5px 20px rgba(76, 175, 80, 0.4);
+    }
+    
+    .team-modal-btn.confirm:hover {
+      background: #45a049;
+      transform: scale(1.05);
+    }
+    
+    .team-modal-btn.cancel {
+      background: #f44336;
+      color: white;
+      box-shadow: 0 5px 20px rgba(244, 67, 54, 0.4);
+    }
+    
+    .team-modal-btn.cancel:hover {
+      background: #da190b;
+      transform: scale(1.05);
+    }
+    
+    /* Animation for sold overlay */
+    .sold-overlay {
+      position: absolute;
+      top:0; left:0;
+      width:100%; height:100%;
+      background: linear-gradient(135deg, rgba(27, 94, 32, 0.25) 0%, rgba(76, 175, 80, 0.2) 100%);
+      display: flex;
+      flex-direction: column;
+      align-items:center;
+      justify-content:center;
+      font-size: 48px;
+      color: #d00;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.5s cubic-bezier(0.4, 0.0, 0.2, 1);
+      z-index: 9999;
+      backdrop-filter: blur(25px) saturate(150%);
+      overflow: hidden;
+    }
+    
+    .sold-overlay::before {
+      content: '';
+      position: absolute;
+      top: -50%;
+      left: -50%;
+      width: 200%;
+      height: 200%;
+      background: 
+        radial-gradient(circle at 30% 30%, rgba(76, 175, 80, 0.4) 0%, transparent 40%),
+        radial-gradient(circle at 70% 70%, rgba(139, 195, 74, 0.35) 0%, transparent 40%),
+        radial-gradient(circle at 50% 50%, rgba(46, 125, 50, 0.3) 0%, transparent 50%);
+      animation: greenFlow 6s ease-in-out infinite;
+      z-index: -1;
+    }
+    
+    @keyframes greenFlow {
+      0% {
+        transform: translate(0, 0) rotate(0deg);
+      }
+      50% {
+        transform: translate(10%, 10%) rotate(180deg);
+      }
+      100% {
+        transform: translate(0, 0) rotate(360deg);
+      }
+    }
+    
+    .sold-overlay.show {
+      opacity:1;
+    }
+    
+    .sold-overlay.show::before {
+      animation-play-state: running;
+    }
+    
+    /* Circular stamp design - Apple style */
+    .stamp {
+      position: relative;
+      width: 450px;
+      height: 450px;
+      border: 12px solid #fff;
+      border-radius: 50%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(135deg, rgba(20, 20, 20, 0.85) 0%, rgba(10, 10, 10, 0.90) 100%);
+      background-size: cover;
+      background-position: center;
+      background-repeat: no-repeat;
+      box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.5),
+                  0 30px 80px rgba(0, 0, 0, 0.4);
+      opacity: 0;
+      transform: scale(0) rotate(-30deg);
+      z-index: 10002;
+    }
+    
+    .stamp-content {
+      position: relative;
+      z-index: 2;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      height: 100%;
+      background: radial-gradient(circle, rgba(0, 0, 0, 0.50) 0%, rgba(0, 0, 0, 0.65) 100%);
+      border-radius: 50%;
+      backdrop-filter: blur(1px);
+    }
+    
+    .stamp.stamping {
+      animation: stampPressApple 1.2s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+    }
+    
+    @keyframes stampPressApple {
+      0% {
+        opacity: 1;
+        transform: scale(0.3) rotate(-30deg);
+        box-shadow: 0 0 0 0 rgba(220, 0, 0, 0.5),
+                    0 15px 40px rgba(0, 0, 0, 0.1);
+      }
+      15% {
+        opacity: 1;
+        transform: scale(0.5) rotate(-20deg);
+        box-shadow: 0 0 0 0 rgba(220, 0, 0, 0.6),
+                    0 20px 50px rgba(0, 0, 0, 0.15);
+      }
+      35% {
+        opacity: 1;
+        transform: scale(0.85) rotate(-5deg);
+        box-shadow: 0 0 0 0 rgba(220, 0, 0, 0.7),
+                    0 25px 60px rgba(0, 0, 0, 0.2);
+      }
+      50% {
+        opacity: 1;
+        transform: scale(1.15) rotate(3deg);
+        box-shadow: 0 0 0 10px rgba(220, 0, 0, 0.8),
+                    0 30px 80px rgba(0, 0, 0, 0.25);
+      }
+      65% {
+        transform: scale(0.92) rotate(-1deg);
+        box-shadow: 0 0 0 40px rgba(220, 0, 0, 0.6),
+                    0 35px 90px rgba(0, 0, 0, 0.3);
+      }
+      80% {
+        transform: scale(1.03) rotate(1deg);
+        box-shadow: 0 0 0 60px rgba(220, 0, 0, 0.3),
+                    0 30px 80px rgba(0, 0, 0, 0.25);
+      }
+      100% {
+        opacity: 1;
+        transform: scale(1) rotate(0deg);
+        box-shadow: 0 0 0 80px rgba(220, 0, 0, 0),
+                    0 25px 70px rgba(0, 0, 0, 0.2);
+      }
+    }
+    
+    .stamp-text-top {
+      font-size: 20px;
+      font-weight: 700;
+      letter-spacing: 4px;
+      color: #fff;
+      margin-bottom: 8px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+      text-transform: uppercase;
+      text-shadow: 2px 2px 8px rgba(0, 0, 0, 0.8);
+    }
+    
+    .stamp-text-main {
+      font-size: 72px;
+      font-weight: 900;
+      letter-spacing: 3px;
+      color: #fff;
+      line-height: 1;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', Impact, 'Arial Black', sans-serif;
+      text-shadow: 3px 3px 12px rgba(0, 0, 0, 0.9), 0 0 20px rgba(255, 255, 255, 0.3);
+      margin: 10px 0;
+    }
+    
+    .stamp-text-team {
+      font-size: 26px;
+      font-weight: 700;
+      letter-spacing: 2px;
+      color: #4CAF50;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+      text-align: center;
+      max-width: 90%;
+      line-height: 1.2;
+      text-transform: uppercase;
+      text-shadow: 2px 2px 8px rgba(0, 0, 0, 0.8), 0 0 15px rgba(76, 175, 80, 0.5);
+    }
+    
+    .stamp-text-bottom {
+      font-size: 18px;
+      font-weight: 600;
+      letter-spacing: 3px;
+      color: #fff;
+      margin-top: 8px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+      text-transform: uppercase;
+      text-shadow: 2px 2px 8px rgba(0, 0, 0, 0.8);
+    }
+    
+    /* Stamp border decoration */
+    .stamp::before {
+      content: '';
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      border-radius: 50%;
+      border: 3px dashed rgba(255, 255, 255, 0.5);
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      padding: 15px;
+      z-index: 1;
+    }
+    
+    /* Hammer animation - Apple style with realistic impact and exit */
+    .hammer {
+      position: absolute;
+      font-size: 140px;
+      top: -200px;
+      left: 50%;
+      transform: translateX(-50%) rotate(-35deg);
+      opacity: 0;
+      z-index: 10003;
+      filter: drop-shadow(0 15px 40px rgba(0, 0, 0, 0.4));
+    }
+    .hammer.strike {
+      animation: hammerStrikeApple 1.4s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
+    }
+    @keyframes hammerStrikeApple {
+      0% {
+        top: -200px;
+        opacity: 0;
+        transform: translateX(-50%) rotate(-35deg) scale(1);
+      }
+      18% {
+        opacity: 1;
+        transform: translateX(-50%) rotate(-35deg) scale(1.1);
+      }
+      32% {
+        top: 42%;
+        opacity: 1;
+        transform: translateX(-50%) rotate(-12deg) scale(1.15);
+      }
+      40% {
+        top: 48%;
+        transform: translateX(-50%) rotate(-3deg) scale(1.2);
+      }
+      45% {
+        top: 50%;
+        transform: translateX(-50%) rotate(0deg) scale(1.25);
+      }
+      50% {
+        top: 51%;
+        transform: translateX(-50%) rotate(2deg) scale(1.23);
+      }
+      55% {
+        top: 50%;
+        opacity: 1;
+        transform: translateX(-50%) rotate(0deg) scale(1.2);
+      }
+      62% {
+        top: 49%;
+        opacity: 0.9;
+        transform: translateX(-50%) rotate(-8deg) scale(1.15);
+      }
+      70% {
+        top: 45%;
+        opacity: 0.7;
+        transform: translateX(-50%) rotate(-20deg) scale(1.1);
+      }
+      82% {
+        top: 20%;
+        opacity: 0.3;
+        transform: translateX(-50%) rotate(-40deg) scale(0.95);
+      }
+      100% {
+        top: -200px;
+        opacity: 0;
+        transform: translateX(-50%) rotate(-50deg) scale(0.8);
+      }
+    }
+    
+    /* Screen impact shake effect */
+    @keyframes screenShake {
+      0%, 100% { transform: translate(0, 0); }
+      10%, 30%, 50%, 70%, 90% { transform: translate(-2px, 2px); }
+      20%, 40%, 60%, 80% { transform: translate(2px, -2px); }
+    }
+    
+    .sold-overlay.impact {
+      animation: screenShake 0.3s cubic-bezier(0.36, 0.07, 0.19, 0.97);
+    }
+    
+    /* Unsold overlay */
+    .unsold-overlay {
+      position: absolute;
+      top:0; left:0;
+      width:100%; height:100%;
+      background: rgba(20,20,20,0.95);
+      display: flex;
+      align-items:center;
+      justify-content:center;
+      flex-direction: column;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.5s ease-in;
+      z-index: 1000;
+    }
+    .unsold-overlay.show {
+      opacity:1;
+    }
+    
+    /* X mark animation */
+    .unsold-x {
+      position: relative;
+      width: 400px;
+      height: 400px;
+      margin-bottom: 40px;
+      opacity: 0;
+    }
+    
+    .unsold-x.animate {
+      animation: xAppear 0.3s ease-out forwards;
+    }
+    
+    @keyframes xAppear {
+      to { opacity: 1; }
+    }
+    
+    .unsold-x::before,
+    .unsold-x::after {
+      content: '';
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 0;
+      height: 30px;
+      background: #ff4444;
+      border-radius: 15px;
+      box-shadow: 0 0 30px rgba(255,68,68,0.8);
+    }
+    
+    .unsold-x::before {
+      transform: translate(-50%, -50%) rotate(45deg);
+    }
+    
+    .unsold-x::after {
+      transform: translate(-50%, -50%) rotate(-45deg);
+    }
+    
+    .unsold-x.animate::before,
+    .unsold-x.animate::after {
+      animation: drawX 0.5s ease-out 0.2s forwards;
+    }
+    
+    @keyframes drawX {
+      to {
+        width: 400px;
+      }
+    }
+    
+    .unsold-text {
+      position: relative;
+      font-size: 120px;
+      font-weight: 900;
+      color: #ff4444;
+      text-transform: uppercase;
+      letter-spacing: 20px;
+      opacity: 0;
+      transform: scale(0.5);
+      text-shadow: 0 0 40px rgba(255,68,68,0.8),
+                   0 0 80px rgba(255,68,68,0.4);
+      font-family: Impact, 'Arial Black', sans-serif;
+    }
+    
+    .unsold-text.animate {
+      animation: unsoldPop 0.6s cubic-bezier(0.68, -0.55, 0.265, 1.55) 0.5s forwards;
+    }
+    
+    @keyframes unsoldPop {
+      0% {
+        opacity: 0;
+        transform: scale(0.5) rotate(-10deg);
+      }
+      50% {
+        transform: scale(1.1) rotate(5deg);
+      }
+      100% {
+        opacity: 1;
+        transform: scale(1) rotate(0deg);
+      }
+    }
+    
+    .unsold-subtext {
+      font-size: 48px;
+      color: #ff6666;
+      margin-top: 20px;
+      opacity: 0;
+      letter-spacing: 8px;
+      font-weight: 600;
+    }
+    
+    .unsold-subtext.animate {
+      animation: fadeInUp 0.5s ease-out 0.8s forwards;
+    }
+    
+    @keyframes fadeInUp {
+      from {
+        opacity: 0;
+        transform: translateY(30px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+    
+    /* Impact effect - Enhanced Apple style */
+    .impact {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 200px;
+      height: 200px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(220, 0, 0, 0.4) 0%, rgba(220, 0, 0, 0.2) 40%, rgba(220, 0, 0, 0) 70%);
+      opacity: 0;
+      z-index: 10001;
+      box-shadow: 0 0 80px rgba(220, 0, 0, 0.5);
+    }
+    .impact.show {
+      animation: impactWaveApple 0.8s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
+    }
+    @keyframes impactWaveApple {
+      0% {
+        width: 200px;
+        height: 200px;
+        opacity: 1;
+        box-shadow: 0 0 80px rgba(220, 0, 0, 0.6);
+      }
+      50% {
+        width: 500px;
+        height: 500px;
+        opacity: 0.6;
+        box-shadow: 0 0 120px rgba(220, 0, 0, 0.4);
+      }
+      100% {
+        width: 800px;
+        height: 800px;
+        opacity: 0;
+        box-shadow: 0 0 200px rgba(220, 0, 0, 0);
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="card" id="card">
+    <!-- Player ID Badge -->
+    <div class="player-id-badge" id="playerId">001</div>
+    
+    <!-- Profile Container with Circular Image and Info -->
+    <div class="profile-container">
+      <!-- Circular Profile Image -->
+      <div class="profile-circle">
+        <img id="profileImg" src="https://via.placeholder.com/450/2d5f3f/ffffff?text=Player" alt="Player Profile"/>
+      </div>
+      
+      <!-- Player Info -->
+      <div class="player-info-section">
+        <div class="info-grid">
+          <div class="info-item">
+            <div class="info-label">Name</div>
+            <div class="info-value player-name" id="playerName">PLAYER NAME</div>
+          </div>
+          
+          <div class="info-item">
+            <div class="info-label">Role</div>
+            <div class="info-value role-value" id="playerRole">All-Rounder</div>
+          </div>
+        </div>
+        
+        <div class="stats-highlight">
+          <div class="stat-box">
+            <div class="stat-label">Matches</div>
+            <div class="stat-value" id="playerMatches">0</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-label">Batting Best</div>
+            <div class="stat-value" id="playerBattingBest">N/A</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-label">Bowling Best</div>
+            <div class="stat-value" id="playerBowlingBest">N/A</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Bid Amount Display -->
+    <div class="bid-display" id="bidDisplay">
+      <div class="bid-label">Current Bid</div>
+      <div class="bid-amount" id="bidAmount">₹0</div>
+      <div class="bid-increment-info">Press 1: +100 | Press 2: +200</div>
+    </div>
+    
+    <!-- <div class="footer">
+      Press "N" for Next | Press "S" for Sold | Press "U" for Unsold
+    </div> -->
+    <div class="sold-overlay" id="soldOverlay">
+      <div class="hammer" id="hammer">🔨</div>
+      <div class="impact" id="impact"></div>
+      <div class="stamp" id="stamp">
+        <div class="stamp-content">
+          <div class="stamp-text-top">AUCTION</div>
+          <div class="stamp-text-main">SOLD</div>
+          <div class="stamp-text-team" id="stampTeamName">TEAM NAME</div>
+          <div class="stamp-text-bottom">OFFICIAL</div>
+        </div>
+      </div>
+    </div>
+    <div class="unsold-overlay" id="unsoldOverlay">
+      <div class="unsold-x" id="unsoldX"></div>
+      <div class="unsold-text" id="unsoldText">UNSOLD</div>
+      <div class="unsold-subtext" id="unsoldSubtext">NO BIDDERS</div>
+    </div>
+    
+    <!-- Team Selection Modal -->
+    <div class="team-selection-modal" id="teamModal">
+      <div class="team-modal-content">
+        <div class="team-modal-title">Select Team</div>
+        <div class="team-dropdown-container">
+          <label class="team-dropdown-label">Team:</label>
+          <select class="team-dropdown" id="teamDropdown">
+            <option value="">-- Select a Team --</option>
+          </select>
+        </div>
+        <div class="team-modal-buttons">
+          <button class="team-modal-btn confirm" onclick="confirmTeamSelection()">Confirm</button>
+          <button class="team-modal-btn cancel" onclick="cancelTeamSelection()">Cancel</button>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Jump to Player Input -->
+    <input type="number" 
+           id="jumpToPlayerInput" 
+           placeholder="ID" 
+           style="position: absolute; 
+                  bottom: 10px; 
+                  left: 10px; 
+                  width: 60px; 
+                  height: 30px; 
+                  padding: 5px; 
+                  font-size: 14px; 
+                  background: rgba(0, 0, 0, 0.9); 
+                  color: #2196F3; 
+                  border: 2px solid #2196F3; 
+                  border-radius: 5px; 
+                  outline: none;
+                  opacity: 0;
+                  pointer-events: none;
+                  transition: opacity 0.3s ease;
+                  z-index: 15000;
+                  box-shadow: 0 0 20px rgba(33, 150, 243, 0.8);" />
+  </div>
+
+  <audio id="soldSound" preload="auto">
+    <source src="./assets/sold.mp3" type="audio/mpeg">
+  </audio>
+  <audio id="unsoldSound" preload="auto">
+    <source src="./assets/unsold.mp3" type="audio/mpeg">
+  </audio>
+
+  <script>
+    // --- CONFIGURATION ---
+    const SHEET_ID = '1-ZcLNOcy-iAKsLVQelBXOaXX6DhgPevy4kx1nvT9WCs';
+    const SHEET_RANGE = 'BCC Tournament Registration!A2:U';
+    const TEAMS_SHEET_RANGE = 'Teams!A2:H'; // Teams sheet with all team data
+    const SOLD_SHEET_RANGE = 'Sold Players!A:I'; // Sheet to save sold data (added team column)
+    const API_KEY = 'AIzaSyC0sO4eAmfmi0QXqBUE912dpvVofuDrVHI';
+    // --- END CONFIG ---
+    
+    let items = [];
+    let teams = [];
+    let currentIndex = -1;
+    let currentBid = 0;
+    let basePrice = 100;
+    
+    // Track unsold players and sold players
+    let unsoldPlayers = [];
+    let soldPlayers = [];
+    let isShowingUnsoldRound = false;
+    let allPlayersShown = false;
+    
+    // Initialize audio elements
+    let soldSound = null;
+    let unsoldSound = null;
+    
+    function initializeAudio() {
+      soldSound = document.getElementById('soldSound');
+      unsoldSound = document.getElementById('unsoldSound');
+      
+      // Set volume
+      if (soldSound) soldSound.volume = 1.0;
+      if (unsoldSound) unsoldSound.volume = 1.0;
+      
+      // Log audio readiness
+      soldSound.addEventListener('canplaythrough', () => {
+        console.log('Sold sound ready to play');
+      });
+      unsoldSound.addEventListener('canplaythrough', () => {
+        console.log('Unsold sound ready to play');
+      });
+      
+      // Log errors
+      soldSound.addEventListener('error', (e) => {
+        console.error('Sold sound error:', e, soldSound.error);
+      });
+      unsoldSound.addEventListener('error', (e) => {
+        console.error('Unsold sound error:', e, unsoldSound.error);
+      });
+    }
+    
+    function playSoldSound() {
+      if (soldSound) {
+        soldSound.currentTime = 0; // Reset to start
+        soldSound.play()
+          .then(() => console.log('Sold sound playing'))
+          .catch(e => console.error('Error playing sold sound:', e));
+      }
+    }
+    
+    function playUnsoldSound() {
+      if (unsoldSound) {
+        unsoldSound.currentTime = 0; // Reset to start
+        unsoldSound.play()
+          .then(() => console.log('Unsold sound playing'))
+          .catch(e => console.error('Error playing unsold sound:', e));
+      }
+    }
+
+    async function fetchSheetData() {
+      const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(SHEET_RANGE)}?key=${API_KEY}`;
+      const resp = await fetch(url);
+      const data = await resp.json();
+      console.log('Fetched sheet data:', data);
+      if (!data.values) {
+        console.error('No data found in sheet');
+        return;
+      }
+      // Map sheet columns: 
+      // Column A(0)=ID, B(1)=ImageURL, C(2)=Name, D(3)=Age, E(4)=Role, F(5)=Matches, G(6)=BestFigures
+      items = data.values.map((row, index) => {
+        const dateOfBirth = row[4] || '';
+        let age = 'N/A';
+
+        // Calculate age if date of birth is provided
+        if (dateOfBirth && dateOfBirth !== 'N/A') {
+          // Parse DD/MM/YYYY format
+          const parts = dateOfBirth.split('/');
+          if (parts.length === 3) {
+            const dob = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`);
+            if (!isNaN(dob.getTime())) {
+              const diffMs = Date.now() - dob.getTime();
+              age = Math.floor(diffMs / (1000 * 60 * 60 * 24 * 365.25));
+            }
+          }
+        }
+        
+        return {
+          id: row[1] || `P${String(index + 1).padStart(3, '0')}`,
+          imageUrl: row[2] || '',
+          name: row[3] || 'Unknown Player',
+          dateOfBirth: dateOfBirth,
+          age: age,
+          role: row[9] || 'Player',
+          matches: row[18] || '0',
+          bowlingBestFigures: row[19] || 'N/A',
+          battingBestFigures: row[20] || 'N/A',
+          bestFigures: row[9] && row[9].toLowerCase().includes('Allrounder') ? (row[19] || 'N/A') : (row[18] || 'N/A')
+        };
+      });
+      console.log('Loaded items:', items);
+    }
+
+    async function fetchTeamsData() {
+      const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(TEAMS_SHEET_RANGE)}?key=${API_KEY}`;
+      try {
+        const resp = await fetch(url);
+        const data = await resp.json();
+        console.log('Fetched teams data:', data);
+        if (!data.values) {
+          console.error('No teams found in sheet');
+          return;
+        }
+        // Map team columns:
+        // A(0)=Team Name, B(1)=Team Logo URL, C(2)=Player Bought, D(3)=Remaining Players, 
+        // E(4)=Allocated Amount, F(5)=Remaining Pursue, G(6)=Highest Bid Value, H(7)=Captain
+        teams = data.values.map((row, index) => ({
+          name: row[0] || `Team ${index + 1}`,
+          logoUrl: row[1] || '',
+          playersBought: parseInt(row[2]) || 0,
+          remainingPlayers: parseInt(row[3]) || 0,
+          allocatedAmount: parseFloat(row[4]) || 0,
+          remainingPurse: parseFloat(row[5]) || 0,
+          highestBid: parseFloat(row[6]) || 0,
+          captain: row[7] || ''
+        }));
+        console.log('Loaded teams:', teams);
+        populateTeamDropdown();
+      } catch (error) {
+        console.error('Error fetching teams:', error);
+        // Add default teams if fetch fails
+        teams = [
+          {name: 'Team A', logoUrl: '', playersBought: 0, remainingPlayers: 11, allocatedAmount: 100000, remainingPurse: 100000, highestBid: 0, captain: ''},
+          {name: 'Team B', logoUrl: '', playersBought: 0, remainingPlayers: 11, allocatedAmount: 100000, remainingPurse: 100000, highestBid: 0, captain: ''},
+          {name: 'Team C', logoUrl: '', playersBought: 0, remainingPlayers: 11, allocatedAmount: 100000, remainingPurse: 100000, highestBid: 0, captain: ''},
+          {name: 'Team D', logoUrl: '', playersBought: 0, remainingPlayers: 11, allocatedAmount: 100000, remainingPurse: 100000, highestBid: 0, captain: ''}
+        ];
+        populateTeamDropdown();
+      }
+    }
+
+    function populateTeamDropdown() {
+      const dropdown = document.getElementById('teamDropdown');
+      dropdown.innerHTML = '<option value="">-- Select a Team --</option>';
+      teams.forEach((team, index) => {
+        const option = document.createElement('option');
+        option.value = index; // Use array index as value
+        // Display team name with remaining purse info
+        option.textContent = `${team.name} (Purse: ₹${team.remainingPurse.toLocaleString()})`;
+        dropdown.appendChild(option);
+      });
+    }
+
+    function convertDriveLinkToDirect(url) {
+      if (!url) return '';
+      
+      // Match various Google Drive URL formats
+      // Format 1: https://drive.google.com/open?id=XXXXX
+      // Format 2: https://drive.google.com/file/d/XXXXX/view
+      // Format 3: https://drive.google.com/uc?id=XXXXX
+      const idMatch = url.match(/[?&]id=([a-zA-Z0-9_-]+)/) || 
+                      url.match(/\/d\/([a-zA-Z0-9_-]+)/) ||
+                      url.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
+      
+      if (idMatch && idMatch[1]) {
+        const fileId = idMatch[1];
+        console.log('Converting Google Drive URL to direct link for ID:', fileId);
+        // Use thumbnail format which works better for embedding and is more reliable
+        return `https://drive.google.com/thumbnail?id=${fileId}&sz=w1000`;
+      }
+      
+      return url; // fallback to original URL
+    }
+
+    function showItem(index) {
+      if (items.length === 0) return;
+      currentIndex = (index + items.length) % items.length;
+      const item = items[currentIndex];
+      
+      const imageSrc = convertDriveLinkToDirect(item.imageUrl);
+      // Use the reference background image
+      const bgImageSrc = './assets/BG.jpg';
+
+      // Set background image
+      const card = document.getElementById('card');
+      card.style.backgroundImage = `url('${bgImageSrc}')`;
+
+      // Set profile circle image from Google Drive or fallback to placeholder
+      const profileImg = document.getElementById('profileImg');
+      const fallbackUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(item.name)}&size=450&background=2196F3&color=fff&bold=true&font-size=0.4`;
+      
+      // Remove any existing error handler
+      profileImg.onerror = null;
+      
+      if (imageSrc && imageSrc.trim() !== '') {
+        // Try to load the Google Drive image
+        profileImg.src = imageSrc;
+        // Set error handler for fallback
+        profileImg.onerror = function() {
+          console.warn('Failed to load image from Google Drive, using fallback for:', item.name);
+          this.onerror = null; // Prevent infinite loop
+          this.src = fallbackUrl;
+        };
+      } else {
+        // Use placeholder if no image URL provided
+        profileImg.src = fallbackUrl;
+      }
+
+      // Update all player information - ID only shows number
+      document.getElementById('playerId').textContent = String(item.id).padStart(2, '0');
+      document.getElementById('playerName').textContent = item.name.toUpperCase();
+      document.getElementById('playerRole').textContent = item.role;
+      document.getElementById('playerMatches').textContent = item.matches;
+      document.getElementById('playerBattingBest').textContent = item.battingBestFigures || 'N/A';
+      document.getElementById('playerBowlingBest').textContent = item.bowlingBestFigures || 'N/A';
+      
+      // Reset bid amount for new player
+      currentBid = basePrice;
+      updateBidDisplay();
+      
+      // hide overlays if visible
+      document.getElementById('soldOverlay').classList.remove('show');
+      document.getElementById('unsoldOverlay').classList.remove('show');
+    }
+
+    function updateBidDisplay() {
+      document.getElementById('bidAmount').textContent = '₹' + currentBid;
+    }
+
+    function increaseBid(amount) {
+      currentBid += amount;
+      updateBidDisplay();
+      
+      // Add pulse animation
+      const bidDisplay = document.getElementById('bidDisplay');
+      bidDisplay.classList.add('pulse');
+      setTimeout(() => {
+        bidDisplay.classList.remove('pulse');
+      }, 300);
+    }
+
+    function showUnsoldRoundMessage() {
+      const card = document.getElementById('card');
+      const messageOverlay = document.createElement('div');
+      messageOverlay.id = 'unsoldRoundMessage';
+      messageOverlay.style.cssText = `
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: linear-gradient(135deg, rgba(10, 10, 10, 0.98) 0%, rgba(20, 20, 20, 0.95) 100%);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        z-index: 10000;
+        opacity: 0;
+        transition: opacity 0.5s ease;
+      `;
+      
+      messageOverlay.innerHTML = `
+        <div style="text-align: center; padding: 60px;">
+          <div style="font-size: 80px; font-weight: 900; color: #ff9800; margin-bottom: 30px; text-transform: uppercase; letter-spacing: 5px; text-shadow: 0 0 30px rgba(255, 152, 0, 0.6);">
+            UNSOLD PLAYERS ROUND
+          </div>
+          <div style="font-size: 36px; color: #fff; margin-bottom: 50px; letter-spacing: 2px;">
+            Now showing ${unsoldPlayers.length} player${unsoldPlayers.length > 1 ? 's' : ''} who were not sold
+          </div>
+          <div style="font-size: 28px; color: #aaa; letter-spacing: 1px;">
+            Press any key to continue...
+          </div>
+        </div>
+      `;
+      
+      card.appendChild(messageOverlay);
+      
+      // Fade in
+      setTimeout(() => {
+        messageOverlay.style.opacity = '1';
+      }, 50);
+      
+      // Wait for key press to continue
+      const continueHandler = (e) => {
+        messageOverlay.style.opacity = '0';
+        setTimeout(() => {
+          if (messageOverlay.parentNode) {
+            messageOverlay.remove();
+          }
+          isShowingUnsoldRound = true;
+          currentIndex = -1;
+          showItem(0);
+        }, 500);
+        document.removeEventListener('keydown', continueHandler);
+      };
+      
+      document.addEventListener('keydown', continueHandler);
+    }
+    
+    function nextItem() {
+      // Check if we've reached the end of all players in first round
+      if (!allPlayersShown && currentIndex >= items.length - 1) {
+        allPlayersShown = true;
+        
+        // Check if there are unsold players
+        if (unsoldPlayers.length > 0) {
+          console.log(`First round complete. ${unsoldPlayers.length} unsold players found.`);
+          // Replace items with unsold players for second round
+          items = [...unsoldPlayers];
+          showUnsoldRoundMessage();
+          return;
+        }
+      }
+      
+      // Check if we've reached the end of unsold round
+      if (isShowingUnsoldRound && currentIndex >= items.length - 1) {
+        console.log('Unsold round complete. All players have been shown.');
+        // Could show completion message here
+        return;
+      }
+      
+      showItem(currentIndex + 1);
+    }
+    
+    // Save sold player data to Google Sheets
+    async function saveSoldPlayer(playerData, bidAmount, teamName, teamData) {
+      try {
+        const soldData = {
+          id: playerData.id,
+          name: playerData.name,
+          role: playerData.role,
+          age: playerData.age,
+          matches: playerData.matches,
+          bestFigures: playerData.bestFigures,
+          soldAmount: bidAmount,
+          teamName: teamName,
+          soldDate: new Date().toISOString(),
+          // Team update data
+          teamPlayersBought: teamData.playersBought + 1,
+          teamRemainingPlayers: teamData.remainingPlayers - 1,
+          teamRemainingPurse: teamData.remainingPurse - bidAmount,
+          teamHighestBid: Math.max(bidAmount, teamData.highestBid)
+        };
+        
+        console.log('Saving sold player:', soldData);
+        
+        // Note: Writing to Google Sheets requires OAuth2 or a service account
+        // For now, this will log the data. You'll need to set up Google Sheets API with write permissions
+        // Alternative: Use Google Apps Script as a webhook endpoint
+        
+        const webhookUrl = 'https://script.google.com/macros/s/AKfycbzHKGGwG-aYmyEWtxDdwbOk_sxWOcibLpXhu8lYksmEIdZ8p-sDH4YW5e4lL8ABiyj-vg/exec';
+        
+        // Log what we're sending
+        console.log('Sending to webhook:', JSON.stringify(soldData, null, 2));
+        
+        const response = await fetch(webhookUrl, {
+          method: 'POST',
+          mode: 'no-cors',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(soldData)
+        });
+        
+        console.log('Player data saved successfully');
+        console.log('Team updated: ' + teamName);
+        console.log('New purse: ₹' + soldData.teamRemainingPurse);
+        return true;
+      } catch (error) {
+        console.error('Error saving sold player:', error);
+        return false;
+      }
+    }
+
+    function showTeamSelection() {
+      const modal = document.getElementById('teamModal');
+      modal.classList.add('show');
+    }
+    
+    function confirmTeamSelection() {
+      const dropdown = document.getElementById('teamDropdown');
+      const selectedTeamIndex = dropdown.value;
+      
+      if (!selectedTeamIndex && selectedTeamIndex !== '0') {
+        alert('Please select a team!');
+        return;
+      }
+      
+      const selectedTeam = teams[parseInt(selectedTeamIndex)];
+      
+      // Check if team has enough purse
+      if (selectedTeam.remainingPurse < currentBid) {
+        alert(`${selectedTeam.name} does not have enough purse! Remaining: ₹${selectedTeam.remainingPurse.toLocaleString()}, Bid: ₹${currentBid.toLocaleString()}`);
+        return;
+      }
+      
+      // Hide team modal
+      document.getElementById('teamModal').classList.remove('show');
+      
+      // Save to Google Sheets with team info
+      if (items[currentIndex]) {
+        saveSoldPlayer(items[currentIndex], currentBid, selectedTeam.name, selectedTeam);
+      }
+      
+      // Update team data locally (will be updated in Google Sheets via webhook)
+      selectedTeam.playersBought += 1;
+      selectedTeam.remainingPlayers -= 1;
+      selectedTeam.remainingPurse -= currentBid;
+      if (currentBid > selectedTeam.highestBid) {
+        selectedTeam.highestBid = currentBid;
+      }
+      
+      // Proceed with sold animation
+      proceedWithSoldAnimation();
+    }
+    
+    function cancelTeamSelection() {
+      document.getElementById('teamModal').classList.remove('show');
+    }
+    
+    function soldOutAnimation() {
+      // Show team selection modal instead of directly animating
+      showTeamSelection();
+    }
+    
+    function proceedWithSoldAnimation() {
+      const overlay = document.getElementById('soldOverlay');
+      const hammer = document.getElementById('hammer');
+      const impact = document.getElementById('impact');
+      const stamp = document.getElementById('stamp');
+      const stampTeamName = document.getElementById('stampTeamName');
+      const card = document.getElementById('card');
+      
+      // Reset all animations first to prevent glitches
+      overlay.classList.remove('show', 'impact');
+      hammer.classList.remove('strike');
+      impact.classList.remove('show');
+      stamp.classList.remove('stamping');
+      
+      // Set the team name and logo in the stamp
+      const selectedTeamIndex = document.getElementById('teamDropdown').value;
+      if (selectedTeamIndex !== '' && teams[selectedTeamIndex]) {
+        const selectedTeam = teams[selectedTeamIndex];
+        stampTeamName.textContent = selectedTeam.name;
+        console.log('Team name set to:', selectedTeam.name);
+        
+        // Set team logo as background image if available
+        console.log('Team logo URL from data:', selectedTeam.logoUrl);
+        if (selectedTeam.logoUrl && selectedTeam.logoUrl.trim() !== '') {
+          const logoSrc = convertDriveLinkToDirect(selectedTeam.logoUrl);
+          console.log('Converted logo URL:', logoSrc);
+          
+          // Set background image on stamp with dark overlay to make logo visible
+          stamp.style.backgroundImage = `linear-gradient(135deg, rgba(20, 20, 20, 0.40) 0%, rgba(10, 10, 10, 0.50) 100%), url('${logoSrc}')`;
+          console.log('Team logo set as background');
+        } else {
+          console.log('No team logo URL provided, using default background');
+          stamp.style.backgroundImage = 'linear-gradient(135deg, rgba(20, 20, 20, 0.85) 0%, rgba(10, 10, 10, 0.90) 100%)';
+        }
+        
+        // Play sound immediately at the start
+        playSoldSound();
+      } else {
+        stampTeamName.textContent = 'TEAM';
+        stampTeamLogo.style.display = 'none';
+        console.log('No team selected, using default');
+      }
+      
+      // Add blur to background content only (not the overlay)
+      card.classList.add('blur-background');
+      
+      // Force reflow to ensure clean state
+      void overlay.offsetWidth;
+      
+      // Show overlay first with smooth fade
+      setTimeout(() => {
+        overlay.classList.add('show');
+      }, 50);
+      
+      // Start hammer animation after overlay is visible
+      setTimeout(() => {
+        hammer.classList.add('strike');
+      }, 150);
+      
+      // Show impact and stamp when hammer hits center (at ~45% of 1.4s = 630ms)
+      setTimeout(() => {
+        impact.classList.add('show');
+        stamp.classList.add('stamping');
+        overlay.classList.add('impact'); // Add screen shake
+        
+        // Remove impact shake after animation
+        setTimeout(() => {
+          overlay.classList.remove('impact');
+        }, 300);
+      }, 780);
+      
+      // Keep sold screen visible and show input after animation
+      setTimeout(() => {
+        hammer.classList.remove('strike');
+        impact.classList.remove('show');
+        
+        // Mark player as sold
+        if (items[currentIndex]) {
+          soldPlayers.push(items[currentIndex]);
+          console.log('Player sold:', items[currentIndex].name);
+        }
+        
+        // Show jump to player input - overlay stays visible
+        showJumpToPlayerInput();
+      }, 4000);
+    }
+
+    function unsoldAnimation() {
+      const overlay = document.getElementById('unsoldOverlay');
+      const x = document.getElementById('unsoldX');
+      const text = document.getElementById('unsoldText');
+      const subtext = document.getElementById('unsoldSubtext');
+      const card = document.getElementById('card');
+      
+      // Add blur to background content only (not the overlay)
+      card.classList.add('blur-background');
+      
+      // Show overlay
+      overlay.classList.add('show');
+      
+      // Trigger animations in sequence
+      setTimeout(() => {
+        x.classList.add('animate');
+      }, 100);
+      
+      setTimeout(() => {
+        text.classList.add('animate');
+        playUnsoldSound();
+      }, 400);
+      
+      setTimeout(() => {
+        subtext.classList.add('animate');
+      }, 700);
+      
+      // Keep unsold screen visible after animation
+      setTimeout(() => {
+        // Mark player as unsold (only in first round)
+        if (!isShowingUnsoldRound && items[currentIndex]) {
+          unsoldPlayers.push(items[currentIndex]);
+          console.log('Player marked as unsold:', items[currentIndex].name);
+          console.log('Total unsold players:', unsoldPlayers.length);
+        }
+        
+        // Show jump to player input - overlay stays visible
+        setTimeout(() => {
+          showJumpToPlayerInput();
+        }, 500);
+      }, 3000);
+    }
+
+    function jumpToPlayer(playerId) {
+      // Find player by ID
+      const playerIndex = items.findIndex(item => String(item.id) === String(playerId));
+      
+      if (playerIndex !== -1) {
+        console.log('Jumping to player ID:', playerId, 'at index:', playerIndex);
+        
+        // Hide sold/unsold overlays when jumping to new player
+        clearSoldUnsoldOverlays();
+        
+        showItem(playerIndex);
+      } else {
+        console.warn('Player with ID', playerId, 'not found');
+        alert(`Player with ID ${playerId} not found!`);
+      }
+    }
+    
+    function clearSoldUnsoldOverlays() {
+      const card = document.getElementById('card');
+      const soldOverlay = document.getElementById('soldOverlay');
+      const unsoldOverlay = document.getElementById('unsoldOverlay');
+      const hammer = document.getElementById('hammer');
+      const impact = document.getElementById('impact');
+      const stamp = document.getElementById('stamp');
+      const x = document.getElementById('unsoldX');
+      const text = document.getElementById('unsoldText');
+      const subtext = document.getElementById('unsoldSubtext');
+      
+      // Clear sold overlay
+      soldOverlay.classList.remove('show', 'impact');
+      hammer.classList.remove('strike');
+      impact.classList.remove('show');
+      stamp.classList.remove('stamping');
+      
+      // Clear unsold overlay
+      unsoldOverlay.classList.remove('show');
+      x.classList.remove('animate');
+      text.classList.remove('animate');
+      subtext.classList.remove('animate');
+      
+      // Remove blur
+      card.classList.remove('blur-background');
+    }
+    
+    function returnToCurrentPlayer() {
+      // Hide input and clear overlays to show current player normally
+      hideJumpToPlayerInput();
+      clearSoldUnsoldOverlays();
+    }
+    
+    function showJumpToPlayerInput() {
+      const input = document.getElementById('jumpToPlayerInput');
+      input.style.opacity = '1';
+      input.style.pointerEvents = 'auto';
+      input.value = '';
+      input.focus();
+    }
+    
+    function hideJumpToPlayerInput() {
+      const input = document.getElementById('jumpToPlayerInput');
+      input.style.opacity = '0';
+      input.style.pointerEvents = 'none';
+      input.value = '';
+    }
+
+    document.addEventListener('keydown', (e) => {
+      // Check if input is focused
+      const input = document.getElementById('jumpToPlayerInput');
+      const isInputFocused = document.activeElement === input;
+      
+      // If input is focused, only handle Enter and Escape
+      if (isInputFocused) {
+        if (e.key === 'Enter') {
+          const playerId = input.value.trim();
+          if (playerId) {
+            jumpToPlayer(playerId);
+          }
+          hideJumpToPlayerInput();
+          e.preventDefault();
+          return;
+        }
+        if (e.key === 'Escape') {
+          returnToCurrentPlayer();
+          e.preventDefault();
+          return;
+        }
+        // Allow number input and backspace
+        return;
+      }
+      
+      // Normal key handlers when input is not focused
+      if (e.key === 'f' || e.key === 'F') {
+        showJumpToPlayerInput();
+        e.preventDefault();
+      }
+      if (e.key === 'n' || e.key === 'N') {
+        nextItem();
+      }
+      if (e.key === 's' || e.key === 'S') {
+        soldOutAnimation(); // This now shows team selection modal
+      }
+      if (e.key === 'u' || e.key === 'U') {
+        unsoldAnimation();
+      }
+      // Bid increment controls
+      if (e.key === '1') {
+        increaseBid(100);
+      }
+      if (e.key === '2') {
+        increaseBid(200);
+      }
+    });
+
+    (async function init() {
+      initializeAudio();
+      await fetchSheetData();
+      await fetchTeamsData();
+      nextItem();
+    })();
+  </script>
+
+</body>
+</html>
