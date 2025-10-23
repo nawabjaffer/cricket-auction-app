@@ -1,0 +1,93 @@
+{
+  "auctionValidationRules": [
+    {
+      "id": "RULE_001",
+      "name": "Remaining Budget Constraint",
+      "description": "Ensure team can still afford remaining players at minimum base price after placing this bid.",
+      "condition": "bidAmount <= remainingFund - (remainingPlayers - 1) * minimumPlayerBasePrice",
+      "onFail": {
+        "action": "BLOCK_BID",
+        "message": "Bid exceeds allowed limit! You must retain enough funds to complete your team."
+      },
+      "severity": "critical"
+    },
+    {
+      "id": "RULE_002",
+      "name": "Dynamic Maximum Bid Calculation",
+      "description": "Define the maximum amount a team can bid based on remaining funds and required players.",
+      "calculation": "maxBidLimit = remainingFund - (remainingPlayers - 1) * minimumPlayerBasePrice",
+      "condition": "bidAmount <= maxBidLimit",
+      "onFail": {
+        "action": "BLOCK_BID",
+        "message": "You cannot bid higher than your max allowed bid limit for this round."
+      },
+      "severity": "critical"
+    },
+    {
+      "id": "RULE_003",
+      "name": "Total Budget Cap",
+      "description": "Prevent team from exceeding allocated total fund.",
+      "condition": "totalSpent + bidAmount <= totalFund",
+      "onFail": {
+        "action": "BLOCK_BID",
+        "message": "Insufficient funds! You cannot exceed your allocated total budget."
+      },
+      "severity": "critical"
+    },
+    {
+      "id": "RULE_004",
+      "name": "Player Count Limit",
+      "description": "Ensure team does not purchase more than allowed players.",
+      "condition": "playersBought < maxPlayers",
+      "onFail": {
+        "action": "BLOCK_BID",
+        "message": "Team roster full. You cannot buy more players."
+      },
+      "severity": "critical"
+    },
+    {
+      "id": "RULE_005",
+      "name": "Minimum Participation Balance",
+      "description": "Ensure team has enough balance to participate in a bid (at least equal to player's base price).",
+      "condition": "remainingFund >= playerBasePrice",
+      "onFail": {
+        "action": "BLOCK_BID",
+        "message": "Insufficient balance to bid for this player."
+      },
+      "severity": "warning"
+    },
+    {
+      "id": "RULE_006",
+      "name": "Safe Fund Threshold",
+      "description": "Maintain a buffer (e.g. 10%) of remaining fund for safe future bidding.",
+      "condition": "remainingFund - bidAmount >= (remainingPlayers - 1) * minimumPlayerBasePrice * 1.1",
+      "onFail": {
+        "action": "WARN_ONLY",
+        "message": "Warning: You are entering the unsafe fund range; consider preserving funds for upcoming players."
+      },
+      "severity": "warning"
+    },
+    {
+      "id": "RULE_007",
+      "name": "Category Quota Check",
+      "description": "Prevent overspending on one player category if minimum players required in others.",
+      "condition": "bidAmount <= remainingFund - Σ((remainingCategoryPlayers[c] - 1) * minPriceByCategory[c])",
+      "onFail": {
+        "action": "BLOCK_BID",
+        "message": "Bid exceeds limit considering remaining category quotas."
+      },
+      "severity": "medium"
+    },
+    {
+      "id": "RULE_008",
+      "name": "Post-Auction Compliance Check",
+      "description": "At the end of auction, verify all teams have valid roster and within fund limit.",
+      "condition": "playersBought == maxPlayers && totalSpent <= totalFund",
+      "onFail": {
+        "action": "FLAG_FOR_REVIEW",
+        "message": "Team does not meet final auction requirements. Requires admin review."
+      },
+      "severity": "info"
+    }
+  ]
+}

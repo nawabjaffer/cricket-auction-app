@@ -94,21 +94,33 @@ const CONFIG = {
   // Keyboard Shortcuts / Hotkeys
   hotkeys: {
     nextPlayer: 'n',           // Next player
-    markSold: 's',             // Mark player as sold
+    markSold: 's',             // Mark player as sold (auto-assigns to last bidding team)
     markUnsold: 'u',           // Mark player as unsold
     jumpToPlayer: 'f',         // Jump to specific player
     showTeamsInfo: 'i',        // Show teams information overlay
-    showTeamMenu: 't',         // Show team selection menu
+    showTeamMenu: 'm',         // Show team selection menu (changed from 't')
     closeOverlay: 'Escape',    // Close any open overlay
+    teamSlotsPrefix: 't',      // Prefix for team slots (t+1, t+2, etc.)
     teamSlots: {
-      team1: '1',              // Show Team 1 slots
-      team2: '2',              // Show Team 2 slots
-      team3: '3',              // Show Team 3 slots
-      team4: '4',              // Show Team 4 slots
-      team5: '5',              // Show Team 5 slots
-      team6: '6',              // Show Team 6 slots
-      team7: '7',              // Show Team 7 slots
-      team8: '8'               // Show Team 8 slots
+      team1: 't1',             // Show Team 1 slots (Press t then 1)
+      team2: 't2',             // Show Team 2 slots
+      team3: 't3',             // Show Team 3 slots
+      team4: 't4',             // Show Team 4 slots
+      team5: 't5',             // Show Team 5 slots
+      team6: 't6',             // Show Team 6 slots
+      team7: 't7',             // Show Team 7 slots
+      team8: 't8'              // Show Team 8 slots
+    },
+    teamBidding: {
+      team1: '1',              // Team 1 places bid
+      team2: '2',              // Team 2 places bid
+      team3: '3',              // Team 3 places bid
+      team4: '4',              // Team 4 places bid
+      team5: '5',              // Team 5 places bid
+      team6: '6',              // Team 6 places bid
+      team7: '7',              // Team 7 places bid
+      team8: '8',              // Team 8 places bid
+      team9: '9'               // Team 9 places bid (if exists)
     },
     bidIncrements: {
       small: 'q',              // Add small bid increment (₹100)
@@ -213,6 +225,7 @@ Object.freeze(CONFIG.ui.breakpoints);
 Object.freeze(CONFIG.ui.teamSlotsGrid);
 Object.freeze(CONFIG.hotkeys);
 Object.freeze(CONFIG.hotkeys.teamSlots);
+Object.freeze(CONFIG.hotkeys.teamBidding);
 Object.freeze(CONFIG.hotkeys.bidIncrements);
 Object.freeze(CONFIG.columnMappings);
 Object.freeze(CONFIG.columnMappings.players);
