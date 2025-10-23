@@ -82,6 +82,32 @@
     .card-wrapper {
       transform: scale(0.8);
       transform-origin: center center;
+      transition: transform 0.3s ease;
+    }
+    
+    /* Fullscreen mode - fill entire screen */
+    :fullscreen .card-wrapper,
+    :-webkit-full-screen .card-wrapper,
+    :-moz-full-screen .card-wrapper,
+    :-ms-fullscreen .card-wrapper {
+      transform: scale(1);
+      width: 100vw;
+      height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    
+    :fullscreen .card,
+    :-webkit-full-screen .card,
+    :-moz-full-screen .card,
+    :-ms-fullscreen .card {
+      width: 100vw;
+      height: 100vh;
+      max-width: 100vw;
+      max-height: 100vh;
+      border-radius: 0;
+      box-shadow: none;
     }
     
     .card {
