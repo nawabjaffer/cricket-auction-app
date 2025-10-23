@@ -5,7 +5,7 @@ const CONFIG = {
     sheetId: '1-ZcLNOcy-iAKsLVQelBXOaXX6DhgPevy4kx1nvT9WCs',
     apiKey: 'AIzaSyC0sO4eAmfmi0QXqBUE912dpvVofuDrVHI',
     ranges: {
-      players: 'BCC Tournament Registration!A2:U',
+      players: 'BCC Tournament Registration!A2:V',  // Extended to include more stats
       teams: 'Teams!A2:I',
       soldPlayers: 'Sold Players!A:J'  // Updated to include Image URL column
     }
@@ -134,7 +134,15 @@ const CONFIG = {
       role: 9,            // Column J
       matches: 18,        // Column S
       bowlingBest: 19,    // Column T
-      battingBest: 20     // Column U
+      battingBest: 20,    // Column U
+      // Cricket Stats (columns 18-22)
+      stats: {
+        matches: 17,      // Column R
+        innings: 18,      // Column S
+        runs: 19,         // Column T
+        wickets: 20,      // Column U
+        average: 21       // Column V
+      }
     },
     teams: {
       name: 0,                    // Column A

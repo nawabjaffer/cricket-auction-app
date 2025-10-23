@@ -482,7 +482,7 @@
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      background: linear-gradient(135deg, rgba(20, 20, 20, 0.85) 0%, rgba(10, 10, 10, 0.90) 100%);
+      background: linear-gradient(135deg, rgba(20, 20, 20, 0.40) 0%, rgba(10, 10, 10, 0.50) 100%);
       background-size: cover;
       background-position: center;
       background-repeat: no-repeat;
@@ -502,7 +502,7 @@
       justify-content: center;
       width: 100%;
       height: 100%;
-      background: radial-gradient(circle, rgba(0, 0, 0, 0.50) 0%, rgba(0, 0, 0, 0.65) 100%);
+      background: radial-gradient(circle, rgba(0, 0, 0, 0.30) 0%, rgba(0, 0, 0, 0.50) 100%);
       border-radius: 50%;
       backdrop-filter: blur(1px);
     }
@@ -553,51 +553,116 @@
                     0 25px 70px rgba(0, 0, 0, 0.2);
       }
     }
-    
-    .stamp-text-top {
-      font-size: 20px;
-      font-weight: 700;
-      letter-spacing: 4px;
-      color: #fff;
-      margin-bottom: 8px;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
-      text-transform: uppercase;
-      text-shadow: 2px 2px 8px rgba(0, 0, 0, 0.8);
+
+    .stamp-text-container {
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
     }
     
+    /* Top arc text - PLAYER */
+    .stamp-text-top {
+      position: absolute;
+      top: 45px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 22px;
+      font-weight: 800;
+      letter-spacing: 8px;
+      color: #fff;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+      text-transform: uppercase;
+      text-shadow: 3px 3px 10px rgba(0, 0, 0, 1), 
+                   0 0 15px rgba(0, 0, 0, 0.9),
+                   0 0 25px rgba(255, 255, 255, 0.2);
+      z-index: 10;
+    }
+    
+    /* Center main text - SOLD */
     .stamp-text-main {
-      font-size: 72px;
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-size: 80px;
       font-weight: 900;
-      letter-spacing: 3px;
+      letter-spacing: 6px;
       color: #fff;
       line-height: 1;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', Impact, 'Arial Black', sans-serif;
-      text-shadow: 3px 3px 12px rgba(0, 0, 0, 0.9), 0 0 20px rgba(255, 255, 255, 0.3);
-      margin: 10px 0;
+      text-transform: uppercase;
+      text-shadow: 4px 4px 15px rgba(0, 0, 0, 1), 
+                   0 0 30px rgba(255, 255, 255, 0.4),
+                   0 0 50px rgba(255, 255, 255, 0.2);
+      z-index: 5;
+      opacity: 0.9;
     }
     
-    .stamp-text-team {
-      font-size: 26px;
+    /* Bottom arc text - TO */
+    .stamp-text-bottom {
+      position: absolute;
+      bottom: 130px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 18px;
       font-weight: 700;
-      letter-spacing: 2px;
-      color: #4CAF50;
+      letter-spacing: 6px;
+      color: #fff;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+      text-transform: uppercase;
+      text-shadow: 3px 3px 10px rgba(0, 0, 0, 1), 
+                   0 0 15px rgba(0, 0, 0, 0.9),
+                   0 0 25px rgba(255, 255, 255, 0.2);
+      z-index: 10;
+    }
+    
+    /* Team name - Lower center with blur effect */
+    .stamp-text-team {
+      position: absolute;
+      bottom: 55px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 32px;
+      font-weight: 900;
+      letter-spacing: 3px;
+      color: #FFD700;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
       text-align: center;
-      max-width: 90%;
+      max-width: 75%;
       line-height: 1.2;
       text-transform: uppercase;
-      text-shadow: 2px 2px 8px rgba(0, 0, 0, 0.8), 0 0 15px rgba(76, 175, 80, 0.5);
+      text-shadow: 3px 3px 12px rgba(0, 0, 0, 1), 
+                   0 0 20px rgba(255, 215, 0, 0.9),
+                   0 0 40px rgba(255, 215, 0, 0.6),
+                   0 0 60px rgba(255, 215, 0, 0.3);
+      z-index: 15;
+      padding: 15px 35px;
+      background: rgba(0, 0, 0, 0.75);
+      backdrop-filter: blur(15px) saturate(180%);
+      -webkit-backdrop-filter: blur(15px) saturate(180%);
+      border-radius: 25px;
+      border: 3px solid rgba(255, 215, 0, 0.5);
+      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.9),
+                  0 0 30px rgba(255, 215, 0, 0.4),
+                  inset 0 0 30px rgba(255, 215, 0, 0.15),
+                  inset 0 -5px 20px rgba(255, 215, 0, 0.1);
+      animation: teamNameGlow 2s ease-in-out infinite alternate;
     }
     
-    .stamp-text-bottom {
-      font-size: 18px;
-      font-weight: 600;
-      letter-spacing: 3px;
-      color: #fff;
-      margin-top: 8px;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
-      text-transform: uppercase;
-      text-shadow: 2px 2px 8px rgba(0, 0, 0, 0.8);
+    @keyframes teamNameGlow {
+      0% {
+        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.9),
+                    0 0 30px rgba(255, 215, 0, 0.4),
+                    inset 0 0 30px rgba(255, 215, 0, 0.15);
+      }
+      100% {
+        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.9),
+                    0 0 50px rgba(255, 215, 0, 0.6),
+                    inset 0 0 40px rgba(255, 215, 0, 0.25);
+      }
     }
     
     /* Stamp border decoration */
@@ -817,6 +882,55 @@
         transform: translateY(0);
       }
     }
+
+    /* Staggered animation for player cards */
+    .player-card {
+      animation: cardFadeIn 0.6s ease-out both;
+    }
+
+    .captain-card {
+      animation: captainCardEntry 0.8s cubic-bezier(0.68, -0.55, 0.265, 1.55) both;
+    }
+
+    @keyframes cardFadeIn {
+      from {
+        opacity: 0;
+        transform: translateY(30px) scale(0.9);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+      }
+    }
+
+    @keyframes captainCardEntry {
+      0% {
+        opacity: 0;
+        transform: translateY(50px) scale(0.8) rotateY(-10deg);
+      }
+      60% {
+        transform: translateY(-10px) scale(1.05) rotateY(5deg);
+      }
+      100% {
+        opacity: 1;
+        transform: translateY(0) scale(1) rotateY(0deg);
+      }
+    }
+
+    /* Stagger delay for cards */
+    .players-grid .player-card:nth-child(1) { animation-delay: 0.1s; }
+    .players-grid .player-card:nth-child(2) { animation-delay: 0.15s; }
+    .players-grid .player-card:nth-child(3) { animation-delay: 0.2s; }
+    .players-grid .player-card:nth-child(4) { animation-delay: 0.25s; }
+    .players-grid .player-card:nth-child(5) { animation-delay: 0.3s; }
+    .players-grid .player-card:nth-child(6) { animation-delay: 0.35s; }
+    .players-grid .player-card:nth-child(7) { animation-delay: 0.4s; }
+    .players-grid .player-card:nth-child(8) { animation-delay: 0.45s; }
+    .players-grid .player-card:nth-child(9) { animation-delay: 0.5s; }
+    .players-grid .player-card:nth-child(10) { animation-delay: 0.55s; }
+    .players-grid .player-card:nth-child(11) { animation-delay: 0.6s; }
+    .players-grid .player-card:nth-child(12) { animation-delay: 0.65s; }
+    .players-grid .player-card:nth-child(n+13) { animation-delay: 0.7s; }
     
     /* Impact effect - Enhanced Apple style */
     .impact {
@@ -1085,6 +1199,40 @@
       visibility: hidden;
       transition: opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1), visibility 0.4s;
     }
+
+    /* Loading indicator */
+    .team-slots-loading {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 20px;
+      z-index: 25001;
+    }
+
+    .team-slots-loading-spinner {
+      width: 60px;
+      height: 60px;
+      border: 4px solid rgba(33, 150, 243, 0.2);
+      border-top-color: #2196F3;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .team-slots-loading-text {
+      color: rgba(255, 255, 255, 0.7);
+      font-size: 16px;
+      font-weight: 600;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+    }
     
     /* Team color overlay background */
     .team-slots-overlay::before {
@@ -1094,9 +1242,17 @@
       left: 0;
       width: 100%;
       height: 100%;
-      background: radial-gradient(ellipse at top center, var(--team-color, rgba(33, 150, 243, 0.15)) 0%, transparent 70%);
+      background: radial-gradient(ellipse at top center, var(--team-color, rgba(33, 150, 243, 0.15)) 0%, transparent 70%),
+                  radial-gradient(circle at 20% 80%, var(--team-color, rgba(33, 150, 243, 0.08)) 0%, transparent 50%),
+                  radial-gradient(circle at 80% 20%, var(--team-color-light, rgba(33, 150, 243, 0.08)) 0%, transparent 50%);
       opacity: 0.6;
       z-index: -1;
+      animation: backgroundPulse 8s ease-in-out infinite;
+    }
+
+    @keyframes backgroundPulse {
+      0%, 100% { opacity: 0.6; }
+      50% { opacity: 0.8; }
     }
     
     .team-slots-overlay.show {
@@ -1104,39 +1260,66 @@
       visibility: visible;
     }
     
+    /* Custom scrollbar styling */
+    .players-grid-wrapper::-webkit-scrollbar {
+      width: 8px;
+    }
+    
+    .players-grid-wrapper::-webkit-scrollbar-track {
+      background: rgba(255, 255, 255, 0.03);
+      border-radius: 4px;
+    }
+    
+    .players-grid-wrapper::-webkit-scrollbar-thumb {
+      background: var(--team-color, rgba(33, 150, 243, 0.4));
+      border-radius: 4px;
+      transition: background 0.3s ease;
+    }
+    
+    .players-grid-wrapper::-webkit-scrollbar-thumb:hover {
+      background: var(--team-color, rgba(33, 150, 243, 0.6));
+    }
+    
     .team-slots-container {
       width: 100%;
-      max-width: 100vw;
+      max-width: 92vw;
       height: 100vh;
       margin: 0 auto;
-      padding: 20px 40px;
+      padding: 8px 15px;
       overflow: hidden;
       transform: translateY(20px);
       opacity: 0;
       transition: transform 0.5s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.5s ease;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
+      display: grid;
+      grid-template-columns: 250px 1fr;
+      grid-template-rows: auto 1fr;
+      gap: 10px;
       box-sizing: border-box;
     }
     
     /* Responsive design for smaller screens */
     @media (max-width: 1600px) {
       .team-slots-container {
-        padding: 18px 35px;
+        padding: 8px 12px;
+        grid-template-columns: 220px 1fr;
+        gap: 8px;
       }
     }
     
     @media (max-width: 1200px) {
       .team-slots-container {
-        padding: 15px 25px;
+        padding: 6px 10px;
+        grid-template-columns: 200px 1fr;
+        gap: 8px;
       }
     }
     
     @media (max-width: 768px) {
       .team-slots-container {
-        padding: 12px 15px;
+        padding: 6px 8px;
+        grid-template-columns: 1fr;
+        grid-template-rows: auto auto 1fr;
+        gap: 6px;
       }
     }
     
@@ -1147,16 +1330,15 @@
     
     /* Team Header Section */
     .team-slots-header {
+      grid-column: 1 / -1;
       text-align: center;
-      margin-bottom: 15px;
+      margin-bottom: 0;
       animation: fadeInDown 0.6s ease-out 0.2s both;
-      flex-shrink: 0;
-      width: 100%;
     }
     
     @media (max-width: 768px) {
       .team-slots-header {
-        margin-bottom: 10px;
+        margin-bottom: 0;
       }
     }
     
@@ -1175,8 +1357,8 @@
       width: 80px;
       height: 80px;
       border-radius: 50%;
-      margin: 0 auto 10px;
-      border: 3px solid var(--team-color-border, rgba(255, 255, 255, 0.15));
+      margin: 0 auto 4px;
+      border: 2px solid var(--team-color-border, rgba(255, 255, 255, 0.15));
       box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5),
                   0 0 40px var(--team-color-glow, rgba(33, 150, 243, 0.3)),
                   inset 0 0 0 1px rgba(255, 255, 255, 0.1);
@@ -1185,7 +1367,7 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 50px;
+      font-size: 28px;
       transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
       position: relative;
     }
@@ -1230,20 +1412,18 @@
     }
     
     .team-slots-title {
-      font-size: 32px;
+      font-size: 30px;
       font-weight: 900;
       color: #fff;
       text-transform: uppercase;
-      letter-spacing: 3px;
-      margin: 0 0 8px 0;
+      letter-spacing: 1.5px;
+      margin: 0 0 4px 0;
       text-shadow: 0 4px 30px rgba(0, 0, 0, 0.6),
                    0 0 40px var(--team-color-glow, rgba(33, 150, 243, 0.4));
       background: linear-gradient(135deg, 
                   #fff 0%, 
                   var(--team-color, #2196F3) 50%,
                   var(--team-color-light, #00BCD4) 100%);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
       background-clip: text;
       animation: shimmer 3s ease-in-out infinite;
     }
@@ -1255,36 +1435,36 @@
     
     @media (max-width: 1200px) {
       .team-slots-title {
-        font-size: 28px;
-        letter-spacing: 2.5px;
+        font-size: 18px;
+        letter-spacing: 1.2px;
       }
     }
     
     @media (max-width: 768px) {
       .team-slots-title {
-        font-size: 22px;
-        letter-spacing: 1.5px;
-        margin-bottom: 6px;
+        font-size: 15px;
+        letter-spacing: 1px;
+        margin-bottom: 3px;
       }
     }
     
     .team-stats-summary {
       display: flex;
       justify-content: center;
-      gap: 30px;
-      margin-top: 8px;
+      gap: 10px;
+      margin-top: 3px;
       flex-wrap: wrap;
     }
     
     .team-stat-item {
       text-align: center;
-      padding: 8px 18px;
+      padding: 4px 10px;
       background: rgba(255, 255, 255, 0.03);
       border: 1px solid var(--team-color-border, rgba(255, 255, 255, 0.1));
-      border-radius: 10px;
+      border-radius: 6px;
       backdrop-filter: blur(10px);
       transition: all 0.3s ease;
-      min-width: 110px;
+      min-width: 70px;
     }
     
     .team-stat-item:hover {
@@ -1295,128 +1475,351 @@
     }
     
     .team-stat-label {
-      font-size: 9px;
-      color: rgba(255, 255, 255, 0.6);
+      font-size: 18px;
+      color: rgba(255, 215, 0, 1.0);
       text-transform: uppercase;
-      letter-spacing: 1px;
-      margin-bottom: 4px;
+      letter-spacing: 0.6px;
+      margin-bottom: 2px;
       font-weight: 600;
     }
     
     .team-stat-number {
       font-size: 18px;
       font-weight: 800;
-      color: var(--team-color, #2196F3);
-      text-shadow: 0 0 20px var(--team-color-glow, rgba(33, 150, 243, 0.5));
-      letter-spacing: 0.5px;
+      color:  rgba(255, 255, 255, 1.0);
+      text-shadow: 0 0 20px var(--team-color-glow, rgba(33, 150, 243, 1.0));
+      letter-spacing: 0.3px;
     }
     
     @media (max-width: 768px) {
       .team-stats-summary {
-        gap: 12px;
-        margin-top: 6px;
+        gap: 10px;
+        margin-top: 3px;
       }
       
       .team-stat-item {
-        padding: 6px 12px;
-        min-width: 85px;
+        padding: 4px 10px;
+        min-width: 75px;
       }
       
       .team-stat-number {
-        font-size: 16px;
+        font-size: 12px;
       }
     }
     
-    /* Players Grid Wrapper */
+    /* Captain Card Container - Left Side */
+    .captain-card-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      padding: 10px;
+      overflow: hidden;
+    }
+    
+    @media (max-width: 768px) {
+      .captain-card-container {
+        grid-column: 1;
+        padding: 6px;
+      }
+    }
+    
+    /* Players Grid Wrapper - Right Side */
     .players-grid-wrapper {
       width: 100%;
       display: flex;
       justify-content: center;
-      align-items: center;
-      flex: 1;
-      overflow: hidden;
-      padding: 0;
+      align-items: flex-start;
+      overflow-y: auto;
+      overflow-x: hidden;
+      padding: 5px;
+      min-height: 0;
+    }
+    
+    @media (max-width: 768px) {
+      .players-grid-wrapper {
+        grid-column: 1;
+      }
     }
     
     /* Players Grid */
     .players-grid {
       display: grid;
       grid-template-columns: repeat(6, 1fr);
-      gap: 24px;
+      gap: 12px;
       max-width: 100%;
       width: 100%;
       margin: 0 auto;
       animation: fadeInUp 0.6s ease-out 0.4s both;
-      align-content: center;
+      align-content: start;
       justify-content: center;
       padding: 0;
+      grid-auto-flow: dense; /* Allow items to fill gaps efficiently */
     }
     
     /* Grid variations for different player counts */
     .players-grid.grid-4-cols {
       grid-template-columns: repeat(4, 1fr);
-      gap: 20px;
+      gap: 10px;
     }
     
     .players-grid.grid-6-cols {
-      grid-template-columns: repeat(6, 0fr);
-      gap: 24px;
+      grid-template-columns: repeat(6, 1fr);
+      gap: 12px;
     }
     
     /* Responsive grid layout */
     @media (max-width: 1600px) {
       .players-grid {
-        gap: 20px;
+        gap: 10px;
       }
       .players-grid.grid-6-cols {
         grid-template-columns: repeat(6, 1fr);
-        gap: 20px;
+        gap: 10px;
       }
       .players-grid.grid-4-cols {
         grid-template-columns: repeat(4, 1fr);
-        gap: 24px;
+        gap: 10px;
       }
     }
     
     @media (max-width: 1200px) {
       .players-grid {
-        gap: 18px;
+        gap: 10px;
       }
       .players-grid.grid-6-cols {
         grid-template-columns: repeat(4, 1fr);
-        gap: 18px;
+        gap: 10px;
       }
       .players-grid.grid-4-cols {
         grid-template-columns: repeat(3, 1fr);
-        gap: 20px;
+        gap: 10px;
       }
     }
     
     @media (max-width: 900px) {
       .players-grid {
-        gap: 14px;
+        gap: 8px;
       }
       .players-grid.grid-6-cols {
         grid-template-columns: repeat(3, 1fr);
-        gap: 14px;
+        gap: 8px;
       }
       .players-grid.grid-4-cols {
         grid-template-columns: repeat(2, 1fr);
-        gap: 16px;
+        gap: 8px;
       }
     }
     
     @media (max-width: 600px) {
       .players-grid {
-        gap: 12px;
+        gap: 6px;
       }
       .players-grid.grid-6-cols,
       .players-grid.grid-4-cols {
         grid-template-columns: repeat(2, 1fr);
-        gap: 12px;
+        gap: 6px;
       }
     }
     
+    /* Captain Card - Standalone Left Side Card */
+    .captain-card {
+      width: 100%;
+      max-width: 230px;
+      aspect-ratio: 3/4;
+      background: linear-gradient(145deg, 
+                  rgba(255, 215, 0, 0.15) 0%, 
+                  rgba(20, 20, 30, 0.98) 50%);
+      border: 2px solid rgba(255, 215, 0, 0.4);
+      border-radius: 20px;
+      position: relative;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 15px 45px rgba(255, 215, 0, 0.3),
+                  0 0 30px rgba(255, 215, 0, 0.2),
+                  0 0 0 1px rgba(255, 255, 255, 0.1) inset;
+      backdrop-filter: blur(15px);
+      transition: all 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+      animation: captainGlow 3s ease-in-out infinite;
+      margin: 0 auto;
+    }
+
+    /* Shine effect on captain card */
+    .captain-card::before {
+      content: '';
+      position: absolute;
+      top: -50%;
+      left: -50%;
+      width: 200%;
+      height: 200%;
+      background: linear-gradient(45deg, 
+                  transparent 30%, 
+                  rgba(255, 255, 255, 0.1) 50%, 
+                  transparent 70%);
+      animation: shine 4s ease-in-out infinite;
+      z-index: 1;
+      pointer-events: none;
+    }
+
+    @keyframes shine {
+      0%, 100% {
+        transform: translateX(-100%) translateY(-100%) rotate(45deg);
+      }
+      50% {
+        transform: translateX(100%) translateY(100%) rotate(45deg);
+      }
+    }
+
+    @keyframes captainGlow {
+      0%, 100% { 
+        box-shadow: 0 15px 45px rgba(255, 215, 0, 0.3),
+                    0 0 30px rgba(255, 215, 0, 0.2),
+                    0 0 0 1px rgba(255, 255, 255, 0.1) inset;
+      }
+      50% { 
+        box-shadow: 0 15px 45px rgba(255, 215, 0, 0.5),
+                    0 0 40px rgba(255, 215, 0, 0.4),
+                    0 0 0 1px rgba(255, 215, 0, 0.3) inset;
+      }
+    }
+
+    .captain-card:hover {
+      transform: translateY(-5px) scale(1.02);
+      border-color: rgba(255, 215, 0, 0.7);
+    }
+
+    .captain-card .player-card-image-container {
+      height: 70%;
+      border-radius: 25px 25px 0 0;
+      z-index: 2;
+    }
+
+    .captain-card .player-card-name {
+      font-size: 24px;
+      letter-spacing: 1px;
+      color: #FFF;
+      padding-top: 10px;
+      z-index: 2;
+    }
+
+    .captain-card .player-card-role {
+      font-size: 20px;
+      color: rgba(255, 215, 0, 0.9);
+      border-color: rgba(255, 215, 0, 0.3);
+      z-index: 2;
+      padding: 3px 8px;
+      margin-bottom: 10px;
+    }
+
+    .captain-card .player-card-info {
+      z-index: 2;
+    }
+
+    .captain-card .player-captain-badge {
+      width: 35px;
+      height: 35px;
+      font-size: 20px;
+      background: linear-gradient(135deg, #FFD700 0%, #FFA500 100%);
+      border: 2px solid rgba(255, 255, 255, 0.9);
+      box-shadow: 0 6px 25px rgba(255, 215, 0, 0.6);
+      animation: captainBadgePulse 2s ease-in-out infinite;
+      z-index: 3;
+    }
+
+    @keyframes captainBadgePulse {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.05); }
+    }
+
+    .captain-card .player-role-icon {
+      width: 32px;
+      height: 32px;
+      font-size: 18px;
+      border: 2px solid rgba(255, 215, 0, 0.5);
+      box-shadow: 0 4px 15px rgba(255, 215, 0, 0.4);
+    }
+
+    @media (max-width: 1600px) {
+      .captain-card {
+        max-width: 200px;
+      }
+    }
+
+    @media (max-width: 1200px) {
+      .captain-card {
+        max-width: 180px;
+      }
+      
+      .captain-card .player-card-name {
+        font-size: 12px;
+      }
+
+      .captain-card .player-captain-badge {
+        width: 32px;
+        height: 32px;
+        font-size: 18px;
+      }
+
+      .captain-card .player-role-icon {
+        width: 28px;
+        height: 28px;
+        font-size: 16px;
+      }
+    }
+
+    @media (max-width: 768px) {
+      .captain-card {
+        max-width: 100%;
+        width: 200px;
+      }
+
+      .captain-card .player-card-name {
+        font-size: 11px;
+        letter-spacing: 0.8px;
+      }
+
+      .captain-card .player-card-role {
+        font-size: 8px;
+      }
+
+      .captain-card .player-captain-badge {
+        width: 28px;
+        height: 28px;
+        font-size: 16px;
+      }
+
+      .captain-card .player-role-icon {
+        width: 24px;
+        height: 24px;
+        font-size: 14px;
+      }
+
+      .player-stats-tooltip {
+        min-width: 200px;
+        padding: 12px;
+      }
+
+      .stats-tooltip-title {
+        font-size: 12px;
+        margin-bottom: 10px;
+      }
+
+      .stats-tooltip-item {
+        padding: 6px 8px;
+      }
+
+      .stats-tooltip-label {
+        font-size: 10px;
+      }
+
+      .stats-tooltip-value {
+        font-size: 12px;
+      }
+    }
+
     /* Player Card - Modern Card Holder Design */
     .player-card {
       background: linear-gradient(145deg, 
@@ -1437,7 +1840,7 @@
                   0 0 0 1px rgba(255, 255, 255, 0.05) inset,
                   0 2px 20px -5px var(--team-color-glow, rgba(33, 150, 243, 0.2));
       width: 100%;
-      height: 100%;
+      height: 83%;
       aspect-ratio: 3/4;
       transform-style: preserve-3d;
       perspective: 1000px;
@@ -1478,6 +1881,13 @@
       background: radial-gradient(ellipse at center, transparent 0%, rgba(0, 0, 0, 0.15) 100%);
       z-index: 1;
       pointer-events: none;
+      transition: background 0.5s ease;
+    }
+
+    .player-card:hover .player-card-image-container::before {
+      background: radial-gradient(ellipse at center, 
+                  var(--team-color, rgba(33, 150, 243, 0.1)) 0%, 
+                  rgba(0, 0, 0, 0.25) 100%);
     }
     
     .player-card-image {
@@ -1489,6 +1899,11 @@
       display: block;
       image-rendering: -webkit-optimize-contrast;
       image-rendering: crisp-edges;
+      filter: brightness(0.95) contrast(1.05);
+    }
+
+    .player-card:hover .player-card-image {
+      filter: brightness(1.05) contrast(1.1) saturate(1.2);
     }
     
     /* Subtle overlay for better contrast */
@@ -1527,6 +1942,114 @@
                   rgba(0, 0, 0, 0.1) 0%,
                   rgba(0, 0, 0, 0.15) 40%,
                   rgba(0, 0, 0, 0.3) 100%);
+    }
+
+    /* Player Stats Tooltip */
+    .player-stats-tooltip {
+      position: absolute;
+      top: 70%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      border-radius: 15px;
+      padding: 20px;
+      z-index: 2;
+      opacity: 0;
+      pointer-events: none;
+      background-color: rgba(0, 0, 0, 0.4)
+      transition: opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+      backdrop-filter: blur(12px);
+      box-shadow: 0 15px 50px rgba(0, 0, 0, 0.9),
+                  0 0 60px var(--team-color-glow, rgba(33, 150, 243, 0.4));
+      min-width: 180px;
+      max-width: 320px;
+    }
+
+    .player-card:hover .player-stats-tooltip {
+      opacity: 1;
+      pointer-events: auto;
+      animation: tooltipBounce 0.5s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+    }
+
+    @keyframes tooltipBounce {
+      0% {
+        opacity: 0;
+        transform: translate(-50%, -50%) scale(0.8);
+      }
+      70% {
+        transform: translate(-50%, -50%) scale(1.05);
+      }
+      100% {
+        opacity: 1;
+        transform: translate(-50%, -50%) scale(1);
+      }
+    }
+
+    .stats-tooltip-title {
+      font-size: 16px;
+      font-weight: 800;
+      color: #fff;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      margin-bottom: 15px;
+      text-align: center;
+      text-shadow: 0 0 20px var(--team-color-glow, rgba(33, 150, 243, 0.6));
+    }
+
+    .stats-tooltip-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 10px;
+    }
+
+    .stats-tooltip-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 12px;
+      background: rgba(255, 255, 255, 0.03);
+      border-radius: 8px;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .stats-tooltip-item::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 0;
+      height: 100%;
+      width: 3px;
+      background: var(--team-color, #2196F3);
+      transform: scaleY(0);
+      transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .stats-tooltip-item:hover {
+      background: rgba(255, 255, 255, 0.06);
+      border-color: var(--team-color, rgba(33, 150, 243, 0.3));
+      transform: translateX(4px);
+      box-shadow: 0 4px 15px var(--team-color-glow, rgba(33, 150, 243, 0.2));
+    }
+
+    .stats-tooltip-item:hover::before {
+      transform: scaleY(1);
+    }
+
+    .stats-tooltip-label {
+      font-size: 12px;
+      color: rgba(255, 255, 255, 0.7);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      font-weight: 600;
+    }
+
+    .stats-tooltip-value {
+      font-size: 14px;
+      font-weight: 800;
+      color: #fff;
+      text-shadow: 0 0 10px var(--team-color-glow, rgba(33, 150, 243, 0.4));
     }
     
     /* TBD Card - Modern Empty Slot Design */
@@ -1622,7 +2145,7 @@
       width: 100%;
       display: flex;
       flex-direction: column;
-      top: 172px;
+      top: 55%;
       align-items: center;
       justify-content: center;
       background: rgba(255, 255, 255, 0.05);
@@ -1647,12 +2170,12 @@
 
     /* Player Name - Dark background */
     .player-card-name {
-      font-size: 16px;
+      font-size: 13px;
       font-weight: 900;
       color: #fff;
       margin: 0;
       text-transform: uppercase;
-      letter-spacing: 1.2px;
+      letter-spacing: 1px;
       line-height: 1.3;
       text-align: center;
       width: 100%;
@@ -1668,26 +2191,26 @@
     }
     
     .player-card:hover .player-card-name {
-      letter-spacing: 1.5px;
+      letter-spacing: 1.2px;
       color: var(--team-color, #2196F3);
       text-shadow: 0 2px 15px var(--team-color-glow, rgba(33, 150, 243, 0.6)),
                    0 0 30px var(--team-color-glow, rgba(33, 150, 243, 0.4));
     }
     
     .player-card-role {
-      font-size: 12px;
+      font-size: 9px;
       color: rgba(255, 255, 255, 0.7);
       margin: 0;
       text-transform: uppercase;
-      letter-spacing: 1.5px;
+      letter-spacing: 1px;
       font-weight: 600;
       text-align: center;
       z-index: 2;
       position: relative;
       transition: all 0.4s ease;
-      padding: 4px 12px;
+      padding: 2px 8px;
       background: rgba(255, 255, 255, 0.03);
-      border-radius: 6px;
+      border-radius: 5px;
       border: 1px solid rgba(255, 255, 255, 0.05);
     }
     
@@ -1791,13 +2314,13 @@
       }
       
       .player-card-name {
-        font-size: 13px;
-        letter-spacing: 0.8px;
+        font-size: 11px;
+        letter-spacing: 0.6px;
       }
       
       .player-card-role {
-        font-size: 10px;
-        padding: 3px 8px;
+        font-size: 9px;
+        padding: 2px 6px;
       }
       
       .player-card-price {
@@ -2063,10 +2586,12 @@
       <div class="impact" id="impact"></div>
       <div class="stamp" id="stamp">
         <div class="stamp-content">
-          <div class="stamp-text-top">AUCTION</div>
-          <div class="stamp-text-main">SOLD</div>
-          <div class="stamp-text-team" id="stampTeamName">TEAM NAME</div>
-          <div class="stamp-text-bottom">OFFICIAL</div>
+          <div class="stamp-text-container">
+            <div class="stamp-text-top">PLAYER</div>
+            <div class="stamp-text-main">SOLD</div>
+            <div class="stamp-text-bottom">TO</div>
+            <div class="stamp-text-team" id="stampTeamName">TEAM NAME</div>
+          </div>
         </div>
       </div>
     </div>
@@ -2894,6 +3419,85 @@
       overlayElement.style.setProperty('--team-color-glow', `rgba(${r}, ${g}, ${b}, 0.25)`);
     }
     
+    // Function to fetch player stats from BCC Tournament Registration sheet
+    async function fetchPlayerStats(playerId) {
+      if (!playerId || playerId.trim() === '') return null;
+      
+      try {
+        const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(CONFIG.googleSheets.ranges.players)}?key=${API_KEY}`;
+        const resp = await fetch(url);
+        const data = await resp.json();
+        
+        if (!data.values || data.values.length === 0) return null;
+        
+        const cols = CONFIG.columnMappings.players;
+        
+        // Find the player by ID
+        for (let i = 0; i < data.values.length; i++) {
+          const row = data.values[i];
+          const rowPlayerId = row[cols.id] || '';
+          
+          if (String(rowPlayerId).trim() === String(playerId).trim()) {
+            return {
+              matches: row[cols.stats.matches] || 'N/A',
+              innings: row[cols.stats.innings] || 'N/A',
+              runs: row[cols.stats.runs] || 'N/A',
+              wickets: row[cols.stats.wickets] || 'N/A',
+              average: row[cols.stats.average] || 'N/A'
+            };
+          }
+        }
+        
+        return null;
+      } catch (error) {
+        console.error('Error fetching player stats:', error);
+        return null;
+      }
+    }
+
+    // Function to fetch captain details from BCC Tournament Registration sheet
+    async function fetchCaptainDetails(captainId) {
+      if (!captainId || captainId.trim() === '') return null;
+      
+      try {
+        const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(CONFIG.googleSheets.ranges.players)}?key=${API_KEY}`;
+        const resp = await fetch(url);
+        const data = await resp.json();
+        
+        if (!data.values || data.values.length === 0) return null;
+        
+        const cols = CONFIG.columnMappings.players;
+        
+        // Find the captain by ID
+        for (let i = 0; i < data.values.length; i++) {
+          const row = data.values[i];
+          const playerId = row[cols.id] || '';
+          
+          if (String(playerId).trim() === String(captainId).trim()) {
+            return {
+              id: row[cols.id] || '',
+              imageUrl: row[cols.imageUrl] || '',
+              name: row[cols.name] || 'Captain',
+              role: row[cols.role] || 'Captain',
+              dateOfBirth: row[cols.dateOfBirth] || '',
+              stats: {
+                matches: row[cols.stats.matches] || 'N/A',
+                innings: row[cols.stats.innings] || 'N/A',
+                runs: row[cols.stats.runs] || 'N/A',
+                wickets: row[cols.stats.wickets] || 'N/A',
+                average: row[cols.stats.average] || 'N/A'
+              }
+            };
+          }
+        }
+        
+        return null;
+      } catch (error) {
+        console.error('Error fetching captain details:', error);
+        return null;
+      }
+    }
+
     async function showTeamSlots(teamIndex) {
       if (teamIndex < 0 || teamIndex >= teams.length) return;
       
@@ -2903,8 +3507,20 @@
       const container = document.getElementById('teamSlotsContainer');
       const team = teams[teamIndex];
       
+      // Show loading indicator
+      container.innerHTML = `
+        <div class="team-slots-loading">
+          <div class="team-slots-loading-spinner"></div>
+          <div class="team-slots-loading-text">Loading Team Squad...</div>
+        </div>
+      `;
+      overlay.classList.add('show');
+      
       // Fetch sold players for this team
       const soldPlayers = await fetchSoldPlayersForTeam(team.name);
+      
+      // Fetch captain details
+      const captainDetails = await fetchCaptainDetails(team.captain);
       
       // Generate TBD slots
       const remainingSlots = team.totalPlayerThreshold - soldPlayers.length;
@@ -2922,7 +3538,7 @@
         applyTeamTheme(overlay, { r: 33, g: 150, b: 243 });
       }
       
-      // Build the HTML
+      // Build the HTML with two-column layout
       let html = `
         <div class="team-slots-header">
           <div class="team-logo-large">
@@ -2948,12 +3564,91 @@
         </div>
       `;
       
+      // Left side: Captain card container
+      html += '<div class="captain-card-container">';
+      
+      let captainCardHTML = '';
+      
+      // Build captain card for left side if captain details are available
+      if (captainDetails) {
+        const avatarConfig = CONFIG.ui.avatarPlaceholder;
+        const placeholderUrl = `${avatarConfig.baseUrl}?name=${encodeURIComponent(captainDetails.name)}&size=${avatarConfig.teamSlotSize}&background=${avatarConfig.background}&color=${avatarConfig.color}&bold=${avatarConfig.bold}&font-size=${avatarConfig.fontSize}`;
+        const avatarUrl = captainDetails.imageUrl 
+          ? convertDriveLinkToDirect(captainDetails.imageUrl)
+          : placeholderUrl;
+        
+        // Determine role icon for captain
+        const role = (captainDetails.role || 'Captain').toLowerCase();
+        let roleIcon = '🏏'; // Default cricket icon
+        if (role.includes('bowler') && role.includes('bat')) {
+          roleIcon = '🏏⚾'; // All-rounder
+        } else if (role.includes('bowl')) {
+          roleIcon = '⚾'; // Bowler
+        } else if (role.includes('bat')) {
+          roleIcon = '🏏'; // Batsman
+        } else if (role.includes('wicket') || role.includes('keeper') || role.includes('wk')) {
+          roleIcon = '🧤'; // Wicket Keeper
+        }
+        
+        // Build stats tooltip (exclude N/A values)
+        let statsTooltipHTML = '';
+        const stats = captainDetails.stats;
+        const statsArray = [
+          { label: 'Matches', value: stats.matches },
+          { label: 'Innings', value: stats.innings },
+          { label: 'Runs', value: stats.runs },
+          { label: 'Wickets', value: stats.wickets },
+          { label: 'Average', value: stats.average }
+        ].filter(stat => stat.value && stat.value !== 'N/A' && stat.value.toString().trim() !== '');
+        
+        if (statsArray.length > 0) {
+          statsTooltipHTML = `
+            <div class="player-stats-tooltip">
+              <div class="stats-tooltip-title">Cricket Stats</div>
+              <div class="stats-tooltip-grid">
+                ${statsArray.map(stat => `
+                  <div class="stats-tooltip-item">
+                    <span class="stats-tooltip-label">${stat.label}</span>
+                    <span class="stats-tooltip-value">${stat.value}</span>
+                  </div>
+                `).join('')}
+              </div>
+            </div>
+          `;
+        }
+        
+        captainCardHTML = `
+          <div class="player-card captain-card">
+            <div class="player-card-image-container">
+              <img class="player-card-image" src="${avatarUrl}" alt="${captainDetails.name}" 
+                   onerror="this.src='${placeholderUrl}'">
+            </div>
+            <div class="player-captain-badge">C</div>
+            <div class="player-role-icon">${roleIcon}</div>
+            <div class="player-card-info">
+              <h3 class="player-card-name">${captainDetails.name}</h3>
+              <p class="player-card-role">${captainDetails.role || 'Captain'}</p>
+            </div>
+            ${statsTooltipHTML}
+          </div>
+        `;
+      }
+      
+      html += captainCardHTML;
+      html += '</div>'; // Close captain-card-container
+      
+      // Right side: Players grid wrapper
       html += '<div class="players-grid-wrapper">';
       html += `<div class="players-grid ${gridClass}">`;
       
       // Add sold players
       if (soldPlayers.length > 0) {
-        soldPlayers.forEach(player => {
+        for (const player of soldPlayers) {
+          // Skip captain if already displayed
+          if (captainDetails && player.id === captainDetails.id) {
+            continue;
+          }
+          
           const avatarConfig = CONFIG.ui.avatarPlaceholder;
           const placeholderUrl = `${avatarConfig.baseUrl}?name=${encodeURIComponent(player.name)}&size=${avatarConfig.teamSlotSize}&background=${avatarConfig.background}&color=${avatarConfig.color}&bold=${avatarConfig.bold}&font-size=${avatarConfig.fontSize}`;
           const avatarUrl = player.imageUrl 
@@ -2973,6 +3668,39 @@
             roleIcon = '🧤'; // Wicket Keeper: glove
           }
           
+          // Fetch player stats from BCC Tournament Registration
+          let statsTooltipHTML = '';
+          try {
+            const playerStats = await fetchPlayerStats(player.id);
+            if (playerStats) {
+              const statsArray = [
+                { label: 'Matches', value: playerStats.matches },
+                { label: 'Innings', value: playerStats.innings },
+                { label: 'Runs', value: playerStats.runs },
+                { label: 'Wickets', value: playerStats.wickets },
+                { label: 'Average', value: playerStats.average }
+              ].filter(stat => stat.value && stat.value !== 'N/A' && stat.value.toString().trim() !== '');
+              
+              if (statsArray.length > 0) {
+                statsTooltipHTML = `
+                  <div class="player-stats-tooltip">
+                    <div class="stats-tooltip-title">Cricket Stats</div>
+                    <div class="stats-tooltip-grid">
+                      ${statsArray.map(stat => `
+                        <div class="stats-tooltip-item">
+                          <span class="stats-tooltip-label">${stat.label}</span>
+                          <span class="stats-tooltip-value">${stat.value}</span>
+                        </div>
+                      `).join('')}
+                    </div>
+                  </div>
+                `;
+              }
+            }
+          } catch (error) {
+            console.error('Error fetching player stats:', error);
+          }
+          
           // Check if captain (you may need to add captain info to your data)
           const isCaptain = player.captain === true || player.isCaptain === true;
           const captainBadge = isCaptain ? '<div class="player-captain-badge">C</div>' : '';
@@ -2990,9 +3718,10 @@
               </div>
               <div class="player-card-price">₹${player.soldAmount.toLocaleString()}</div>
               <div class="player-role-icon">${roleIcon}</div>
+              ${statsTooltipHTML}
             </div>
           `;
-        });
+        }
       }
       
       // Add TBD slots
@@ -3164,8 +3893,8 @@
       // Refresh the dropdown to show updated purse values
       populateTeamDropdown();
       
-      // Proceed with sold animation
-      proceedWithSoldAnimation();
+      // Proceed with sold animation, passing the team info
+      proceedWithSoldAnimation(selectedTeam, selectedTeamIndex);
     }
     
     function cancelTeamSelection() {
@@ -3177,7 +3906,7 @@
       showTeamSelection();
     }
     
-    function proceedWithSoldAnimation() {
+    function proceedWithSoldAnimation(teamData = null, teamIndex = null) {
       const overlay = document.getElementById('soldOverlay');
       const hammer = document.getElementById('hammer');
       const impact = document.getElementById('impact');
@@ -3192,11 +3921,35 @@
       stamp.classList.remove('stamping');
       
       // Set the team name and logo in the stamp
-      const selectedTeamIndex = document.getElementById('teamDropdown').value;
-      if (selectedTeamIndex !== '' && teams[selectedTeamIndex]) {
-        const selectedTeam = teams[selectedTeamIndex];
+      // Use passed parameters if available, otherwise try to get from dropdown
+      let selectedTeam = teamData;
+      let selectedTeamIndex = teamIndex;
+      
+      if (!selectedTeam) {
+        selectedTeamIndex = document.getElementById('teamDropdown').value;
+        if (selectedTeamIndex !== '' && teams[selectedTeamIndex]) {
+          selectedTeam = teams[selectedTeamIndex];
+        }
+      }
+      
+      console.log('Selected team index:', selectedTeamIndex);
+      console.log('Selected team data:', selectedTeam);
+      console.log('Teams array:', teams);
+      
+      if (selectedTeam) {
+        
+        // Set team name with explicit styling to ensure visibility
         stampTeamName.textContent = selectedTeam.name;
-        console.log('Team name set to:', selectedTeam.name);
+        stampTeamName.style.display = 'block';
+        stampTeamName.style.visibility = 'visible';
+        stampTeamName.style.opacity = '1';
+        stampTeamName.style.color = '#4CAF50';
+        stampTeamName.style.fontSize = '26px';
+        stampTeamName.style.fontWeight = '700';
+        stampTeamName.style.textTransform = 'uppercase';
+        console.log('✓ Team name set to:', selectedTeam.name);
+        console.log('✓ stampTeamName element:', stampTeamName);
+        console.log('✓ stampTeamName textContent:', stampTeamName.textContent);
         
         // Set team logo as background image if available
         console.log('Team logo URL from data:', selectedTeam.logoUrl);
@@ -3204,17 +3957,49 @@
           const logoSrc = convertDriveLinkToDirect(selectedTeam.logoUrl);
           console.log('Converted logo URL:', logoSrc);
           
-          // Set background image on stamp with dark overlay to make logo visible
-          stamp.style.backgroundImage = `linear-gradient(135deg, rgba(20, 20, 20, 0.40) 0%, rgba(10, 10, 10, 0.50) 100%), url('${logoSrc}')`;
-          console.log('Team logo set as background');
+          // Set background properties explicitly
+          stamp.style.backgroundImage = `linear-gradient(135deg, rgba(20, 20, 20, 0.25) 0%, rgba(10, 10, 10, 0.40) 100%), url("${logoSrc}")`;
+          stamp.style.backgroundSize = 'cover';
+          stamp.style.backgroundPosition = 'center';
+          stamp.style.backgroundRepeat = 'no-repeat';
+          stamp.style.backgroundBlendMode = 'normal';
+          console.log('✓ Team logo set as background');
+          
+          // Also reduce the stamp-content overlay opacity
+          const stampContent = stamp.querySelector('.stamp-content');
+          if (stampContent) {
+            stampContent.style.background = 'radial-gradient(circle, rgba(0, 0, 0, 0.20) 0%, rgba(0, 0, 0, 0.35) 100%)';
+          }
         } else {
           console.log('No team logo URL provided, using default background');
           stamp.style.backgroundImage = 'linear-gradient(135deg, rgba(20, 20, 20, 0.85) 0%, rgba(10, 10, 10, 0.90) 100%)';
+          stamp.style.backgroundSize = 'cover';
+          stamp.style.backgroundPosition = 'center';
+          stamp.style.backgroundRepeat = 'no-repeat';
+          
+          // Reset stamp-content overlay
+          const stampContent = stamp.querySelector('.stamp-content');
+          if (stampContent) {
+            stampContent.style.background = 'radial-gradient(circle, rgba(0, 0, 0, 0.30) 0%, rgba(0, 0, 0, 0.50) 100%)';
+          }
         }
       } else {
+        console.warn('⚠️ No team selected or invalid index');
         stampTeamName.textContent = 'TEAM';
+        stampTeamName.style.display = 'block';
+        stampTeamName.style.visibility = 'visible';
+        stampTeamName.style.opacity = '1';
         stamp.style.backgroundImage = 'linear-gradient(135deg, rgba(20, 20, 20, 0.85) 0%, rgba(10, 10, 10, 0.90) 100%)';
+        stamp.style.backgroundSize = 'cover';
+        stamp.style.backgroundPosition = 'center';
+        stamp.style.backgroundRepeat = 'no-repeat';
         console.log('No team selected, using default');
+        
+        // Reset stamp-content overlay
+        const stampContent = stamp.querySelector('.stamp-content');
+        if (stampContent) {
+          stampContent.style.background = 'radial-gradient(circle, rgba(0, 0, 0, 0.30) 0%, rgba(0, 0, 0, 0.50) 100%)';
+        }
       }
       
       // Add blur to background content only (not the overlay)
