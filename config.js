@@ -18,13 +18,27 @@ const CONFIG = {
   },
   
   // Auction Settings
+  // NOTE: These rules are dynamically read by AUCTION_RULES object using getters
+  // Changes to these values will affect validation in real-time (if config is unfrozen)
   auction: {
-    basePrice: 100,
+    basePrice: 100,              // Starting price for all players
     bidIncrements: {
-      default: 100,        // Default increment when player starts or after sold
-      adjustmentStep: 50,  // Amount to increase/decrease with Q/W keys
-      minimum: 50,         // Minimum allowed increment
-      maximum: 1000        // Maximum allowed increment
+      default: 100,              // Default increment when player starts or after sold
+      adjustmentStep: 50,        // Amount to increase/decrease with Q/W keys
+      minimum: 50,               // Minimum allowed increment
+      maximum: 1000              // Maximum allowed increment
+    },
+    rules: {
+      // DYNAMIC AUCTION RULES - These are read via getters for real-time updates
+      minimumPlayerBasePrice: 100,  // Minimum base price for any player (used in RULE_001, RULE_002, RULE_006)
+      safeFundBufferPercent: 1.1    // 10% buffer for safe fund threshold (RULE_006: 1.1 = 110% of minimum)
+      
+      // RULE_001: Remaining Budget Constraint - Team must retain enough to complete roster
+      // RULE_002: Dynamic Max Bid = remainingPurse - (remainingPlayers - 1) * minimumPlayerBasePrice
+      // RULE_003: Total Budget Cap - Cannot exceed allocatedAmount
+      // RULE_004: Player Count Limit - Cannot exceed totalPlayerThreshold
+      // RULE_005: Minimum Participation Balance - Must have at least playerBasePrice remaining
+      // RULE_006: Safe Fund Threshold - Should maintain buffer of (remainingPlayers - 1) * minimumPlayerBasePrice * safeFundBufferPercent
     }
   },
   
@@ -71,10 +85,12 @@ const CONFIG = {
       baseUrl: 'https://ui-avatars.com/api/',
       cardSize: 450,             // Size for main player card
       teamSlotSize: 300,         // Size for team slots view
+      teamStatusSize: 80,        // Size for team status indicator circles
       background: '2196F3',      // Background color (hex without #)
       color: 'fff',              // Text color (hex without #)
       bold: true,
-      fontSize: 0.4
+      fontSize: 0.4,
+      teamStatusFontSize: 0.5    // Font size for team status indicator
     },
     
     // Grid Layout Breakpoints (in pixels)
@@ -90,6 +106,22 @@ const CONFIG = {
     teamSlotsGrid: {
       maxPlayersPer6Cols: 12,   // Max players for 6-column grid
       // Above this number, use 4-column grid
+    },
+    
+    // Team Statistics Warning Thresholds
+    teamStatsThresholds: {
+      purseSpent: {
+        warning: 0.8,           // Warning when spent > 80% of allocated
+        danger: 0.9             // Danger when spent > 90% of allocated
+      },
+      remainingPurse: {
+        warning: 2000,          // Warning when remaining < ₹2000
+        danger: 500             // Danger when remaining < ₹500
+      },
+      remainingPlayers: {
+        warning: 2,             // Warning when remaining players <= 2
+        danger: 0               // Danger when no remaining players
+      }
     }
   },
   
@@ -101,6 +133,8 @@ const CONFIG = {
     jumpToPlayer: 'f',         // Jump to specific player
     showTeamsInfo: 'i',        // Show teams information overlay
     showTeamMenu: 'm',         // Show team selection menu (changed from 't')
+    showHotkeyHelper: 'h',     // Show hotkey helper overlay
+    toggleFullscreen: ' ',     // Toggle fullscreen (spacebar)
     closeOverlay: 'Escape',    // Close any open overlay
     teamSlotsPrefix: 't',      // Prefix for team slots (t+1, t+2, etc.)
     teamSlots: {
@@ -214,6 +248,7 @@ Object.freeze(CONFIG.googleSheets.ranges);
 Object.freeze(CONFIG.webhook);
 Object.freeze(CONFIG.auction);
 Object.freeze(CONFIG.auction.bidIncrements);
+Object.freeze(CONFIG.auction.rules);
 Object.freeze(CONFIG.audio);
 Object.freeze(CONFIG.audio.files);
 Object.freeze(CONFIG.assets);
@@ -225,6 +260,10 @@ Object.freeze(CONFIG.ui.animations.imagePreload);
 Object.freeze(CONFIG.ui.avatarPlaceholder);
 Object.freeze(CONFIG.ui.breakpoints);
 Object.freeze(CONFIG.ui.teamSlotsGrid);
+Object.freeze(CONFIG.ui.teamStatsThresholds);
+Object.freeze(CONFIG.ui.teamStatsThresholds.purseSpent);
+Object.freeze(CONFIG.ui.teamStatsThresholds.remainingPurse);
+Object.freeze(CONFIG.ui.teamStatsThresholds.remainingPlayers);
 Object.freeze(CONFIG.hotkeys);
 Object.freeze(CONFIG.hotkeys.teamSlots);
 Object.freeze(CONFIG.hotkeys.teamBidding);

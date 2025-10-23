@@ -3716,9 +3716,15 @@
     // Track current bid increment (dynamic)
     let currentBidIncrement = CONFIG.auction.bidIncrements.default;
     
-    // Auction Rules Validation System
+    // Auction Rules Validation System (Dynamically uses CONFIG values)
     const AUCTION_RULES = {
-      minimumPlayerBasePrice: 100, // Minimum base price for any player
+      // Dynamic getters to always use current CONFIG values
+      get minimumPlayerBasePrice() {
+        return CONFIG.auction.rules.minimumPlayerBasePrice;
+      },
+      get safeFundBufferPercent() {
+        return CONFIG.auction.rules.safeFundBufferPercent;
+      },
       
       // RULE_001 & RULE_002: Remaining Budget Constraint & Dynamic Max Bid
       calculateMaxBid: function(team) {
@@ -3743,10 +3749,10 @@
         return team.remainingPurse >= playerBasePrice;
       },
       
-      // RULE_006: Safe Fund Threshold (10% buffer)
+      // RULE_006: Safe Fund Threshold (configurable buffer)
       validateSafeFundThreshold: function(team, bidAmount) {
         if (team.remainingPlayers <= 1) return true; // Last player, no need for buffer
-        const safeThreshold = (team.remainingPlayers - 1) * this.minimumPlayerBasePrice * 1.1;
+        const safeThreshold = (team.remainingPlayers - 1) * this.minimumPlayerBasePrice * this.safeFundBufferPercent;
         return (team.remainingPurse - bidAmount) >= safeThreshold;
       },
       
@@ -3812,6 +3818,34 @@
           message: 'Bid is valid.',
           ruleId: null
         };
+      },
+      
+      // Helper function to get current rule configuration
+      getCurrentRules: function() {
+        return {
+          minimumPlayerBasePrice: this.minimumPlayerBasePrice,
+          safeFundBufferPercent: this.safeFundBufferPercent,
+          basePrice: basePrice,
+          bidIncrements: {
+            current: currentBidIncrement,
+            default: CONFIG.auction.bidIncrements.default,
+            minimum: CONFIG.auction.bidIncrements.minimum,
+            maximum: CONFIG.auction.bidIncrements.maximum,
+            adjustmentStep: CONFIG.auction.bidIncrements.adjustmentStep
+          },
+          teamStatsThresholds: CONFIG.ui.teamStatsThresholds
+        };
+      },
+      
+      // Helper function to log current rules (for debugging)
+      logRules: function() {
+        console.debug('[AUCTION_RULES] Current auction rules configuration:');
+        console.debug('[AUCTION_RULES] - Minimum Player Base Price:', this.minimumPlayerBasePrice);
+        console.debug('[AUCTION_RULES] - Safe Fund Buffer Percent:', this.safeFundBufferPercent);
+        console.debug('[AUCTION_RULES] - Base Price:', basePrice);
+        console.debug('[AUCTION_RULES] - Current Bid Increment:', currentBidIncrement);
+        console.debug('[AUCTION_RULES] - Bid Increment Range:', CONFIG.auction.bidIncrements.minimum, '-', CONFIG.auction.bidIncrements.maximum);
+        console.debug('[AUCTION_RULES] - Team Stats Thresholds:', CONFIG.ui.teamStatsThresholds);
       }
     };
     
@@ -3824,7 +3858,7 @@
         const img = new Image();
         img.onload = () => {
           imageCache.set(url, img);
-          console.log('✓ Preloaded image:', url.substring(0, 50) + '...');
+          console.debug('[IMAGE_CACHE] Preloaded image:', url.substring(0, 50) + '...');
           resolve(img);
         };
         img.onerror = () => {
@@ -3847,7 +3881,7 @@
     }
     
     function preloadAllPlayerImages() {
-      console.log('Starting to preload all player images...');
+      console.debug('[IMAGE_CACHE] Starting to preload all player images...');
       const promises = items.map(item => {
         if (item.imageUrl) {
           const imageUrl = convertDriveLinkToDirect(item.imageUrl);
@@ -3857,12 +3891,12 @@
       });
       
       Promise.all(promises).then(() => {
-        console.log(`✓ Preloaded ${imageCache.size} player images`);
+        console.debug(`[IMAGE_CACHE] Successfully preloaded ${imageCache.size} player images`);
       });
     }
     
     function preloadTeamLogos() {
-      console.log('Preloading team logos...');
+      console.debug('[IMAGE_CACHE] Preloading team logos...');
       teams.forEach(team => {
         if (team.logoUrl) {
           const logoUrl = convertDriveLinkToDirect(team.logoUrl);
@@ -3889,16 +3923,14 @@
       
       // Log audio readiness
       soldSound.addEventListener('canplaythrough', () => {
-        console.log('✓ Sold sound ready to play (canplaythrough)');
-        console.log('  Ready state:', soldSound.readyState);
-        console.log('  Duration:', soldSound.duration);
+        console.debug('[AUDIO] Sold sound ready to play (canplaythrough) - Ready state:', soldSound.readyState, 'Duration:', soldSound.duration);
       });
       unsoldSound.addEventListener('canplaythrough', () => {
-        console.log('✓ Unsold sound ready to play (canplaythrough)');
+        console.debug('[AUDIO] Unsold sound ready to play (canplaythrough)');
       });
       
       soldSound.addEventListener('loadeddata', () => {
-        console.log('✓ Sold sound data loaded');
+        console.debug('[AUDIO] Sold sound data loaded');
       });
       
       // Log errors
@@ -3915,13 +3947,13 @@
       
       // Unlock audio on first user interaction (for browser autoplay policy)
       const unlockAudio = () => {
-        console.log('Unlocking audio on user interaction...');
+        console.debug('[AUDIO] Unlocking audio on user interaction...');
         
         // Unlock sold sound
         const soldPromise = soldSound.play().then(() => {
           soldSound.pause();
           soldSound.currentTime = 0;
-          console.log('✓ Sold audio unlocked');
+          console.debug('[AUDIO] Sold audio unlocked successfully');
         }).catch(e => {
           console.warn('⚠️ Sold audio unlock failed:', e.name, e.message);
         });
@@ -3930,13 +3962,13 @@
         const unsoldPromise = unsoldSound.play().then(() => {
           unsoldSound.pause();
           unsoldSound.currentTime = 0;
-          console.log('✓ Unsold audio unlocked');
+          console.debug('[AUDIO] Unsold audio unlocked successfully');
         }).catch(e => {
           console.warn('⚠️ Unsold audio unlock failed:', e.name, e.message);
         });
         
         Promise.all([soldPromise, unsoldPromise]).then(() => {
-          console.log('✓ All audio unlocked successfully');
+          console.debug('[AUDIO] All audio elements unlocked successfully');
         });
       };
       
@@ -3951,11 +3983,7 @@
         return;
       }
       
-      console.log('Attempting to play sold sound...');
-      console.log('Audio ready state:', soldSound.readyState);
-      console.log('Audio source:', soldSound.src || soldSound.currentSrc);
-      console.log('Audio volume:', soldSound.volume);
-      console.log('Audio muted:', soldSound.muted);
+      console.debug('[AUDIO] Attempting to play sold sound - Ready state:', soldSound.readyState, 'Source:', soldSound.src || soldSound.currentSrc, 'Volume:', soldSound.volume, 'Muted:', soldSound.muted);
       
       // Function to actually play the sound
       const attemptPlay = () => {
@@ -3966,8 +3994,7 @@
         if (playPromise !== undefined) {
           playPromise
             .then(() => {
-              console.log('✓ Sold sound playing successfully');
-              console.log('Audio duration:', soldSound.duration);
+              console.debug('[AUDIO] Sold sound playing successfully - Duration:', soldSound.duration);
             })
             .catch(e => {
               console.error('✗ Error playing sold sound:', e);
@@ -3991,13 +4018,13 @@
       
       // Check if audio is ready to play (readyState >= 3 means HAVE_FUTURE_DATA)
       if (soldSound.readyState >= 3) {
-        console.log('Audio is ready, playing immediately');
+        console.debug('[AUDIO] Audio is ready (readyState >= 3), playing immediately');
         attemptPlay();
       } else {
-        console.log('Audio not fully loaded, waiting for canplay event...');
+        console.debug('[AUDIO] Audio not fully loaded (readyState:', soldSound.readyState + '), waiting for canplay event...');
         // Wait for audio to be ready
         soldSound.addEventListener('canplay', function onCanPlay() {
-          console.log('Audio now ready after waiting');
+          console.debug('[AUDIO] Audio now ready after waiting, attempting playback');
           soldSound.removeEventListener('canplay', onCanPlay);
           attemptPlay();
         }, { once: true });
@@ -4013,14 +4040,14 @@
         return;
       }
       
-      console.log('Attempting to play unsold sound...');
+      console.debug('[AUDIO] Attempting to play unsold sound...');
       unsoldSound.currentTime = 0; // Reset to start
       
       const playPromise = unsoldSound.play();
       
       if (playPromise !== undefined) {
         playPromise
-          .then(() => console.log('✓ Unsold sound playing successfully'))
+          .then(() => console.debug('[AUDIO] Unsold sound playing successfully'))
           .catch(e => {
             console.error('✗ Error playing unsold sound:', e);
             if (e.name === 'NotAllowedError') {
@@ -4034,7 +4061,7 @@
       const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(SHEET_RANGE)}?key=${API_KEY}`;
       const resp = await fetch(url);
       const data = await resp.json();
-      console.log('Fetched sheet data:', data);
+      console.debug('[DATA_FETCH] Fetched player sheet data - Rows:', data.values?.length || 0);
       if (!data.values) {
         console.error('No data found in sheet');
         return;
@@ -4081,7 +4108,7 @@
             : (row[cols.battingBest] || 'N/A')
         };
       });
-      console.log('Loaded items:', items);
+      console.debug('[DATA_FETCH] Loaded', items.length, 'players from sheet');
     }
 
     async function fetchTeamsData() {
@@ -4089,7 +4116,7 @@
       try {
         const resp = await fetch(url);
         const data = await resp.json();
-        console.log('Fetched teams data:', data);
+        console.debug('[DATA_FETCH] Fetched teams data - Rows:', data.values?.length || 0);
         if (!data.values) {
           console.error('No teams found in sheet');
           return;
@@ -4112,7 +4139,7 @@
             captain: row[cols.captain] || ''
           };
         });
-        console.log('Loaded teams:', teams);
+        console.debug('[DATA_FETCH] Loaded teams:', teams.length, 'teams with', teams.map(t => t.name).join(', '));
         populateTeamDropdown();
         populateTeamStatusIndicator(); // Initialize team status indicator
       } catch (error) {
@@ -4160,7 +4187,7 @@
       
       if (idMatch && idMatch[1]) {
         const fileId = idMatch[1];
-        console.log('Converting Google Drive URL to direct link for ID:', fileId);
+        console.debug('[IMAGE_CACHE] Converting Google Drive URL to direct link - File ID:', fileId);
         // Use thumbnail format which works better for embedding and is more reliable
         // Use w600 for faster loading (sufficient for 450px circle)
         return `https://drive.google.com/thumbnail?id=${fileId}&sz=w600`;
@@ -4193,7 +4220,7 @@
       if (imageSrc && imageSrc.trim() !== '') {
         // Check if image is already in cache
         if (imageCache.has(imageSrc)) {
-          console.log('✓ Using cached image for:', item.name);
+          console.debug('[IMAGE_CACHE] Using cached image for player:', item.name);
           profileImg.src = imageSrc;
         } else {
           // Try to load the Google Drive image
@@ -4395,7 +4422,7 @@
         
         // Check if there are unsold players
         if (unsoldPlayers.length > 0) {
-          console.log(`First round complete. ${unsoldPlayers.length} unsold players found.`);
+          console.debug(`[AUCTION_FLOW] First round complete - ${unsoldPlayers.length} unsold players will be shown in second round`);
           // Replace items with unsold players for second round
           items = [...unsoldPlayers];
           showUnsoldRoundMessage();
@@ -4405,7 +4432,7 @@
       
       // Check if we've reached the end of unsold round
       if (isShowingUnsoldRound && currentIndex >= items.length - 1) {
-        console.log('Unsold round complete. All players have been shown.');
+        console.debug('[AUCTION_FLOW] Unsold round complete - All players have been shown');
         // Could show completion message here
         return;
       }
@@ -4496,26 +4523,27 @@
         
         // Calculate Purse Spent
         const purseSpent = team.allocatedAmount - team.remainingPurse;
+        const thresholds = CONFIG.ui.teamStatsThresholds;
         
         // Determine status colors
         let purseSpentClass = 'team-stat-value';
-        if (purseSpent > team.allocatedAmount * 0.8) {
+        if (purseSpent > team.allocatedAmount * thresholds.purseSpent.warning) {
           purseSpentClass += ' warning';
-        } else if (purseSpent > team.allocatedAmount * 0.9) {
+        } else if (purseSpent > team.allocatedAmount * thresholds.purseSpent.danger) {
           purseSpentClass += ' danger';
         }
         
         let purseRemainingClass = 'team-stat-value';
-        if (team.remainingPurse < 500) {
+        if (team.remainingPurse < thresholds.remainingPurse.danger) {
           purseRemainingClass += ' danger';
-        } else if (team.remainingPurse < 2000) {
+        } else if (team.remainingPurse < thresholds.remainingPurse.warning) {
           purseRemainingClass += ' warning';
         }
         
         let playersClass = 'team-stat-value';
-        if (team.remainingPlayers <= 0) {
+        if (team.remainingPlayers <= thresholds.remainingPlayers.danger) {
           playersClass += ' danger';
-        } else if (team.remainingPlayers <= 2) {
+        } else if (team.remainingPlayers <= thresholds.remainingPlayers.warning) {
           playersClass += ' warning';
         }
         
@@ -5062,13 +5090,8 @@
           originalPlayersBought: teamData.playersBought
         };
         
-        console.log('=== SAVING SOLD PLAYER ===');
-        console.log('Player:', playerData.name);
-        console.log('Team:', teamName);
-        console.log('Bid Amount:', bidAmount);
-        console.log('Team Before - Purse:', teamData.remainingPurse, 'Players:', teamData.playersBought);
-        console.log('Team After - Purse:', soldData.teamRemainingPurse, 'Players:', soldData.teamPlayersBought);
-        console.log('Full data being sent:', JSON.stringify(soldData, null, 2));
+        console.debug('[WEBHOOK] Saving sold player:', playerData.name, 'to team:', teamName, 'for bid:', bidAmount);
+        console.debug('[WEBHOOK] Team update - Before: {purse:', teamData.remainingPurse, 'players:', teamData.playersBought + '} After: {purse:', soldData.teamRemainingPurse, 'players:', soldData.teamPlayersBought + '}');
         
         const webhookUrl = CONFIG.webhook.url;
         
@@ -5081,14 +5104,13 @@
           body: JSON.stringify(soldData)
         });
         
-        console.log('Webhook request sent (no-cors mode)');
-        console.log(`Waiting ${CONFIG.webhook.updateDelay / 1000} seconds for Google Sheets to update...`);
+        console.debug('[WEBHOOK] Request sent (no-cors mode) - Waiting', CONFIG.webhook.updateDelay / 1000, 'seconds for Google Sheets update...');
         
         // Wait for Google Sheets to update, then refresh teams data
         setTimeout(async () => {
-          console.log('Fetching updated teams data...');
+          console.debug('[WEBHOOK] Fetching updated teams data after webhook delay...');
           await fetchTeamsData();
-          console.log('Teams data refreshed!');
+          console.debug('[WEBHOOK] Teams data refreshed successfully');
         }, CONFIG.webhook.updateDelay);
         
         return true;
@@ -5386,7 +5408,7 @@
       
       teams.forEach((team, index) => {
         const avatarConfig = CONFIG.ui.avatarPlaceholder;
-        const fallbackUrl = `${avatarConfig.baseUrl}?name=${encodeURIComponent(team.name.substring(0, 2))}&size=80&background=${avatarConfig.background}&color=${avatarConfig.color}&bold=${avatarConfig.bold}&font-size=0.5`;
+        const fallbackUrl = `${avatarConfig.baseUrl}?name=${encodeURIComponent(team.name.substring(0, 2))}&size=${avatarConfig.teamStatusSize}&background=${avatarConfig.background}&color=${avatarConfig.color}&bold=${avatarConfig.bold}&font-size=${avatarConfig.teamStatusFontSize}`;
         const logoUrl = team.logoUrl && team.logoUrl.trim() !== '' 
           ? convertDriveLinkToDirect(team.logoUrl) 
           : fallbackUrl;
@@ -5570,9 +5592,7 @@
         }
       }
       
-      console.log('Selected team index:', selectedTeamIndex);
-      console.log('Selected team data:', selectedTeam);
-      console.log('Teams array:', teams);
+      console.debug('[TEAM_SELECTION] Selected team index:', selectedTeamIndex, '| Team:', selectedTeam?.name || 'None');
       
       if (selectedTeam) {
         
@@ -5585,15 +5605,12 @@
         stampTeamName.style.fontSize = '26px';
         stampTeamName.style.fontWeight = '700';
         stampTeamName.style.textTransform = 'uppercase';
-        console.log('✓ Team name set to:', selectedTeam.name);
-        console.log('✓ stampTeamName element:', stampTeamName);
-        console.log('✓ stampTeamName textContent:', stampTeamName.textContent);
+        console.debug('[TEAM_SELECTION] Team stamp name set to:', selectedTeam.name);
         
         // Set team logo as background image if available
-        console.log('Team logo URL from data:', selectedTeam.logoUrl);
         if (selectedTeam.logoUrl && selectedTeam.logoUrl.trim() !== '') {
           const logoSrc = convertDriveLinkToDirect(selectedTeam.logoUrl);
-          console.log('Converted logo URL:', logoSrc);
+          console.debug('[TEAM_SELECTION] Setting team logo background:', logoSrc.substring(0, 50) + '...');
           
           // Set background properties explicitly
           stamp.style.backgroundImage = `linear-gradient(135deg, rgba(20, 20, 20, 0.25) 0%, rgba(10, 10, 10, 0.40) 100%), url("${logoSrc}")`;
@@ -5601,7 +5618,6 @@
           stamp.style.backgroundPosition = 'center';
           stamp.style.backgroundRepeat = 'no-repeat';
           stamp.style.backgroundBlendMode = 'normal';
-          console.log('✓ Team logo set as background');
           
           // Also reduce the stamp-content overlay opacity
           const stampContent = stamp.querySelector('.stamp-content');
@@ -5609,7 +5625,7 @@
             stampContent.style.background = 'radial-gradient(circle, rgba(0, 0, 0, 0.20) 0%, rgba(0, 0, 0, 0.35) 100%)';
           }
         } else {
-          console.log('No team logo URL provided, using default background');
+          console.debug('[TEAM_SELECTION] No team logo URL provided, using default background');
           stamp.style.backgroundImage = 'linear-gradient(135deg, rgba(20, 20, 20, 0.85) 0%, rgba(10, 10, 10, 0.90) 100%)';
           stamp.style.backgroundSize = 'cover';
           stamp.style.backgroundPosition = 'center';
@@ -5631,7 +5647,6 @@
         stamp.style.backgroundSize = 'cover';
         stamp.style.backgroundPosition = 'center';
         stamp.style.backgroundRepeat = 'no-repeat';
-        console.log('No team selected, using default');
         
         // Reset stamp-content overlay
         const stampContent = stamp.querySelector('.stamp-content');
@@ -5677,7 +5692,7 @@
         // Mark player as sold
         if (items[currentIndex]) {
           soldPlayers.push(items[currentIndex]);
-          console.log('Player sold:', items[currentIndex].name);
+          console.debug('[AUCTION_FLOW] Player sold:', items[currentIndex].name, '- Total sold:', soldPlayers.length);
         }
         
         // Show jump to player input - overlay stays visible
@@ -5718,8 +5733,7 @@
         // Mark player as unsold (only in first round)
         if (!isShowingUnsoldRound && items[currentIndex]) {
           unsoldPlayers.push(items[currentIndex]);
-          console.log('Player marked as unsold:', items[currentIndex].name);
-          console.log('Total unsold players:', unsoldPlayers.length);
+          console.debug('[AUCTION_FLOW] Player marked as unsold:', items[currentIndex].name, '- Total unsold:', unsoldPlayers.length);
         }
         
         // Show jump to player input - overlay stays visible
@@ -5734,7 +5748,7 @@
       const playerIndex = items.findIndex(item => String(item.id) === String(playerId));
       
       if (playerIndex !== -1) {
-        console.log('Jumping to player ID:', playerId, 'at index:', playerIndex);
+        console.debug('[AUCTION_FLOW] Jumping to player ID:', playerId, 'at index:', playerIndex);
         
         // Hide sold/unsold overlays when jumping to new player
         clearSoldUnsoldOverlays();
@@ -6044,6 +6058,61 @@
         }, 300);
       }, 2000);
     }
+
+    // Global Auction Debug/Utility Object
+    // Exposed for console debugging and testing
+    window.AuctionDebug = {
+      // Get current auction rules
+      getRules: () => AUCTION_RULES.getCurrentRules(),
+      
+      // Log current rules to console
+      logRules: () => AUCTION_RULES.logRules(),
+      
+      // Test bid validation for a specific team
+      testBid: (teamIndex, bidAmount) => {
+        if (teamIndex < 0 || teamIndex >= teams.length) {
+          console.error('Invalid team index. Valid range: 0 -', teams.length - 1);
+          return;
+        }
+        const team = teams[teamIndex];
+        const validation = AUCTION_RULES.validateBid(team, bidAmount, basePrice);
+        console.log('[DEBUG] BID VALIDATION TEST - Team:', team.name, '| Bid:', bidAmount);
+        console.log('[DEBUG] Result:', validation.valid ? '✓ VALID' : '✗ INVALID', validation.valid ? '' : '| Reason: ' + validation.message);
+        console.log('[DEBUG] Max Allowed Bid:', AUCTION_RULES.calculateMaxBid(team));
+        return validation;
+      },
+      
+      // Get all teams status
+      getTeamsStatus: () => {
+        return teams.map((team, index) => ({
+          index,
+          name: team.name,
+          playersBought: team.playersBought,
+          remainingPlayers: team.remainingPlayers,
+          remainingPurse: team.remainingPurse,
+          maxBid: AUCTION_RULES.calculateMaxBid(team),
+          canBidCurrent: AUCTION_RULES.validateBid(team, currentBid, basePrice).valid
+        }));
+      },
+      
+      // Get current state
+      getState: () => ({
+        currentPlayerIndex: currentIndex,
+        currentPlayer: items[currentIndex],
+        currentBid,
+        basePrice,
+        currentBidIncrement,
+        lastBiddingTeam: lastBiddingTeam?.name,
+        isAwaitingConfirmation,
+        unsoldPlayersCount: unsoldPlayers.length,
+        soldPlayersCount: soldPlayers.length
+      })
+    };
+    
+    // Log initialization message
+    console.log('%c🏏 Cricket Auction App Initialized', 'color: #2196F3; font-size: 16px; font-weight: bold;');
+    console.log('%cDebug utilities available via window.AuctionDebug', 'color: #4CAF50; font-size: 12px;');
+    console.log('%cTry: AuctionDebug.logRules(), AuctionDebug.getTeamsStatus(), AuctionDebug.testBid(0, 500)', 'color: #ff9800; font-size: 11px;');
 
     (async function init() {
       // Update bid increment info from config
