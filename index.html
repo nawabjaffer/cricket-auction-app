@@ -2976,9 +2976,9 @@
             <th>Team Name</th>
             <th>Players Bought</th>
             <th>Remaining Players</th>
+            <th>Purse Spent</th>
             <th>Remaining Purse</th>
             <th>Highest Bid</th>
-            <th>Captain</th>
           </tr>
         </thead>
         <tbody id="teamsTableBody">
@@ -3276,8 +3276,8 @@
 
         // Calculate age if date of birth is provided
         if (dateOfBirth && dateOfBirth !== 'N/A') {
-          // Parse DD/MM/YYYY format
-          const parts = dateOfBirth.split('/');
+          // Parse DD/MM/YYYY or DD-MM-YYYY format
+          const parts = dateOfBirth.split(/[\/\-]/);
           if (parts.length === 3) {
             const dob = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`);
             if (!isNaN(dob.getTime())) {
@@ -3287,17 +3287,27 @@
           }
         }
         
+        // Get ID from column C, or generate if missing
+        const playerId = row[cols.id] || `P${String(index + 1).padStart(3, '0')}`;
+        
         return {
-          id: row[cols.id] || `P${String(index + 1).padStart(3, '0')}`,
+          id: playerId,
           imageUrl: row[cols.imageUrl] || '',
           name: row[cols.name] || 'Unknown Player',
           dateOfBirth: dateOfBirth,
           age: age,
           role: row[cols.role] || 'Player',
           matches: row[cols.matches] || '0',
+          runs: row[cols.runs] || 'N/A',
+          wickets: row[cols.wickets] || 'N/A',
           bowlingBestFigures: row[cols.bowlingBest] || 'N/A',
           battingBestFigures: row[cols.battingBest] || 'N/A',
-          bestFigures: row[cols.role] && row[cols.role].toLowerCase().includes('Allrounder') ? (row[cols.bowlingBest] || 'N/A') : (row[cols.matches] || 'N/A')
+          basePrice: row[cols.basePrice] || '100',
+          batsmanType: row[cols.batsmanType] || '',
+          bowlingHand: row[cols.bowlingHand] || '',
+          bestFigures: row[cols.role] && row[cols.role].toLowerCase().includes('allrounder') 
+            ? (row[cols.bowlingBest] || 'N/A') 
+            : (row[cols.battingBest] || 'N/A')
         };
       });
       console.log('Loaded items:', items);
@@ -3568,12 +3578,22 @@
       teams.forEach(team => {
         const row = document.createElement('tr');
         
+        // Calculate Purse Spent
+        const purseSpent = team.allocatedAmount - team.remainingPurse;
+        
         // Determine status colors
-        let purseClass = 'team-stat-value';
+        let purseSpentClass = 'team-stat-value';
+        if (purseSpent > team.allocatedAmount * 0.8) {
+          purseSpentClass += ' warning';
+        } else if (purseSpent > team.allocatedAmount * 0.9) {
+          purseSpentClass += ' danger';
+        }
+        
+        let purseRemainingClass = 'team-stat-value';
         if (team.remainingPurse < 500) {
-          purseClass += ' danger';
+          purseRemainingClass += ' danger';
         } else if (team.remainingPurse < 2000) {
-          purseClass += ' warning';
+          purseRemainingClass += ' warning';
         }
         
         let playersClass = 'team-stat-value';
@@ -3605,9 +3625,9 @@
           <td class="team-name-cell">${team.name}</td>
           <td><span class="team-stat-value">${team.playersBought}</span> / ${team.totalPlayerThreshold}</td>
           <td><span class="${playersClass}">${team.remainingPlayers}</span></td>
-          <td><span class="${purseClass}">₹${team.remainingPurse.toLocaleString()}</span></td>
+          <td><span class="${purseSpentClass}">₹${purseSpent.toLocaleString()}</span></td>
+          <td><span class="${purseRemainingClass}">₹${team.remainingPurse.toLocaleString()}</span></td>
           <td><span class="team-stat-value">₹${team.highestBid.toLocaleString()}</span></td>
-          <td><span class="team-captain">${team.captain || 'TBD'}</span></td>
         `;
         
         // Insert logo cell at the beginning
@@ -3769,10 +3789,10 @@
       if (player) {
         const stats = {
           matches: player.matches || 'N/A',
-          innings: 'N/A', // Not available in current structure
-          runs: player.battingBestFigures || 'N/A',
-          wickets: player.bowlingBestFigures || 'N/A',
-          average: 'N/A' // Not available in current structure
+          innings: 'N/A', // Not available in new table structure
+          runs: player.runs || 'N/A', // Career runs from column U
+          wickets: player.wickets || 'N/A', // Total wickets from column T
+          average: 'N/A' // Not available in new table structure
         };
         
         // Cache it
@@ -3799,10 +3819,10 @@
           dateOfBirth: captain.dateOfBirth,
           stats: {
             matches: captain.matches || 'N/A',
-            innings: 'N/A', // Not in current data structure
-            runs: captain.battingBestFigures || 'N/A',
-            wickets: captain.bowlingBestFigures || 'N/A',
-            average: 'N/A' // Not in current data structure
+            innings: 'N/A', // Not available in new table structure
+            runs: captain.runs || 'N/A', // Career runs from column U
+            wickets: captain.wickets || 'N/A', // Total wickets from column T
+            average: 'N/A' // Not available in new table structure
           }
         };
       }

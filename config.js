@@ -5,7 +5,7 @@ const CONFIG = {
     sheetId: '1-ZcLNOcy-iAKsLVQelBXOaXX6DhgPevy4kx1nvT9WCs',
     apiKey: 'AIzaSyC0sO4eAmfmi0QXqBUE912dpvVofuDrVHI',
     ranges: {
-      players: 'BCC Tournament Registration!A2:V',  // Extended to include more stats
+      players: 'BCC Tournament Registration!A2:Y',  // Updated to include all columns (A-Y = 25 columns)
       teams: 'Teams!A2:I',
       soldPlayers: 'Sold Players!A:J'  // Updated to include Image URL column
     }
@@ -125,23 +125,46 @@ const CONFIG = {
   ],
   
   // Column Mappings (for reference)
+  // New BCC Registration Table Structure (25 columns):
+  // 0=Timestamp, 1=Base Price, 2=Id, 3=Upload Photo, 4=Full Name, 5=DOB, 6=Blood Group,
+  // 7=Phone Number, 8=Jersey Size, 9=Shoe Size, 10=Cricket Role, 11=Batsman Type,
+  // 12=Batting Order Preference, 13=Bowling Hand, 14=Batting Type (AR), 15=Batting Order (AR),
+  // 16=Bowling Style (AR), 17=Bowling Hand (AR), 18=CricHeroes Link, 19=Matches Played,
+  // 20=Total Wickets, 21=Career runs, 22=Batting Best Figures, 23=Bowling Best Figures, 24=Declaration
   columnMappings: {
     players: {
-      id: 1,              // Column B
-      imageUrl: 2,        // Column C
-      name: 3,            // Column D
-      dateOfBirth: 4,     // Column E
-      role: 9,            // Column J
-      matches: 18,        // Column S
-      bowlingBest: 19,    // Column T
-      battingBest: 20,    // Column U
-      // Cricket Stats (columns 18-22)
+      timestamp: 0,       // Column A - Timestamp
+      basePrice: 1,       // Column B - Base Price
+      id: 2,              // Column C - Id
+      imageUrl: 3,        // Column D - Upload Photo
+      name: 4,            // Column E - Full Name
+      dateOfBirth: 5,     // Column F - Date of Birth (DOB)
+      bloodGroup: 6,      // Column G - Blood Group
+      phoneNumber: 7,     // Column H - Phone Number
+      jerseySize: 8,      // Column I - Jersey Size
+      shoeSize: 9,        // Column J - Shoe Size (India/UK)
+      role: 10,           // Column K - Cricket Role
+      batsmanType: 11,    // Column L - Batsman Type
+      battingOrder: 12,   // Column M - Batting Order Preference
+      bowlingHand: 13,    // Column N - Bowling Hand
+      battingTypeAR: 14,  // Column O - Batting Type For All Rounder
+      battingOrderAR: 15, // Column P - Batting Order Preference For All Rounder
+      bowlingStyleAR: 16, // Column Q - Bowling Style For All Rounder
+      bowlingHandAR: 17,  // Column R - Bowling Hand For All Rounder
+      cricHeroesLink: 18, // Column S - CricHeroes Link
+      matches: 19,        // Column T - Matches Played
+      wickets: 20,        // Column U - Total Wickets
+      runs: 21,           // Column V - Career runs
+      battingBest: 22,    // Column W - Batting Best Figures
+      bowlingBest: 23,    // Column X - Bowling Best Figures
+      declaration: 24,    // Column Y - Declaration / Signature
+      // Legacy stats mapping (for backward compatibility)
       stats: {
-        matches: 17,      // Column R
-        innings: 18,      // Column S
-        runs: 19,         // Column T
-        wickets: 20,      // Column U
-        average: 21       // Column V
+        matches: 19,      // Column T - Matches Played
+        innings: 19,      // Using matches as innings (not available)
+        runs: 21,         // Column V - Career runs
+        wickets: 20,      // Column U - Total Wickets
+        average: 19       // Using matches as average (not available)
       }
     },
     teams: {
