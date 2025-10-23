@@ -1355,11 +1355,11 @@
     /* Grid variations for different player counts */
     .players-grid.grid-4-cols {
       grid-template-columns: repeat(4, 1fr);
-      gap: 28px;
+      gap: 20px;
     }
     
     .players-grid.grid-6-cols {
-      grid-template-columns: repeat(6, 1fr);
+      grid-template-columns: repeat(6, 0fr);
       gap: 24px;
     }
     
@@ -1448,26 +1448,50 @@
       .player-card {
         border-radius: 16px;
       }
+      
+      .player-card-image-container {
+        border-radius: 16px 16px 0 0;
+      }
+      
+      .player-card::after {
+        border-radius: 16px 16px 0 0;
+      }
     }
     
-    /* Player Card Background Image - Top Section */
-    .player-card::before {
-      content: '';
+    /* Player Card Image Container - Top Section */
+    .player-card-image-container {
       position: absolute;
       top: 0;
       left: 0;
       right: 0;
       height: 65%;
-      background: var(--player-image, linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%));
-      background-size: cover;
-      background-position: center 20%;
-      background-repeat: no-repeat;
-      transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
-      z-index: 0;
+      overflow: hidden;
       border-radius: 20px 20px 0 0;
+      z-index: 0;
+      background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
     }
     
-    /* No overlay gradient - clean separation */
+    .player-card-image-container::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(ellipse at center, transparent 0%, rgba(0, 0, 0, 0.15) 100%);
+      z-index: 1;
+      pointer-events: none;
+    }
+    
+    .player-card-image {
+      width: 100%;
+      height: 160%;
+      object-fit: cover;
+      object-position: center 15%;
+      transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+      display: block;
+      image-rendering: -webkit-optimize-contrast;
+      image-rendering: crisp-edges;
+    }
+    
+    /* Subtle overlay for better contrast */
     .player-card::after {
       content: '';
       position: absolute;
@@ -1476,12 +1500,12 @@
       right: 0;
       height: 65%;
       background: linear-gradient(to bottom, 
-                  rgba(0, 0, 0, 0.1) 0%,
-                  rgba(0, 0, 0, 0.2) 50%,
-                  rgba(0, 0, 0, 0.4) 100%);
+                  rgba(0, 0, 0, 0.05) 0%,
+                  rgba(0, 0, 0, 0.1) 40%,
+                  rgba(0, 0, 0, 0.25) 100%);
       z-index: 1;
       pointer-events: none;
-      transition: opacity 0.5s ease;
+      transition: all 0.5s ease;
       border-radius: 20px 20px 0 0;
     }
     
@@ -1493,13 +1517,16 @@
       transform: translateY(-8px);
     }
     
-    .player-card:hover::before {
-      background-position: center 15%;
+    .player-card:hover .player-card-image {
       transform: scale(1.08);
+      object-position: center center;
     }
     
     .player-card:hover::after {
-      opacity: 0.7;
+      background: linear-gradient(to bottom, 
+                  rgba(0, 0, 0, 0.1) 0%,
+                  rgba(0, 0, 0, 0.15) 40%,
+                  rgba(0, 0, 0, 0.3) 100%);
     }
     
     /* TBD Card - Modern Empty Slot Design */
@@ -1512,6 +1539,8 @@
       border-style: dashed;
       border-color: rgba(255, 255, 255, 0.12);
       border-width: 2px;
+      height: 260px;
+      width: 220px;
       padding: 0;
       display: flex;
       flex-direction: column;
@@ -1519,7 +1548,7 @@
       justify-content: center;
     }
     
-    .player-card.tbd::before {
+    .player-card.tbd .player-card-image-container {
       display: none;
     }
     
@@ -1545,10 +1574,10 @@
     /* TBD Avatar - Visible only for TBD cards */
     .player-avatar-tbd {
       width: 100%;
-      max-width: 90px;
+      max-width: 140px;
       aspect-ratio: 1/1;
       border-radius: 50%;
-      margin: 0 auto 16px;
+      margin: 20px auto 20px;
       border: 3px dashed rgba(255, 255, 255, 0.15);
       display: flex;
       align-items: center;
@@ -1590,30 +1619,32 @@
     /* Player Info Container - Dark Background Section */
     .player-card-info {
       position: relative;
-      z-index: 2;
       width: 100%;
-      height: 35%;
-      padding: 18px 14px 16px;
       display: flex;
       flex-direction: column;
+      top: 172px;
       align-items: center;
       justify-content: center;
-      background: linear-gradient(180deg, 
-                  rgba(10, 10, 20, 0.98) 0%,
-                  rgba(5, 5, 15, 1) 100%);
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(10px);
       border-top: 1px solid rgba(255, 255, 255, 0.05);
       transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
       gap: 6px;
     }
     
-    .player-card:hover .player-card-info {
-      background: linear-gradient(180deg, 
-                  rgba(15, 15, 25, 0.98) 0%,
-                  rgba(8, 8, 18, 1) 100%);
+    .player-card:hover {
       padding-top: 20px;
       gap: 8px;
     }
     
+    .player-card:hover .player-card-info{
+      background: rgba(255, 255, 255, 0.08);
+      /* border-top-color: var(--team-color, rgba(33, 150, 243, 0.3)); */
+      padding-top: 20px;
+      padding-bottom: 20px;
+      gap: 8px;
+    }
+
     /* Player Name - Dark background */
     .player-card-name {
       font-size: 16px;
@@ -1662,7 +1693,6 @@
     
     .player-card:hover .player-card-role {
       color: rgba(255, 255, 255, 0.9);
-      background: rgba(255, 255, 255, 0.05);
       border-color: var(--team-color, rgba(33, 150, 243, 0.3));
     }
     
@@ -2948,7 +2978,11 @@
           const captainBadge = isCaptain ? '<div class="player-captain-badge">C</div>' : '';
           
           html += `
-            <div class="player-card" style="--player-image: url('${avatarUrl}')">
+            <div class="player-card">
+              <div class="player-card-image-container">
+                <img class="player-card-image" src="${avatarUrl}" alt="${player.name}" 
+                     onerror="this.src='${placeholderUrl}'">
+              </div>
               ${captainBadge}
               <div class="player-card-info">
                 <h3 class="player-card-name">${player.name}</h3>
