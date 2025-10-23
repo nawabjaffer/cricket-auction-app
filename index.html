@@ -474,6 +474,179 @@
       animation: incrementFlash 0.3s ease-out;
     }
     
+    /* Team Status Indicator (Bottom Left Corner) */
+    .team-status-indicator {
+      position: absolute;
+      bottom: 15px;
+      left: 15px;
+      z-index: 50;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      max-width: 250px;
+      opacity: 0.9;
+      transition: opacity 0.3s ease;
+      padding: 10px;
+      background: rgba(0, 0, 0, 0.75);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      border-radius: 12px;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+    }
+    
+    .team-status-indicator:hover {
+      opacity: 1;
+    }
+    
+    .team-status-item {
+      position: relative;
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      overflow: visible;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      border: 3px solid transparent;
+    }
+    
+    .team-status-item:hover {
+      transform: scale(1.15);
+    }
+    
+    .team-status-item.status-safe {
+      background: rgba(76, 175, 80, 0.4);
+      border-color: #4CAF50;
+      box-shadow: 0 0 15px rgba(76, 175, 80, 0.7),
+                  0 0 25px rgba(76, 175, 80, 0.4),
+                  inset 0 0 10px rgba(76, 175, 80, 0.2);
+      animation: statusGlowSafe 2s ease-in-out infinite;
+    }
+    
+    .team-status-item.status-warning {
+      background: rgba(255, 152, 0, 0.35);
+      border-color: #ff9800;
+      box-shadow: 0 0 15px rgba(255, 152, 0, 0.6),
+                  0 0 25px rgba(255, 152, 0, 0.35),
+                  inset 0 0 10px rgba(255, 152, 0, 0.15);
+      animation: statusGlowWarning 2s ease-in-out infinite;
+    }
+    
+    .team-status-item.status-warning .team-status-logo {
+      opacity: 0.6;
+    }
+    
+    .team-status-item.status-danger {
+      background: rgba(244, 67, 54, 0.85);
+      border-color: #f44336;
+      box-shadow: 0 0 18px rgba(244, 67, 54, 0.9),
+                  0 0 30px rgba(244, 67, 54, 0.6),
+                  inset 0 0 15px rgba(244, 67, 54, 0.4);
+      animation: statusGlowDanger 2s ease-in-out infinite;
+    }
+    
+    .team-status-item.status-danger .team-status-logo {
+      opacity: 0.2;
+      filter: brightness(0.3);
+    }
+    
+    .team-status-logo {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 50%;
+      position: relative;
+      z-index: 1;
+      transition: opacity 0.3s ease, filter 0.3s ease;
+    }
+    
+    .team-status-number {
+      position: absolute;
+      bottom: -2px;
+      right: -2px;
+      width: 16px;
+      height: 16px;
+      background: rgba(0, 0, 0, 0.9);
+      color: white;
+      font-size: 9px;
+      font-weight: 900;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border: 2px solid rgba(255, 255, 255, 0.6);
+      box-shadow: 0 0 5px rgba(0, 0, 0, 0.5);
+      z-index: 2;
+    }
+    
+    .team-status-tooltip {
+      position: absolute;
+      bottom: 45px;
+      left: 50%;
+      transform: translateX(-50%) scale(0);
+      background: rgba(0, 0, 0, 0.95);
+      color: white;
+      padding: 6px 10px;
+      border-radius: 6px;
+      font-size: 10px;
+      white-space: nowrap;
+      pointer-events: none;
+      transition: transform 0.2s ease, opacity 0.2s ease;
+      opacity: 0;
+      z-index: 100;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+    }
+    
+    .team-status-item:hover .team-status-tooltip {
+      transform: translateX(-50%) scale(1);
+      opacity: 1;
+    }
+    
+    @keyframes statusGlowSafe {
+      0%, 100% {
+        background: rgba(76, 175, 80, 0.35);
+        box-shadow: 0 0 12px rgba(76, 175, 80, 0.6),
+                    0 0 20px rgba(76, 175, 80, 0.3),
+                    inset 0 0 10px rgba(76, 175, 80, 0.2);
+      }
+      50% {
+        background: rgba(76, 175, 80, 0.5);
+        box-shadow: 0 0 18px rgba(76, 175, 80, 0.9),
+                    0 0 30px rgba(76, 175, 80, 0.5),
+                    inset 0 0 15px rgba(76, 175, 80, 0.3);
+      }
+    }
+    
+    @keyframes statusGlowWarning {
+      0%, 100% {
+        background: rgba(255, 152, 0, 0.3);
+        box-shadow: 0 0 12px rgba(255, 152, 0, 0.5),
+                    0 0 20px rgba(255, 152, 0, 0.25),
+                    inset 0 0 10px rgba(255, 152, 0, 0.15);
+      }
+      50% {
+        background: rgba(255, 152, 0, 0.45);
+        box-shadow: 0 0 18px rgba(255, 152, 0, 0.8),
+                    0 0 30px rgba(255, 152, 0, 0.4),
+                    inset 0 0 15px rgba(255, 152, 0, 0.25);
+      }
+    }
+    
+    @keyframes statusGlowDanger {
+      0%, 100% {
+        background: rgba(244, 67, 54, 0.8);
+        box-shadow: 0 0 15px rgba(244, 67, 54, 0.85),
+                    0 0 25px rgba(244, 67, 54, 0.5),
+                    inset 0 0 12px rgba(244, 67, 54, 0.35);
+      }
+      50% {
+        background: rgba(244, 67, 54, 0.95);
+        box-shadow: 0 0 22px rgba(244, 67, 54, 1),
+                    0 0 35px rgba(244, 67, 54, 0.7),
+                    inset 0 0 18px rgba(244, 67, 54, 0.5);
+      }
+    }
+    
     @keyframes incrementFlash {
       0%, 100% {
         transform: scale(1);
@@ -3328,6 +3501,11 @@
       </span>
     </div>
     
+    <!-- Team Status Indicator (Bottom Left Corner) -->
+    <div class="team-status-indicator" id="teamStatusIndicator">
+      <!-- Teams will be populated dynamically -->
+    </div>
+    
     <!-- Hotkey Helper Button -->
     <button class="hotkey-helper-btn" id="hotkeyHelperBtn" onclick="toggleHotkeyHelper()" title="Keyboard Shortcuts (Press H)">
       ⌨️
@@ -3936,11 +4114,13 @@
         });
         console.log('Loaded teams:', teams);
         populateTeamDropdown();
+        populateTeamStatusIndicator(); // Initialize team status indicator
       } catch (error) {
         console.error('Error fetching teams:', error);
         // Load default teams from config if fetch fails
         teams = CONFIG.defaultTeams.map(team => ({...team})); // Clone the default teams
         populateTeamDropdown();
+        populateTeamStatusIndicator(); // Initialize team status indicator
       }
     }
 
@@ -4065,6 +4245,7 @@
 
     function updateBidDisplay() {
       document.getElementById('bidAmount').textContent = '₹' + currentBid.toLocaleString();
+      updateTeamStatusIndicator(); // Update team status colors when bid changes
     }
     
     function updateBidIncrementDisplay() {
@@ -4087,6 +4268,7 @@
       if (newIncrement <= config.maximum) {
         currentBidIncrement = newIncrement;
         updateBidIncrementDisplay();
+        updateTeamStatusIndicator(); // Update team status colors
         showNotification(`Bid increment increased to ₹${currentBidIncrement.toLocaleString()}`, 'info');
       } else {
         showNotification(`Maximum increment is ₹${config.maximum.toLocaleString()}`, 'warning');
@@ -4100,6 +4282,7 @@
       if (newIncrement >= config.minimum) {
         currentBidIncrement = newIncrement;
         updateBidIncrementDisplay();
+        updateTeamStatusIndicator(); // Update team status colors
         showNotification(`Bid increment decreased to ₹${currentBidIncrement.toLocaleString()}`, 'info');
       } else {
         showNotification(`Minimum increment is ₹${config.minimum.toLocaleString()}`, 'warning');
@@ -5194,6 +5377,136 @@
     function hideBidTeamWarning() {
       const warning = document.getElementById('bidTeamWarning');
       warning.style.display = 'none';
+    }
+    
+    // Populate team status indicator with all teams
+    function populateTeamStatusIndicator() {
+      const container = document.getElementById('teamStatusIndicator');
+      container.innerHTML = '';
+      
+      teams.forEach((team, index) => {
+        const avatarConfig = CONFIG.ui.avatarPlaceholder;
+        const fallbackUrl = `${avatarConfig.baseUrl}?name=${encodeURIComponent(team.name.substring(0, 2))}&size=80&background=${avatarConfig.background}&color=${avatarConfig.color}&bold=${avatarConfig.bold}&font-size=0.5`;
+        const logoUrl = team.logoUrl && team.logoUrl.trim() !== '' 
+          ? convertDriveLinkToDirect(team.logoUrl) 
+          : fallbackUrl;
+        
+        const statusItem = document.createElement('div');
+        statusItem.className = 'team-status-item';
+        statusItem.setAttribute('data-team-index', index);
+        
+        statusItem.innerHTML = `
+          <img src="${logoUrl}" alt="${team.name}" class="team-status-logo" onerror="this.src='${fallbackUrl}'">
+          <div class="team-status-number">${index + 1}</div>
+          <div class="team-status-tooltip">
+            <strong>${team.name}</strong><br>
+            Purse: ₹${team.remainingPurse.toLocaleString()}<br>
+            Players: ${team.playersBought}/${team.totalPlayerThreshold}
+          </div>
+        `;
+        
+        container.appendChild(statusItem);
+      });
+      
+      // Initial status update
+      updateTeamStatusIndicator();
+    }
+    
+    // Update team status colors based on current bid
+    function updateTeamStatusIndicator() {
+      if (teams.length === 0) return;
+      
+      const container = document.getElementById('teamStatusIndicator');
+      const statusItems = container.querySelectorAll('.team-status-item');
+      
+      const nextBid = currentBid + currentBidIncrement;
+      
+      statusItems.forEach((item, index) => {
+        const team = teams[index];
+        
+        // Remove all status classes
+        item.classList.remove('status-safe', 'status-warning', 'status-danger');
+        
+        // Check if team can bid at all
+        const currentBidValidation = AUCTION_RULES.validateBid(team, currentBid, basePrice);
+        
+        // If team can't afford current bid, mark as danger (red)
+        if (!currentBidValidation.valid && currentBidValidation.severity === 'critical') {
+          item.classList.add('status-danger');
+          
+          // Update tooltip with reason
+          const tooltip = item.querySelector('.team-status-tooltip');
+          const maxBid = AUCTION_RULES.calculateMaxBid(team);
+          let reason = '';
+          
+          switch(currentBidValidation.ruleId) {
+            case 'RULE_001':
+              reason = `Max: ₹${maxBid.toLocaleString()}`;
+              break;
+            case 'RULE_003':
+              reason = 'Budget exhausted';
+              break;
+            case 'RULE_004':
+              reason = 'Roster full';
+              break;
+            case 'RULE_005':
+              reason = 'Insufficient balance';
+              break;
+            default:
+              reason = 'Cannot bid';
+          }
+          
+          tooltip.innerHTML = `
+            <strong>${team.name}</strong><br>
+            <span style="color: #f44336;">${reason}</span>
+          `;
+          return;
+        }
+        
+        // Check next bid validation
+        const nextBidValidation = AUCTION_RULES.validateBid(team, nextBid, basePrice);
+        
+        // If team can't afford next bid increment, mark as warning (orange)
+        if (!nextBidValidation.valid && nextBidValidation.severity === 'critical') {
+          item.classList.add('status-warning');
+          
+          // Update tooltip
+          const tooltip = item.querySelector('.team-status-tooltip');
+          const maxBid = AUCTION_RULES.calculateMaxBid(team);
+          tooltip.innerHTML = `
+            <strong>${team.name}</strong><br>
+            Purse: ₹${team.remainingPurse.toLocaleString()}<br>
+            <span style="color: #ff9800;">Max: ₹${maxBid.toLocaleString()}</span>
+          `;
+          return;
+        }
+        
+        // Check for warning conditions (RULE_006)
+        if (nextBidValidation.isWarning) {
+          item.classList.add('status-warning');
+          
+          // Update tooltip
+          const tooltip = item.querySelector('.team-status-tooltip');
+          tooltip.innerHTML = `
+            <strong>${team.name}</strong><br>
+            Purse: ₹${team.remainingPurse.toLocaleString()}<br>
+            <span style="color: #ff9800;">Entering unsafe range</span>
+          `;
+          return;
+        }
+        
+        // Otherwise, team is safe (green)
+        item.classList.add('status-safe');
+        
+        // Update tooltip
+        const tooltip = item.querySelector('.team-status-tooltip');
+        const maxBid = AUCTION_RULES.calculateMaxBid(team);
+        tooltip.innerHTML = `
+          <strong>${team.name}</strong><br>
+          Purse: ₹${team.remainingPurse.toLocaleString()}<br>
+          <span style="color: #4CAF50;">Max: ₹${maxBid.toLocaleString()}</span>
+        `;
+      });
     }
     
     function updateMaxBidIndicator() {
