@@ -60,7 +60,7 @@
       "id": "RULE_006",
       "name": "Safe Fund Threshold",
       "description": "Maintain a buffer (e.g. 10%) of remaining fund for safe future bidding.",
-      "condition": "remainingFund - bidAmount >= (remainingPlayers - 1) * minimumPlayerBasePrice * 1.1",
+      "condition": "remainingFund - bidAmount >= (remainingPlayers - 1) * minimumPlayerBasePrice * 1.5",
       "onFail": {
         "action": "WARN_ONLY",
         "message": "Warning: You are entering the unsafe fund range; consider preserving funds for upcoming players."
