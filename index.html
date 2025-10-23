@@ -409,9 +409,80 @@
     }
     
     .bid-increment-info {
-      font-size: 14px;
-      color: #666;
-      letter-spacing: 1px;
+      position: absolute;
+      bottom: 15px;
+      right: 15px;
+      z-index: 50;
+      font-size: 10px;
+      color: #555;
+      letter-spacing: 0.5px;
+      background: rgba(0, 0, 0, 0.6);
+      padding: 6px 10px;
+      border-radius: 8px;
+      border: 1px solid rgba(33, 150, 243, 0.2);
+      backdrop-filter: blur(5px);
+      opacity: 0.7;
+      transition: opacity 0.3s ease, transform 0.3s ease;
+    }
+    
+    .bid-increment-info:hover {
+      opacity: 1;
+      transform: scale(1.05);
+    }
+    
+    .increment-controls {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+    }
+    
+    .increment-controls kbd {
+      background: linear-gradient(135deg, #555 0%, #333 100%);
+      color: white;
+      padding: 2px 5px;
+      border-radius: 3px;
+      font-size: 9px;
+      font-weight: 700;
+      font-family: 'Courier New', monospace;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+    }
+    
+    .increment-value {
+      color: #2196F3;
+      font-weight: 900;
+      font-size: 11px;
+      padding: 0 3px;
+      text-shadow: 0 0 8px rgba(33, 150, 243, 0.4);
+      min-width: 50px;
+      text-align: center;
+      display: inline-block;
+    }
+    
+    .increment-arrow,
+    .decrement-arrow {
+      color: #777;
+      font-size: 8px;
+    }
+    
+    .bid-increment-info.updated {
+      opacity: 1;
+      transform: scale(1.1);
+    }
+    
+    .bid-increment-info.updated .increment-value {
+      animation: incrementFlash 0.3s ease-out;
+    }
+    
+    @keyframes incrementFlash {
+      0%, 100% {
+        transform: scale(1);
+      }
+      50% {
+        transform: scale(1.3);
+        color: #4CAF50;
+        text-shadow: 0 0 12px rgba(76, 175, 80, 0.8);
+      }
     }
     
     .bid-display.pulse {
@@ -3065,6 +3136,51 @@
       flex: 1;
     }
     
+    /* Bid Team Warning */
+    .bid-team-warning {
+      margin-top: 8px;
+      padding: 6px 10px;
+      background: linear-gradient(135deg, rgba(255, 152, 0, 0.15) 0%, rgba(245, 124, 0, 0.15) 100%);
+      border: 2px solid rgba(255, 152, 0, 0.6);
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 600;
+      color: #ff9800;
+      text-align: center;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      animation: warningPulse 2s ease-in-out infinite;
+    }
+    
+    .warning-icon {
+      font-size: 14px;
+      animation: warningShake 0.5s ease-in-out infinite;
+    }
+    
+    .warning-text {
+      font-size: 11px;
+      line-height: 1.3;
+    }
+    
+    @keyframes warningPulse {
+      0%, 100% {
+        box-shadow: 0 0 5px rgba(255, 152, 0, 0.3);
+        border-color: rgba(255, 152, 0, 0.6);
+      }
+      50% {
+        box-shadow: 0 0 12px rgba(255, 152, 0, 0.5);
+        border-color: rgba(255, 152, 0, 0.8);
+      }
+    }
+    
+    @keyframes warningShake {
+      0%, 100% { transform: rotate(0deg); }
+      25% { transform: rotate(-10deg); }
+      75% { transform: rotate(10deg); }
+    }
+    
     /* Bid Confirm Hint (inline in bid display) */
     .bid-confirm-hint {
       margin-top: 10px;
@@ -3193,11 +3309,23 @@
         <div class="bid-label">Current Bid</div>
         <div class="bid-amount" id="bidAmount">₹0</div>
         <div class="bid-team-name" id="bidTeamName" style="display: none;"></div>
-        <div class="bid-increment-info" id="bidIncrementInfo">Press Q: +₹100 | Press W: +₹200</div>
+        <div class="bid-team-warning" id="bidTeamWarning" style="display: none;">
+          <span class="warning-icon">⚠️</span>
+          <span class="warning-text" id="bidTeamWarningText"></span>
+        </div>
         <div class="bid-confirm-hint" id="bidConfirmHint" style="display: none;">
           <kbd>ENTER</kbd> to Sell | <kbd>ESC</kbd> to Cancel
         </div>
       </div>
+    </div>
+    
+    <!-- Bid Increment Info (Bottom Right Corner) -->
+    <div class="bid-increment-info" id="bidIncrementInfo">
+      <span class="increment-controls">
+        <kbd>Q</kbd> <span class="decrement-arrow">▼</span> | 
+        <span class="increment-value" id="incrementValue">+₹100</span> | 
+        <span class="increment-arrow">▲</span> <kbd>W</kbd>
+      </span>
     </div>
     
     <!-- Hotkey Helper Button -->
@@ -3214,9 +3342,9 @@
         <div class="hotkey-section">
           <h3 class="hotkey-section-title">🎯 Team Bidding</h3>
           <div class="hotkey-grid">
-            <div class="hotkey-item"><kbd>1-9</kbd> <span>Team 1-9 places bid (+₹100)</span></div>
-            <div class="hotkey-item"><kbd>Q</kbd> <span>Increase bid by ₹100</span></div>
-            <div class="hotkey-item"><kbd>W</kbd> <span>Increase bid by ₹200</span></div>
+            <div class="hotkey-item"><kbd>Q</kbd> <span>Decrease bid increment (−₹50)</span></div>
+            <div class="hotkey-item"><kbd>W</kbd> <span>Increase bid increment (+₹50)</span></div>
+            <div class="hotkey-item"><kbd>1-9</kbd> <span>Team 1-9 places bid (by set increment)</span></div>
             <div class="hotkey-item"><kbd>S</kbd> <span>Show sell confirmation</span></div>
             <div class="hotkey-item"><kbd>ENTER</kbd> <span>Confirm sale (when S pressed)</span></div>
           </div>
@@ -3406,6 +3534,9 @@
     // Track 't' key press for team slots
     let tKeyPressed = false;
     let tKeyTimeout = null;
+    
+    // Track current bid increment (dynamic)
+    let currentBidIncrement = CONFIG.auction.bidIncrements.default;
     
     // Auction Rules Validation System
     const AUCTION_RULES = {
@@ -3914,6 +4045,9 @@
       currentBid = basePrice;
       updateBidDisplay();
       
+      // Reset bid increment to default
+      resetBidIncrement();
+      
       // Reset last bidding team
       lastBiddingTeam = null;
       lastBiddingTeamIndex = null;
@@ -3930,7 +4064,51 @@
     }
 
     function updateBidDisplay() {
-      document.getElementById('bidAmount').textContent = '₹' + currentBid;
+      document.getElementById('bidAmount').textContent = '₹' + currentBid.toLocaleString();
+    }
+    
+    function updateBidIncrementDisplay() {
+      const incrementValueEl = document.getElementById('incrementValue');
+      const bidIncrementInfo = document.getElementById('bidIncrementInfo');
+      
+      incrementValueEl.textContent = `+₹${currentBidIncrement.toLocaleString()}`;
+      
+      // Add flash animation
+      bidIncrementInfo.classList.add('updated');
+      setTimeout(() => {
+        bidIncrementInfo.classList.remove('updated');
+      }, 300);
+    }
+    
+    function increaseBidIncrement() {
+      const config = CONFIG.auction.bidIncrements;
+      const newIncrement = currentBidIncrement + config.adjustmentStep;
+      
+      if (newIncrement <= config.maximum) {
+        currentBidIncrement = newIncrement;
+        updateBidIncrementDisplay();
+        showNotification(`Bid increment increased to ₹${currentBidIncrement.toLocaleString()}`, 'info');
+      } else {
+        showNotification(`Maximum increment is ₹${config.maximum.toLocaleString()}`, 'warning');
+      }
+    }
+    
+    function decreaseBidIncrement() {
+      const config = CONFIG.auction.bidIncrements;
+      const newIncrement = currentBidIncrement - config.adjustmentStep;
+      
+      if (newIncrement >= config.minimum) {
+        currentBidIncrement = newIncrement;
+        updateBidIncrementDisplay();
+        showNotification(`Bid increment decreased to ₹${currentBidIncrement.toLocaleString()}`, 'info');
+      } else {
+        showNotification(`Minimum increment is ₹${config.minimum.toLocaleString()}`, 'warning');
+      }
+    }
+    
+    function resetBidIncrement() {
+      currentBidIncrement = CONFIG.auction.bidIncrements.default;
+      updateBidIncrementDisplay();
     }
 
     function increaseBid(amount) {
@@ -4084,6 +4262,7 @@
       bidDisplay.classList.add('confirm-mode');
       confirmHint.style.display = 'block';
       incrementInfo.style.display = 'none';
+      hideBidTeamWarning(); // Hide any warnings during confirmation
       
       showNotification(`Press ENTER to confirm sale to ${lastBiddingTeam.name}`, 'info');
     }
@@ -4864,16 +5043,78 @@
       }
       
       const team = teams[teamIndex];
-      const bidIncrement = CONFIG.auction.bidIncrements.small;
-      const newBid = currentBid + bidIncrement;
       
-      // Validate the bid
+      // First, check if team can bid at all (without increment) - for immediate feedback
+      const currentBidValidation = AUCTION_RULES.validateBid(team, currentBid, basePrice);
+      
+      // If team can't even afford current bid, show warning immediately
+      if (!currentBidValidation.valid && currentBidValidation.severity === 'critical') {
+        showNotification(currentBidValidation.message, 'warning');
+        
+        // Show warning in bid display with detailed reason
+        let warningMessage = '';
+        switch(currentBidValidation.ruleId) {
+          case 'RULE_001':
+            const maxBid = AUCTION_RULES.calculateMaxBid(team);
+            warningMessage = `${team.name} cannot bid - Max allowed: ₹${maxBid.toLocaleString()}`;
+            break;
+          case 'RULE_003':
+            warningMessage = `${team.name} has exhausted budget (₹${team.allocatedAmount.toLocaleString()})`;
+            break;
+          case 'RULE_004':
+            warningMessage = `${team.name} roster full (${team.totalPlayerThreshold}/${team.totalPlayerThreshold})`;
+            break;
+          case 'RULE_005':
+            warningMessage = `${team.name} insufficient balance (₹${team.remainingPurse.toLocaleString()} < ₹${basePrice.toLocaleString()})`;
+            break;
+          default:
+            warningMessage = `${team.name} cannot place this bid`;
+        }
+        showBidTeamWarning(warningMessage);
+        
+        // Update bid display with team logo (but show as disabled)
+        updateBidTeamDisplay(team);
+        
+        return;
+      }
+      
+      const newBid = currentBid + currentBidIncrement; // Use dynamic increment
+      
+      // Now validate the new bid with increment
       const validation = AUCTION_RULES.validateBid(team, newBid, basePrice);
       
       if (!validation.valid && validation.severity === 'critical') {
         showNotification(validation.message, 'warning');
+        
+        // Show warning in bid display with detailed reason
+        let warningMessage = '';
+        switch(validation.ruleId) {
+          case 'RULE_001':
+            const maxBid = AUCTION_RULES.calculateMaxBid(team);
+            warningMessage = `${team.name} cannot bid ₹${newBid.toLocaleString()} - Max: ₹${maxBid.toLocaleString()}`;
+            break;
+          case 'RULE_003':
+            warningMessage = `${team.name} would exceed budget with ₹${newBid.toLocaleString()}`;
+            break;
+          case 'RULE_004':
+            warningMessage = `${team.name} roster full (${team.totalPlayerThreshold}/${team.totalPlayerThreshold})`;
+            break;
+          case 'RULE_005':
+            warningMessage = `${team.name} insufficient balance (₹${team.remainingPurse.toLocaleString()})`;
+            break;
+          default:
+            warningMessage = `${team.name} cannot place this bid`;
+        }
+        showBidTeamWarning(warningMessage);
+        
+        // Update bid display with team logo (but show as disabled)
+        updateBidTeamDisplay(team);
+        
         return;
       }
+      
+      // Hide any previous warnings
+      hideBidTeamWarning();
       
       if (validation.isWarning) {
         showNotification(validation.message, 'warning');
@@ -4898,7 +5139,7 @@
       }, 300);
       
       // Show notification
-      showNotification(`${team.name} bids ₹${currentBid.toLocaleString()}`, 'info');
+      showNotification(`${team.name} bids ₹${currentBid.toLocaleString()} (+₹${currentBidIncrement.toLocaleString()})`, 'info');
     }
     
     // Update bid display with team logo and name
@@ -4930,12 +5171,29 @@
       const logo = document.getElementById('bidTeamLogo');
       const teamName = document.getElementById('bidTeamName');
       const logoContainer = document.getElementById('bidTeamLogoContainer');
+      const warning = document.getElementById('bidTeamWarning');
       
       logo.style.display = 'none';
       logo.src = '';
       teamName.style.display = 'none';
       teamName.textContent = '';
       logoContainer.classList.remove('active');
+      warning.style.display = 'none';
+    }
+    
+    // Show team warning in bid display
+    function showBidTeamWarning(message) {
+      const warning = document.getElementById('bidTeamWarning');
+      const warningText = document.getElementById('bidTeamWarningText');
+      
+      warningText.textContent = message;
+      warning.style.display = 'flex';
+    }
+    
+    // Hide team warning
+    function hideBidTeamWarning() {
+      const warning = document.getElementById('bidTeamWarning');
+      warning.style.display = 'none';
     }
     
     function updateMaxBidIndicator() {
@@ -5346,12 +5604,14 @@
         unsoldAnimation();
       }
       
-      // Bid increment controls
-      if (e.key === CONFIG.hotkeys.bidIncrements.small) {
-        increaseBid(CONFIG.auction.bidIncrements.small);
+      // Bid increment controls - Q decreases, W increases
+      if (key === 'q') {
+        decreaseBidIncrement();
+        e.preventDefault();
       }
-      if (e.key === CONFIG.hotkeys.bidIncrements.large) {
-        increaseBid(CONFIG.auction.bidIncrements.large);
+      if (key === 'w') {
+        increaseBidIncrement();
+        e.preventDefault();
       }
       
       // Close overlays with Escape key
@@ -5475,9 +5735,6 @@
     (async function init() {
       // Update bid increment info from config
       const bidInfoElement = document.getElementById('bidIncrementInfo');
-      if (bidInfoElement) {
-        bidInfoElement.textContent = `Press 1: +${CONFIG.auction.bidIncrements.small} | Press 2: +${CONFIG.auction.bidIncrements.large}`;
-      }
       
       initializeAudio();
       await fetchSheetData();

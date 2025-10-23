@@ -21,8 +21,10 @@ const CONFIG = {
   auction: {
     basePrice: 100,
     bidIncrements: {
-      small: 100,  // Press 1
-      large: 200   // Press 2
+      default: 100,        // Default increment when player starts or after sold
+      adjustmentStep: 50,  // Amount to increase/decrease with Q/W keys
+      minimum: 50,         // Minimum allowed increment
+      maximum: 1000        // Maximum allowed increment
     }
   },
   
