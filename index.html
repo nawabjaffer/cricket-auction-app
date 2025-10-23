@@ -31,6 +31,53 @@
       overflow: hidden;
     }
     
+    /* Fullscreen notification */
+    .fullscreen-notification {
+      position: fixed;
+      top: 30px;
+      left: 50%;
+      transform: translateX(-50%) translateY(-100px);
+      background: linear-gradient(135deg, rgba(33, 150, 243, 0.95), rgba(21, 101, 192, 0.95));
+      color: #fff;
+      padding: 20px 50px;
+      border-radius: 50px;
+      font-size: 24px;
+      font-weight: 700;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      box-shadow: 0 10px 40px rgba(33, 150, 243, 0.6),
+                  0 0 60px rgba(33, 150, 243, 0.4),
+                  inset 0 0 20px rgba(255, 255, 255, 0.2);
+      z-index: 10000;
+      opacity: 0;
+      transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+      pointer-events: none;
+      backdrop-filter: blur(10px);
+      border: 2px solid rgba(255, 255, 255, 0.3);
+    }
+    
+    .fullscreen-notification.show {
+      transform: translateX(-50%) translateY(0);
+      opacity: 1;
+    }
+    
+    .fullscreen-notification::before {
+      content: '⌧';
+      margin-right: 15px;
+      font-size: 28px;
+      display: inline-block;
+      animation: pulse 1.5s ease-in-out infinite;
+    }
+    
+    @keyframes pulse {
+      0%, 100% {
+        transform: scale(1);
+      }
+      50% {
+        transform: scale(1.2);
+      }
+    }
+    
     /* Container wrapper for scaling */
     .card-wrapper {
       transform: scale(0.8);
@@ -1200,7 +1247,7 @@
       transition: opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1), visibility 0.4s;
     }
 
-    /* Loading indicator */
+    /* Cricket animation loader */
     .team-slots-loading {
       position: absolute;
       top: 50%;
@@ -1209,29 +1256,193 @@
       display: flex;
       flex-direction: column;
       align-items: center;
-      gap: 20px;
+      justify-content: center;
+      gap: 40px;
       z-index: 25001;
+      width: 500px;
+      height: 300px;
     }
 
-    .team-slots-loading-spinner {
-      width: 60px;
-      height: 60px;
-      border: 4px solid rgba(33, 150, 243, 0.2);
-      border-top-color: #2196F3;
+    .cricket-animation-container {
+      position: relative;
+      width: 100%;
+      height: 150px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    /* Cricket Bat */
+    .cricket-bat {
+      position: absolute;
+      left: 30%;
+      width: 80px;
+      height: 120px;
+      background: linear-gradient(135deg, #8B4513 0%, #A0522D 50%, #6B3410 100%);
+      border-radius: 8px 8px 25px 25px;
+      transform-origin: bottom center;
+      animation: batSwing 1.2s ease-in-out infinite;
+      box-shadow: 0 5px 20px rgba(0, 0, 0, 0.5),
+                  inset 2px 2px 5px rgba(255, 255, 255, 0.2);
+      z-index: 2;
+    }
+
+    .cricket-bat::before {
+      content: '';
+      position: absolute;
+      bottom: -30px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 18px;
+      height: 35px;
+      background: linear-gradient(180deg, #654321, #3e2914);
+      border-radius: 3px;
+    }
+
+    .cricket-bat::after {
+      content: '';
+      position: absolute;
+      top: 15%;
+      left: 10%;
+      right: 10%;
+      height: 60%;
+      background: linear-gradient(90deg, 
+        transparent 0%, 
+        rgba(255, 255, 255, 0.1) 20%, 
+        transparent 40%,
+        transparent 60%,
+        rgba(255, 255, 255, 0.1) 80%, 
+        transparent 100%);
+      border-radius: 4px;
+    }
+
+    /* Cricket Ball */
+    .cricket-ball {
+      position: absolute;
+      right: 30%;
+      width: 50px;
+      height: 50px;
+      background: radial-gradient(circle at 30% 30%, #DC143C, #8B0000);
       border-radius: 50%;
-      animation: spin 1s linear infinite;
+      animation: ballFly 1.2s ease-in-out infinite;
+      box-shadow: 0 5px 25px rgba(220, 20, 60, 0.6),
+                  inset -3px -3px 8px rgba(0, 0, 0, 0.4),
+                  inset 3px 3px 8px rgba(255, 255, 255, 0.2);
+      z-index: 1;
     }
 
-    @keyframes spin {
-      to { transform: rotate(360deg); }
+    .cricket-ball::before {
+      content: '';
+      position: absolute;
+      top: 48%;
+      left: 0;
+      right: 0;
+      height: 2px;
+      background: rgba(255, 255, 255, 0.4);
+      box-shadow: 0 0 3px rgba(255, 255, 255, 0.6);
+    }
+
+    .cricket-ball::after {
+      content: '';
+      position: absolute;
+      top: 48%;
+      left: 0;
+      right: 0;
+      height: 2px;
+      background: rgba(255, 255, 255, 0.4);
+      transform: rotate(180deg);
+      box-shadow: 0 0 3px rgba(255, 255, 255, 0.6);
+    }
+
+    /* Motion lines for speed effect */
+    .motion-lines {
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      opacity: 0.6;
+    }
+
+    .motion-line {
+      position: absolute;
+      top: 50%;
+      right: 35%;
+      width: 60px;
+      height: 2px;
+      background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.6), transparent);
+      animation: motionLine 1.2s ease-in-out infinite;
+    }
+
+    .motion-line:nth-child(2) {
+      top: 45%;
+      animation-delay: 0.1s;
+    }
+
+    .motion-line:nth-child(3) {
+      top: 55%;
+      animation-delay: 0.2s;
+    }
+
+    /* Animations */
+    @keyframes batSwing {
+      0%, 100% {
+        transform: rotate(-15deg);
+      }
+      50% {
+        transform: rotate(35deg);
+      }
+    }
+
+    @keyframes ballFly {
+      0% {
+        transform: translateX(0) translateY(0) scale(1);
+        opacity: 1;
+      }
+      50% {
+        transform: translateX(-150px) translateY(-30px) scale(0.7);
+        opacity: 0.8;
+      }
+      100% {
+        transform: translateX(-300px) translateY(0) scale(0.5);
+        opacity: 0;
+      }
+    }
+
+    @keyframes motionLine {
+      0% {
+        transform: translateX(0) scaleX(1);
+        opacity: 0;
+      }
+      50% {
+        transform: translateX(-100px) scaleX(1.5);
+        opacity: 1;
+      }
+      100% {
+        transform: translateX(-200px) scaleX(0.5);
+        opacity: 0;
+      }
     }
 
     .team-slots-loading-text {
-      color: rgba(255, 255, 255, 0.7);
-      font-size: 16px;
-      font-weight: 600;
-      letter-spacing: 1px;
+      color: rgba(255, 255, 255, 0.9);
+      font-size: 22px;
+      font-weight: 700;
+      letter-spacing: 2px;
       text-transform: uppercase;
+      text-shadow: 0 2px 10px rgba(0, 0, 0, 0.8),
+                   0 0 20px rgba(33, 150, 243, 0.6);
+      animation: textPulse 1.2s ease-in-out infinite;
+    }
+
+    @keyframes textPulse {
+      0%, 100% {
+        opacity: 0.7;
+        transform: scale(1);
+      }
+      50% {
+        opacity: 1;
+        transform: scale(1.05);
+      }
     }
     
     /* Team color overlay background */
@@ -1944,8 +2155,8 @@
                   rgba(0, 0, 0, 0.3) 100%);
     }
 
-    /* Player Stats Tooltip */
-    .player-stats-tooltip {
+    /* Captain Stats Tooltip - Larger */
+    .captain-card .player-stats-tooltip {
       position: absolute;
       top: 70%;
       left: 50%;
@@ -1955,16 +2166,42 @@
       z-index: 2;
       opacity: 0;
       pointer-events: none;
-      background-color: rgba(0, 0, 0, 0.4)
+      background-color: rgba(0, 0, 0, 0.5);
       transition: opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1);
       backdrop-filter: blur(12px);
       box-shadow: 0 15px 50px rgba(0, 0, 0, 0.9),
                   0 0 60px var(--team-color-glow, rgba(33, 150, 243, 0.4));
-      min-width: 180px;
-      max-width: 320px;
+      min-width: 200px;
+      max-width: 340px;
     }
 
-    .player-card:hover .player-stats-tooltip {
+    .captain-card:hover .player-stats-tooltip {
+      opacity: 1;
+      pointer-events: auto;
+      animation: tooltipBounce 0.5s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+    }
+
+    /* Regular Player Stats Tooltip - Smaller */
+    .player-card:not(.captain-card) .player-stats-tooltip {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      border-radius: 12px;
+      padding: 12px 14px;
+      z-index: 2;
+      opacity: 0;
+      pointer-events: none;
+      background-color: rgba(0, 0, 0, 0.45);
+      transition: opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+      backdrop-filter: blur(10px);
+      box-shadow: 0 10px 35px rgba(0, 0, 0, 0.8),
+                  0 0 40px var(--team-color-glow, rgba(33, 150, 243, 0.3));
+      min-width: 140px;
+      max-width: 220px;
+    }
+
+    .player-card:not(.captain-card):hover .player-stats-tooltip {
       opacity: 1;
       pointer-events: auto;
       animation: tooltipBounce 0.5s cubic-bezier(0.68, -0.55, 0.265, 1.55);
@@ -1984,7 +2221,8 @@
       }
     }
 
-    .stats-tooltip-title {
+    /* Captain Stats Tooltip Title */
+    .captain-card .stats-tooltip-title {
       font-size: 16px;
       font-weight: 800;
       color: #fff;
@@ -1995,19 +2233,54 @@
       text-shadow: 0 0 20px var(--team-color-glow, rgba(33, 150, 243, 0.6));
     }
 
-    .stats-tooltip-grid {
+    /* Regular Player Stats Tooltip Title - Smaller */
+    .player-card:not(.captain-card) .stats-tooltip-title {
+      font-size: 12px;
+      font-weight: 700;
+      color: #fff;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      margin-bottom: 10px;
+      text-align: center;
+      text-shadow: 0 0 15px var(--team-color-glow, rgba(33, 150, 243, 0.5));
+    }
+
+    /* Captain Stats Tooltip Grid */
+    .captain-card .stats-tooltip-grid {
       display: grid;
       grid-template-columns: 1fr;
       gap: 10px;
     }
 
-    .stats-tooltip-item {
+    /* Regular Player Stats Tooltip Grid - Compact */
+    .player-card:not(.captain-card) .stats-tooltip-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 6px;
+    }
+
+    /* Captain Stats Tooltip Item */
+    .captain-card .stats-tooltip-item {
       display: flex;
       justify-content: space-between;
       align-items: center;
       padding: 8px 12px;
       background: rgba(255, 255, 255, 0.03);
       border-radius: 8px;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      position: relative;
+      overflow: hidden;
+    }
+
+    /* Regular Player Stats Tooltip Item - Smaller */
+    .player-card:not(.captain-card) .stats-tooltip-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 5px 8px;
+      background: rgba(255, 255, 255, 0.03);
+      border-radius: 6px;
       border: 1px solid rgba(255, 255, 255, 0.05);
       transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
       position: relative;
@@ -2037,7 +2310,8 @@
       transform: scaleY(1);
     }
 
-    .stats-tooltip-label {
+    /* Captain Stats Tooltip Label */
+    .captain-card .stats-tooltip-label {
       font-size: 12px;
       color: rgba(255, 255, 255, 0.7);
       text-transform: uppercase;
@@ -2045,11 +2319,29 @@
       font-weight: 600;
     }
 
-    .stats-tooltip-value {
+    /* Regular Player Stats Tooltip Label - Smaller */
+    .player-card:not(.captain-card) .stats-tooltip-label {
+      font-size: 10px;
+      color: rgba(255, 255, 255, 0.65);
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      font-weight: 600;
+    }
+
+    /* Captain Stats Tooltip Value */
+    .captain-card .stats-tooltip-value {
       font-size: 14px;
       font-weight: 800;
       color: #fff;
       text-shadow: 0 0 10px var(--team-color-glow, rgba(33, 150, 243, 0.4));
+    }
+
+    /* Regular Player Stats Tooltip Value - Smaller */
+    .player-card:not(.captain-card) .stats-tooltip-value {
+      font-size: 11px;
+      font-weight: 700;
+      color: #fff;
+      text-shadow: 0 0 8px var(--team-color-glow, rgba(33, 150, 243, 0.3));
     }
     
     /* TBD Card - Modern Empty Slot Design */
@@ -3507,11 +3799,19 @@
       const container = document.getElementById('teamSlotsContainer');
       const team = teams[teamIndex];
       
-      // Show loading indicator
+      // Show cricket animation loader
       container.innerHTML = `
         <div class="team-slots-loading">
-          <div class="team-slots-loading-spinner"></div>
-          <div class="team-slots-loading-text">Loading Team Squad...</div>
+          <div class="cricket-animation-container">
+            <div class="motion-lines">
+              <div class="motion-line"></div>
+              <div class="motion-line"></div>
+              <div class="motion-line"></div>
+            </div>
+            <div class="cricket-bat"></div>
+            <div class="cricket-ball"></div>
+          </div>
+          <div class="team-slots-loading-text">Loading Squad...</div>
         </div>
       `;
       overlay.classList.add('show');
@@ -4255,7 +4555,79 @@
           e.preventDefault();
         }
       }
+      
+      // Fullscreen toggle with Spacebar
+      if (e.key === ' ' || e.code === 'Space') {
+        // Prevent default spacebar behavior (page scroll)
+        e.preventDefault();
+        toggleFullscreen();
+      }
     });
+
+    // Fullscreen toggle function
+    function toggleFullscreen() {
+      if (!document.fullscreenElement && 
+          !document.webkitFullscreenElement && 
+          !document.mozFullScreenElement && 
+          !document.msFullscreenElement) {
+        // Enter fullscreen
+        const elem = document.documentElement;
+        if (elem.requestFullscreen) {
+          elem.requestFullscreen();
+        } else if (elem.webkitRequestFullscreen) { // Safari
+          elem.webkitRequestFullscreen();
+        } else if (elem.mozRequestFullScreen) { // Firefox
+          elem.mozRequestFullScreen();
+        } else if (elem.msRequestFullscreen) { // IE/Edge
+          elem.msRequestFullscreen();
+        }
+        
+        // Show notification
+        showFullscreenNotification('Fullscreen Mode Activated');
+      } else {
+        // Exit fullscreen
+        if (document.exitFullscreen) {
+          document.exitFullscreen();
+        } else if (document.webkitExitFullscreen) { // Safari
+          document.webkitExitFullscreen();
+        } else if (document.mozCancelFullScreen) { // Firefox
+          document.mozCancelFullScreen();
+        } else if (document.msExitFullscreen) { // IE/Edge
+          document.msExitFullscreen();
+        }
+        
+        // Show notification
+        showFullscreenNotification('Fullscreen Mode Deactivated');
+      }
+    }
+
+    // Show fullscreen notification
+    function showFullscreenNotification(message) {
+      // Remove existing notification if any
+      const existingNotification = document.querySelector('.fullscreen-notification');
+      if (existingNotification) {
+        existingNotification.remove();
+      }
+
+      // Create notification element
+      const notification = document.createElement('div');
+      notification.className = 'fullscreen-notification';
+      notification.textContent = message;
+      document.body.appendChild(notification);
+
+      // Trigger animation
+      setTimeout(() => {
+        notification.classList.add('show');
+      }, 10);
+
+      // Remove notification after 2 seconds
+      setTimeout(() => {
+        notification.classList.remove('show');
+        setTimeout(() => {
+          notification.remove();
+        }, 300);
+      }, 2000);
+    }
 
     (async function init() {
       // Update bid increment info from config
