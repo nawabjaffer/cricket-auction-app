@@ -3017,7 +3017,6 @@
     
     // Image preloading cache
     const imageCache = new Map();
-    const preloadQueue = [];
     
     function preloadImage(url) {
       if (!url || url.trim() === '' || imageCache.has(url)) {
@@ -3631,8 +3630,16 @@
       });
     }
     
+    // Cache for team colors to avoid recalculation
+    const teamColorCache = new Map();
+    
     // Extract dominant color from team logo
     async function getTeamColorFromLogo(logoUrl) {
+      // Check cache first
+      if (teamColorCache.has(logoUrl)) {
+        return teamColorCache.get(logoUrl);
+      }
+      
       return new Promise((resolve) => {
         const img = new Image();
         img.crossOrigin = 'Anonymous';
@@ -3667,24 +3674,32 @@
             }
             
             if (count > 0) {
-              resolve({
+              const color = {
                 r: Math.round(r / count),
                 g: Math.round(g / count),
                 b: Math.round(b / count)
-              });
+              };
+              teamColorCache.set(logoUrl, color); // Cache the result
+              resolve(color);
             } else {
               // Fallback to default blue
-              resolve({ r: 33, g: 150, b: 243 });
+              const defaultColor = { r: 33, g: 150, b: 243 };
+              teamColorCache.set(logoUrl, defaultColor);
+              resolve(defaultColor);
             }
           } catch (err) {
             console.warn('Color extraction failed:', err);
-            resolve({ r: 33, g: 150, b: 243 });
+            const defaultColor = { r: 33, g: 150, b: 243 };
+            teamColorCache.set(logoUrl, defaultColor);
+            resolve(defaultColor);
           }
         };
         
         img.onerror = () => {
           console.warn('Logo failed to load for color extraction');
-          resolve({ r: 33, g: 150, b: 243 });
+          const defaultColor = { r: 33, g: 150, b: 243 };
+          teamColorCache.set(logoUrl, defaultColor);
+          resolve(defaultColor);
         };
         
         img.src = logoUrl;
@@ -3711,83 +3726,62 @@
       overlayElement.style.setProperty('--team-color-glow', `rgba(${r}, ${g}, ${b}, 0.25)`);
     }
     
-    // Function to fetch player stats from BCC Tournament Registration sheet
-    async function fetchPlayerStats(playerId) {
+    // Cache for player stats to avoid multiple API calls
+    let playerStatsCache = new Map();
+
+    // Function to get player stats from cache (already loaded in items array)
+    function getPlayerStatsFromCache(playerId) {
       if (!playerId || playerId.trim() === '') return null;
       
-      try {
-        const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(CONFIG.googleSheets.ranges.players)}?key=${API_KEY}`;
-        const resp = await fetch(url);
-        const data = await resp.json();
-        
-        if (!data.values || data.values.length === 0) return null;
-        
-        const cols = CONFIG.columnMappings.players;
-        
-        // Find the player by ID
-        for (let i = 0; i < data.values.length; i++) {
-          const row = data.values[i];
-          const rowPlayerId = row[cols.id] || '';
-          
-          if (String(rowPlayerId).trim() === String(playerId).trim()) {
-            return {
-              matches: row[cols.stats.matches] || 'N/A',
-              innings: row[cols.stats.innings] || 'N/A',
-              runs: row[cols.stats.runs] || 'N/A',
-              wickets: row[cols.stats.wickets] || 'N/A',
-              average: row[cols.stats.average] || 'N/A'
-            };
-          }
-        }
-        
-        return null;
-      } catch (error) {
-        console.error('Error fetching player stats:', error);
-        return null;
+      // Check cache first
+      if (playerStatsCache.has(playerId)) {
+        return playerStatsCache.get(playerId);
       }
+      
+      // Find in items array (already loaded)
+      const player = items.find(item => String(item.id).trim() === String(playerId).trim());
+      if (player) {
+        const stats = {
+          matches: player.matches || 'N/A',
+          innings: 'N/A', // Not available in current structure
+          runs: player.battingBestFigures || 'N/A',
+          wickets: player.bowlingBestFigures || 'N/A',
+          average: 'N/A' // Not available in current structure
+        };
+        
+        // Cache it
+        playerStatsCache.set(playerId, stats);
+        return stats;
+      }
+      
+      return null;
     }
 
-    // Function to fetch captain details from BCC Tournament Registration sheet
-    async function fetchCaptainDetails(captainId) {
+    // Function to get captain details from cached items array (no API call needed)
+    function getCaptainDetails(captainId) {
       if (!captainId || captainId.trim() === '') return null;
       
-      try {
-        const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(CONFIG.googleSheets.ranges.players)}?key=${API_KEY}`;
-        const resp = await fetch(url);
-        const data = await resp.json();
-        
-        if (!data.values || data.values.length === 0) return null;
-        
-        const cols = CONFIG.columnMappings.players;
-        
-        // Find the captain by ID
-        for (let i = 0; i < data.values.length; i++) {
-          const row = data.values[i];
-          const playerId = row[cols.id] || '';
-          
-          if (String(playerId).trim() === String(captainId).trim()) {
-            return {
-              id: row[cols.id] || '',
-              imageUrl: row[cols.imageUrl] || '',
-              name: row[cols.name] || 'Captain',
-              role: row[cols.role] || 'Captain',
-              dateOfBirth: row[cols.dateOfBirth] || '',
-              stats: {
-                matches: row[cols.stats.matches] || 'N/A',
-                innings: row[cols.stats.innings] || 'N/A',
-                runs: row[cols.stats.runs] || 'N/A',
-                wickets: row[cols.stats.wickets] || 'N/A',
-                average: row[cols.stats.average] || 'N/A'
-              }
-            };
+      // Find captain in already loaded items array
+      const captain = items.find(item => String(item.id).trim() === String(captainId).trim());
+      
+      if (captain) {
+        return {
+          id: captain.id,
+          imageUrl: captain.imageUrl,
+          name: captain.name,
+          role: captain.role,
+          dateOfBirth: captain.dateOfBirth,
+          stats: {
+            matches: captain.matches || 'N/A',
+            innings: 'N/A', // Not in current data structure
+            runs: captain.battingBestFigures || 'N/A',
+            wickets: captain.bowlingBestFigures || 'N/A',
+            average: 'N/A' // Not in current data structure
           }
-        }
-        
-        return null;
-      } catch (error) {
-        console.error('Error fetching captain details:', error);
-        return null;
+        };
       }
+      
+      return null;
     }
 
     async function showTeamSlots(teamIndex) {
@@ -3816,11 +3810,19 @@
       `;
       overlay.classList.add('show');
       
-      // Fetch sold players for this team
-      const soldPlayers = await fetchSoldPlayersForTeam(team.name);
+      // Get captain details from cache (no API call, instant)
+      const captainDetails = getCaptainDetails(team.captain);
       
-      // Fetch captain details
-      const captainDetails = await fetchCaptainDetails(team.captain);
+      // Fetch data in parallel for faster loading
+      const [soldPlayers, teamColor] = await Promise.all([
+        fetchSoldPlayersForTeam(team.name),
+        team.logoUrl && team.logoUrl.trim() !== '' 
+          ? getTeamColorFromLogo(convertDriveLinkToDirect(team.logoUrl))
+          : Promise.resolve({ r: 33, g: 150, b: 243 })
+      ]);
+      
+      // Apply team theme
+      applyTeamTheme(overlay, teamColor);
       
       // Generate TBD slots
       const remainingSlots = team.totalPlayerThreshold - soldPlayers.length;
@@ -3828,15 +3830,6 @@
       // Calculate total players and determine grid layout
       const totalPlayers = soldPlayers.length + remainingSlots;
       const gridClass = totalPlayers <= CONFIG.ui.teamSlotsGrid.maxPlayersPer6Cols ? 'grid-6-cols' : 'grid-4-cols';
-      
-      // Extract team color from logo and apply theme
-      if (team.logoUrl && team.logoUrl.trim() !== '') {
-        const teamColor = await getTeamColorFromLogo(convertDriveLinkToDirect(team.logoUrl));
-        applyTeamTheme(overlay, teamColor);
-      } else {
-        // Apply default theme if no logo
-        applyTeamTheme(overlay, { r: 33, g: 150, b: 243 });
-      }
       
       // Build the HTML with two-column layout
       let html = `
@@ -3968,37 +3961,31 @@
             roleIcon = '🧤'; // Wicket Keeper: glove
           }
           
-          // Fetch player stats from BCC Tournament Registration
+          // Get player stats from cache (instant, no API call)
           let statsTooltipHTML = '';
-          try {
-            const playerStats = await fetchPlayerStats(player.id);
-            if (playerStats) {
-              const statsArray = [
-                { label: 'Matches', value: playerStats.matches },
-                { label: 'Innings', value: playerStats.innings },
-                { label: 'Runs', value: playerStats.runs },
-                { label: 'Wickets', value: playerStats.wickets },
-                { label: 'Average', value: playerStats.average }
-              ].filter(stat => stat.value && stat.value !== 'N/A' && stat.value.toString().trim() !== '');
-              
-              if (statsArray.length > 0) {
-                statsTooltipHTML = `
-                  <div class="player-stats-tooltip">
-                    <div class="stats-tooltip-title">Cricket Stats</div>
-                    <div class="stats-tooltip-grid">
-                      ${statsArray.map(stat => `
-                        <div class="stats-tooltip-item">
-                          <span class="stats-tooltip-label">${stat.label}</span>
-                          <span class="stats-tooltip-value">${stat.value}</span>
-                        </div>
-                      `).join('')}
-                    </div>
+          const playerStats = getPlayerStatsFromCache(player.id);
+          if (playerStats) {
+            const statsArray = [
+              { label: 'Matches', value: playerStats.matches },
+              { label: 'Runs', value: playerStats.runs },
+              { label: 'Wickets', value: playerStats.wickets }
+            ].filter(stat => stat.value && stat.value !== 'N/A' && stat.value.toString().trim() !== '');
+            
+            if (statsArray.length > 0) {
+              statsTooltipHTML = `
+                <div class="player-stats-tooltip">
+                  <div class="stats-tooltip-title">Cricket Stats</div>
+                  <div class="stats-tooltip-grid">
+                    ${statsArray.map(stat => `
+                      <div class="stats-tooltip-item">
+                        <span class="stats-tooltip-label">${stat.label}</span>
+                        <span class="stats-tooltip-value">${stat.value}</span>
+                      </div>
+                    `).join('')}
                   </div>
-                `;
-              }
+                </div>
+              `;
             }
-          } catch (error) {
-            console.error('Error fetching player stats:', error);
           }
           
           // Check if captain (you may need to add captain info to your data)
@@ -4566,38 +4553,61 @@
 
     // Fullscreen toggle function
     function toggleFullscreen() {
-      if (!document.fullscreenElement && 
-          !document.webkitFullscreenElement && 
-          !document.mozFullScreenElement && 
-          !document.msFullscreenElement) {
+      const isFullscreen = document.fullscreenElement || 
+                          document.webkitFullscreenElement || 
+                          document.mozFullScreenElement || 
+                          document.msFullscreenElement;
+      
+      if (!isFullscreen) {
         // Enter fullscreen
         const elem = document.documentElement;
+        let fullscreenPromise;
+        
         if (elem.requestFullscreen) {
-          elem.requestFullscreen();
+          fullscreenPromise = elem.requestFullscreen();
         } else if (elem.webkitRequestFullscreen) { // Safari
-          elem.webkitRequestFullscreen();
+          fullscreenPromise = elem.webkitRequestFullscreen();
         } else if (elem.mozRequestFullScreen) { // Firefox
-          elem.mozRequestFullScreen();
+          fullscreenPromise = elem.mozRequestFullScreen();
         } else if (elem.msRequestFullscreen) { // IE/Edge
-          elem.msRequestFullscreen();
+          fullscreenPromise = elem.msRequestFullscreen();
         }
         
-        // Show notification
-        showFullscreenNotification('Fullscreen Mode Activated');
+        if (fullscreenPromise) {
+          fullscreenPromise
+            .then(() => {
+              showFullscreenNotification('Fullscreen Mode Activated');
+            })
+            .catch((err) => {
+              console.error('Error entering fullscreen:', err);
+              showFullscreenNotification('Fullscreen Not Supported');
+            });
+        } else {
+          showFullscreenNotification('Fullscreen Not Supported');
+        }
       } else {
         // Exit fullscreen
+        let exitPromise;
+        
         if (document.exitFullscreen) {
-          document.exitFullscreen();
+          exitPromise = document.exitFullscreen();
         } else if (document.webkitExitFullscreen) { // Safari
-          document.webkitExitFullscreen();
+          exitPromise = document.webkitExitFullscreen();
         } else if (document.mozCancelFullScreen) { // Firefox
-          document.mozCancelFullScreen();
+          exitPromise = document.mozCancelFullScreen();
         } else if (document.msExitFullscreen) { // IE/Edge
-          document.msExitFullscreen();
+          exitPromise = document.msExitFullscreen();
         }
         
-        // Show notification
-        showFullscreenNotification('Fullscreen Mode Deactivated');
+        if (exitPromise) {
+          exitPromise
+            .then(() => {
+              showFullscreenNotification('Fullscreen Mode Deactivated');
+            })
+            .catch((err) => {
+              console.error('Error exiting fullscreen:', err);
+            });
+        }
       }
     }
 
