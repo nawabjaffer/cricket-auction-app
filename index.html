@@ -2168,6 +2168,33 @@
         transform: translateX(5px);
       }
     }
+    
+    /* Reset Auction Button - Small and unobtrusive */
+    .reset-auction-button {
+      position: absolute;
+      bottom: 20px;
+      right: 20px;
+      width: 35px;
+      height: 35px;
+      padding: 0;
+      font-size: 18px;
+      color: rgba(255, 255, 255, 0.3);
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 50%;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    
+    .reset-auction-button:hover {
+      color: rgba(255, 255, 255, 0.8);
+      background: rgba(255, 87, 34, 0.2);
+      border-color: rgba(255, 87, 34, 0.5);
+      transform: rotate(180deg) scale(1.1);
+    }
 
     /* Staggered animation for player cards */
     .player-card {
@@ -4494,6 +4521,7 @@
           <span>START AUCTION</span>
         </button>
         <div class="start-screen-hint">Click to begin and enable audio</div>
+        <button class="reset-auction-button" id="resetAuctionButton" title="Reset auction and start fresh">⟳</button>
       </div>
     </div>
     
@@ -4628,6 +4656,79 @@
     
     // Image preloading cache
     const imageCache = new Map();
+    
+    // LocalStorage key for auction state
+    const AUCTION_STATE_KEY = 'cricketAuctionState';
+    
+    // Save auction state to localStorage
+    function saveAuctionState() {
+      try {
+        const state = {
+          currentIndex,
+          currentBid,
+          basePrice,
+          unsoldPlayers: unsoldPlayers.map(p => p.id), // Store only IDs
+          soldPlayers: soldPlayers.map(p => p.id), // Store only IDs
+          isShowingUnsoldRound,
+          allPlayersShown,
+          timestamp: Date.now()
+        };
+        localStorage.setItem(AUCTION_STATE_KEY, JSON.stringify(state));
+        console.debug('[STATE] Auction state saved');
+      } catch (e) {
+        console.error('[STATE] Failed to save auction state:', e);
+      }
+    }
+    
+    // Restore auction state from localStorage
+    function restoreAuctionState() {
+      try {
+        const savedState = localStorage.getItem(AUCTION_STATE_KEY);
+        if (!savedState) return false;
+        
+        const state = JSON.parse(savedState);
+        
+        // Check if state is recent (within 24 hours)
+        const hoursSinceLastSave = (Date.now() - state.timestamp) / (1000 * 60 * 60);
+        if (hoursSinceLastSave > 24) {
+          console.debug('[STATE] Saved state is too old, starting fresh');
+          return false;
+        }
+        
+        // Restore state
+        currentIndex = state.currentIndex;
+        currentBid = state.currentBid;
+        basePrice = state.basePrice;
+        isShowingUnsoldRound = state.isShowingUnsoldRound;
+        allPlayersShown = state.allPlayersShown;
+        
+        // Restore unsold players (find by ID)
+        unsoldPlayers = state.unsoldPlayers.map(id => 
+          items.find(item => item.id === id)
+        ).filter(p => p); // Remove undefined
+        
+        // Restore sold players (find by ID)
+        soldPlayers = state.soldPlayers.map(id => 
+          items.find(item => item.id === id)
+        ).filter(p => p); // Remove undefined
+        
+        console.debug('[STATE] Auction state restored:', state);
+        return true;
+      } catch (e) {
+        console.error('[STATE] Failed to restore auction state:', e);
+        return false;
+      }
+    }
+    
+    // Clear auction state from localStorage
+    function clearAuctionState() {
+      try {
+        localStorage.removeItem(AUCTION_STATE_KEY);
+        console.debug('[STATE] Auction state cleared');
+      } catch (e) {
+        console.error('[STATE] Failed to clear auction state:', e);
+      }
+    }
     
     // Performance optimization: Preload images efficiently
     
@@ -5212,6 +5313,9 @@
       if (items.length === 0) return;
       currentIndex = (index + items.length) % items.length;
       const item = items[currentIndex];
+      
+      // Save state when showing new item
+      saveAuctionState();
       
       const imageSrc = convertDriveLinkToDirect(item.imageUrl);
       // Use background image from config
@@ -5800,6 +5904,9 @@
     function showEndScreen() {
       console.debug('[COMPLETION] Showing end screen - Auction complete!');
       hideCompletionPrompt();
+      
+      // Clear saved state since auction is complete
+      clearAuctionState();
       
       const endScreen = document.getElementById('endScreenOverlay');
       endScreen.classList.add('show');
@@ -7138,6 +7245,9 @@
           soldPlayers.push(items[currentIndex]);
           console.debug('[AUCTION_FLOW] Player sold:', items[currentIndex].name, '- Total sold:', soldPlayers.length);
           
+          // Save state after marking as sold
+          saveAuctionState();
+          
           // If in unsold round, remove from both unsold players list AND items array
           if (isShowingUnsoldRound) {
             const soldPlayerId = items[currentIndex].id;
@@ -7206,9 +7316,15 @@
         if (!isShowingUnsoldRound && items[currentIndex]) {
           unsoldPlayers.push(items[currentIndex]);
           console.debug('[AUCTION_FLOW] Player marked as unsold:', items[currentIndex].name, '- Total unsold:', unsoldPlayers.length);
+          
+          // Save state after marking as unsold
+          saveAuctionState();
         } else if (isShowingUnsoldRound && items[currentIndex]) {
           // In unsold round, player remains unsold - no need to add again
           console.debug('[AUCTION_FLOW] Player remains unsold in second round:', items[currentIndex].name);
+          
+          // Save state
+          saveAuctionState();
         }
         
         // Show appropriate prompt based on selection mode
@@ -7677,12 +7793,32 @@
       // Fetch data in parallel for faster loading (but don't start auction yet)
       await Promise.all([fetchSheetData(), fetchTeamsData()]);
       
+      // Try to restore saved state
+      const stateRestored = restoreAuctionState();
+      
       // Check if random mode is enabled
       const startButton = document.getElementById('startButton');
+      const resetButton = document.getElementById('resetAuctionButton');
       const startScreenOverlay = document.getElementById('startScreenOverlay');
+      
+      // Reset button handler
+      resetButton.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (confirm('Are you sure you want to reset the auction and start fresh?')) {
+          clearAuctionState();
+          location.reload();
+        }
+      });
       
       if (CONFIG.selectionMode.type === 'random') {
         // Show start screen for random mode
+        
+        // If state was restored, show resume message
+        if (stateRestored) {
+          startButton.innerHTML = '<span class="start-icon">▶</span><span>RESUME AUCTION</span>';
+          document.querySelector('.start-screen-hint').textContent = 'Continue from where you left off';
+        }
+        
         startButton.addEventListener('click', () => {
           // Hide start screen with animation
           startScreenOverlay.classList.add('hidden');
@@ -7692,8 +7828,13 @@
             startScreenOverlay.remove();
           }, 500);
           
-          // Start auction
-          nextItem();
+          // Start or resume auction
+          if (stateRestored) {
+            // Show current player
+            showItem(currentIndex);
+          } else {
+            nextItem();
+          }
           
           // Preload images in background after 1 second (non-blocking)
           setTimeout(() => {
@@ -7706,8 +7847,12 @@
         startScreenOverlay.classList.add('hidden');
         startScreenOverlay.remove();
         
-        // Start auction immediately
-        nextItem();
+        // Start or resume auction
+        if (stateRestored) {
+          showItem(currentIndex);
+        } else {
+          nextItem();
+        }
         
         // Preload images in background after 1 second (non-blocking)
         setTimeout(() => {
