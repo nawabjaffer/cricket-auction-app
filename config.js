@@ -31,8 +31,7 @@ const CONFIG = {
     rules: {
       // DYNAMIC AUCTION RULES - These are read via getters for real-time updates
       minimumPlayerBasePrice: 100,  // Minimum base price for any player (used in RULE_001, RULE_002, RULE_006)
-      safeFundBufferPercent: 1.1    // 10% buffer for safe fund threshold (RULE_006: 1.1 = 110% of minimum)
-      
+      safeFundBufferPercent: 1.5    // 50% buffer for safe fund threshold (RULE_006: 1.5 = 150% of minimum)
       // RULE_001: Remaining Budget Constraint - Team must retain enough to complete roster
       // RULE_002: Dynamic Max Bid = remainingPurse - (remainingPlayers - 1) * minimumPlayerBasePrice
       // RULE_003: Total Budget Cap - Cannot exceed allocatedAmount
