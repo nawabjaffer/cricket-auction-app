@@ -4663,8 +4663,10 @@
     // Save auction state to localStorage
     function saveAuctionState() {
       try {
+        const currentPlayer = items[currentIndex];
         const state = {
           currentIndex,
+          currentPlayerId: currentPlayer ? currentPlayer.id : null, // Save player ID for reliable restore
           currentBid,
           basePrice,
           currentBidIncrement,
@@ -4677,7 +4679,7 @@
           timestamp: Date.now()
         };
         localStorage.setItem(AUCTION_STATE_KEY, JSON.stringify(state));
-        console.debug('[STATE] Auction state saved - currentBid:', currentBid, 'lastBiddingTeam:', lastBiddingTeam, 'bidIncrement:', currentBidIncrement);
+        console.debug('[STATE] Auction state saved - currentPlayer:', currentPlayer?.name, '(ID:', currentPlayer?.id, ') currentBid:', currentBid, 'lastBiddingTeam:', lastBiddingTeam, 'bidIncrement:', currentBidIncrement);
       } catch (e) {
         console.error('[STATE] Failed to save auction state:', e);
       }
@@ -4699,7 +4701,6 @@
         }
         
         // Restore state
-        currentIndex = state.currentIndex;
         currentBid = state.currentBid || 0;
         basePrice = state.basePrice || 0;
         currentBidIncrement = state.currentBidIncrement || CONFIG.auction.bidIncrements.default;
@@ -4718,7 +4719,21 @@
           items.find(item => item.id === id)
         ).filter(p => p); // Remove undefined
         
-        console.debug('[STATE] Auction state restored - currentBid:', currentBid, 'basePrice:', basePrice, 'lastBiddingTeam:', lastBiddingTeam, 'bidIncrement:', currentBidIncrement);
+        // Find current player by ID (more reliable than index when items array changes)
+        if (state.currentPlayerId) {
+          const playerIndex = items.findIndex(item => item.id === state.currentPlayerId);
+          if (playerIndex !== -1) {
+            currentIndex = playerIndex;
+            console.debug('[STATE] Found player by ID:', state.currentPlayerId, 'at index:', currentIndex);
+          } else {
+            console.warn('[STATE] Could not find player with ID:', state.currentPlayerId, '- using saved index:', state.currentIndex);
+            currentIndex = state.currentIndex;
+          }
+        } else {
+          currentIndex = state.currentIndex;
+        }
+        
+        console.debug('[STATE] Auction state restored - currentIndex:', currentIndex, 'player:', items[currentIndex]?.name, 'currentBid:', currentBid, 'basePrice:', basePrice, 'lastBiddingTeam:', lastBiddingTeam, 'bidIncrement:', currentBidIncrement);
         return true;
       } catch (e) {
         console.error('[STATE] Failed to restore auction state:', e);
@@ -5320,9 +5335,6 @@
       currentIndex = (index + items.length) % items.length;
       const item = items[currentIndex];
       
-      // Save state when showing new item
-      saveAuctionState();
-      
       const imageSrc = convertDriveLinkToDirect(item.imageUrl);
       // Use background image from config
       const bgImageSrc = CONFIG.assets.backgroundImage;
@@ -5392,6 +5404,9 @@
       // hide overlays if visible
       document.getElementById('soldOverlay').classList.remove('show');
       document.getElementById('unsoldOverlay').classList.remove('show');
+      
+      // Save state after everything is reset and ready
+      saveAuctionState();
     }
 
     function updateBidDisplay() {
@@ -7254,8 +7269,7 @@
           soldPlayers.push(items[currentIndex]);
           console.debug('[AUCTION_FLOW] Player sold:', items[currentIndex].name, '- Total sold:', soldPlayers.length);
           
-          // Save state after marking as sold
-          saveAuctionState();
+          // Don't save here - will be saved when next player is shown via showItem()
           
           // If in unsold round, remove from both unsold players list AND items array
           if (isShowingUnsoldRound) {
@@ -7326,14 +7340,12 @@
           unsoldPlayers.push(items[currentIndex]);
           console.debug('[AUCTION_FLOW] Player marked as unsold:', items[currentIndex].name, '- Total unsold:', unsoldPlayers.length);
           
-          // Save state after marking as unsold
-          saveAuctionState();
+          // Don't save here - will be saved when next player is shown via showItem()
         } else if (isShowingUnsoldRound && items[currentIndex]) {
           // In unsold round, player remains unsold - no need to add again
           console.debug('[AUCTION_FLOW] Player remains unsold in second round:', items[currentIndex].name);
           
-          // Save state
-          saveAuctionState();
+          // Don't save here - will be saved when next player is shown via showItem()
         }
         
         // Show appropriate prompt based on selection mode
