@@ -7830,8 +7830,13 @@
           
           // Start or resume auction
           if (stateRestored) {
+            // Save the restored bid amount before showItem resets it
+            const savedBid = currentBid;
             // Show current player
             showItem(currentIndex);
+            // Restore the bid amount and update display
+            currentBid = savedBid;
+            updateBidDisplay();
           } else {
             nextItem();
           }
@@ -7849,7 +7854,12 @@
         
         // Start or resume auction
         if (stateRestored) {
+          // Save the restored bid amount before showItem resets it
+          const savedBid = currentBid;
           showItem(currentIndex);
+          // Restore the bid amount and update display
+          currentBid = savedBid;
+          updateBidDisplay();
         } else {
           nextItem();
         }
