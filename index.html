@@ -4498,6 +4498,8 @@
     // Image preloading cache
     const imageCache = new Map();
     
+    // Performance optimization: Preload images efficiently
+    
     // Track last bidding team
     let lastBiddingTeam = null;
     let lastBiddingTeamIndex = null;
@@ -4663,37 +4665,60 @@
     }
     
     function preloadNextImages(currentIdx, count = 3) {
-      // Preload the next 'count' player images
+      // Preload the next 'count' player images (optimized - only if not cached)
       for (let i = 1; i <= count; i++) {
         const nextIndex = (currentIdx + i) % items.length;
         if (items[nextIndex] && items[nextIndex].imageUrl) {
           const imageUrl = convertDriveLinkToDirect(items[nextIndex].imageUrl);
-          preloadImage(imageUrl).catch(() => {});
+          if (!imageCache.has(imageUrl)) {
+            preloadImage(imageUrl).catch(() => {});
+          }
         }
       }
     }
     
     function preloadAllPlayerImages() {
-      console.debug('[IMAGE_CACHE] Starting to preload all player images...');
-      const promises = items.map(item => {
-        if (item.imageUrl) {
+      // Optimized: Only preload if not already cached
+      if (imageCache.size >= items.length * 0.5) {
+        console.debug('[IMAGE_CACHE] Most images already cached, skipping bulk preload');
+        return;
+      }
+      
+      console.debug('[IMAGE_CACHE] Starting to preload player images...');
+      const promises = items.slice(0, 10).map(item => { // Preload only first 10
+        if (item && item.imageUrl) {
           const imageUrl = convertDriveLinkToDirect(item.imageUrl);
-          return preloadImage(imageUrl).catch(() => {});
+          if (!imageCache.has(imageUrl)) {
+            return preloadImage(imageUrl).catch(() => {});
+          }
         }
         return Promise.resolve();
       });
       
       Promise.all(promises).then(() => {
-        console.debug(`[IMAGE_CACHE] Successfully preloaded ${imageCache.size} player images`);
+        console.debug(`[IMAGE_CACHE] Preloaded ${imageCache.size} images`);
+        // Lazy load remaining images in background
+        setTimeout(() => {
+          items.slice(10).forEach(item => {
+            if (item && item.imageUrl) {
+              const imageUrl = convertDriveLinkToDirect(item.imageUrl);
+              if (!imageCache.has(imageUrl)) {
+                preloadImage(imageUrl).catch(() => {});
+              }
+            }
+          });
+        }, 2000); // Delay by 2 seconds
       });
     }
     
     function preloadTeamLogos() {
       console.debug('[IMAGE_CACHE] Preloading team logos...');
       teams.forEach(team => {
-        if (team.logoUrl) {
+        if (team && team.logoUrl) {
           const logoUrl = convertDriveLinkToDirect(team.logoUrl);
-          preloadImage(logoUrl).catch(() => {});
+          if (!imageCache.has(logoUrl)) {
+            preloadImage(logoUrl).catch(() => {});
+          }
         }
       });
     }
@@ -4850,7 +4875,42 @@
       }
     }
 
+    // Fetch already sold players from the Sold Players sheet
+    async function fetchAlreadySoldPlayers() {
+      try {
+        const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(SOLD_SHEET_RANGE)}?key=${API_KEY}`;
+        const resp = await fetch(url);
+        const data = await resp.json();
+        
+        if (!data.values || data.values.length === 0) {
+          console.debug('[DATA_FETCH] No sold players found in sheet');
+          return [];
+        }
+        
+        const cols = CONFIG.columnMappings.soldPlayers;
+        const alreadySoldPlayerIds = [];
+        
+        // Skip header row and collect player IDs
+        for (let i = 1; i < data.values.length; i++) {
+          const row = data.values[i];
+          const playerId = row[cols.id] || '';
+          if (playerId && playerId.trim() !== '') {
+            alreadySoldPlayerIds.push(playerId.trim());
+          }
+        }
+        
+        console.debug('[DATA_FETCH] Found', alreadySoldPlayerIds.length, 'already sold players in sheet');
+        return alreadySoldPlayerIds;
+      } catch (error) {
+        console.error('Error fetching already sold players:', error);
+        return [];
+      }
+    }
+
     async function fetchSheetData() {
+      // First, fetch already sold players from the Sold Players sheet
+      const alreadySoldPlayerIds = await fetchAlreadySoldPlayers();
+      
       const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(SHEET_RANGE)}?key=${API_KEY}`;
       const resp = await fetch(url);
       const data = await resp.json();
@@ -4862,7 +4922,7 @@
       // Map sheet columns using CONFIG.columnMappings.players
       const cols = CONFIG.columnMappings.players;
       
-      // Filter and map - only include players with valid base price
+      // Filter and map - only include players with valid base price and not already sold
       items = data.values
         .map((row, index) => {
           // Skip if no base price or base price is N/A
@@ -4870,48 +4930,30 @@
             return null;
           }
 
-          const dateOfBirth = row[cols.dateOfBirth] || '';
-          let age = 'N/A';
-
-          // Calculate age if date of birth is provided
-          if (dateOfBirth && dateOfBirth !== 'N/A') {
-            // Parse DD/MM/YYYY or DD-MM-YYYY format
-            const parts = dateOfBirth.split(/[\/\-]/);
-            if (parts.length === 3) {
-              const dob = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`);
-              if (!isNaN(dob.getTime())) {
-                const diffMs = Date.now() - dob.getTime();
-                age = Math.floor(diffMs / (1000 * 60 * 60 * 24 * 365.25));
-              }
-            }
-          }
-          
-          // Get ID from column C, or generate if missing
           const playerId = row[cols.id] || `P${String(index + 1).padStart(3, '0')}`;
+          
+          // Skip if player is already sold (exists in Sold Players sheet)
+          if (alreadySoldPlayerIds.includes(playerId.trim())) {
+            console.debug('[DATA_FETCH] Skipping already sold player:', playerId, row[cols.name]);
+            return null;
+          }
           
           return {
             id: playerId,
             imageUrl: row[cols.imageUrl] || '',
             name: row[cols.name] || 'Unknown Player',
-            dateOfBirth: dateOfBirth,
-            age: age,
             role: row[cols.role] || 'Player',
             matches: row[cols.matches] || '0',
             runs: row[cols.runs] || 'N/A',
             wickets: row[cols.wickets] || 'N/A',
             bowlingBestFigures: row[cols.bowlingBest] || 'N/A',
             battingBestFigures: row[cols.battingBest] || 'N/A',
-            basePrice: row[cols.basePrice],
-            batsmanType: row[cols.batsmanType] || '',
-            bowlingHand: row[cols.bowlingHand] || '',
-            bestFigures: row[cols.role] && row[cols.role].toLowerCase().includes('allrounder') 
-              ? (row[cols.bowlingBest] || 'N/A') 
-              : (row[cols.battingBest] || 'N/A')
+            basePrice: row[cols.basePrice]
           };
         })
         .filter(player => player !== null); // Remove null entries
       
-      console.debug('[DATA_FETCH] Loaded', items.length, 'players from sheet (filtered by base price)');
+      console.debug('[DATA_FETCH] Loaded', items.length, 'players for auction (excluded', alreadySoldPlayerIds.length, 'already sold players)');
     }
 
     async function fetchTeamsData() {
@@ -5051,8 +5093,10 @@
       document.getElementById('playerBattingBest').textContent = item.battingBestFigures || 'N/A';
       document.getElementById('playerBowlingBest').textContent = item.bowlingBestFigures || 'N/A';
       
-      // Reset bid amount for new player
-      currentBid = basePrice;
+      // Reset bid amount for new player - use player's base price or default
+      const playerBasePrice = parseFloat(item.basePrice) || basePrice;
+      currentBid = playerBasePrice;
+      basePrice = playerBasePrice; // Update global basePrice for current player
       updateBidDisplay();
       
       // Reset bid increment to default
@@ -5272,11 +5316,20 @@
         return;
       }
       
-      // Get list of players not yet shown (excluding sold and unsold)
+      // Get list of players not yet shown
+      // In first round: exclude sold and unsold
+      // In unsold round: only exclude sold (we're showing unsold players)
       const availablePlayers = items.filter((item, index) => {
-        const isAlreadyShown = soldPlayers.some(p => p.id === item.id) || 
-                               unsoldPlayers.some(p => p.id === item.id);
-        return !isAlreadyShown;
+        const isSold = soldPlayers.some(p => p.id === item.id);
+        
+        if (isShowingUnsoldRound) {
+          // In unsold round, only exclude already sold players
+          return !isSold;
+        } else {
+          // In first round, exclude both sold and unsold
+          const isUnsold = unsoldPlayers.some(p => p.id === item.id);
+          return !isSold && !isUnsold;
+        }
       });
       
       if (availablePlayers.length === 0) {
@@ -5319,11 +5372,18 @@
       // Show overlay with fade in
       overlay.classList.add('show');
       
-      // Generate coins for all available players
+      // Generate coins for all available players (same logic as showRandomPlayerSelection)
       const availablePlayers = items.filter((item) => {
-        const isAlreadyShown = soldPlayers.some(p => p.id === item.id) || 
-                               unsoldPlayers.some(p => p.id === item.id);
-        return !isAlreadyShown;
+        const isSold = soldPlayers.some(p => p.id === item.id);
+        
+        if (isShowingUnsoldRound) {
+          // In unsold round, only exclude already sold players
+          return !isSold;
+        } else {
+          // In first round, exclude both sold and unsold
+          const isUnsold = unsoldPlayers.some(p => p.id === item.id);
+          return !isSold && !isUnsold;
+        }
       });
       
       coinsContainer.innerHTML = '';
@@ -5850,41 +5910,22 @@
         
         const cols = CONFIG.columnMappings.players;
         allPlayersCache = data.values.map((row, index) => {
-          const dateOfBirth = row[cols.dateOfBirth] || '';
-          let age = 'N/A';
-
-          if (dateOfBirth && dateOfBirth !== 'N/A') {
-            const parts = dateOfBirth.split(/[\/\-]/);
-            if (parts.length === 3) {
-              const dob = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`);
-              if (!isNaN(dob.getTime())) {
-                const diffMs = Date.now() - dob.getTime();
-                age = Math.floor(diffMs / (1000 * 60 * 60 * 24 * 365.25));
-              }
-            }
-          }
-          
           const playerId = row[cols.id] || `P${String(index + 1).padStart(3, '0')}`;
           
           return {
             id: playerId,
             imageUrl: row[cols.imageUrl] || '',
             name: row[cols.name] || 'Unknown Player',
-            dateOfBirth: dateOfBirth,
-            age: age,
+            dateOfBirth: row[cols.dateOfBirth] || '',
             role: row[cols.role] || 'Player',
             matches: row[cols.matches] || '0',
             runs: row[cols.runs] || 'N/A',
             wickets: row[cols.wickets] || 'N/A',
-            bowlingBestFigures: row[cols.bowlingBest] || 'N/A',
-            battingBestFigures: row[cols.battingBest] || 'N/A',
-            basePrice: row[cols.basePrice] || '',
-            batsmanType: row[cols.batsmanType] || '',
-            bowlingHand: row[cols.bowlingHand] || ''
+            basePrice: row[cols.basePrice] || ''
           };
         });
         
-        console.debug('[PLAYER_CACHE] Cached all players:', allPlayersCache.length);
+        console.debug('[PLAYER_CACHE] Cached', allPlayersCache.length, 'players');
         return allPlayersCache;
       } catch (error) {
         console.error('Error fetching all players for cache:', error);
@@ -5913,10 +5954,8 @@
       if (player) {
         const stats = {
           matches: player.matches || 'N/A',
-          innings: 'N/A', // Not available in new table structure
-          runs: player.runs || 'N/A', // Career runs from column U
-          wickets: player.wickets || 'N/A', // Total wickets from column T
-          average: 'N/A' // Not available in new table structure
+          runs: player.runs || 'N/A',
+          wickets: player.wickets || 'N/A'
         };
         
         // Cache it
@@ -5946,13 +5985,11 @@
           imageUrl: captain.imageUrl,
           name: captain.name,
           role: captain.role,
-          dateOfBirth: captain.dateOfBirth,
+          dateOfBirth: captain.dateOfBirth || '',
           stats: {
             matches: captain.matches || 'N/A',
-            innings: 'N/A', // Not available in new table structure
-            runs: captain.runs || 'N/A', // Career runs from column U
-            wickets: captain.wickets || 'N/A', // Total wickets from column T
-            average: 'N/A' // Not available in new table structure
+            runs: captain.runs || 'N/A',
+            wickets: captain.wickets || 'N/A'
           }
         };
       }
@@ -6886,6 +6923,15 @@
         if (items[currentIndex]) {
           soldPlayers.push(items[currentIndex]);
           console.debug('[AUCTION_FLOW] Player sold:', items[currentIndex].name, '- Total sold:', soldPlayers.length);
+          
+          // If in unsold round, remove from unsold players list
+          if (isShowingUnsoldRound) {
+            const unsoldIndex = unsoldPlayers.findIndex(p => p.id === items[currentIndex].id);
+            if (unsoldIndex !== -1) {
+              unsoldPlayers.splice(unsoldIndex, 1);
+              console.debug('[AUCTION_FLOW] Removed from unsold list - Remaining unsold:', unsoldPlayers.length);
+            }
+          }
         }
         
         // Show appropriate prompt based on selection mode
@@ -6927,10 +6973,13 @@
       
       // Keep unsold screen visible after animation
       setTimeout(() => {
-        // Mark player as unsold (only in first round)
+        // Mark player as unsold (only in first round, not if already in unsold round)
         if (!isShowingUnsoldRound && items[currentIndex]) {
           unsoldPlayers.push(items[currentIndex]);
           console.debug('[AUCTION_FLOW] Player marked as unsold:', items[currentIndex].name, '- Total unsold:', unsoldPlayers.length);
+        } else if (isShowingUnsoldRound && items[currentIndex]) {
+          // In unsold round, player remains unsold - no need to add again
+          console.debug('[AUCTION_FLOW] Player remains unsold in second round:', items[currentIndex].name);
         }
         
         // Show appropriate prompt based on selection mode
@@ -7385,7 +7434,6 @@
     // Log initialization message
     console.log('%c🏏 Cricket Auction App Initialized', 'color: #2196F3; font-size: 16px; font-weight: bold;');
     console.log('%cDebug utilities available via window.AuctionDebug', 'color: #4CAF50; font-size: 12px;');
-    console.log('%cTry: AuctionDebug.logRules(), AuctionDebug.getTeamsStatus(), AuctionDebug.testBid(0, 500)', 'color: #ff9800; font-size: 11px;');
 
     (async function init() {
       // Control bid increment info visibility based on config
@@ -7394,17 +7442,20 @@
         bidInfoElement.style.display = CONFIG.notifications.showBidIncrementInfo ? 'block' : 'none';
       }
       
+      // Initialize audio without blocking
       initializeAudio();
-      await fetchSheetData();
-      await fetchTeamsData();
       
-      // Start preloading images in background (non-blocking)
-      setTimeout(() => {
-        preloadAllPlayerImages();
-        preloadTeamLogos();
-      }, CONFIG.ui.animations.imagePreload.startDelay);
+      // Fetch data in parallel for faster loading
+      await Promise.all([fetchSheetData(), fetchTeamsData()]);
       
+      // Start auction immediately
       nextItem();
+      
+      // Preload images in background after 1 second (non-blocking)
+      setTimeout(() => {
+        preloadTeamLogos();
+        preloadAllPlayerImages();
+      }, 1000);
     })();
   </script>
 
