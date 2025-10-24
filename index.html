@@ -4667,6 +4667,9 @@
           currentIndex,
           currentBid,
           basePrice,
+          currentBidIncrement,
+          lastBiddingTeam,
+          lastBiddingTeamIndex,
           unsoldPlayers: unsoldPlayers.map(p => p.id), // Store only IDs
           soldPlayers: soldPlayers.map(p => p.id), // Store only IDs
           isShowingUnsoldRound,
@@ -4674,7 +4677,7 @@
           timestamp: Date.now()
         };
         localStorage.setItem(AUCTION_STATE_KEY, JSON.stringify(state));
-        console.debug('[STATE] Auction state saved');
+        console.debug('[STATE] Auction state saved - currentBid:', currentBid, 'lastBiddingTeam:', lastBiddingTeam, 'bidIncrement:', currentBidIncrement);
       } catch (e) {
         console.error('[STATE] Failed to save auction state:', e);
       }
@@ -4697,8 +4700,11 @@
         
         // Restore state
         currentIndex = state.currentIndex;
-        currentBid = state.currentBid;
-        basePrice = state.basePrice;
+        currentBid = state.currentBid || 0;
+        basePrice = state.basePrice || 0;
+        currentBidIncrement = state.currentBidIncrement || CONFIG.auction.bidIncrements.default;
+        lastBiddingTeam = state.lastBiddingTeam || null;
+        lastBiddingTeamIndex = state.lastBiddingTeamIndex !== undefined ? state.lastBiddingTeamIndex : null;
         isShowingUnsoldRound = state.isShowingUnsoldRound;
         allPlayersShown = state.allPlayersShown;
         
@@ -4712,7 +4718,7 @@
           items.find(item => item.id === id)
         ).filter(p => p); // Remove undefined
         
-        console.debug('[STATE] Auction state restored:', state);
+        console.debug('[STATE] Auction state restored - currentBid:', currentBid, 'basePrice:', basePrice, 'lastBiddingTeam:', lastBiddingTeam, 'bidIncrement:', currentBidIncrement);
         return true;
       } catch (e) {
         console.error('[STATE] Failed to restore auction state:', e);
@@ -6884,6 +6890,9 @@
       lastBiddingTeam = team;
       lastBiddingTeamIndex = teamIndex;
       
+      // Save state after bid is placed
+      saveAuctionState();
+      
       // Update bid display with team logo
       updateBidTeamDisplay(team);
       
@@ -7830,13 +7839,35 @@
           
           // Start or resume auction
           if (stateRestored) {
-            // Save the restored bid amount before showItem resets it
+            // Save the restored values before showItem resets them
             const savedBid = currentBid;
+            const savedBidIncrement = currentBidIncrement;
+            const savedLastTeam = lastBiddingTeam;
+            const savedLastTeamIndex = lastBiddingTeamIndex;
+            
+            console.debug('[RESUME] Before showItem - currentBid:', currentBid, 'savedBid:', savedBid, 'lastBiddingTeam:', lastBiddingTeam);
+            
             // Show current player
             showItem(currentIndex);
-            // Restore the bid amount and update display
+            
+            console.debug('[RESUME] After showItem - currentBid:', currentBid);
+            
+            // Restore all the saved values
             currentBid = savedBid;
+            currentBidIncrement = savedBidIncrement;
+            lastBiddingTeam = savedLastTeam;
+            lastBiddingTeamIndex = savedLastTeamIndex;
+            
+            console.debug('[RESUME] After restore - currentBid:', currentBid);
+            
+            // Update all displays
             updateBidDisplay();
+            updateBidIncrementDisplay();
+            
+            // Restore the bidding team display if there was one
+            if (lastBiddingTeam) {
+              updateBidTeamDisplay(lastBiddingTeam);
+            }
           } else {
             nextItem();
           }
@@ -7854,12 +7885,34 @@
         
         // Start or resume auction
         if (stateRestored) {
-          // Save the restored bid amount before showItem resets it
+          // Save the restored values before showItem resets them
           const savedBid = currentBid;
+          const savedBidIncrement = currentBidIncrement;
+          const savedLastTeam = lastBiddingTeam;
+          const savedLastTeamIndex = lastBiddingTeamIndex;
+          
+          console.debug('[RESUME] Sequential - Before showItem - currentBid:', currentBid, 'savedBid:', savedBid, 'lastBiddingTeam:', lastBiddingTeam);
+          
           showItem(currentIndex);
-          // Restore the bid amount and update display
+          
+          console.debug('[RESUME] Sequential - After showItem - currentBid:', currentBid);
+          
+          // Restore all the saved values
           currentBid = savedBid;
+          currentBidIncrement = savedBidIncrement;
+          lastBiddingTeam = savedLastTeam;
+          lastBiddingTeamIndex = savedLastTeamIndex;
+          
+          console.debug('[RESUME] Sequential - After restore - currentBid:', currentBid);
+          
+          // Update all displays
           updateBidDisplay();
+          updateBidIncrementDisplay();
+          
+          // Restore the bidding team display if there was one
+          if (lastBiddingTeam) {
+            updateBidTeamDisplay(lastBiddingTeam);
+          }
         } else {
           nextItem();
         }
