@@ -2055,6 +2055,120 @@
       }
     }
 
+    /* Start Screen Overlay */
+    .start-screen-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 10001;
+      opacity: 1;
+      pointer-events: all;
+      transition: opacity 0.5s ease;
+    }
+    
+    .start-screen-overlay.hidden {
+      opacity: 0;
+      pointer-events: none;
+    }
+    
+    .start-screen-content {
+      text-align: center;
+      animation: startScreenFadeIn 1s ease-out;
+    }
+    
+    .start-screen-title {
+      font-size: 72px;
+      font-weight: 900;
+      color: #ffffff;
+      margin-bottom: 10px;
+      text-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+      letter-spacing: 2px;
+      animation: titlePulse 2s ease-in-out infinite;
+    }
+    
+    .start-screen-subtitle {
+      font-size: 28px;
+      font-weight: 600;
+      color: rgba(255, 255, 255, 0.8);
+      margin-bottom: 50px;
+      text-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+    }
+    
+    .start-button {
+      padding: 20px 60px;
+      font-size: 24px;
+      font-weight: 700;
+      color: #ffffff;
+      background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%);
+      border: none;
+      border-radius: 50px;
+      cursor: pointer;
+      box-shadow: 0 10px 30px rgba(76, 175, 80, 0.4);
+      transition: all 0.3s ease;
+      display: inline-flex;
+      align-items: center;
+      gap: 15px;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+    }
+    
+    .start-button:hover {
+      transform: translateY(-3px) scale(1.05);
+      box-shadow: 0 15px 40px rgba(76, 175, 80, 0.6);
+      background: linear-gradient(135deg, #45a049 0%, #4CAF50 100%);
+    }
+    
+    .start-button:active {
+      transform: translateY(-1px) scale(1.02);
+    }
+    
+    .start-icon {
+      font-size: 28px;
+      animation: iconBounce 1.5s ease-in-out infinite;
+    }
+    
+    .start-screen-hint {
+      margin-top: 30px;
+      font-size: 16px;
+      color: rgba(255, 255, 255, 0.5);
+      font-style: italic;
+    }
+    
+    @keyframes startScreenFadeIn {
+      0% {
+        opacity: 0;
+        transform: translateY(30px);
+      }
+      100% {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+    
+    @keyframes titlePulse {
+      0%, 100% {
+        text-shadow: 0 4px 20px rgba(76, 175, 80, 0.5);
+      }
+      50% {
+        text-shadow: 0 4px 30px rgba(76, 175, 80, 0.8);
+      }
+    }
+    
+    @keyframes iconBounce {
+      0%, 100% {
+        transform: translateX(0);
+      }
+      50% {
+        transform: translateX(5px);
+      }
+    }
+
     /* Staggered animation for player cards */
     .player-card {
       animation: cardFadeIn 0.6s ease-out both;
@@ -4370,6 +4484,19 @@
       <img src="./assets/END.jpg" alt="Auction Complete" class="end-screen-image">
     </div>
     
+    <!-- Start Screen Overlay -->
+    <div class="start-screen-overlay" id="startScreenOverlay">
+      <div class="start-screen-content">
+        <div class="start-screen-title">🏏 Cricket Auction</div>
+        <div class="start-screen-subtitle">Player Bidding System</div>
+        <button class="start-button" id="startButton">
+          <span class="start-icon">▶</span>
+          <span>START AUCTION</span>
+        </button>
+        <div class="start-screen-hint">Click to begin and enable audio</div>
+      </div>
+    </div>
+    
     <!-- Team Selection Modal -->
     <div class="team-selection-modal" id="teamModal">
       <div class="team-modal-content">
@@ -4470,6 +4597,9 @@
   <audio id="unsoldSound" preload="auto">
     <source id="unsoldSoundSource" src="./assets/unsold.mp3" type="audio/mpeg">
   </audio>
+  <audio id="coinShakeSound" preload="auto">
+    <source id="coinShakeSoundSource" src="./assets/coinsshake.mp3" type="audio/mpeg">
+  </audio>
   
   <script>
     // Configuration loaded from config.js
@@ -4494,6 +4624,7 @@
     // Initialize audio elements
     let soldSound = null;
     let unsoldSound = null;
+    let coinShakeSound = null;
     
     // Image preloading cache
     const imageCache = new Map();
@@ -4727,17 +4858,21 @@
       // Set audio sources from config
       document.getElementById('soldSoundSource').src = CONFIG.audio.files.sold;
       document.getElementById('unsoldSoundSource').src = CONFIG.audio.files.unsold;
+      document.getElementById('coinShakeSoundSource').src = './assets/coinsshake.mp3';
       
       soldSound = document.getElementById('soldSound');
       unsoldSound = document.getElementById('unsoldSound');
+      coinShakeSound = document.getElementById('coinShakeSound');
       
       // Set volume from config BEFORE loading
       if (soldSound) soldSound.volume = CONFIG.audio.volume;
       if (unsoldSound) unsoldSound.volume = CONFIG.audio.volume;
+      if (coinShakeSound) coinShakeSound.volume = CONFIG.audio.volume;
       
       // Load audio files
       soldSound.load();
       unsoldSound.load();
+      coinShakeSound.load();
       
       // Log audio readiness
       soldSound.addEventListener('canplaythrough', () => {
@@ -4785,7 +4920,16 @@
           console.warn('⚠️ Unsold audio unlock failed:', e.name, e.message);
         });
         
-        Promise.all([soldPromise, unsoldPromise]).then(() => {
+        // Unlock coin shake sound
+        const coinShakePromise = coinShakeSound.play().then(() => {
+          coinShakeSound.pause();
+          coinShakeSound.currentTime = 0;
+          console.debug('[AUDIO] Coin shake audio unlocked successfully');
+        }).catch(e => {
+          console.warn('⚠️ Coin shake audio unlock failed:', e.name, e.message);
+        });
+        
+        Promise.all([soldPromise, unsoldPromise, coinShakePromise]).then(() => {
           console.debug('[AUDIO] All audio elements unlocked successfully');
         });
       };
@@ -4868,6 +5012,29 @@
           .then(() => console.debug('[AUDIO] Unsold sound playing successfully'))
           .catch(e => {
             console.error('✗ Error playing unsold sound:', e);
+            if (e.name === 'NotAllowedError') {
+              console.warn('⚠️ Audio playback blocked by browser. User interaction may be required.');
+            }
+          });
+      }
+    }
+    
+    function playCoinShakeSound() {
+      if (!coinShakeSound) {
+        console.error('✗ Coin shake sound element not found');
+        return;
+      }
+      
+      console.debug('[AUDIO] Attempting to play coin shake sound...');
+      coinShakeSound.currentTime = 0; // Reset to start
+      
+      const playPromise = coinShakeSound.play();
+      
+      if (playPromise !== undefined) {
+        playPromise
+          .then(() => console.debug('[AUDIO] Coin shake sound playing successfully'))
+          .catch(e => {
+            console.error('✗ Error playing coin shake sound:', e);
             if (e.name === 'NotAllowedError') {
               console.warn('⚠️ Audio playback blocked by browser. User interaction may be required.');
             }
@@ -5487,6 +5654,9 @@
       // Start shaking animation with Z-axis rotation
       coinsContainer.classList.add('shaking');
       jar.classList.add('shaking');
+      
+      // Play coin shake sound during animation
+      playCoinShakeSound();
       
       const animConfig = CONFIG.selectionMode.animation;
       
@@ -7504,17 +7674,47 @@
       // Initialize audio without blocking
       initializeAudio();
       
-      // Fetch data in parallel for faster loading
+      // Fetch data in parallel for faster loading (but don't start auction yet)
       await Promise.all([fetchSheetData(), fetchTeamsData()]);
       
-      // Start auction immediately
-      nextItem();
+      // Check if random mode is enabled
+      const startButton = document.getElementById('startButton');
+      const startScreenOverlay = document.getElementById('startScreenOverlay');
       
-      // Preload images in background after 1 second (non-blocking)
-      setTimeout(() => {
-        preloadTeamLogos();
-        preloadAllPlayerImages();
-      }, 1000);
+      if (CONFIG.selectionMode.type === 'random') {
+        // Show start screen for random mode
+        startButton.addEventListener('click', () => {
+          // Hide start screen with animation
+          startScreenOverlay.classList.add('hidden');
+          
+          // Remove from DOM after animation completes
+          setTimeout(() => {
+            startScreenOverlay.remove();
+          }, 500);
+          
+          // Start auction
+          nextItem();
+          
+          // Preload images in background after 1 second (non-blocking)
+          setTimeout(() => {
+            preloadTeamLogos();
+            preloadAllPlayerImages();
+          }, 1000);
+        });
+      } else {
+        // Sequential mode - hide start screen and start immediately
+        startScreenOverlay.classList.add('hidden');
+        startScreenOverlay.remove();
+        
+        // Start auction immediately
+        nextItem();
+        
+        // Preload images in background after 1 second (non-blocking)
+        setTimeout(() => {
+          preloadTeamLogos();
+          preloadAllPlayerImages();
+        }, 1000);
+      }
     })();
   </script>
 

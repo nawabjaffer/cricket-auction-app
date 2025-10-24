@@ -1,0 +1,80 @@
+# Cricket Auction App - Apache Configuration
+
+# Enable Rewrite Engine
+RewriteEngine On
+
+# Force HTTPS (recommended for production)
+RewriteCond %{HTTPS} off
+RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+
+# Compression for faster loading
+<IfModule mod_deflate.c>
+    AddOutputFilterByType DEFLATE text/html text/plain text/xml text/css application/javascript application/json
+</IfModule>
+
+# Browser Caching
+<IfModule mod_expires.c>
+    ExpiresActive On
+    
+    # Images
+    ExpiresByType image/jpeg "access plus 1 month"
+    ExpiresByType image/png "access plus 1 month"
+    ExpiresByType image/gif "access plus 1 month"
+    ExpiresByType image/svg+xml "access plus 1 month"
+    
+    # Audio
+    ExpiresByType audio/mpeg "access plus 1 month"
+    ExpiresByType audio/mp3 "access plus 1 month"
+    
+    # CSS and JavaScript
+    ExpiresByType text/css "access plus 1 week"
+    ExpiresByType application/javascript "access plus 1 week"
+    
+    # HTML
+    ExpiresByType text/html "access plus 1 hour"
+</IfModule>
+
+# Security Headers
+<IfModule mod_headers.c>
+    # Prevent clickjacking
+    Header always set X-Frame-Options "SAMEORIGIN"
+    
+    # XSS Protection
+    Header always set X-XSS-Protection "1; mode=block"
+    
+    # Prevent MIME sniffing
+    Header always set X-Content-Type-Options "nosniff"
+    
+    # Referrer Policy
+    Header always set Referrer-Policy "strict-origin-when-cross-origin"
+    
+    # CORS (if needed for cross-domain assets)
+    # Header always set Access-Control-Allow-Origin "*"
+</IfModule>
+
+# Disable directory browsing
+Options -Indexes
+
+# Custom Error Pages (optional)
+ErrorDocument 404 /404.html
+ErrorDocument 500 /500.html
+
+# Protect sensitive files
+<FilesMatch "^(config\.js|\.env|\.htaccess|build-production\.js)$">
+    # Allow config.js but protect others
+    <If "%{REQUEST_URI} =~ /config\.js$/">
+        Require all granted
+    </If>
+    <Else>
+        Require all denied
+    </Else>
+</FilesMatch>
+
+# MIME Types
+<IfModule mod_mime.c>
+    AddType audio/mpeg mp3
+    AddType audio/mp4 m4a
+    AddType image/svg+xml svg svgz
+    AddType application/javascript js
+    AddType text/css css
+</IfModule>

@@ -1,0 +1,60 @@
+# Cricket Auction App - Git Ignore File
+
+# Production build (generated file)
+index-production.html
+
+# Environment variables (if used)
+.env
+.env.local
+.env.production
+
+# Sensitive configuration (if separated)
+config.local.js
+secrets.js
+
+# Node modules (if using build tools)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Editor directories and files
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+.DS_Store
+
+# Build outputs
+dist/
+build/
+*.log
+
+# Temporary files
+*.tmp
+*.temp
+.cache/
+
+# Backup files
+*.bak
+*.backup
+*~
+
+# OS generated files
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Testing
+coverage/
+.nyc_output/
+
+# Optional: Uncomment if you want to ignore test files in production
+# test-audio.html
