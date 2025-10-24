@@ -50,6 +50,23 @@ const CONFIG = {
     }
   },
   
+  // Notification & UI Display Settings
+  notifications: {
+    showTopNotifications: false,      // true = show popup notifications at top, false = use color feedback only
+    showBidIncrementInfo: false,       // true = show bid increment info at bottom right, false = hide
+    useColorFeedback: true            // true = use color changes in bid display instead of popups
+  },
+  
+  // Player Selection Mode
+  selectionMode: {
+    type: 'random',               // 'sequential' = normal next player, 'random' = coin jar random selection
+    animation: {
+      coinJarShakeDuration: 3000,     // How long coins shake (ms)
+      coinRevealDuration: 2500,       // How long to show revealed coin (ms)
+      totalAnimationTime: 5000        // Total time before showing player (ms)
+    }
+  },
+  
   // Asset Paths
   assets: {
     backgroundImage: './assets/BG.jpg',
@@ -250,6 +267,9 @@ Object.freeze(CONFIG.auction.bidIncrements);
 Object.freeze(CONFIG.auction.rules);
 Object.freeze(CONFIG.audio);
 Object.freeze(CONFIG.audio.files);
+Object.freeze(CONFIG.notifications);
+Object.freeze(CONFIG.selectionMode);
+Object.freeze(CONFIG.selectionMode.animation);
 Object.freeze(CONFIG.assets);
 Object.freeze(CONFIG.ui);
 Object.freeze(CONFIG.ui.animations);
