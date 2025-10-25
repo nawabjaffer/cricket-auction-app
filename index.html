@@ -5668,17 +5668,16 @@
     function nextItem() {
       // For random mode, check if all available players have been shown in first round
       if (!allPlayersShown && CONFIG.selectionMode.type === 'random') {
-        // Count how many players are available (not sold and not unsold)
-        const availablePlayers = items.filter((item) => {
-          const isSold = soldPlayers.some(p => p.id === item.id);
-          const isUnsold = unsoldPlayers.some(p => p.id === item.id);
-          return !isSold && !isUnsold;
-        });
+        // Get original item count (before any removals)
+        // We need to check if we've processed all players in the first round
+        // A player is "processed" if they're either sold OR marked as unsold (for round 2)
+        const totalProcessed = soldPlayers.length + unsoldPlayers.length;
+        const originalItemCount = items.length + finallyUnsoldPlayers.length; // items may have players removed after 2x unsold
         
-        console.debug('[AUCTION_FLOW] Checking first round status - Available:', availablePlayers.length, '| Sold:', soldPlayers.length, '| Unsold:', unsoldPlayers.length);
+        console.debug('[AUCTION_FLOW] Checking first round status - Total processed:', totalProcessed, '| Original items:', originalItemCount, '| Sold:', soldPlayers.length, '| Unsold for R2:', unsoldPlayers.length);
         
-        // If no more available players in first round, move to unsold round
-        if (availablePlayers.length === 0) {
+        // If all original players have been processed (sold or unsold), move to unsold round
+        if (totalProcessed >= originalItemCount) {
           allPlayersShown = true;
           
           if (unsoldPlayers.length > 0) {
