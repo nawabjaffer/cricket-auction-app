@@ -5674,17 +5674,25 @@
     function nextItem() {
       // For random mode, check if all available players have been shown in first round
       if (!allPlayersShown && CONFIG.selectionMode.type === 'random') {
-        // A player is "processed" if they're either sold OR marked as unsold (for round 2)
-        const totalProcessed = soldPlayers.length + unsoldPlayers.length;
+        // Check how many players in items array haven't been processed yet
+        const unprocessedPlayers = items.filter((item) => {
+          const isSold = soldPlayers.some(p => p.id === item.id);
+          const isUnsold = unsoldPlayers.some(p => p.id === item.id);
+          return !isSold && !isUnsold;
+        });
         
-        console.debug('[AUCTION_FLOW] Checking first round status - Total processed:', totalProcessed, '| Original items:', originalItemCount, '| Sold:', soldPlayers.length, '| Unsold for R2:', unsoldPlayers.length);
+        console.debug('[AUCTION_FLOW] === FIRST ROUND CHECK ===');
+        console.debug('[AUCTION_FLOW] Items in array:', items.length);
+        console.debug('[AUCTION_FLOW] Unprocessed players:', unprocessedPlayers.length, '| IDs:', unprocessedPlayers.map(p => p.id).join(', '));
+        console.debug('[AUCTION_FLOW] Sold:', soldPlayers.length, '| Unsold for R2:', unsoldPlayers.length);
+        console.debug('[AUCTION_FLOW] Original items:', originalItemCount);
         
-        // If all original players have been processed (sold or unsold), move to unsold round
-        if (totalProcessed >= originalItemCount) {
+        // If NO unprocessed players remain in items array, move to unsold round
+        if (unprocessedPlayers.length === 0) {
           allPlayersShown = true;
           
           if (unsoldPlayers.length > 0) {
-            console.debug(`[AUCTION_FLOW] First round complete - ${unsoldPlayers.length} unsold players will be shown in second round`);
+            console.warn(`[AUCTION_FLOW] ⚠️ TRANSITIONING TO UNSOLD ROUND - All ${items.length} players processed, ${unsoldPlayers.length} unsold players will be shown in second round`);
             // Replace items with unsold players for second round
             items = [...unsoldPlayers];
             showUnsoldRoundMessage();
@@ -5695,6 +5703,8 @@
             showEndScreen();
             return;
           }
+        } else {
+          console.debug('[AUCTION_FLOW] First round continues - Still', unprocessedPlayers.length, 'unprocessed players in items array');
         }
       }
       
@@ -5761,7 +5771,12 @@
         return;
       }
       
-      console.debug('[RANDOM_SELECTION] Total items:', items.length, '| Sold:', soldPlayers.length, '| Unsold:', unsoldPlayers.length, '| Round:', isShowingUnsoldRound ? 'UNSOLD' : 'FIRST');
+      console.debug('[RANDOM_SELECTION] === RANDOM SELECTION START ===');
+      console.debug('[RANDOM_SELECTION] Total items.length:', items.length);
+      console.debug('[RANDOM_SELECTION] Sold players:', soldPlayers.length);
+      console.debug('[RANDOM_SELECTION] Unsold players:', unsoldPlayers.length);
+      console.debug('[RANDOM_SELECTION] Round:', isShowingUnsoldRound ? 'UNSOLD' : 'FIRST');
+      console.debug('[RANDOM_SELECTION] Original item count:', originalItemCount);
       
       // Get list of players not yet shown
       // In first round: exclude sold and unsold
@@ -5782,7 +5797,38 @@
       console.debug('[RANDOM_SELECTION] Available players for selection:', availablePlayers.length, '| IDs:', availablePlayers.map(p => p.id).join(', '));
       
       if (availablePlayers.length === 0) {
-        console.debug('[RANDOM_SELECTION] No more players available');
+        console.warn('[RANDOM_SELECTION] ⚠️ NO AVAILABLE PLAYERS for random selection');
+        
+        // Check if we should move to unsold round or end auction
+        if (!allPlayersShown && !isShowingUnsoldRound) {
+          // Check how many unprocessed players remain in items array
+          const unprocessedPlayers = items.filter((item) => {
+            const isSold = soldPlayers.some(p => p.id === item.id);
+            const isUnsold = unsoldPlayers.some(p => p.id === item.id);
+            return !isSold && !isUnsold;
+          });
+          
+          console.debug('[RANDOM_SELECTION] === CHECKING COMPLETION ===');
+          console.debug('[RANDOM_SELECTION] Items in array:', items.length);
+          console.debug('[RANDOM_SELECTION] Unprocessed players:', unprocessedPlayers.length);
+          console.debug('[RANDOM_SELECTION] Sold:', soldPlayers.length, '| Unsold:', unsoldPlayers.length);
+          console.debug('[RANDOM_SELECTION] Should move to unsold round?', unprocessedPlayers.length === 0);
+          
+          if (unprocessedPlayers.length === 0) {
+            allPlayersShown = true;
+            if (unsoldPlayers.length > 0) {
+              console.warn(`[RANDOM_SELECTION] ⚠️ TRANSITIONING TO UNSOLD ROUND from showRandomPlayerSelection - ${unsoldPlayers.length} unsold players`);
+              items = [...unsoldPlayers];
+              showUnsoldRoundMessage();
+              return;
+            }
+          } else {
+            console.error('[RANDOM_SELECTION] ❌ ERROR: No available players for selection but', unprocessedPlayers.length, 'unprocessed players still exist!');
+            console.error('[RANDOM_SELECTION] Unprocessed player IDs:', unprocessedPlayers.map(p => p.id).join(', '));
+            console.error('[RANDOM_SELECTION] This indicates a filtering logic error in availablePlayers calculation');
+          }
+        }
+        
         return;
       }
       
