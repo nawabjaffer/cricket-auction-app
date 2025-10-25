@@ -4751,6 +4751,76 @@
       }
     }
     
+    // Webhook functions to update Google Sheets
+    async function sendToWebhook(action, playerData) {
+      if (!CONFIG.webhook.url) {
+        console.debug('[WEBHOOK] No webhook URL configured, skipping');
+        return;
+      }
+      
+      try {
+        const response = await fetch(CONFIG.webhook.url, {
+          method: 'POST',
+          mode: 'no-cors',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            action: action,
+            ...playerData
+          })
+        });
+        
+        console.debug('[WEBHOOK] Sent', action, 'for player:', playerData.playerName);
+      } catch (error) {
+        console.error('[WEBHOOK] Error sending', action, ':', error);
+      }
+    }
+    
+    async function updateSoldPlayerSheet(player, team, soldPrice, basePrice) {
+      await sendToWebhook('updateSoldPlayer', {
+        playerId: player.id,
+        playerName: player.name,
+        role: player.role,
+        matches: player.matches,
+        battingBest: player.battingBestFigures || 'N/A',
+        bowlingBest: player.bowlingBestFigures || 'N/A',
+        teamName: team.name,
+        soldPrice: soldPrice,
+        basePrice: basePrice,
+        imageUrl: player.imageUrl || ''
+      });
+    }
+    
+    async function updateUnsoldPlayerSheet(player, basePrice, round) {
+      await sendToWebhook('updateUnsoldPlayer', {
+        playerId: player.id,
+        playerName: player.name,
+        role: player.role,
+        matches: player.matches,
+        battingBest: player.battingBestFigures || 'N/A',
+        bowlingBest: player.bowlingBestFigures || 'N/A',
+        basePrice: basePrice,
+        round: round,
+        imageUrl: player.imageUrl || ''
+      });
+    }
+    
+    async function moveUnsoldToSoldSheet(player, team, soldPrice, basePrice) {
+      await sendToWebhook('moveUnsoldToSold', {
+        playerId: player.id,
+        playerName: player.name,
+        role: player.role,
+        matches: player.matches,
+        battingBest: player.battingBestFigures || 'N/A',
+        bowlingBest: player.bowlingBestFigures || 'N/A',
+        teamName: team.name,
+        soldPrice: soldPrice,
+        basePrice: basePrice,
+        imageUrl: player.imageUrl || ''
+      });
+    }
+    
     // Performance optimization: Preload images efficiently
     
     // Track last bidding team
@@ -7269,6 +7339,16 @@
           soldPlayers.push(items[currentIndex]);
           console.debug('[AUCTION_FLOW] Player sold:', items[currentIndex].name, '- Total sold:', soldPlayers.length);
           
+          // Update Google Sheets
+          const soldPlayer = items[currentIndex];
+          if (isShowingUnsoldRound) {
+            // Player was unsold, now sold in second round - move from unsold to sold sheet
+            moveUnsoldToSoldSheet(soldPlayer, lastBiddingTeam, currentBid, basePrice);
+          } else {
+            // First round sale - add to sold sheet
+            updateSoldPlayerSheet(soldPlayer, lastBiddingTeam, currentBid, basePrice);
+          }
+          
           // Don't save here - will be saved when next player is shown via showItem()
           
           // If in unsold round, remove from both unsold players list AND items array
@@ -7339,6 +7419,9 @@
         if (!isShowingUnsoldRound && items[currentIndex]) {
           unsoldPlayers.push(items[currentIndex]);
           console.debug('[AUCTION_FLOW] Player marked as unsold:', items[currentIndex].name, '- Total unsold:', unsoldPlayers.length);
+          
+          // Update Google Sheets - add to unsold sheet
+          updateUnsoldPlayerSheet(items[currentIndex], basePrice, 'First Round');
           
           // Don't save here - will be saved when next player is shown via showItem()
         } else if (isShowingUnsoldRound && items[currentIndex]) {
