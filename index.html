@@ -7851,34 +7851,45 @@
           
           // Start or resume auction
           if (stateRestored) {
-            // Save the restored values before showItem resets them
-            const savedBid = currentBid;
-            const savedBidIncrement = currentBidIncrement;
-            const savedLastTeam = lastBiddingTeam;
-            const savedLastTeamIndex = lastBiddingTeamIndex;
+            // Check if the current player was already sold or unsold
+            const currentPlayer = items[currentIndex];
+            const isAlreadySold = currentPlayer && soldPlayers.some(p => p.id === currentPlayer.id);
+            const isAlreadyUnsold = currentPlayer && unsoldPlayers.some(p => p.id === currentPlayer.id);
             
-            console.debug('[RESUME] Before showItem - currentBid:', currentBid, 'savedBid:', savedBid, 'lastBiddingTeam:', lastBiddingTeam);
-            
-            // Show current player
-            showItem(currentIndex);
-            
-            console.debug('[RESUME] After showItem - currentBid:', currentBid);
-            
-            // Restore all the saved values
-            currentBid = savedBid;
-            currentBidIncrement = savedBidIncrement;
-            lastBiddingTeam = savedLastTeam;
-            lastBiddingTeamIndex = savedLastTeamIndex;
-            
-            console.debug('[RESUME] After restore - currentBid:', currentBid);
-            
-            // Update all displays
-            updateBidDisplay();
-            updateBidIncrementDisplay();
-            
-            // Restore the bidding team display if there was one
-            if (lastBiddingTeam) {
-              updateBidTeamDisplay(lastBiddingTeam);
+            if (isAlreadySold || isAlreadyUnsold) {
+              // Player was already processed - move to next player
+              console.debug('[RESUME] Current player already processed (sold/unsold), moving to next player');
+              nextItem();
+            } else {
+              // Save the restored values before showItem resets them
+              const savedBid = currentBid;
+              const savedBidIncrement = currentBidIncrement;
+              const savedLastTeam = lastBiddingTeam;
+              const savedLastTeamIndex = lastBiddingTeamIndex;
+              
+              console.debug('[RESUME] Before showItem - currentBid:', currentBid, 'savedBid:', savedBid, 'lastBiddingTeam:', lastBiddingTeam);
+              
+              // Show current player
+              showItem(currentIndex);
+              
+              console.debug('[RESUME] After showItem - currentBid:', currentBid);
+              
+              // Restore all the saved values
+              currentBid = savedBid;
+              currentBidIncrement = savedBidIncrement;
+              lastBiddingTeam = savedLastTeam;
+              lastBiddingTeamIndex = savedLastTeamIndex;
+              
+              console.debug('[RESUME] After restore - currentBid:', currentBid);
+              
+              // Update all displays
+              updateBidDisplay();
+              updateBidIncrementDisplay();
+              
+              // Restore the bidding team display if there was one
+              if (lastBiddingTeam) {
+                updateBidTeamDisplay(lastBiddingTeam);
+              }
             }
           } else {
             nextItem();
@@ -7897,33 +7908,44 @@
         
         // Start or resume auction
         if (stateRestored) {
-          // Save the restored values before showItem resets them
-          const savedBid = currentBid;
-          const savedBidIncrement = currentBidIncrement;
-          const savedLastTeam = lastBiddingTeam;
-          const savedLastTeamIndex = lastBiddingTeamIndex;
+          // Check if the current player was already sold or unsold
+          const currentPlayer = items[currentIndex];
+          const isAlreadySold = currentPlayer && soldPlayers.some(p => p.id === currentPlayer.id);
+          const isAlreadyUnsold = currentPlayer && unsoldPlayers.some(p => p.id === currentPlayer.id);
           
-          console.debug('[RESUME] Sequential - Before showItem - currentBid:', currentBid, 'savedBid:', savedBid, 'lastBiddingTeam:', lastBiddingTeam);
-          
-          showItem(currentIndex);
-          
-          console.debug('[RESUME] Sequential - After showItem - currentBid:', currentBid);
-          
-          // Restore all the saved values
-          currentBid = savedBid;
-          currentBidIncrement = savedBidIncrement;
-          lastBiddingTeam = savedLastTeam;
-          lastBiddingTeamIndex = savedLastTeamIndex;
-          
-          console.debug('[RESUME] Sequential - After restore - currentBid:', currentBid);
-          
-          // Update all displays
-          updateBidDisplay();
-          updateBidIncrementDisplay();
-          
-          // Restore the bidding team display if there was one
-          if (lastBiddingTeam) {
-            updateBidTeamDisplay(lastBiddingTeam);
+          if (isAlreadySold || isAlreadyUnsold) {
+            // Player was already processed - move to next player
+            console.debug('[RESUME] Sequential - Current player already processed (sold/unsold), moving to next player');
+            nextItem();
+          } else {
+            // Save the restored values before showItem resets them
+            const savedBid = currentBid;
+            const savedBidIncrement = currentBidIncrement;
+            const savedLastTeam = lastBiddingTeam;
+            const savedLastTeamIndex = lastBiddingTeamIndex;
+            
+            console.debug('[RESUME] Sequential - Before showItem - currentBid:', currentBid, 'savedBid:', savedBid, 'lastBiddingTeam:', lastBiddingTeam);
+            
+            showItem(currentIndex);
+            
+            console.debug('[RESUME] Sequential - After showItem - currentBid:', currentBid);
+            
+            // Restore all the saved values
+            currentBid = savedBid;
+            currentBidIncrement = savedBidIncrement;
+            lastBiddingTeam = savedLastTeam;
+            lastBiddingTeamIndex = savedLastTeamIndex;
+            
+            console.debug('[RESUME] Sequential - After restore - currentBid:', currentBid);
+            
+            // Update all displays
+            updateBidDisplay();
+            updateBidIncrementDisplay();
+            
+            // Restore the bidding team display if there was one
+            if (lastBiddingTeam) {
+              updateBidTeamDisplay(lastBiddingTeam);
+            }
           }
         } else {
           nextItem();

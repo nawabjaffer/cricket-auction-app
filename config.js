@@ -7,7 +7,8 @@ const CONFIG = {
     ranges: {
       players: 'BCC Tournament Registration!A2:Y',  // Updated to include all columns (A-Y = 25 columns)
       teams: 'Teams!A2:I',
-      soldPlayers: 'Sold Players!A:J'  // Updated to include Image URL column
+      soldPlayers: 'Sold Players!A:J',  // Updated to include Image URL column
+      unsoldPlayers: 'Unsold Players!A:J'  // Track unsold players for second round
     }
   },
   
