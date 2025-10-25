@@ -5309,9 +5309,44 @@
       }
     }
 
+    // Fetch unsold players from the Unsold Players sheet
+    async function fetchAlreadyUnsoldPlayers() {
+      try {
+        const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(UNSOLD_SHEET_RANGE)}?key=${API_KEY}`;
+        const resp = await fetch(url);
+        const data = await resp.json();
+        
+        if (!data.values || data.values.length === 0) {
+          console.debug('[DATA_FETCH] No unsold players found in sheet');
+          return [];
+        }
+        
+        const cols = CONFIG.columnMappings.unsoldPlayers;
+        const alreadyUnsoldPlayerIds = [];
+        
+        // Skip header row and collect player IDs (only Round 1, not "Round 2 - Final")
+        for (let i = 1; i < data.values.length; i++) {
+          const row = data.values[i];
+          const playerId = row[cols.id] || '';
+          const round = row[cols.round] || '';
+          
+          if (playerId && playerId.trim() !== '' && round.includes('Round 1')) {
+            alreadyUnsoldPlayerIds.push(playerId.trim());
+          }
+        }
+        
+        console.debug('[DATA_FETCH] Found', alreadyUnsoldPlayerIds.length, 'unsold players (Round 1) in sheet');
+        return alreadyUnsoldPlayerIds;
+      } catch (error) {
+        console.error('Error fetching already unsold players:', error);
+        return [];
+      }
+    }
+
     async function fetchSheetData() {
-      // First, fetch already sold players from the Sold Players sheet
+      // First, fetch already sold and unsold players from sheets
       const alreadySoldPlayerIds = await fetchAlreadySoldPlayers();
+      const alreadyUnsoldPlayerIds = await fetchAlreadyUnsoldPlayers();
       
       const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(SHEET_RANGE)}?key=${API_KEY}`;
       const resp = await fetch(url);
@@ -5358,7 +5393,15 @@
       // Store the original count before any modifications
       originalItemCount = items.length;
       
-      console.debug('[DATA_FETCH] Loaded', items.length, 'players for auction (excluded', alreadySoldPlayerIds.length, 'already sold players)');
+      // Populate unsoldPlayers array from sheet data
+      unsoldPlayers = items.filter(item => alreadyUnsoldPlayerIds.includes(item.id));
+      
+      // Also populate soldPlayers array from sheet data
+      soldPlayers = items.filter(item => alreadySoldPlayerIds.includes(item.id));
+      
+      console.debug('[DATA_FETCH] Loaded', items.length, 'players for auction');
+      console.debug('[DATA_FETCH] Already sold:', soldPlayers.length, '| Already unsold (Round 1):', unsoldPlayers.length);
+      console.debug('[DATA_FETCH] Excluded:', alreadySoldPlayerIds.length, 'sold players from items');
     }
 
     async function fetchTeamsData() {

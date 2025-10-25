@@ -257,6 +257,18 @@ const CONFIG = {
       soldAmount: 7,      // Column H
       teamName: 8,        // Column I
       soldDate: 9         // Column J
+    },
+    unsoldPlayers: {
+      id: 0,              // Column A
+      imageUrl: 1,        // Column B
+      name: 2,            // Column C
+      role: 3,            // Column D
+      age: 4,             // Column E
+      matches: 5,         // Column F
+      bestFigures: 6,     // Column G
+      basePrice: 7,       // Column H
+      round: 8,           // Column I - "Round 1" or "Round 2 - Final"
+      unsoldDate: 9       // Column J
     }
   }
 };
