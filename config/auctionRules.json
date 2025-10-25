@@ -88,6 +88,17 @@
         "message": "Team does not meet final auction requirements. Requires admin review."
       },
       "severity": "info"
+    },
+    {
+      "id": "RULE_009",
+      "name": "Under-Age Player Limit",
+      "description": "Ensure team does not exceed maximum allowed under-age players (configurable age limit and max count).",
+      "condition": "underAgePlayers < maxUnderAgePlayers OR playerAge >= underAgeLimit",
+      "onFail": {
+        "action": "BLOCK_BID",
+        "message": "Team has reached maximum limit of under-{X} players (max {Y} allowed)."
+      },
+      "severity": "critical"
     }
   ]
 }

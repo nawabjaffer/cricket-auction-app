@@ -32,13 +32,16 @@ const CONFIG = {
     rules: {
       // DYNAMIC AUCTION RULES - These are read via getters for real-time updates
       minimumPlayerBasePrice: 100,  // Minimum base price for any player (used in RULE_001, RULE_002, RULE_006)
-      safeFundBufferPercent: 1.5    // 50% buffer for safe fund threshold (RULE_006: 1.5 = 150% of minimum)
+      safeFundBufferPercent: 1.5,   // 50% buffer for safe fund threshold (RULE_006: 1.5 = 150% of minimum)
+      underAgeLimit: 18,            // Age limit for under-age player restriction (RULE_009)
+      maxUnderAgePlayers: 2         // Maximum number of under-age players per team (RULE_009)
       // RULE_001: Remaining Budget Constraint - Team must retain enough to complete roster
       // RULE_002: Dynamic Max Bid = remainingPurse - (remainingPlayers - 1) * minimumPlayerBasePrice
       // RULE_003: Total Budget Cap - Cannot exceed allocatedAmount
       // RULE_004: Player Count Limit - Cannot exceed totalPlayerThreshold
       // RULE_005: Minimum Participation Balance - Must have at least playerBasePrice remaining
       // RULE_006: Safe Fund Threshold - Should maintain buffer of (remainingPlayers - 1) * minimumPlayerBasePrice * safeFundBufferPercent
+      // RULE_009: Under-Age Player Limit - Maximum number of under-age players per team
     }
   },
   

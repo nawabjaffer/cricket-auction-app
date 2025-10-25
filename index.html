@@ -4855,6 +4855,12 @@
       get safeFundBufferPercent() {
         return CONFIG.auction.rules.safeFundBufferPercent;
       },
+      get underAgeLimit() {
+        return CONFIG.auction.rules.underAgeLimit;
+      },
+      get maxUnderAgePlayers() {
+        return CONFIG.auction.rules.maxUnderAgePlayers;
+      },
       
       // RULE_001 & RULE_002: Remaining Budget Constraint & Dynamic Max Bid
       calculateMaxBid: function(team) {
@@ -4886,8 +4892,18 @@
         return (team.remainingPurse - bidAmount) >= safeThreshold;
       },
       
+      // RULE_009: Under-Age Player Limit
+      validateUnderAgeLimit: function(team, playerAge) {
+        // If player is not under-age, always valid
+        if (!playerAge || playerAge >= this.underAgeLimit) {
+          return true;
+        }
+        // If player is under-age, check if team has reached the limit
+        return (team.underAgePlayers || 0) < this.maxUnderAgePlayers;
+      },
+      
       // Comprehensive validation
-      validateBid: function(team, bidAmount, playerBasePrice = this.minimumPlayerBasePrice) {
+      validateBid: function(team, bidAmount, playerBasePrice = this.minimumPlayerBasePrice, playerAge = null) {
         const validations = [];
         
         // RULE_004: Check player count
@@ -4918,6 +4934,18 @@
             message: `Insufficient balance to bid for this player. ${team.name} needs at least ₹${playerBasePrice.toLocaleString()}.`,
             ruleId: 'RULE_005'
           };
+        }
+        
+        // RULE_009: Check under-age player limit
+        if (playerAge && playerAge < this.underAgeLimit) {
+          if (!this.validateUnderAgeLimit(team, playerAge)) {
+            return {
+              valid: false,
+              severity: 'critical',
+              message: `${team.name} has reached maximum limit of under-${this.underAgeLimit} players (max ${this.maxUnderAgePlayers} allowed).`,
+              ruleId: 'RULE_009'
+            };
+          }
         }
         
         // RULE_001 & RULE_002: Check remaining budget constraint
@@ -5352,7 +5380,8 @@
             allocatedAmount: parseFloat(row[cols.allocatedAmount]) || 0,
             remainingPurse: parseFloat(row[cols.remainingPurse]) || 0,
             highestBid: parseFloat(row[cols.highestBid]) || 0,
-            captain: row[cols.captain] || ''
+            captain: row[cols.captain] || '',
+            underAgePlayers: 0 // Track number of under-age players bought by this team
           };
         });
         console.debug('[DATA_FETCH] Loaded teams:', teams.length, 'teams with', teams.map(t => t.name).join(', '));
@@ -6820,6 +6849,13 @@
         selectedTeam.highestBid = currentBid;
       }
       
+      // Increment under-age player count if applicable
+      const currentPlayer = items[currentIndex];
+      if (currentPlayer && currentPlayer.age && parseInt(currentPlayer.age) < AUCTION_RULES.underAgeLimit) {
+        selectedTeam.underAgePlayers = (selectedTeam.underAgePlayers || 0) + 1;
+        console.debug('[AUCTION_FLOW] Under-age player sold - Team:', selectedTeam.name, 'Under-age count:', selectedTeam.underAgePlayers);
+      }
+      
       // Refresh the dropdown to show updated purse values
       populateTeamDropdown();
       
@@ -6876,6 +6912,13 @@
         selectedTeam.highestBid = currentBid;
       }
       
+      // Increment under-age player count if applicable
+      const currentPlayer = items[currentIndex];
+      if (currentPlayer && currentPlayer.age && parseInt(currentPlayer.age) < AUCTION_RULES.underAgeLimit) {
+        selectedTeam.underAgePlayers = (selectedTeam.underAgePlayers || 0) + 1;
+        console.debug('[AUCTION_FLOW] Under-age player sold - Team:', selectedTeam.name, 'Under-age count:', selectedTeam.underAgePlayers);
+      }
+      
       // Refresh the dropdown to show updated purse values
       populateTeamDropdown();
       
@@ -6904,7 +6947,9 @@
       }
       
       // First, check if team can bid at all (without increment) - for immediate feedback
-      const currentBidValidation = AUCTION_RULES.validateBid(team, currentBid, basePrice);
+      const currentPlayer = items[currentIndex];
+      const playerAge = currentPlayer ? parseInt(currentPlayer.age) : null;
+      const currentBidValidation = AUCTION_RULES.validateBid(team, currentBid, basePrice, playerAge);
       
       // If team can't even afford current bid, show warning immediately
       if (!currentBidValidation.valid && currentBidValidation.severity === 'critical') {
@@ -6926,6 +6971,9 @@
           case 'RULE_005':
             warningMessage = `${team.name} insufficient balance (₹${team.remainingPurse.toLocaleString()} < ₹${basePrice.toLocaleString()})`;
             break;
+          case 'RULE_009':
+            warningMessage = `${team.name} has reached max under-${AUCTION_RULES.underAgeLimit} players limit (${AUCTION_RULES.maxUnderAgePlayers} max)`;
+            break;
           default:
             warningMessage = `${team.name} cannot place this bid`;
         }
@@ -6940,7 +6988,7 @@
       const newBid = currentBid + currentBidIncrement; // Use dynamic increment
       
       // Now validate the new bid with increment
-      const validation = AUCTION_RULES.validateBid(team, newBid, basePrice);
+      const validation = AUCTION_RULES.validateBid(team, newBid, basePrice, playerAge);
       
       if (!validation.valid && validation.severity === 'critical') {
         showNotification(validation.message, 'warning');
@@ -6960,6 +7008,9 @@
             break;
           case 'RULE_005':
             warningMessage = `${team.name} insufficient balance (₹${team.remainingPurse.toLocaleString()})`;
+            break;
+          case 'RULE_009':
+            warningMessage = `${team.name} has reached max under-${AUCTION_RULES.underAgeLimit} players limit (${AUCTION_RULES.maxUnderAgePlayers} max)`;
             break;
           default:
             warningMessage = `${team.name} cannot place this bid`;
