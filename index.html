@@ -4650,6 +4650,7 @@
     let unsoldRoundCount = {}; // Track how many times each player was unsold: { playerId: roundCount }
     let isShowingUnsoldRound = false;
     let allPlayersShown = false;
+    let originalItemCount = 0; // Store the original count of items before any modifications
     
     // Initialize audio elements
     let soldSound = null;
@@ -4680,6 +4681,7 @@
           unsoldRoundCount: unsoldRoundCount, // Track rounds for each player
           isShowingUnsoldRound,
           allPlayersShown,
+          originalItemCount, // Save the original count for accurate round tracking
           timestamp: Date.now()
         };
         localStorage.setItem(AUCTION_STATE_KEY, JSON.stringify(state));
@@ -4712,6 +4714,7 @@
         lastBiddingTeamIndex = state.lastBiddingTeamIndex !== undefined ? state.lastBiddingTeamIndex : null;
         isShowingUnsoldRound = state.isShowingUnsoldRound;
         allPlayersShown = state.allPlayersShown;
+        originalItemCount = state.originalItemCount || items.length; // Restore original count or fallback to current items length
         
         // Restore unsold players (find by ID)
         unsoldPlayers = state.unsoldPlayers.map(id => 
@@ -5352,6 +5355,9 @@
         })
         .filter(player => player !== null); // Remove null entries
       
+      // Store the original count before any modifications
+      originalItemCount = items.length;
+      
       console.debug('[DATA_FETCH] Loaded', items.length, 'players for auction (excluded', alreadySoldPlayerIds.length, 'already sold players)');
     }
 
@@ -5668,11 +5674,8 @@
     function nextItem() {
       // For random mode, check if all available players have been shown in first round
       if (!allPlayersShown && CONFIG.selectionMode.type === 'random') {
-        // Get original item count (before any removals)
-        // We need to check if we've processed all players in the first round
         // A player is "processed" if they're either sold OR marked as unsold (for round 2)
         const totalProcessed = soldPlayers.length + unsoldPlayers.length;
-        const originalItemCount = items.length + finallyUnsoldPlayers.length; // items may have players removed after 2x unsold
         
         console.debug('[AUCTION_FLOW] Checking first round status - Total processed:', totalProcessed, '| Original items:', originalItemCount, '| Sold:', soldPlayers.length, '| Unsold for R2:', unsoldPlayers.length);
         
