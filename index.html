@@ -4646,6 +4646,8 @@
     // Track unsold players and sold players
     let unsoldPlayers = [];
     let soldPlayers = [];
+    let finallyUnsoldPlayers = []; // Players unsold in both rounds (won't be shown again)
+    let unsoldRoundCount = {}; // Track how many times each player was unsold: { playerId: roundCount }
     let isShowingUnsoldRound = false;
     let allPlayersShown = false;
     
@@ -4674,6 +4676,8 @@
           lastBiddingTeamIndex,
           unsoldPlayers: unsoldPlayers.map(p => p.id), // Store only IDs
           soldPlayers: soldPlayers.map(p => p.id), // Store only IDs
+          finallyUnsoldPlayers: finallyUnsoldPlayers.map(p => p.id), // Players unsold twice
+          unsoldRoundCount: unsoldRoundCount, // Track rounds for each player
           isShowingUnsoldRound,
           allPlayersShown,
           timestamp: Date.now()
@@ -4718,6 +4722,14 @@
         soldPlayers = state.soldPlayers.map(id => 
           items.find(item => item.id === id)
         ).filter(p => p); // Remove undefined
+        
+        // Restore finally unsold players (find by ID)
+        finallyUnsoldPlayers = (state.finallyUnsoldPlayers || []).map(id => 
+          items.find(item => item.id === id)
+        ).filter(p => p); // Remove undefined
+        
+        // Restore unsold round count
+        unsoldRoundCount = state.unsoldRoundCount || {};
         
         // Find current player by ID (more reliable than index when items array changes)
         if (state.currentPlayerId) {
@@ -6919,8 +6931,8 @@
         }
         showBidTeamWarning(warningMessage);
         
-        // Update bid display with team logo (but show as disabled)
-        updateBidTeamDisplay(team);
+        // DO NOT update bid display with team logo - they are not eligible
+        // Just show the warning and return
         
         return;
       }
@@ -6954,8 +6966,8 @@
         }
         showBidTeamWarning(warningMessage);
         
-        // Update bid display with team logo (but show as disabled)
-        updateBidTeamDisplay(team);
+        // DO NOT update bid display with team logo - they are not eligible
+        // Just show the warning and return
         
         return;
       }
@@ -7038,6 +7050,17 @@
       
       warningText.textContent = message;
       warning.style.display = 'flex';
+      warning.style.opacity = '1';
+      
+      // Auto-hide after 3 seconds with fade out
+      setTimeout(() => {
+        warning.style.transition = 'opacity 0.5s ease-out';
+        warning.style.opacity = '0';
+        setTimeout(() => {
+          warning.style.display = 'none';
+          warning.style.transition = '';
+        }, 500);
+      }, 3000);
     }
     
     // Hide team warning
@@ -7392,6 +7415,18 @@
       const subtext = document.getElementById('unsoldSubtext');
       const card = document.getElementById('card');
       
+      // Determine which round this is for the current player
+      const currentPlayer = items[currentIndex];
+      const playerId = currentPlayer ? currentPlayer.id : null;
+      const currentRound = playerId && unsoldRoundCount[playerId] ? unsoldRoundCount[playerId] + 1 : 1;
+      
+      // Update subtext based on round
+      if (currentRound === 1) {
+        subtext.textContent = 'Moving to Second Round';
+      } else {
+        subtext.textContent = 'Removed from Auction (Unsold 2x)';
+      }
+      
       // Add blur to background content only (not the overlay)
       card.classList.add('blur-background');
       
@@ -7415,18 +7450,57 @@
       
       // Keep unsold screen visible after animation
       setTimeout(() => {
-        // Mark player as unsold (only in first round, not if already in unsold round)
-        if (!isShowingUnsoldRound && items[currentIndex]) {
-          unsoldPlayers.push(items[currentIndex]);
-          console.debug('[AUCTION_FLOW] Player marked as unsold:', items[currentIndex].name, '- Total unsold:', unsoldPlayers.length);
+        // Mark player as unsold
+        if (items[currentIndex]) {
+          const currentPlayer = items[currentIndex];
+          const playerId = currentPlayer.id;
           
-          // Update Google Sheets - add to unsold sheet
-          updateUnsoldPlayerSheet(items[currentIndex], basePrice, 'First Round');
+          // Track unsold round count
+          if (!unsoldRoundCount[playerId]) {
+            unsoldRoundCount[playerId] = 0;
+          }
+          unsoldRoundCount[playerId]++;
           
-          // Don't save here - will be saved when next player is shown via showItem()
-        } else if (isShowingUnsoldRound && items[currentIndex]) {
-          // In unsold round, player remains unsold - no need to add again
-          console.debug('[AUCTION_FLOW] Player remains unsold in second round:', items[currentIndex].name);
+          const currentRound = unsoldRoundCount[playerId];
+          console.debug('[AUCTION_FLOW] Player marked as unsold:', currentPlayer.name, '- Round:', currentRound, '- Total unsold:', unsoldPlayers.length);
+          
+          if (currentRound === 1) {
+            // First time unsold - add to unsold list for second round
+            if (!isShowingUnsoldRound) {
+              unsoldPlayers.push(currentPlayer);
+              console.debug('[AUCTION_FLOW] Added to unsold list for second round');
+            }
+            
+            // Update Google Sheets - add to unsold sheet
+            updateUnsoldPlayerSheet(currentPlayer, basePrice, 'Round 1');
+            
+          } else if (currentRound >= 2) {
+            // Second time unsold - mark as finally unsold and remove from future rounds
+            finallyUnsoldPlayers.push(currentPlayer);
+            
+            // Remove from unsold players list
+            const unsoldIndex = unsoldPlayers.findIndex(p => p.id === playerId);
+            if (unsoldIndex !== -1) {
+              unsoldPlayers.splice(unsoldIndex, 1);
+            }
+            
+            // Remove from items array
+            const itemsIndex = items.findIndex(p => p.id === playerId);
+            if (itemsIndex !== -1) {
+              items.splice(itemsIndex, 1);
+              console.debug('[AUCTION_FLOW] Player removed from auction (unsold 2x) - Remaining items:', items.length);
+              
+              // Adjust currentIndex if needed
+              if (currentIndex >= items.length && items.length > 0) {
+                currentIndex = items.length - 1;
+              }
+            }
+            
+            // Update Google Sheets - mark as finally unsold
+            updateUnsoldPlayerSheet(currentPlayer, basePrice, 'Round 2 - Final');
+            
+            console.debug('[AUCTION_FLOW] Player finally unsold (2x) - Total finally unsold:', finallyUnsoldPlayers.length);
+          }
           
           // Don't save here - will be saved when next player is shown via showItem()
         }
