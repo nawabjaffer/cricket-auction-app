@@ -4584,6 +4584,7 @@
             <th>Logo</th>
             <th>Team Name</th>
             <th>Players Bought</th>
+            <th>Under-18</th>
             <th>Remaining Players</th>
             <th>Purse Spent</th>
             <th>Remaining Purse</th>
@@ -4682,6 +4683,15 @@
           isShowingUnsoldRound,
           allPlayersShown,
           originalItemCount, // Save the original count for accurate round tracking
+          // Save team stats including underAgePlayers count
+          teamStats: teams.map(team => ({
+            name: team.name,
+            playersBought: team.playersBought,
+            remainingPlayers: team.remainingPlayers,
+            remainingPurse: team.remainingPurse,
+            highestBid: team.highestBid,
+            underAgePlayers: team.underAgePlayers || 0
+          })),
           timestamp: Date.now()
         };
         localStorage.setItem(AUCTION_STATE_KEY, JSON.stringify(state));
@@ -4733,6 +4743,21 @@
         
         // Restore unsold round count
         unsoldRoundCount = state.unsoldRoundCount || {};
+        
+        // Restore team stats including underAgePlayers count
+        if (state.teamStats && Array.isArray(state.teamStats)) {
+          state.teamStats.forEach(savedTeam => {
+            const team = teams.find(t => t.name === savedTeam.name);
+            if (team) {
+              team.playersBought = savedTeam.playersBought;
+              team.remainingPlayers = savedTeam.remainingPlayers;
+              team.remainingPurse = savedTeam.remainingPurse;
+              team.highestBid = savedTeam.highestBid;
+              team.underAgePlayers = savedTeam.underAgePlayers || 0;
+            }
+          });
+          console.debug('[STATE] Team stats restored including under-age player counts');
+        }
         
         // Find current player by ID (more reliable than index when items array changes)
         if (state.currentPlayerId) {
@@ -5375,11 +5400,36 @@
             return null;
           }
           
+          // Calculate or extract age from DOB column
+          let age = null;
+          const dobValue = row[cols.dateOfBirth];
+          if (dobValue && dobValue.trim() !== '') {
+            // First, check if it's a number (direct age)
+            const ageNumber = parseInt(dobValue);
+            if (!isNaN(ageNumber) && ageNumber > 0 && ageNumber < 120) {
+              // It's a direct age number
+              age = ageNumber;
+            } else {
+              // Try to parse it as a date
+              const dobDate = new Date(dobValue);
+              if (!isNaN(dobDate.getTime())) {
+                // Valid date - calculate age
+                const today = new Date();
+                age = today.getFullYear() - dobDate.getFullYear();
+                const monthDiff = today.getMonth() - dobDate.getMonth();
+                if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < dobDate.getDate())) {
+                  age--;
+                }
+              }
+            }
+          }
+          
           return {
             id: playerId,
             imageUrl: row[cols.imageUrl] || '',
             name: row[cols.name] || 'Unknown Player',
             role: row[cols.role] || 'Player',
+            age: age,
             matches: row[cols.matches] || '0',
             runs: row[cols.runs] || 'N/A',
             wickets: row[cols.wickets] || 'N/A',
@@ -5396,11 +5446,12 @@
       // Populate unsoldPlayers array from sheet data
       unsoldPlayers = items.filter(item => alreadyUnsoldPlayerIds.includes(item.id));
       
-      // Also populate soldPlayers array from sheet data
-      soldPlayers = items.filter(item => alreadySoldPlayerIds.includes(item.id));
+      // Note: soldPlayers array will be populated from localStorage on resume
+      // or will be built dynamically as players are sold during the auction
+      // We don't populate it here because sold players are excluded from items array
       
       console.debug('[DATA_FETCH] Loaded', items.length, 'players for auction');
-      console.debug('[DATA_FETCH] Already sold:', soldPlayers.length, '| Already unsold (Round 1):', unsoldPlayers.length);
+      console.debug('[DATA_FETCH] Already unsold (Round 1):', unsoldPlayers.length);
       console.debug('[DATA_FETCH] Excluded:', alreadySoldPlayerIds.length, 'sold players from items');
     }
 
@@ -5536,7 +5587,22 @@
 
       // Update all player information - ID only shows number
       document.getElementById('playerId').textContent = String(item.id).padStart(2, '0');
-      document.getElementById('playerName').textContent = item.name.toUpperCase();
+      
+      // Display name with age category
+      let nameDisplay = item.name.toUpperCase();
+      if (item.age !== null && item.age !== undefined) {
+        let ageCategory = '';
+        if (item.age < 18) {
+          ageCategory = ' (U-18)';
+        } else if (item.age >= 18 && item.age <= 35) {
+          ageCategory = ` (${item.age})`;
+        } else if (item.age > 35) {
+          ageCategory = ' (35+)';
+        }
+        nameDisplay += ageCategory;
+      }
+      document.getElementById('playerName').textContent = nameDisplay;
+      
       document.getElementById('playerRole').textContent = item.role;
       document.getElementById('playerMatches').textContent = item.matches;
       document.getElementById('playerBattingBest').textContent = item.battingBestFigures || 'N/A';
@@ -5630,8 +5696,12 @@
         const selectedTeam = teams[selectedTeamIndex];
         
         if (selectedTeam) {
-          // Validate the new bid amount
-          const validation = AUCTION_RULES.validateBid(selectedTeam, newBid, basePrice);
+          // Get player age for validation
+          const player = items[currentIndex];
+          const playerAge = player ? parseInt(player.age) : null;
+          
+          // Validate the new bid amount with player age
+          const validation = AUCTION_RULES.validateBid(selectedTeam, newBid, basePrice, playerAge);
           
           if (!validation.valid && validation.severity === 'critical') {
             showNotification(validation.message, 'warning');
@@ -6264,6 +6334,16 @@
           playersClass += ' warning';
         }
         
+        // Under-age players status
+        let underAgeClass = 'team-stat-value';
+        const underAgeCount = team.underAgePlayers || 0;
+        const maxUnderAge = AUCTION_RULES.maxUnderAgePlayers;
+        if (underAgeCount >= maxUnderAge) {
+          underAgeClass += ' danger';
+        } else if (underAgeCount === maxUnderAge - 1) {
+          underAgeClass += ' warning';
+        }
+        
         // Create logo cell
         const logoCell = document.createElement('td');
         logoCell.className = 'team-logo-cell';
@@ -6285,6 +6365,7 @@
         row.innerHTML = `
           <td class="team-name-cell">${team.name}</td>
           <td><span class="team-stat-value">${team.playersBought}</span> / ${team.totalPlayerThreshold}</td>
+          <td><span class="${underAgeClass}">${underAgeCount}</span> / ${maxUnderAge}</td>
           <td><span class="${playersClass}">${team.remainingPlayers}</span></td>
           <td><span class="${purseSpentClass}">₹${purseSpent.toLocaleString()}</span></td>
           <td><span class="${purseRemainingClass}">₹${team.remainingPurse.toLocaleString()}</span></td>
@@ -6603,6 +6684,10 @@
               <div class="team-stat-number">${soldPlayers.length}/${team.totalPlayerThreshold}</div>
             </div>
             <div class="team-stat-item">
+              <div class="team-stat-label">Under-${AUCTION_RULES.underAgeLimit}</div>
+              <div class="team-stat-number">${team.underAgePlayers || 0}/${AUCTION_RULES.maxUnderAgePlayers}</div>
+            </div>
+            <div class="team-stat-item">
               <div class="team-stat-label">Purse Left</div>
               <div class="team-stat-number">₹${team.remainingPurse.toLocaleString()}</div>
             </div>
@@ -6904,9 +6989,11 @@
       }
       
       const selectedTeam = teams[teamIndex];
+      const player = items[currentIndex];
+      const playerAge = player ? parseInt(player.age) : null;
       
-      // Comprehensive auction rules validation
-      const validation = AUCTION_RULES.validateBid(selectedTeam, currentBid, basePrice);
+      // Comprehensive auction rules validation with player age
+      const validation = AUCTION_RULES.validateBid(selectedTeam, currentBid, basePrice, playerAge);
       
       if (!validation.valid) {
         if (validation.severity === 'critical') {
@@ -6964,9 +7051,11 @@
       }
       
       const selectedTeam = teams[parseInt(selectedTeamIndex)];
+      const player = items[currentIndex];
+      const playerAge = player ? parseInt(player.age) : null;
       
-      // Comprehensive auction rules validation
-      const validation = AUCTION_RULES.validateBid(selectedTeam, currentBid, basePrice);
+      // Comprehensive auction rules validation with player age
+      const validation = AUCTION_RULES.validateBid(selectedTeam, currentBid, basePrice, playerAge);
       
       if (!validation.valid) {
         if (validation.severity === 'critical') {
@@ -7252,6 +7341,8 @@
       const statusItems = container.querySelectorAll('.team-status-item');
       
       const nextBid = currentBid + currentBidIncrement;
+      const player = items[currentIndex];
+      const playerAge = player ? parseInt(player.age) : null;
       
       statusItems.forEach((item, index) => {
         const team = teams[index];
@@ -7259,8 +7350,8 @@
         // Remove all status classes
         item.classList.remove('status-safe', 'status-warning', 'status-danger');
         
-        // Check if team can bid at all
-        const currentBidValidation = AUCTION_RULES.validateBid(team, currentBid, basePrice);
+        // Check if team can bid at all (with player age validation)
+        const currentBidValidation = AUCTION_RULES.validateBid(team, currentBid, basePrice, playerAge);
         
         // If team can't afford current bid, mark as danger (red)
         if (!currentBidValidation.valid && currentBidValidation.severity === 'critical') {
@@ -7284,6 +7375,9 @@
             case 'RULE_005':
               reason = 'Insufficient balance';
               break;
+            case 'RULE_009':
+              reason = `Under-${AUCTION_RULES.underAgeLimit} limit reached`;
+              break;
             default:
               reason = 'Cannot bid';
           }
@@ -7295,8 +7389,8 @@
           return;
         }
         
-        // Check next bid validation
-        const nextBidValidation = AUCTION_RULES.validateBid(team, nextBid, basePrice);
+        // Check next bid validation (with player age)
+        const nextBidValidation = AUCTION_RULES.validateBid(team, nextBid, basePrice, playerAge);
         
         // If team can't afford next bid increment, mark as warning (orange)
         if (!nextBidValidation.valid && nextBidValidation.severity === 'critical') {
@@ -8062,8 +8156,10 @@
           return;
         }
         const team = teams[teamIndex];
-        const validation = AUCTION_RULES.validateBid(team, bidAmount, basePrice);
-        console.log('[DEBUG] BID VALIDATION TEST - Team:', team.name, '| Bid:', bidAmount);
+        const player = items[currentIndex];
+        const playerAge = player ? parseInt(player.age) : null;
+        const validation = AUCTION_RULES.validateBid(team, bidAmount, basePrice, playerAge);
+        console.log('[DEBUG] BID VALIDATION TEST - Team:', team.name, '| Bid:', bidAmount, '| Player Age:', playerAge);
         console.log('[DEBUG] Result:', validation.valid ? '✓ VALID' : '✗ INVALID', validation.valid ? '' : '| Reason: ' + validation.message);
         console.log('[DEBUG] Max Allowed Bid:', AUCTION_RULES.calculateMaxBid(team));
         return validation;
@@ -8071,14 +8167,17 @@
       
       // Get all teams status
       getTeamsStatus: () => {
+        const player = items[currentIndex];
+        const playerAge = player ? parseInt(player.age) : null;
         return teams.map((team, index) => ({
           index,
           name: team.name,
           playersBought: team.playersBought,
           remainingPlayers: team.remainingPlayers,
           remainingPurse: team.remainingPurse,
+          underAgePlayers: team.underAgePlayers || 0,
           maxBid: AUCTION_RULES.calculateMaxBid(team),
-          canBidCurrent: AUCTION_RULES.validateBid(team, currentBid, basePrice).valid
+          canBidCurrent: AUCTION_RULES.validateBid(team, currentBid, basePrice, playerAge).valid
         }));
       },
       
