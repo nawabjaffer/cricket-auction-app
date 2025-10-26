@@ -41,18 +41,19 @@ function updateSoldPlayer(data) {
     })).setMimeType(ContentService.MimeType.JSON);
   }
   
-  // Add new row with sold player data
+  // Column order based on config.js soldPlayers mapping:
+  // 0=ID, 1=Name, 2=Role, 3=Age, 4=Matches, 5=BestFigures, 6=TeamName, 7=SoldAmount, 8=BasePrice, 9=ImageUrl
   soldSheet.appendRow([
-    data.playerId,
-    data.playerName,
-    data.role,
-    data.matches,
-    data.battingBest,
-    data.bowlingBest,
-    data.teamName,
-    data.soldPrice,
-    data.basePrice,
-    data.imageUrl || ''
+    data.playerId,           // Column A: ID
+    data.playerName,         // Column B: Name
+    data.role,               // Column C: Role
+    data.age || '',          // Column D: Age
+    data.matches,            // Column E: Matches
+    data.battingBest || data.bowlingBest || 'N/A', // Column F: Best Figures
+    data.teamName,           // Column G: Team Name
+    data.soldPrice,          // Column H: Sold Amount
+    data.basePrice,          // Column I: Base Price
+    data.imageUrl || ''      // Column J: Image URL
   ]);
   
   return ContentService.createTextOutput(JSON.stringify({
@@ -74,9 +75,9 @@ function updateUnsoldPlayer(data) {
       'Player ID',
       'Name',
       'Role',
+      'Age',
       'Matches',
-      'Batting Best',
-      'Bowling Best',
+      'Best Figures',
       'Base Price',
       'Round',
       'Timestamp',
@@ -94,17 +95,19 @@ function updateUnsoldPlayer(data) {
     }
   }
   
+  // Column order based on config.js unsoldPlayers mapping:
+  // 0=ID, 1=Name, 2=Role, 3=Age, 4=Matches, 5=BestFigures, 6=BasePrice, 7=Round, 8=UnsoldDate, 9=ImageUrl
   const rowData = [
-    data.playerId,
-    data.playerName,
-    data.role,
-    data.matches,
-    data.battingBest,
-    data.bowlingBest,
-    data.basePrice,
-    data.round || 'First Round',
-    new Date(),
-    data.imageUrl || ''
+    data.playerId,           // Column A: ID
+    data.playerName,         // Column B: Name
+    data.role,               // Column C: Role
+    data.age || '',          // Column D: Age
+    data.matches,            // Column E: Matches
+    data.battingBest || data.bowlingBest || 'N/A', // Column F: Best Figures
+    data.basePrice,          // Column G: Base Price
+    data.round || 'Round 1', // Column H: Round
+    new Date(),              // Column I: Timestamp
+    data.imageUrl || ''      // Column J: Image URL
   ];
   
   if (playerRow > 0) {
@@ -143,18 +146,19 @@ function moveUnsoldToSold(data) {
     }
   }
   
-  // Add to Sold Players
+  // Add to Sold Players with correct column order
+  // Column order: ID, Name, Role, Age, Matches, BestFigures, TeamName, SoldAmount, BasePrice, ImageUrl
   soldSheet.appendRow([
-    data.playerId,
-    data.playerName,
-    data.role,
-    data.matches,
-    data.battingBest,
-    data.bowlingBest,
-    data.teamName,
-    data.soldPrice,
-    data.basePrice,
-    data.imageUrl || ''
+    data.playerId,           // Column A: ID
+    data.playerName,         // Column B: Name
+    data.role,               // Column C: Role
+    data.age || '',          // Column D: Age
+    data.matches,            // Column E: Matches
+    data.battingBest || data.bowlingBest || 'N/A', // Column F: Best Figures
+    data.teamName,           // Column G: Team Name
+    data.soldPrice,          // Column H: Sold Amount
+    data.basePrice,          // Column I: Base Price
+    data.imageUrl || ''      // Column J: Image URL
   ]);
   
   return ContentService.createTextOutput(JSON.stringify({
