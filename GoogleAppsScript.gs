@@ -33,6 +33,7 @@ function doPost(e) {
 function updateSoldPlayer(data) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const soldSheet = ss.getSheetByName('Sold Players');
+  const teamsSheet = ss.getSheetByName('Teams');
   
   if (!soldSheet) {
     return ContentService.createTextOutput(JSON.stringify({
@@ -56,10 +57,52 @@ function updateSoldPlayer(data) {
     data.imageUrl || ''      // Column J: Image URL
   ]);
   
+  // Update Teams sheet if team data is provided
+  if (teamsSheet && data.teamPlayersBought !== undefined) {
+    updateTeamStats(teamsSheet, data.teamName, {
+      playersBought: data.teamPlayersBought,
+      remainingPlayers: data.teamRemainingPlayers,
+      remainingPurse: data.teamRemainingPurse,
+      highestBid: data.teamHighestBid
+    });
+  }
+  
   return ContentService.createTextOutput(JSON.stringify({
     success: true,
-    message: 'Player added to Sold Players'
+    message: 'Player added to Sold Players and team stats updated'
   })).setMimeType(ContentService.MimeType.JSON);
+}
+
+// Helper function to update team statistics
+function updateTeamStats(teamsSheet, teamName, stats) {
+  const teamsData = teamsSheet.getDataRange().getValues();
+  
+  // Find the team row (skip header row)
+  for (let i = 1; i < teamsData.length; i++) {
+    if (teamsData[i][0] === teamName) { // Column A is team name
+      // Column mappings based on config.js:
+      // 0=Name, 1=LogoUrl, 2=PlayersBought, 3=RemainingPlayers, 4=TotalPlayerThreshold,
+      // 5=AllocatedAmount, 6=RemainingPurse, 7=HighestBid, 8=Captain
+      
+      const row = i + 1; // Sheet rows are 1-indexed
+      
+      if (stats.playersBought !== undefined) {
+        teamsSheet.getRange(row, 3).setValue(stats.playersBought); // Column C
+      }
+      if (stats.remainingPlayers !== undefined) {
+        teamsSheet.getRange(row, 4).setValue(stats.remainingPlayers); // Column D
+      }
+      if (stats.remainingPurse !== undefined) {
+        teamsSheet.getRange(row, 7).setValue(stats.remainingPurse); // Column G
+      }
+      if (stats.highestBid !== undefined) {
+        teamsSheet.getRange(row, 8).setValue(stats.highestBid); // Column H
+      }
+      
+      Logger.log('Updated team stats for ' + teamName + ': ' + JSON.stringify(stats));
+      break;
+    }
+  }
 }
 
 // Update unsold player in Unsold Players sheet
@@ -129,6 +172,7 @@ function moveUnsoldToSold(data) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const unsoldSheet = ss.getSheetByName('Unsold Players');
   const soldSheet = ss.getSheetByName('Sold Players');
+  const teamsSheet = ss.getSheetByName('Teams');
   
   if (!unsoldSheet || !soldSheet) {
     return ContentService.createTextOutput(JSON.stringify({
@@ -161,9 +205,19 @@ function moveUnsoldToSold(data) {
     data.imageUrl || ''      // Column J: Image URL
   ]);
   
+  // Update Teams sheet if team data is provided
+  if (teamsSheet && data.teamPlayersBought !== undefined) {
+    updateTeamStats(teamsSheet, data.teamName, {
+      playersBought: data.teamPlayersBought,
+      remainingPlayers: data.teamRemainingPlayers,
+      remainingPurse: data.teamRemainingPurse,
+      highestBid: data.teamHighestBid
+    });
+  }
+  
   return ContentService.createTextOutput(JSON.stringify({
     success: true,
-    message: 'Player moved from Unsold to Sold'
+    message: 'Player moved from Unsold to Sold and team stats updated'
   })).setMimeType(ContentService.MimeType.JSON);
 }
 

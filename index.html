@@ -4830,7 +4830,12 @@
         teamName: team.name,
         soldPrice: soldPrice,
         basePrice: basePrice,
-        imageUrl: player.imageUrl || ''
+        imageUrl: player.imageUrl || '',
+        // Include team stats for updating Teams sheet
+        teamPlayersBought: team.playersBought,
+        teamRemainingPlayers: team.remainingPlayers,
+        teamRemainingPurse: team.remainingPurse,
+        teamHighestBid: team.highestBid
       });
     }
     
@@ -4861,7 +4866,12 @@
         teamName: team.name,
         soldPrice: soldPrice,
         basePrice: basePrice,
-        imageUrl: player.imageUrl || ''
+        imageUrl: player.imageUrl || '',
+        // Include team stats for updating Teams sheet
+        teamPlayersBought: team.playersBought,
+        teamRemainingPlayers: team.remainingPlayers,
+        teamRemainingPurse: team.remainingPurse,
+        teamHighestBid: team.highestBid
       });
     }
     
