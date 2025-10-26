@@ -248,27 +248,27 @@ const CONFIG = {
     },
     soldPlayers: {
       id: 0,              // Column A
-      imageUrl: 1,        // Column B
-      name: 2,            // Column C
-      role: 3,            // Column D
-      age: 4,             // Column E
-      matches: 5,         // Column F
-      bestFigures: 6,     // Column G
-      soldAmount: 7,      // Column H
-      teamName: 8,        // Column I
-      soldDate: 9         // Column J
+      name: 1,            // Column C
+      role: 2,            // Column D
+      age: 3,             // Column E
+      matches: 4,         // Column F
+      bestFigures: 5,     // Column G
+      teamName: 6,        // Column H
+      soldAmount: 7,      // Column I
+      basePrice: 8,
+      imageUrl: 9,       // Column J
     },
     unsoldPlayers: {
       id: 0,              // Column A
-      imageUrl: 1,        // Column B
-      name: 2,            // Column C
-      role: 3,            // Column D
-      age: 4,             // Column E
-      matches: 5,         // Column F
-      bestFigures: 6,     // Column G
-      basePrice: 7,       // Column H
-      round: 8,           // Column I - "Round 1" or "Round 2 - Final"
-      unsoldDate: 9       // Column J
+      name: 1,            // Column B
+      role: 2,            // Column C
+      age: 3,             // Column D
+      matches: 4,         // Column E
+      bestFigures: 5,     // Column F
+      basePrice: 6,       // Column G
+      round: 7,           // Column H - "Round 1" or "Round 2 - Final"
+      unsoldDate: 8,      // Column I
+      imageUrl: 9,       // Column J
     }
   }
 };

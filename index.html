@@ -4636,6 +4636,7 @@
     const SHEET_RANGE = CONFIG.googleSheets.ranges.players;
     const TEAMS_SHEET_RANGE = CONFIG.googleSheets.ranges.teams;
     const SOLD_SHEET_RANGE = CONFIG.googleSheets.ranges.soldPlayers;
+    const UNSOLD_SHEET_RANGE = CONFIG.googleSheets.ranges.unsoldPlayers;
     const API_KEY = CONFIG.googleSheets.apiKey;
     
     let items = [];
@@ -5311,26 +5312,41 @@
         
         if (!data.values || data.values.length === 0) {
           console.debug('[DATA_FETCH] No sold players found in sheet');
-          return [];
+          return { ids: [], players: [] };
         }
         
         const cols = CONFIG.columnMappings.soldPlayers;
-        const alreadySoldPlayerIds = [];
+        const soldPlayerIds = [];
+        const soldPlayerObjects = [];
         
-        // Skip header row and collect player IDs
+        // Skip header row and collect player IDs and full player objects
         for (let i = 1; i < data.values.length; i++) {
           const row = data.values[i];
           const playerId = row[cols.id] || '';
           if (playerId && playerId.trim() !== '') {
-            alreadySoldPlayerIds.push(playerId.trim());
+            soldPlayerIds.push(playerId.trim());
+            
+            // Create player object from sold sheet data
+            const playerObj = {
+              id: playerId.trim(),
+              imageUrl: row[cols.imageUrl] || '',
+              name: row[cols.name] || 'Unknown Player',
+              role: row[cols.role] || 'Player',
+              age: row[cols.age] ? parseInt(row[cols.age]) : null,
+              matches: row[cols.matches] || '0',
+              battingBestFigures: row[cols.bestFigures] || 'N/A',
+              bowlingBestFigures: row[cols.bestFigures] || 'N/A',
+              basePrice: row[cols.soldAmount] || '0' // Use sold amount as base price for display
+            };
+            soldPlayerObjects.push(playerObj);
           }
         }
         
-        console.debug('[DATA_FETCH] Found', alreadySoldPlayerIds.length, 'already sold players in sheet');
-        return alreadySoldPlayerIds;
+        console.debug('[DATA_FETCH] Found', soldPlayerIds.length, 'already sold players in sheet');
+        return { ids: soldPlayerIds, players: soldPlayerObjects };
       } catch (error) {
         console.error('Error fetching already sold players:', error);
-        return [];
+        return { ids: [], players: [] };
       }
     }
 
@@ -5343,35 +5359,56 @@
         
         if (!data.values || data.values.length === 0) {
           console.debug('[DATA_FETCH] No unsold players found in sheet');
-          return [];
+          return { ids: [], players: [] };
         }
         
         const cols = CONFIG.columnMappings.unsoldPlayers;
-        const alreadyUnsoldPlayerIds = [];
+        const unsoldPlayerIds = [];
+        const unsoldPlayerObjects = [];
         
-        // Skip header row and collect player IDs (only Round 1, not "Round 2 - Final")
+        // Skip header row and collect player IDs and full player objects (only Round 1, not "Round 2 - Final")
         for (let i = 1; i < data.values.length; i++) {
           const row = data.values[i];
           const playerId = row[cols.id] || '';
           const round = row[cols.round] || '';
           
           if (playerId && playerId.trim() !== '' && round.includes('Round 1')) {
-            alreadyUnsoldPlayerIds.push(playerId.trim());
+            unsoldPlayerIds.push(playerId.trim());
+            
+            // Create player object from unsold sheet data
+            const playerObj = {
+              id: playerId.trim(),
+              imageUrl: row[cols.imageUrl] || '',
+              name: row[cols.name] || 'Unknown Player',
+              role: row[cols.role] || 'Player',
+              age: row[cols.age] ? parseInt(row[cols.age]) : null,
+              matches: row[cols.matches] || '0',
+              battingBestFigures: row[cols.bestFigures] || 'N/A',
+              bowlingBestFigures: row[cols.bestFigures] || 'N/A',
+              basePrice: row[cols.basePrice] || '0'
+            };
+            unsoldPlayerObjects.push(playerObj);
           }
         }
         
-        console.debug('[DATA_FETCH] Found', alreadyUnsoldPlayerIds.length, 'unsold players (Round 1) in sheet');
-        return alreadyUnsoldPlayerIds;
+        console.debug('[DATA_FETCH] Found', unsoldPlayerIds.length, 'unsold players (Round 1) in sheet');
+        return { ids: unsoldPlayerIds, players: unsoldPlayerObjects };
       } catch (error) {
-        console.error('Error fetching already unsold players:', error);
-        return [];
+        console.error('Error fetching unsold players:', error);
+        return { ids: [], players: [] };
       }
     }
 
     async function fetchSheetData() {
       // First, fetch already sold and unsold players from sheets
-      const alreadySoldPlayerIds = await fetchAlreadySoldPlayers();
-      const alreadyUnsoldPlayerIds = await fetchAlreadyUnsoldPlayers();
+      const soldData = await fetchAlreadySoldPlayers();
+      const unsoldData = await fetchAlreadyUnsoldPlayers();
+      
+      // Populate soldPlayers and unsoldPlayers arrays from sheet data
+      soldPlayers = soldData.players;
+      unsoldPlayers = unsoldData.players;
+      
+      console.debug('[DATA_FETCH] Loaded from sheets:', soldPlayers.length, 'sold players,', unsoldPlayers.length, 'unsold players');
       
       const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(SHEET_RANGE)}?key=${API_KEY}`;
       const resp = await fetch(url);
@@ -5395,7 +5432,7 @@
           const playerId = row[cols.id] || `P${String(index + 1).padStart(3, '0')}`;
           
           // Skip if player is already sold (exists in Sold Players sheet)
-          if (alreadySoldPlayerIds.includes(playerId.trim())) {
+          if (soldData.ids.includes(playerId.trim())) {
             console.debug('[DATA_FETCH] Skipping already sold player:', playerId, row[cols.name]);
             return null;
           }
@@ -5443,16 +5480,13 @@
       // Store the original count before any modifications
       originalItemCount = items.length;
       
-      // Populate unsoldPlayers array from sheet data
-      unsoldPlayers = items.filter(item => alreadyUnsoldPlayerIds.includes(item.id));
-      
-      // Note: soldPlayers array will be populated from localStorage on resume
-      // or will be built dynamically as players are sold during the auction
-      // We don't populate it here because sold players are excluded from items array
+      // Note: soldPlayers and unsoldPlayers arrays are already populated from sheet data above
+      // They don't need to be filtered from items array
       
       console.debug('[DATA_FETCH] Loaded', items.length, 'players for auction');
-      console.debug('[DATA_FETCH] Already unsold (Round 1):', unsoldPlayers.length);
-      console.debug('[DATA_FETCH] Excluded:', alreadySoldPlayerIds.length, 'sold players from items');
+      console.debug('[DATA_FETCH] Already sold:', soldPlayers.length, 'players');
+      console.debug('[DATA_FETCH] Already unsold (Round 1):', unsoldPlayers.length, 'players');
+      console.debug('[DATA_FETCH] Excluded:', soldData.ids.length, 'sold players from items');
     }
 
     async function fetchTeamsData() {
@@ -5481,9 +5515,13 @@
             remainingPurse: parseFloat(row[cols.remainingPurse]) || 0,
             highestBid: parseFloat(row[cols.highestBid]) || 0,
             captain: row[cols.captain] || '',
-            underAgePlayers: 0 // Track number of under-age players bought by this team
+            underAgePlayers: 0 // Will be calculated from sold players below
           };
         });
+        
+        // Sync underAgePlayers count from soldPlayers array
+        syncUnderAgePlayersFromSoldData();
+        
         console.debug('[DATA_FETCH] Loaded teams:', teams.length, 'teams with', teams.map(t => t.name).join(', '));
         populateTeamDropdown();
         populateTeamStatusIndicator(); // Initialize team status indicator
@@ -5494,6 +5532,46 @@
         populateTeamDropdown();
         populateTeamStatusIndicator(); // Initialize team status indicator
       }
+    }
+    
+    // Sync underAgePlayers count from soldPlayers data
+    function syncUnderAgePlayersFromSoldData() {
+      if (!soldPlayers || soldPlayers.length === 0) {
+        console.debug('[SYNC] No sold players to sync under-age count from');
+        return;
+      }
+      
+      // First, fetch sold players with team information from Sold Players sheet
+      const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(SOLD_SHEET_RANGE)}?key=${API_KEY}`;
+      fetch(url)
+        .then(resp => resp.json())
+        .then(data => {
+          if (!data.values || data.values.length === 0) {
+            return;
+          }
+          
+          const cols = CONFIG.columnMappings.soldPlayers;
+          
+          // Count under-age players for each team
+          for (let i = 1; i < data.values.length; i++) {
+            const row = data.values[i];
+            const age = row[cols.age] ? parseInt(row[cols.age]) : null;
+            const teamName = row[cols.teamName] || '';
+            
+            if (age !== null && age < CONFIG.auction.rules.underAgeLimit && teamName) {
+              // Find the team and increment their underAgePlayers count
+              const team = teams.find(t => t.name === teamName);
+              if (team) {
+                team.underAgePlayers = (team.underAgePlayers || 0) + 1;
+              }
+            }
+          }
+          
+          console.debug('[SYNC] Synced under-age player counts for all teams');
+        })
+        .catch(error => {
+          console.error('[SYNC] Error syncing under-age player counts:', error);
+        });
     }
 
     function populateTeamDropdown() {
