@@ -5519,8 +5519,8 @@
           };
         });
         
-        // Sync underAgePlayers count from soldPlayers array
-        syncUnderAgePlayersFromSoldData();
+        // Sync underAgePlayers count from soldPlayers array (await completion)
+        await syncUnderAgePlayersFromSoldData();
         
         console.debug('[DATA_FETCH] Loaded teams:', teams.length, 'teams with', teams.map(t => t.name).join(', '));
         populateTeamDropdown();
@@ -5535,43 +5535,63 @@
     }
     
     // Sync underAgePlayers count from soldPlayers data
-    function syncUnderAgePlayersFromSoldData() {
+    async function syncUnderAgePlayersFromSoldData() {
+      console.debug('[SYNC] Starting under-age sync - soldPlayers.length:', soldPlayers.length);
+      
       if (!soldPlayers || soldPlayers.length === 0) {
         console.debug('[SYNC] No sold players to sync under-age count from');
         return;
       }
       
-      // First, fetch sold players with team information from Sold Players sheet
-      const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(SOLD_SHEET_RANGE)}?key=${API_KEY}`;
-      fetch(url)
-        .then(resp => resp.json())
-        .then(data => {
-          if (!data.values || data.values.length === 0) {
-            return;
-          }
+      try {
+        // Fetch sold players with team information from Sold Players sheet
+        const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(SOLD_SHEET_RANGE)}?key=${API_KEY}`;
+        const resp = await fetch(url);
+        const data = await resp.json();
+        
+        if (!data.values || data.values.length === 0) {
+          console.debug('[SYNC] No sold players data in sheet');
+          return;
+        }
+        
+        console.debug('[SYNC] Sold Players sheet has', data.values.length - 1, 'rows (excluding header)');
+        
+        const cols = CONFIG.columnMappings.soldPlayers;
+        
+        // Reset all team under-age counts first
+        teams.forEach(team => {
+          team.underAgePlayers = 0;
+        });
+        
+        // Count under-age players for each team
+        let totalUnderAgeFound = 0;
+        for (let i = 1; i < data.values.length; i++) {
+          const row = data.values[i];
+          const age = row[cols.age] ? parseInt(row[cols.age]) : null;
+          const teamName = row[cols.teamName] || '';
+          const playerName = row[cols.name] || 'Unknown';
           
-          const cols = CONFIG.columnMappings.soldPlayers;
+          console.debug('[SYNC] Checking player:', playerName, '| Age:', age, '| Team:', teamName);
           
-          // Count under-age players for each team
-          for (let i = 1; i < data.values.length; i++) {
-            const row = data.values[i];
-            const age = row[cols.age] ? parseInt(row[cols.age]) : null;
-            const teamName = row[cols.teamName] || '';
-            
-            if (age !== null && age < CONFIG.auction.rules.underAgeLimit && teamName) {
-              // Find the team and increment their underAgePlayers count
-              const team = teams.find(t => t.name === teamName);
-              if (team) {
-                team.underAgePlayers = (team.underAgePlayers || 0) + 1;
-              }
+          if (age !== null && age < CONFIG.auction.rules.underAgeLimit && teamName) {
+            // Find the team and increment their underAgePlayers count
+            const team = teams.find(t => t.name === teamName);
+            if (team) {
+              team.underAgePlayers = (team.underAgePlayers || 0) + 1;
+              totalUnderAgeFound++;
+              console.debug('[SYNC] ✓ Under-age player found! Team', teamName, 'now has', team.underAgePlayers, 'under-age players');
+            } else {
+              console.warn('[SYNC] ✗ Team not found:', teamName);
             }
           }
-          
-          console.debug('[SYNC] Synced under-age player counts for all teams');
-        })
-        .catch(error => {
-          console.error('[SYNC] Error syncing under-age player counts:', error);
-        });
+        }
+        
+        console.debug('[SYNC] ===== SYNC COMPLETE =====');
+        console.debug('[SYNC] Total under-age players found:', totalUnderAgeFound);
+        console.debug('[SYNC] Team under-age counts:', teams.map(t => `${t.name}: ${t.underAgePlayers || 0}`).join(', '));
+      } catch (error) {
+        console.error('[SYNC] Error syncing under-age player counts:', error);
+      }
     }
 
     function populateTeamDropdown() {
@@ -7177,8 +7197,14 @@
         console.debug('[AUCTION_FLOW] Under-age player sold - Team:', selectedTeam.name, 'Under-age count:', selectedTeam.underAgePlayers);
       }
       
+      // Save updated state to localStorage (including team stats)
+      saveAuctionState();
+      
       // Refresh the dropdown to show updated purse values
       populateTeamDropdown();
+      
+      // Update team status indicator to reflect new team stats
+      updateTeamStatusIndicator();
       
       // Proceed with sold animation, passing the team info
       proceedWithSoldAnimation(selectedTeam, selectedTeamIndex);
@@ -8287,8 +8313,11 @@
       // Initialize audio without blocking
       initializeAudio();
       
-      // Fetch data in parallel for faster loading (but don't start auction yet)
-      await Promise.all([fetchSheetData(), fetchTeamsData()]);
+      // Fetch sheet data first (populates soldPlayers array)
+      await fetchSheetData();
+      
+      // Then fetch teams data (syncs under-age counts from soldPlayers)
+      await fetchTeamsData();
       
       // Try to restore saved state
       const stateRestored = restoreAuctionState();
