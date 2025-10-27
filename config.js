@@ -44,7 +44,7 @@ const CONFIG = {
       // RULE_009: Under-Age Player Limit - Maximum number of under-age players per team
     },
     undo: {
-      historySize: 5,              // Number of recent bids to keep in undo history
+      historySize: 99,              // Number of recent bids to keep in undo history
       enabled: true                // Enable/disable undo functionality
     }
   },
