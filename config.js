@@ -2,7 +2,7 @@
 const CONFIG = {
   // Google Sheets Configuration
   googleSheets: {
-    sheetId: '1-ZcLNOcy-iAKsLVQelBXOaXX6DhgPevy4kx1nvT9WCs',
+    sheetId: '1m7y5jM7RyQkV5sz-wV_McfiykQf4Nvn4ydUZbpCITy8',
     apiKey: 'AIzaSyC0sO4eAmfmi0QXqBUE912dpvVofuDrVHI',
     ranges: {
       players: 'BCC Tournament Registration!A2:Y',  // Updated to include all columns (A-Y = 25 columns)
@@ -14,7 +14,7 @@ const CONFIG = {
   
   // Google Apps Script Webhook
   webhook: {
-    url: 'https://script.google.com/macros/s/AKfycbxdrVwarvVo6k3UEEWytmfV-SXY-JRS0rr_WENWdfgRj9ZqN4nkD4F5zNxITeHy1Oizdw/exec',
+    url: 'https://script.google.com/macros/s/AKfycbwbjnz8HR5kfS4WzvSPUxoSKvlEiqZLQ4HioHSoy2T884IQSczO2uGPNMWDEOwARaB0Jg/exec',
     updateDelay: 3000 // Wait 3 seconds after saving before refreshing teams data
   },
   
@@ -42,6 +42,10 @@ const CONFIG = {
       // RULE_005: Minimum Participation Balance - Must have at least playerBasePrice remaining
       // RULE_006: Safe Fund Threshold - Should maintain buffer of (remainingPlayers - 1) * minimumPlayerBasePrice * safeFundBufferPercent
       // RULE_009: Under-Age Player Limit - Maximum number of under-age players per team
+    },
+    undo: {
+      historySize: 5,              // Number of recent bids to keep in undo history
+      enabled: true                // Enable/disable undo functionality
     }
   },
   
@@ -239,12 +243,13 @@ const CONFIG = {
       name: 0,                    // Column A
       logoUrl: 1,                 // Column B
       playersBought: 2,           // Column C
-      remainingPlayers: 3,        // Column D
-      totalPlayerThreshold: 4,    // Column E
-      allocatedAmount: 5,         // Column F
-      remainingPurse: 6,          // Column G
-      highestBid: 7,              // Column H
-      captain: 8                  // Column I
+      underAgePlayers: 3,         // Column D - U19 Player Bought
+      remainingPlayers: 4,        // Column E
+      totalPlayerThreshold: 5,    // Column F
+      allocatedAmount: 6,         // Column G
+      remainingPurse: 7,          // Column H
+      highestBid: 8,              // Column I
+      captain: 9                  // Column J
     },
     soldPlayers: {
       id: 0,              // Column A

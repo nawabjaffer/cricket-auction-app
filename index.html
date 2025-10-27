@@ -4320,6 +4320,47 @@
       background: rgba(33, 150, 243, 0.7);
     }
   </style>
+
+  <style>
+    /* Undo Button Styles */
+    .undo-button {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.1);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      color: rgba(255, 255, 255, 0.7);
+      font-size: 18px;
+      font-weight: bold;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s ease;
+      z-index: 1000;
+      backdrop-filter: blur(5px);
+      -webkit-backdrop-filter: blur(5px);
+    }
+    
+    .undo-button:hover {
+      background: rgba(255, 255, 255, 0.2);
+      color: rgba(255, 255, 255, 0.9);
+      transform: scale(1.1);
+    }
+    
+    .undo-button:active {
+      transform: scale(0.95);
+    }
+    
+    .undo-button:disabled {
+      opacity: 0.3;
+      cursor: not-allowed;
+      transform: none;
+    }
+  </style>
 </head>
 <body>
 
@@ -4702,6 +4743,102 @@
       }
     }
     
+    // Save bid history to localStorage
+    function saveBidHistory() {
+      try {
+        localStorage.setItem(UNDO_HISTORY_KEY, JSON.stringify(bidHistory));
+        console.debug('[UNDO] Bid history saved -', bidHistory.length, 'entries');
+      } catch (e) {
+        console.error('[UNDO] Failed to save bid history:', e);
+      }
+    }
+    
+    // Restore bid history from localStorage
+    function restoreBidHistory() {
+      try {
+        const savedHistory = localStorage.getItem(UNDO_HISTORY_KEY);
+        if (savedHistory) {
+          bidHistory = JSON.parse(savedHistory);
+          console.debug('[UNDO] Bid history restored -', bidHistory.length, 'entries');
+        }
+      } catch (e) {
+        console.error('[UNDO] Failed to restore bid history:', e);
+        bidHistory = [];
+      }
+    }
+    
+    // Add bid to history
+    function addBidToHistory(bidAmount, teamIndex, teamName) {
+      if (!CONFIG.auction.undo.enabled) return;
+      
+      const bidEntry = {
+        bidAmount: bidAmount,
+        teamIndex: teamIndex,
+        teamName: teamName,
+        timestamp: Date.now()
+      };
+      
+      bidHistory.unshift(bidEntry); // Add to beginning
+      
+      // Keep only the last X bids as configured
+      if (bidHistory.length > CONFIG.auction.undo.historySize) {
+        bidHistory = bidHistory.slice(0, CONFIG.auction.undo.historySize);
+      }
+      
+      saveBidHistory();
+      console.debug('[UNDO] Bid added to history:', bidEntry);
+      
+      // Update undo button state
+      updateUndoButtonState();
+    }
+    
+    // Undo last bid
+    function undoLastBid() {
+      if (!CONFIG.auction.undo.enabled || bidHistory.length === 0) {
+        console.debug('[UNDO] No bids to undo or undo disabled');
+        return false;
+      }
+      
+      const lastBid = bidHistory.shift(); // Remove from beginning
+      const team = teams[lastBid.teamIndex];
+      
+      if (!team) {
+        console.error('[UNDO] Team not found for undo operation');
+        return false;
+      }
+      
+      // Revert the bid amount
+      currentBid = lastBid.bidAmount;
+      updateBidDisplay();
+      
+      // Clear the last bidding team
+      lastBiddingTeam = null;
+      lastBiddingTeamIndex = null;
+      clearBidTeamDisplay();
+      
+      // Save updated history and state
+      saveBidHistory();
+      saveAuctionState();
+      
+      // Update undo button state
+      updateUndoButtonState();
+      
+      console.debug('[UNDO] Undid bid by', lastBid.teamName, '- reverted to ₹' + currentBid.toLocaleString());
+      showNotification(`Undid bid by ${lastBid.teamName} - reverted to ₹${currentBid.toLocaleString()}`, 'info');
+      
+      return true;
+    }
+    
+    // Update undo button state (enabled/disabled)
+    function updateUndoButtonState() {
+      const undoButton = document.getElementById('undoButton');
+      if (undoButton) {
+        const hasHistory = bidHistory.length > 0 && CONFIG.auction.undo.enabled;
+        undoButton.disabled = !hasHistory;
+        undoButton.style.opacity = hasHistory ? '1' : '0.3';
+      }
+    }
+    
     // Restore auction state from localStorage
     function restoreAuctionState() {
       try {
@@ -4775,6 +4912,10 @@
         }
         
         console.debug('[STATE] Auction state restored - currentIndex:', currentIndex, 'player:', items[currentIndex]?.name, 'currentBid:', currentBid, 'basePrice:', basePrice, 'lastBiddingTeam:', lastBiddingTeam, 'bidIncrement:', currentBidIncrement);
+        
+        // Restore bid history
+        restoreBidHistory();
+        
         return true;
       } catch (e) {
         console.error('[STATE] Failed to restore auction state:', e);
@@ -4786,7 +4927,9 @@
     function clearAuctionState() {
       try {
         localStorage.removeItem(AUCTION_STATE_KEY);
-        console.debug('[STATE] Auction state cleared');
+        localStorage.removeItem(UNDO_HISTORY_KEY);
+        bidHistory = []; // Clear in-memory history
+        console.debug('[STATE] Auction state and bid history cleared');
       } catch (e) {
         console.error('[STATE] Failed to clear auction state:', e);
       }
@@ -4813,12 +4956,30 @@
         });
         
         console.debug('[WEBHOOK] Sent', action, 'for player:', playerData.playerName);
+        
+        // If this was a sold player action, refresh teams data after delay
+        if (action === 'updateSoldPlayer' || action === 'moveUnsoldToSold') {
+          setTimeout(async () => {
+            console.debug('[WEBHOOK] Fetching updated teams data after', action, '...');
+            await fetchTeamsData();
+            console.debug('[WEBHOOK] Teams data refreshed successfully');
+          }, CONFIG.webhook.updateDelay);
+        }
       } catch (error) {
         console.error('[WEBHOOK] Error sending', action, ':', error);
       }
     }
     
     async function updateSoldPlayerSheet(player, team, soldPrice, basePrice) {
+      console.debug('[WEBHOOK] updateSoldPlayerSheet - Team stats being sent:', {
+        teamName: team.name,
+        playersBought: team.playersBought,
+        underAgePlayers: team.underAgePlayers,
+        remainingPlayers: team.remainingPlayers,
+        remainingPurse: team.remainingPurse,
+        highestBid: team.highestBid
+      });
+      
       await sendToWebhook('updateSoldPlayer', {
         playerId: player.id,
         playerName: player.name,
@@ -4833,6 +4994,7 @@
         imageUrl: player.imageUrl || '',
         // Include team stats for updating Teams sheet
         teamPlayersBought: team.playersBought,
+        teamU19PlayersBought: team.underAgePlayers,
         teamRemainingPlayers: team.remainingPlayers,
         teamRemainingPurse: team.remainingPurse,
         teamHighestBid: team.highestBid
@@ -4855,6 +5017,15 @@
     }
     
     async function moveUnsoldToSoldSheet(player, team, soldPrice, basePrice) {
+      console.debug('[WEBHOOK] moveUnsoldToSoldSheet - Team stats being sent:', {
+        teamName: team.name,
+        playersBought: team.playersBought,
+        underAgePlayers: team.underAgePlayers,
+        remainingPlayers: team.remainingPlayers,
+        remainingPurse: team.remainingPurse,
+        highestBid: team.highestBid
+      });
+      
       await sendToWebhook('moveUnsoldToSold', {
         playerId: player.id,
         playerName: player.name,
@@ -4869,6 +5040,7 @@
         imageUrl: player.imageUrl || '',
         // Include team stats for updating Teams sheet
         teamPlayersBought: team.playersBought,
+        teamU19PlayersBought: team.underAgePlayers,
         teamRemainingPlayers: team.remainingPlayers,
         teamRemainingPurse: team.remainingPurse,
         teamHighestBid: team.highestBid
@@ -4887,6 +5059,10 @@
     
     // Track current bid increment (dynamic)
     let currentBidIncrement = CONFIG.auction.bidIncrements.default;
+    
+    // Undo functionality
+    let bidHistory = []; // Array of {bidAmount, teamIndex, teamName, timestamp}
+    const UNDO_HISTORY_KEY = 'auctionBidHistory';
     
     // Auction Rules Validation System (Dynamically uses CONFIG values)
     const AUCTION_RULES = {
@@ -5517,6 +5693,17 @@
         teams = data.values.map((row, index) => {
           const totalPlayerThreshold = parseInt(row[cols.totalPlayerThreshold]) || 11;
           const playersBought = parseInt(row[cols.playersBought]) || 0;
+          const underAgePlayers = parseInt(row[cols.underAgePlayers]) || 0;
+          const remainingPurse = parseFloat(row[cols.remainingPurse]) || 0;
+          const highestBid = parseFloat(row[cols.highestBid]) || 0;
+          
+          console.debug('[DATA_FETCH] Team from sheet:', {
+            name: row[cols.name],
+            playersBought: playersBought,
+            underAgePlayers: underAgePlayers,
+            remainingPurse: remainingPurse,
+            highestBid: highestBid
+          });
           
           return {
             name: row[cols.name] || `Team ${index + 1}`,
@@ -5525,19 +5712,38 @@
             totalPlayerThreshold: totalPlayerThreshold,
             remainingPlayers: totalPlayerThreshold - playersBought, // Calculate from threshold
             allocatedAmount: parseFloat(row[cols.allocatedAmount]) || 0,
-            remainingPurse: parseFloat(row[cols.remainingPurse]) || 0,
-            highestBid: parseFloat(row[cols.highestBid]) || 0,
+            remainingPurse: remainingPurse,
+            highestBid: highestBid,
             captain: row[cols.captain] || '',
-            underAgePlayers: 0 // Will be calculated from sold players below
+            underAgePlayers: underAgePlayers // Read directly from sheet (Column D)
           };
         });
         
-        // Sync underAgePlayers count from soldPlayers array (await completion)
+        // Sync underAgePlayers count from soldPlayers array as validation/backup
         await syncUnderAgePlayersFromSoldData();
         
         console.debug('[DATA_FETCH] Loaded teams:', teams.length, 'teams with', teams.map(t => t.name).join(', '));
         populateTeamDropdown();
         populateTeamStatusIndicator(); // Initialize team status indicator
+        
+        // If teams info overlay is open, refresh it
+        const teamsInfoOverlay = document.getElementById('teamsInfoOverlay');
+        if (teamsInfoOverlay && teamsInfoOverlay.classList.contains('show')) {
+          populateTeamsTable();
+        }
+        
+        // If team slots overlay is open, refresh it
+        const teamSlotsOverlay = document.getElementById('teamSlotsOverlay');
+        if (teamSlotsOverlay && teamSlotsOverlay.classList.contains('show')) {
+          // Find which team is currently displayed and refresh it
+          const currentTeamName = teamSlotsOverlay.getAttribute('data-current-team');
+          if (currentTeamName) {
+            const teamIndex = teams.findIndex(t => t.name === currentTeamName);
+            if (teamIndex >= 0) {
+              showTeamSlots(teamIndex, true); // Pass true to skip recursive refresh
+            }
+          }
+        }
       } catch (error) {
         console.error('Error fetching teams:', error);
         // Load default teams from config if fetch fails
@@ -6324,10 +6530,19 @@
     }
     
     // Teams Info Overlay Functions
-    function showTeamsInfo() {
+    async function showTeamsInfo() {
       const overlay = document.getElementById('teamsInfoOverlay');
-      populateTeamsTable();
+      
+      // Show loading state
+      const tbody = document.getElementById('teamsTableBody');
+      tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding: 40px; color: #888;">Loading teams data...</td></tr>';
       overlay.classList.add('show');
+      
+      // Refresh team data from sheet to ensure sync
+      await fetchTeamsData();
+      
+      // Now populate with fresh data
+      populateTeamsTable();
     }
     
     function hideTeamsInfo() {
@@ -6733,14 +6948,17 @@
       return null;
     }
 
-    async function showTeamSlots(teamIndex) {
+    async function showTeamSlots(teamIndex, skipRefresh = false) {
       if (teamIndex < 0 || teamIndex >= teams.length) return;
       
       hideTeamSelectionMenu();
       
       const overlay = document.getElementById('teamSlotsOverlay');
       const container = document.getElementById('teamSlotsContainer');
-      const team = teams[teamIndex];
+      const teamName = teams[teamIndex].name; // Store team name before refresh
+      
+      // Store current team name in overlay for refresh purposes
+      overlay.setAttribute('data-current-team', teamName);
       
       // Show cricket animation loader
       container.innerHTML = `
@@ -6758,6 +6976,21 @@
         </div>
       `;
       overlay.classList.add('show');
+      
+      // Refresh team data from sheet to ensure sync (unless called from fetchTeamsData refresh)
+      if (!skipRefresh) {
+        await fetchTeamsData();
+        
+        // Find the team again after refresh (index might have changed)
+        const refreshedTeamIndex = teams.findIndex(t => t.name === teamName);
+        if (refreshedTeamIndex < 0) {
+          container.innerHTML = '<div style="padding:40px;text-align:center;">Team not found</div>';
+          return;
+        }
+        teamIndex = refreshedTeamIndex;
+      }
+      
+      const team = teams[teamIndex];
       
       // Get captain details from cache (now async to support all players)
       const captainDetails = await getCaptainDetails(team.captain);
@@ -6989,6 +7222,7 @@
     function hideTeamSlots() {
       const overlay = document.getElementById('teamSlotsOverlay');
       overlay.classList.remove('show');
+      overlay.removeAttribute('data-current-team');
     }
     
     async function fetchSoldPlayersForTeam(teamName) {
@@ -7042,19 +7276,22 @@
           soldAmount: bidAmount,
           teamName: teamName,
           soldDate: new Date().toISOString(),
-          // Team update data - send all the calculated values
-          teamPlayersBought: teamData.playersBought + 1,
-          teamRemainingPlayers: teamData.remainingPlayers - 1,
-          teamRemainingPurse: teamData.remainingPurse - bidAmount,
-          teamHighestBid: Math.max(bidAmount, teamData.highestBid),
-          // Also send the original team data for reference
-          originalTeamName: teamName,
-          originalRemainingPurse: teamData.remainingPurse,
-          originalPlayersBought: teamData.playersBought
+          // Team update data - send the ALREADY UPDATED values from teamData
+          teamPlayersBought: teamData.playersBought,
+          teamU19PlayersBought: teamData.underAgePlayers,
+          teamRemainingPlayers: teamData.remainingPlayers,
+          teamRemainingPurse: teamData.remainingPurse,
+          teamHighestBid: teamData.highestBid
         };
         
         console.debug('[WEBHOOK] Saving sold player:', playerData.name, 'to team:', teamName, 'for bid:', bidAmount);
-        console.debug('[WEBHOOK] Team update - Before: {purse:', teamData.remainingPurse, 'players:', teamData.playersBought + '} After: {purse:', soldData.teamRemainingPurse, 'players:', soldData.teamPlayersBought + '}');
+        console.debug('[WEBHOOK] Team stats being sent:', {
+          playersBought: soldData.teamPlayersBought,
+          u19PlayersBought: soldData.teamU19PlayersBought,
+          remainingPlayers: soldData.teamRemainingPlayers,
+          remainingPurse: soldData.teamRemainingPurse,
+          highestBid: soldData.teamHighestBid
+        });
         
         const webhookUrl = CONFIG.webhook.url;
         
@@ -7125,12 +7362,7 @@
       // Play sound immediately when confirm is pressed
       playSoldSound();
       
-      // Save to Google Sheets with team info
-      if (items[currentIndex]) {
-        saveSoldPlayer(items[currentIndex], currentBid, selectedTeam.name, selectedTeam);
-      }
-      
-      // Update team data locally (will be updated in Google Sheets via webhook)
+      // Update team data locally FIRST (before sending to webhook)
       selectedTeam.playersBought += 1;
       selectedTeam.remainingPlayers -= 1;
       selectedTeam.remainingPurse -= currentBid;
@@ -7143,6 +7375,11 @@
       if (currentPlayer && currentPlayer.age && parseInt(currentPlayer.age) < AUCTION_RULES.underAgeLimit) {
         selectedTeam.underAgePlayers = (selectedTeam.underAgePlayers || 0) + 1;
         console.debug('[AUCTION_FLOW] Under-age player sold - Team:', selectedTeam.name, 'Under-age count:', selectedTeam.underAgePlayers);
+      }
+      
+      // Now save to Google Sheets with UPDATED team info
+      if (items[currentIndex]) {
+        saveSoldPlayer(items[currentIndex], currentBid, selectedTeam.name, selectedTeam);
       }
       
       // Refresh the dropdown to show updated purse values
@@ -7190,12 +7427,7 @@
       // Play sound immediately when confirm is pressed
       playSoldSound();
       
-      // Save to Google Sheets with team info
-      if (items[currentIndex]) {
-        saveSoldPlayer(items[currentIndex], currentBid, selectedTeam.name, selectedTeam);
-      }
-      
-      // Update team data locally (will be updated in Google Sheets via webhook)
+      // Update team data locally FIRST (before sending to webhook)
       selectedTeam.playersBought += 1;
       selectedTeam.remainingPlayers -= 1;
       selectedTeam.remainingPurse -= currentBid;
@@ -7208,6 +7440,11 @@
       if (currentPlayer && currentPlayer.age && parseInt(currentPlayer.age) < AUCTION_RULES.underAgeLimit) {
         selectedTeam.underAgePlayers = (selectedTeam.underAgePlayers || 0) + 1;
         console.debug('[AUCTION_FLOW] Under-age player sold - Team:', selectedTeam.name, 'Under-age count:', selectedTeam.underAgePlayers);
+      }
+      
+      // Now save to Google Sheets with UPDATED team info
+      if (items[currentIndex]) {
+        saveSoldPlayer(items[currentIndex], currentBid, selectedTeam.name, selectedTeam);
       }
       
       // Save updated state to localStorage (including team stats)
@@ -7330,6 +7567,9 @@
       // Update the current bid
       currentBid = newBid;
       updateBidDisplay();
+      
+      // Add bid to undo history
+      addBidToHistory(currentBid, teamIndex, team.name);
       
       // Update last bidding team
       lastBiddingTeam = team;
@@ -8113,6 +8353,12 @@
         e.preventDefault();
         toggleFullscreen();
       }
+      
+      // Undo last bid with 'z' key
+      if (key === 'z' && !e.ctrlKey && !e.metaKey) {
+        undoLastBid();
+        e.preventDefault();
+      }
     });
 
     // Fullscreen toggle function
@@ -8335,6 +8581,9 @@
       // Try to restore saved state
       const stateRestored = restoreAuctionState();
       
+      // Update undo button state after state restoration
+      updateUndoButtonState();
+      
       // Check if random mode is enabled
       const startButton = document.getElementById('startButton');
       const resetButton = document.getElementById('resetAuctionButton');
@@ -8477,6 +8726,11 @@
       }
     })();
   </script>
+
+  <!-- Undo Button (bottom right corner, subtle) -->
+  <button id="undoButton" class="undo-button" title="Undo last bid (Z)" onclick="undoLastBid()">
+    ↶
+  </button>
 
 </body>
 </html>

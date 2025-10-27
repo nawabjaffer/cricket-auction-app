@@ -61,6 +61,7 @@ function updateSoldPlayer(data) {
   if (teamsSheet && data.teamPlayersBought !== undefined) {
     updateTeamStats(teamsSheet, data.teamName, {
       playersBought: data.teamPlayersBought,
+      u19PlayersBought: data.teamU19PlayersBought,
       remainingPlayers: data.teamRemainingPlayers,
       remainingPurse: data.teamRemainingPurse,
       highestBid: data.teamHighestBid
@@ -80,23 +81,26 @@ function updateTeamStats(teamsSheet, teamName, stats) {
   // Find the team row (skip header row)
   for (let i = 1; i < teamsData.length; i++) {
     if (teamsData[i][0] === teamName) { // Column A is team name
-      // Column mappings based on config.js:
-      // 0=Name, 1=LogoUrl, 2=PlayersBought, 3=RemainingPlayers, 4=TotalPlayerThreshold,
-      // 5=AllocatedAmount, 6=RemainingPurse, 7=HighestBid, 8=Captain
+      // Column mappings based on new structure:
+      // 0=Name, 1=LogoUrl, 2=PlayersBought, 3=U19PlayersBought, 4=RemainingPlayers,
+      // 5=TotalPlayerThreshold, 6=AllocatedAmount, 7=RemainingPurse, 8=HighestBid, 9=Captain
       
       const row = i + 1; // Sheet rows are 1-indexed
       
       if (stats.playersBought !== undefined) {
         teamsSheet.getRange(row, 3).setValue(stats.playersBought); // Column C
       }
+      if (stats.u19PlayersBought !== undefined) {
+        teamsSheet.getRange(row, 4).setValue(stats.u19PlayersBought); // Column D
+      }
       if (stats.remainingPlayers !== undefined) {
-        teamsSheet.getRange(row, 4).setValue(stats.remainingPlayers); // Column D
+        teamsSheet.getRange(row, 5).setValue(stats.remainingPlayers); // Column E
       }
       if (stats.remainingPurse !== undefined) {
-        teamsSheet.getRange(row, 7).setValue(stats.remainingPurse); // Column G
+        teamsSheet.getRange(row, 8).setValue(stats.remainingPurse); // Column H
       }
       if (stats.highestBid !== undefined) {
-        teamsSheet.getRange(row, 8).setValue(stats.highestBid); // Column H
+        teamsSheet.getRange(row, 9).setValue(stats.highestBid); // Column I
       }
       
       Logger.log('Updated team stats for ' + teamName + ': ' + JSON.stringify(stats));
@@ -209,6 +213,7 @@ function moveUnsoldToSold(data) {
   if (teamsSheet && data.teamPlayersBought !== undefined) {
     updateTeamStats(teamsSheet, data.teamName, {
       playersBought: data.teamPlayersBought,
+      u19PlayersBought: data.teamU19PlayersBought,
       remainingPlayers: data.teamRemainingPlayers,
       remainingPurse: data.teamRemainingPurse,
       highestBid: data.teamHighestBid
