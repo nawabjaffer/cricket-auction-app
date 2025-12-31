@@ -16,10 +16,55 @@
   <link rel="preconnect" href="https://drive.google.com">
   <link rel="preconnect" href="https://ui-avatars.com">
   
-  <!-- Preload critical background image -->
+  <!-- Preload critical background images (both themes) -->
   <link rel="preload" as="image" href="./assets/BG.jpg">
+  <link rel="preload" as="image" href="./assets/BG-1.jpg">
   
   <style>
+    /* Season Badge */
+    .season-badge {
+      position: absolute;
+      top: 20px;
+      left: 20px;
+      z-index: 6;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 8px 12px;
+      border-radius: 12px;
+      background: rgba(0, 0, 0, 0.45);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      box-shadow: 0 8px 28px rgba(0,0,0,0.35);
+      backdrop-filter: blur(6px);
+    }
+    .season-badge img {
+      width: 120px;
+      height: auto;
+      display: block;
+      border-radius: 8px;
+      box-shadow: 0 0 18px rgba(255, 215, 0, 0.35);
+    }
+    .season-badge .season-text {
+      font-weight: 800;
+      font-size: 22px;
+      letter-spacing: 1px;
+      color: var(--theme-primary);
+      text-shadow: 0 0 12px rgba(0,0,0,0.8), 0 0 22px rgba(255, 215, 0, 0.45);
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+    /* CSS Variables for Theme Support */
+    :root {
+      --theme-primary: #2196F3;
+      --theme-secondary: #1976D2;
+      --theme-accent: #1565C0;
+      --theme-success: #4CAF50;
+      --theme-warning: #ff9800;
+      --theme-danger: #f44336;
+      --theme-text: #ffffff;
+      --theme-text-secondary: #aaa;
+    }
+    
     /* Basic reset & container */
     body, html {
       margin: 0;
@@ -4364,249 +4409,485 @@
 </head>
 <body>
 
-  <div class="card-wrapper">
+  <!-- <div class="card-wrapper">
     <div class="card" id="card">
-      <!-- Player ID Badge -->
+
+      <div id="seasonBadge" class="season-badge" style="display:none;">
+        <img id="seasonBadgeImg" alt="Season Logo" />
+        <div class="season-text" id="seasonBadgeText">Season</div>
+      </div>
+
       <div class="player-id-badge" id="playerId">001</div>
-    
-    <!-- Profile Container with Circular Image and Info -->
-    <div class="profile-container">
-      <!-- Circular Profile Image -->
-      <div class="profile-circle">
-        <img id="profileImg" 
-             src="https://ui-avatars.com/api/?name=Player&size=450&background=2d5f3f&color=ffffff&bold=true&font-size=0.4" 
-             alt="Player Profile"
-             loading="eager"
-             decoding="async"
-             fetchpriority="high"/>
-      </div>
-      
-      <!-- Player Info -->
-      <div class="player-info-section">
-        <div class="info-grid">
-          <div class="info-item">
-            <div class="info-label">Name</div>
-            <div class="info-value player-name" id="playerName">PLAYER NAME</div>
-          </div>
-          
-          <div class="info-item">
-            <div class="info-label">Role</div>
-            <div class="info-value role-value" id="playerRole">All-Rounder</div>
-          </div>
+  
+
+      <div class="profile-container">
+
+        <div class="profile-circle">
+          <img id="profileImg" src="https://ui-avatars.com/api/?name=Player&size=450&background=2d5f3f&color=ffffff&bold=true&font-size=0.4" alt="Player Profile" loading="eager" decoding="async" fetchpriority="high" />
         </div>
-        
-        <div class="stats-highlight">
-          <div class="stat-box">
-            <div class="stat-label">Matches</div>
-            <div class="stat-value" id="playerMatches">0</div>
-          </div>
-          <div class="stat-box">
-            <div class="stat-label">Batting Best</div>
-            <div class="stat-value" id="playerBattingBest">N/A</div>
-          </div>
-          <div class="stat-box">
-            <div class="stat-label">Bowling Best</div>
-            <div class="stat-value" id="playerBowlingBest">N/A</div>
-          </div>
-        </div>
-      </div>
-    </div>
-    
-    <!-- Bid Amount Display with Team Logo -->
-    <div class="bid-display" id="bidDisplay">
-      <div class="bid-team-logo-container" id="bidTeamLogoContainer">
-        <img src="" alt="" class="bid-team-logo" id="bidTeamLogo" style="display: none;">
-        <div class="bid-team-pulse" id="bidTeamPulse"></div>
-      </div>
-      <div class="bid-content">
-        <div class="bid-label">Current Bid</div>
-        <div class="bid-amount" id="bidAmount">₹0</div>
-        <div class="bid-team-name" id="bidTeamName" style="display: none;"></div>
-        <div class="bid-team-warning" id="bidTeamWarning" style="display: none;">
-          <span class="warning-icon">⚠️</span>
-          <span class="warning-text" id="bidTeamWarningText"></span>
-        </div>
-        <div class="bid-confirm-hint" id="bidConfirmHint" style="display: none;">
-          <kbd>ENTER</kbd> to Sell | <kbd>ESC</kbd> to Cancel
-        </div>
-      </div>
-    </div>
-    
-    <!-- Bid Increment Info (Bottom Right Corner) -->
-    <div class="bid-increment-info" id="bidIncrementInfo">
-      <span class="increment-controls">
-        <kbd>Q</kbd> <span class="decrement-arrow">▼</span> | 
-        <span class="increment-value" id="incrementValue">+₹100</span> | 
-        <span class="increment-arrow">▲</span> <kbd>W</kbd>
-      </span>
-    </div>
-    
-    <!-- Team Status Indicator (Bottom Left Corner) -->
-    <div class="team-status-indicator" id="teamStatusIndicator">
-      <!-- Teams will be populated dynamically -->
-    </div>
-    
-    <!-- Hotkey Helper Button -->
-    <button class="hotkey-helper-btn" id="hotkeyHelperBtn" onclick="toggleHotkeyHelper()" title="Keyboard Shortcuts (Press H)">
-      ⌨️
-    </button>
-    
-    <!-- Hotkey Helper Overlay -->
-    <div class="hotkey-helper-overlay" id="hotkeyHelperOverlay">
-      <div class="hotkey-helper-content">
-        <button class="close-hotkey-btn" onclick="toggleHotkeyHelper()">×</button>
-        <h2 class="hotkey-helper-title">⌨️ Keyboard Shortcuts</h2>
-        
-        <div class="hotkey-section">
-          <h3 class="hotkey-section-title">🎯 Team Bidding</h3>
-          <div class="hotkey-grid">
-            <div class="hotkey-item"><kbd>Q</kbd> <span>Decrease bid increment (−₹50)</span></div>
-            <div class="hotkey-item"><kbd>W</kbd> <span>Increase bid increment (+₹50)</span></div>
-            <div class="hotkey-item"><kbd>1-9</kbd> <span>Team 1-9 places bid (by set increment)</span></div>
-            <div class="hotkey-item"><kbd>S</kbd> <span>Show sell confirmation</span></div>
-            <div class="hotkey-item"><kbd>ENTER</kbd> <span>Confirm sale (when S pressed)</span></div>
-          </div>
-        </div>
-        
-        <div class="hotkey-section">
-          <h3 class="hotkey-section-title">🎮 Navigation</h3>
-          <div class="hotkey-grid">
-            <div class="hotkey-item"><kbd>N</kbd> <span>Next player</span></div>
-            <div class="hotkey-item"><kbd>U</kbd> <span>Mark as unsold</span></div>
-            <div class="hotkey-item"><kbd>F</kbd> <span>Jump to player (by ID)</span></div>
-            <div class="hotkey-item"><kbd>Space</kbd> <span>Toggle fullscreen</span></div>
-          </div>
-        </div>
-        
-        <div class="hotkey-section">
-          <h3 class="hotkey-section-title">📊 Information</h3>
-          <div class="hotkey-grid">
-            <div class="hotkey-item"><kbd>I</kbd> <span>Show team statistics</span></div>
-            <div class="hotkey-item"><kbd>M</kbd> <span>Show team selection menu</span></div>
-            <div class="hotkey-item"><kbd>T</kbd>+<kbd>1-8</kbd> <span>View team squad (T then number)</span></div>
-            <div class="hotkey-item"><kbd>H</kbd> <span>Toggle this help</span></div>
-          </div>
-        </div>
-        
-        <div class="hotkey-section">
-          <h3 class="hotkey-section-title">✖️ Close</h3>
-          <div class="hotkey-grid">
-            <div class="hotkey-item"><kbd>ESC</kbd> <span>Close any overlay</span></div>
-          </div>
-        </div>
-      </div>
-    </div>
-    
-    <div class="sold-overlay" id="soldOverlay">
-      <div class="hammer" id="hammer">🔨</div>
-      <div class="impact" id="impact"></div>
-      <div class="stamp" id="stamp">
-        <div class="stamp-content">
-          <div class="stamp-text-container">
-            <div class="stamp-text-top">PLAYER</div>
-            <div class="stamp-text-main">SOLD</div>
-            <div class="stamp-text-bottom">TO</div>
-            <div class="stamp-text-team" id="stampTeamName">TEAM NAME</div>
-          </div>
-        </div>
-      </div>
-    </div>
-    <div class="unsold-overlay" id="unsoldOverlay">
-      <div class="unsold-x" id="unsoldX"></div>
-      <div class="unsold-text" id="unsoldText">UNSOLD</div>
-      <div class="unsold-subtext" id="unsoldSubtext">NO BIDDERS</div>
-    </div>
-    
-    <!-- Coin Jar Random Selection Overlay -->
-    <div class="coin-jar-overlay" id="coinJarOverlay">
-      <div class="coin-jar-container">
-        <div class="coin-jar">
-          <div class="jar-body">
-            <div class="coins-container" id="coinsContainer">
-              <!-- Coins will be generated dynamically -->
+  
+
+        <div class="player-info-section">
+          <div class="info-grid">
+            <div class="info-item">
+              <div class="info-label">Name</div>
+              <div class="info-value player-name" id="playerName">PLAYER NAME</div>
+            </div>
+  
+            <div class="info-item">
+              <div class="info-label">Role</div>
+              <div class="info-value role-value" id="playerRole">All-Rounder</div>
             </div>
           </div>
-          <div class="jar-lid"></div>
-        </div>
-        <div class="selected-coin" id="selectedCoin">
-          <div class="coin-face">
-            <span class="coin-number"></span>
+  
+          <div class="stats-highlight">
+            <div class="stat-box">
+              <div class="stat-label">Matches</div>
+              <div class="stat-value" id="playerMatches">0</div>
+            </div>
+            <div class="stat-box">
+              <div class="stat-label">Batting Best</div>
+              <div class="stat-value" id="playerBattingBest">N/A</div>
+            </div>
+            <div class="stat-box">
+              <div class="stat-label">Bowling Best</div>
+              <div class="stat-value" id="playerBowlingBest">N/A</div>
+            </div>
           </div>
         </div>
-        <div class="selection-text">Selecting Random Player...</div>
       </div>
-    </div>
-    
-    <!-- Completion Prompt for Unsold Players -->
-    <div class="completion-prompt" id="completionPrompt" onclick="restartUnsoldAuction()">
-      ♻️ Re-auction Unsold Players
-    </div>
-    
-    <!-- Next Random Prompt (shown after sold/unsold in random mode) -->
-    <div class="next-random-prompt" id="nextRandomPrompt">
-      <span>Press</span> <kbd>ENTER</kbd> <span>to draw next player</span>
-    </div>
-    
-    <!-- End Screen Overlay -->
-    <div class="end-screen-overlay" id="endScreenOverlay">
-      <img src="./assets/END.jpg" alt="Auction Complete" class="end-screen-image">
-    </div>
-    
-    <!-- Start Screen Overlay -->
-    <div class="start-screen-overlay" id="startScreenOverlay">
-      <div class="start-screen-content">
-        <div class="start-screen-title">🏏 Cricket Auction</div>
-        <div class="start-screen-subtitle">Player Bidding System</div>
-        <button class="start-button" id="startButton">
-          <span class="start-icon">▶</span>
-          <span>START AUCTION</span>
-        </button>
-        <div class="start-screen-hint">Click to begin and enable audio</div>
-        <button class="reset-auction-button" id="resetAuctionButton" title="Reset auction and start fresh">⟳</button>
-      </div>
-    </div>
-    
-    <!-- Team Selection Modal -->
-    <div class="team-selection-modal" id="teamModal">
-      <div class="team-modal-content">
-        <div class="team-modal-title">Select Team</div>
-        <div class="team-dropdown-container">
-          <label class="team-dropdown-label">Team:</label>
-          <select class="team-dropdown" id="teamDropdown" onchange="updateMaxBidIndicator()">
-            <option value="">-- Select a Team --</option>
-          </select>
+  
+
+      <div class="bid-display" id="bidDisplay">
+        <div class="bid-team-logo-container" id="bidTeamLogoContainer">
+          <img src="" alt="" class="bid-team-logo" id="bidTeamLogo" style="display: none;">
+          <div class="bid-team-pulse" id="bidTeamPulse"></div>
         </div>
-        <div id="maxBidIndicator" style="margin: 10px 0; padding: 10px; background: rgba(33, 150, 243, 0.1); border-left: 3px solid #2196F3; border-radius: 5px; font-size: 14px; color: #fff; display: none;">
-          <strong>Max Allowed Bid:</strong> <span id="maxBidValue">₹0</span>
-        </div>
-        <div class="team-modal-buttons">
-          <button class="team-modal-btn confirm" onclick="confirmTeamSelection()">Confirm</button>
-          <button class="team-modal-btn cancel" onclick="cancelTeamSelection()">Cancel</button>
+        <div class="bid-content">
+          <div class="bid-label">Current Bid</div>
+          <div class="bid-amount" id="bidAmount">₹0</div>
+          <div class="bid-team-name" id="bidTeamName" style="display: none;"></div>
+          <div class="bid-team-warning" id="bidTeamWarning" style="display: none;">
+            <span class="warning-icon">⚠️</span>
+            <span class="warning-text" id="bidTeamWarningText"></span>
+          </div>
+          <div class="bid-confirm-hint" id="bidConfirmHint" style="display: none;">
+            <kbd>ENTER</kbd> to Sell | <kbd>ESC</kbd> to Cancel
+          </div>
         </div>
       </div>
+  
+
+      <div class="bid-increment-info" id="bidIncrementInfo">
+        <span class="increment-controls">
+          <kbd>Q</kbd> <span class="decrement-arrow">▼</span> |
+          <span class="increment-value" id="incrementValue">+₹100</span> |
+          <span class="increment-arrow">▲</span> <kbd>W</kbd>
+        </span>
+      </div>
+  
+
+      <div class="team-status-indicator" id="teamStatusIndicator">
+
+      </div>
+  
+
+      <button class="hotkey-helper-btn" id="hotkeyHelperBtn" onclick="toggleHotkeyHelper()" title="Keyboard Shortcuts (Press H)">
+        ⌨️
+      </button>
+  
+
+      <div class="hotkey-helper-overlay" id="hotkeyHelperOverlay">
+        <div class="hotkey-helper-content">
+          <button class="close-hotkey-btn" onclick="toggleHotkeyHelper()">×</button>
+          <h2 class="hotkey-helper-title">⌨️ Keyboard Shortcuts</h2>
+  
+          <div class="hotkey-section">
+            <h3 class="hotkey-section-title">🎯 Team Bidding</h3>
+            <div class="hotkey-grid">
+              <div class="hotkey-item"><kbd>Q</kbd> <span>Decrease bid increment (−₹50)</span></div>
+              <div class="hotkey-item"><kbd>W</kbd> <span>Increase bid increment (+₹50)</span></div>
+              <div class="hotkey-item"><kbd>1-9</kbd> <span>Team 1-9 places bid (by set increment)</span></div>
+              <div class="hotkey-item"><kbd>S</kbd> <span>Show sell confirmation</span></div>
+              <div class="hotkey-item"><kbd>ENTER</kbd> <span>Confirm sale (when S pressed)</span></div>
+            </div>
+          </div>
+  
+          <div class="hotkey-section">
+            <h3 class="hotkey-section-title">🎮 Navigation</h3>
+            <div class="hotkey-grid">
+              <div class="hotkey-item"><kbd>N</kbd> <span>Next player</span></div>
+              <div class="hotkey-item"><kbd>U</kbd> <span>Mark as unsold</span></div>
+              <div class="hotkey-item"><kbd>F</kbd> <span>Jump to player (by ID)</span></div>
+              <div class="hotkey-item"><kbd>Space</kbd> <span>Toggle fullscreen</span></div>
+            </div>
+          </div>
+  
+          <div class="hotkey-section">
+            <h3 class="hotkey-section-title">📊 Information</h3>
+            <div class="hotkey-grid">
+              <div class="hotkey-item"><kbd>I</kbd> <span>Show team statistics</span></div>
+              <div class="hotkey-item"><kbd>M</kbd> <span>Show team selection menu</span></div>
+              <div class="hotkey-item"><kbd>T</kbd>+<kbd>1-8</kbd> <span>View team squad (T then number)</span></div>
+              <div class="hotkey-item"><kbd>H</kbd> <span>Toggle this help</span></div>
+            </div>
+          </div>
+  
+          <div class="hotkey-section">
+            <h3 class="hotkey-section-title">✖️ Close</h3>
+            <div class="hotkey-grid">
+              <div class="hotkey-item"><kbd>ESC</kbd> <span>Close any overlay</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+  
+      <div class="sold-overlay" id="soldOverlay">
+        <div class="hammer" id="hammer">🔨</div>
+        <div class="impact" id="impact"></div>
+        <div class="stamp" id="stamp">
+          <div class="stamp-content">
+            <div class="stamp-text-container">
+              <div class="stamp-text-top">PLAYER</div>
+              <div class="stamp-text-main">SOLD</div>
+              <div class="stamp-text-bottom">TO</div>
+              <div class="stamp-text-team" id="stampTeamName">TEAM NAME</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="unsold-overlay" id="unsoldOverlay">
+        <div class="unsold-x" id="unsoldX"></div>
+        <div class="unsold-text" id="unsoldText">UNSOLD</div>
+        <div class="unsold-subtext" id="unsoldSubtext">NO BIDDERS</div>
+      </div>
+  
+
+      <div class="coin-jar-overlay" id="coinJarOverlay">
+        <div class="coin-jar-container">
+          <div class="coin-jar">
+            <div class="jar-body">
+              <div class="coins-container" id="coinsContainer">
+
+              </div>
+            </div>
+            <div class="jar-lid"></div>
+          </div>
+          <div class="selected-coin" id="selectedCoin">
+            <div class="coin-face">
+              <span class="coin-number"></span>
+            </div>
+          </div>
+          <div class="selection-text">Selecting Random Player...</div>
+        </div>
+      </div>
+  
+
+      <div class="completion-prompt" id="completionPrompt" onclick="restartUnsoldAuction()">
+        ♻️ Re-auction Unsold Players
+      </div>
+  
+
+      <div class="next-random-prompt" id="nextRandomPrompt">
+        <span>Press</span> <kbd>ENTER</kbd> <span>to draw next player</span>
+      </div>
+  
+      <div class="end-screen-overlay" id="endScreenOverlay">
+        <img src="./assets/END.jpg" alt="Auction Complete" class="end-screen-image">
+      </div>
+  
+      <div class="start-screen-overlay" id="startScreenOverlay">
+        <div class="start-screen-content">
+          <div class="start-screen-title">🏏 Cricket Auction</div>
+          <div class="start-screen-subtitle">Player Bidding System</div>
+          <button class="start-button" id="startButton">
+            <span class="start-icon">▶</span>
+            <span>START AUCTION</span>
+          </button>
+          <div class="start-screen-hint">Click to begin and enable audio</div>
+          <button class="reset-auction-button" id="resetAuctionButton" title="Reset auction and start fresh">⟳</button>
+        </div>
+      </div>
+  
+
+      <div class="team-selection-modal" id="teamModal">
+        <div class="team-modal-content">
+          <div class="team-modal-title">Select Team</div>
+          <div class="team-dropdown-container">
+            <label class="team-dropdown-label">Team:</label>
+            <select class="team-dropdown" id="teamDropdown" onchange="updateMaxBidIndicator()">
+              <option value="">-- Select a Team --</option>
+            </select>
+          </div>
+          <div id="maxBidIndicator" style="margin: 10px 0; padding: 10px; background: rgba(33, 150, 243, 0.1); border-left: 3px solid #2196F3; border-radius: 5px; font-size: 14px; color: #fff; display: none;">
+            <strong>Max Allowed Bid:</strong> <span id="maxBidValue">₹0</span>
+          </div>
+          <div class="team-modal-buttons">
+            <button class="team-modal-btn confirm" onclick="confirmTeamSelection()">Confirm</button>
+            <button class="team-modal-btn cancel" onclick="cancelTeamSelection()">Cancel</button>
+          </div>
+        </div>
+      </div>
+  
+
+      <input type="number" id="jumpToPlayerInput" placeholder="ID" style="position: absolute; 
+                    bottom: 10px; 
+                    left: 10px; 
+                    width: 60px; 
+                    height: 30px; 
+                    padding: 5px; 
+                    font-size: 14px; 
+                    background: rgba(0, 0, 0, 0.9); 
+                    color: #2196F3; 
+                    border: 2px solid #2196F3; 
+                    border-radius: 5px; 
+                    outline: none;
+                    opacity: 0;
+                    pointer-events: none;
+                    transition: opacity 0.3s ease;
+                    z-index: 15000;
+                    box-shadow: 0 0 20px rgba(33, 150, 243, 0.8);" />
     </div>
-    
-    <!-- Jump to Player Input -->
-    <input type="number" 
-           id="jumpToPlayerInput" 
-           placeholder="ID" 
-           style="position: absolute; 
-                  bottom: 10px; 
-                  left: 10px; 
-                  width: 60px; 
-                  height: 30px; 
-                  padding: 5px; 
-                  font-size: 14px; 
-                  background: rgba(0, 0, 0, 0.9); 
-                  color: #2196F3; 
-                  border: 2px solid #2196F3; 
-                  border-radius: 5px; 
-                  outline: none;
-                  opacity: 0;
-                  pointer-events: none;
-                  transition: opacity 0.3s ease;
-                  z-index: 15000;
-                  box-shadow: 0 0 20px rgba(33, 150, 243, 0.8);" />
+  </div> -->
+
+  <div class="card-wrapper">
+    <div class="card" id="card">
+
+      <div id="seasonBadge" class="season-badge" style="display:none;">
+        <img id="seasonBadgeImg" alt="Season Logo" />
+        <div class="season-text" id="seasonBadgeText">Season</div>
+      </div>
+
+      <div class="player-id-badge" id="playerId">001</div>
+  
+
+      <div class="profile-container">
+
+        <div class="profile-circle">
+          <img id="profileImg" src="https://ui-avatars.com/api/?name=Player&size=450&background=2d5f3f&color=ffffff&bold=true&font-size=0.4" alt="Player Profile" loading="eager" decoding="async" fetchpriority="high" />
+        </div>
+  
+
+        <div class="player-info-section">
+          <div class="info-grid">
+            <div class="info-item">
+              <div class="info-label">Name</div>
+              <div class="info-value player-name" id="playerName">PLAYER NAME</div>
+            </div>
+  
+            <div class="info-item">
+              <div class="info-label">Role</div>
+              <div class="info-value role-value" id="playerRole">All-Rounder</div>
+            </div>
+          </div>
+  
+          <div class="stats-highlight">
+            <div class="stat-box">
+              <div class="stat-label">Matches</div>
+              <div class="stat-value" id="playerMatches">0</div>
+            </div>
+            <div class="stat-box">
+              <div class="stat-label">Batting Best</div>
+              <div class="stat-value" id="playerBattingBest">N/A</div>
+            </div>
+            <div class="stat-box">
+              <div class="stat-label">Bowling Best</div>
+              <div class="stat-value" id="playerBowlingBest">N/A</div>
+            </div>
+          </div>
+        </div>
+      </div>
+  
+
+      <div class="bid-display" id="bidDisplay">
+        <div class="bid-team-logo-container" id="bidTeamLogoContainer">
+          <img src="" alt="" class="bid-team-logo" id="bidTeamLogo" style="display: none;">
+          <div class="bid-team-pulse" id="bidTeamPulse"></div>
+        </div>
+        <div class="bid-content">
+          <div class="bid-label">Current Bid</div>
+          <div class="bid-amount" id="bidAmount">₹0</div>
+          <div class="bid-team-name" id="bidTeamName" style="display: none;"></div>
+          <div class="bid-team-warning" id="bidTeamWarning" style="display: none;">
+            <span class="warning-icon">⚠️</span>
+            <span class="warning-text" id="bidTeamWarningText"></span>
+          </div>
+          <div class="bid-confirm-hint" id="bidConfirmHint" style="display: none;">
+            <kbd>ENTER</kbd> to Sell | <kbd>ESC</kbd> to Cancel
+          </div>
+        </div>
+      </div>
+  
+
+      <div class="bid-increment-info" id="bidIncrementInfo">
+        <span class="increment-controls">
+          <kbd>Q</kbd> <span class="decrement-arrow">▼</span> |
+          <span class="increment-value" id="incrementValue">+₹100</span> |
+          <span class="increment-arrow">▲</span> <kbd>W</kbd>
+        </span>
+      </div>
+  
+
+      <div class="team-status-indicator" id="teamStatusIndicator">
+
+      </div>
+  
+
+      <button class="hotkey-helper-btn" id="hotkeyHelperBtn" onclick="toggleHotkeyHelper()" title="Keyboard Shortcuts (Press H)">
+        ⌨️
+      </button>
+  
+
+      <div class="hotkey-helper-overlay" id="hotkeyHelperOverlay">
+        <div class="hotkey-helper-content">
+          <button class="close-hotkey-btn" onclick="toggleHotkeyHelper()">×</button>
+          <h2 class="hotkey-helper-title">⌨️ Keyboard Shortcuts</h2>
+  
+          <div class="hotkey-section">
+            <h3 class="hotkey-section-title">🎯 Team Bidding</h3>
+            <div class="hotkey-grid">
+              <div class="hotkey-item"><kbd>Q</kbd> <span>Decrease bid increment (−₹50)</span></div>
+              <div class="hotkey-item"><kbd>W</kbd> <span>Increase bid increment (+₹50)</span></div>
+              <div class="hotkey-item"><kbd>1-9</kbd> <span>Team 1-9 places bid (by set increment)</span></div>
+              <div class="hotkey-item"><kbd>S</kbd> <span>Show sell confirmation</span></div>
+              <div class="hotkey-item"><kbd>ENTER</kbd> <span>Confirm sale (when S pressed)</span></div>
+            </div>
+          </div>
+  
+          <div class="hotkey-section">
+            <h3 class="hotkey-section-title">🎮 Navigation</h3>
+            <div class="hotkey-grid">
+              <div class="hotkey-item"><kbd>N</kbd> <span>Next player</span></div>
+              <div class="hotkey-item"><kbd>U</kbd> <span>Mark as unsold</span></div>
+              <div class="hotkey-item"><kbd>F</kbd> <span>Jump to player (by ID)</span></div>
+              <div class="hotkey-item"><kbd>Space</kbd> <span>Toggle fullscreen</span></div>
+            </div>
+          </div>
+  
+          <div class="hotkey-section">
+            <h3 class="hotkey-section-title">📊 Information</h3>
+            <div class="hotkey-grid">
+              <div class="hotkey-item"><kbd>I</kbd> <span>Show team statistics</span></div>
+              <div class="hotkey-item"><kbd>M</kbd> <span>Show team selection menu</span></div>
+              <div class="hotkey-item"><kbd>T</kbd>+<kbd>1-8</kbd> <span>View team squad (T then number)</span></div>
+              <div class="hotkey-item"><kbd>H</kbd> <span>Toggle this help</span></div>
+            </div>
+          </div>
+  
+          <div class="hotkey-section">
+            <h3 class="hotkey-section-title">✖️ Close</h3>
+            <div class="hotkey-grid">
+              <div class="hotkey-item"><kbd>ESC</kbd> <span>Close any overlay</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+  
+      <div class="sold-overlay" id="soldOverlay">
+        <div class="hammer" id="hammer">🔨</div>
+        <div class="impact" id="impact"></div>
+        <div class="stamp" id="stamp">
+          <div class="stamp-content">
+            <div class="stamp-text-container">
+              <div class="stamp-text-top">PLAYER</div>
+              <div class="stamp-text-main">SOLD</div>
+              <div class="stamp-text-bottom">TO</div>
+              <div class="stamp-text-team" id="stampTeamName">TEAM NAME</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="unsold-overlay" id="unsoldOverlay">
+        <div class="unsold-x" id="unsoldX"></div>
+        <div class="unsold-text" id="unsoldText">UNSOLD</div>
+        <div class="unsold-subtext" id="unsoldSubtext">NO BIDDERS</div>
+      </div>
+  
+
+      <div class="coin-jar-overlay" id="coinJarOverlay">
+        <div class="coin-jar-container">
+          <div class="coin-jar">
+            <div class="jar-body">
+              <div class="coins-container" id="coinsContainer">
+
+              </div>
+            </div>
+            <div class="jar-lid"></div>
+          </div>
+          <div class="selected-coin" id="selectedCoin">
+            <div class="coin-face">
+              <span class="coin-number"></span>
+            </div>
+          </div>
+          <div class="selection-text">Selecting Random Player...</div>
+        </div>
+      </div>
+  
+
+      <div class="completion-prompt" id="completionPrompt" onclick="restartUnsoldAuction()">
+        ♻️ Re-auction Unsold Players
+      </div>
+  
+
+      <div class="next-random-prompt" id="nextRandomPrompt">
+        <span>Press</span> <kbd>ENTER</kbd> <span>to draw next player</span>
+      </div>
+  
+      <div class="end-screen-overlay" id="endScreenOverlay">
+        <img src="./assets/END.jpg" alt="Auction Complete" class="end-screen-image">
+      </div>
+  
+      <div class="start-screen-overlay" id="startScreenOverlay">
+        <div class="start-screen-content">
+          <div class="start-screen-title">🏏 Cricket Auction</div>
+          <div class="start-screen-subtitle">Player Bidding System</div>
+          <button class="start-button" id="startButton">
+            <span class="start-icon">▶</span>
+            <span>START AUCTION</span>
+          </button>
+          <div class="start-screen-hint">Click to begin and enable audio</div>
+          <button class="reset-auction-button" id="resetAuctionButton" title="Reset auction and start fresh">⟳</button>
+        </div>
+      </div>
+  
+
+      <div class="team-selection-modal" id="teamModal">
+        <div class="team-modal-content">
+          <div class="team-modal-title">Select Team</div>
+          <div class="team-dropdown-container">
+            <label class="team-dropdown-label">Team:</label>
+            <select class="team-dropdown" id="teamDropdown" onchange="updateMaxBidIndicator()">
+              <option value="">-- Select a Team --</option>
+            </select>
+          </div>
+          <div id="maxBidIndicator" style="margin: 10px 0; padding: 10px; background: rgba(33, 150, 243, 0.1); border-left: 3px solid #2196F3; border-radius: 5px; font-size: 14px; color: #fff; display: none;">
+            <strong>Max Allowed Bid:</strong> <span id="maxBidValue">₹0</span>
+          </div>
+          <div class="team-modal-buttons">
+            <button class="team-modal-btn confirm" onclick="confirmTeamSelection()">Confirm</button>
+            <button class="team-modal-btn cancel" onclick="cancelTeamSelection()">Cancel</button>
+          </div>
+        </div>
+      </div>
+  
+
+      <input type="number" id="jumpToPlayerInput" placeholder="ID" style="position: absolute; 
+                    bottom: 10px; 
+                    left: 10px; 
+                    width: 60px; 
+                    height: 30px; 
+                    padding: 5px; 
+                    font-size: 14px; 
+                    background: rgba(0, 0, 0, 0.9); 
+                    color: #2196F3; 
+                    border: 2px solid #2196F3; 
+                    border-radius: 5px; 
+                    outline: none;
+                    opacity: 0;
+                    pointer-events: none;
+                    transition: opacity 0.3s ease;
+                    z-index: 15000;
+                    box-shadow: 0 0 20px rgba(33, 150, 243, 0.8);" />
     </div>
   </div>
 
@@ -5702,7 +5983,8 @@
             playersBought: playersBought,
             underAgePlayers: underAgePlayers,
             remainingPurse: remainingPurse,
-            highestBid: highestBid
+            highestBid: highestBid,
+            captain: row[cols.captain] || '(empty)'
           });
           
           return {
@@ -5864,12 +6146,16 @@
       const item = items[currentIndex];
       
       const imageSrc = convertDriveLinkToDirect(item.imageUrl);
-      // Use background image from config
-      const bgImageSrc = CONFIG.assets.backgroundImage;
+      // Use background image from active theme with fallback
+      const activeTheme = (CONFIG.theme && CONFIG.theme[CONFIG.theme.active]) ? CONFIG.theme[CONFIG.theme.active] : null;
+      const bgImageSrc = (activeTheme && activeTheme.background) || (CONFIG.assets && CONFIG.assets.backgroundImage) || './assets/BG-1.jpg';
 
       // Set background image
       const card = document.getElementById('card');
       card.style.backgroundImage = `url('${bgImageSrc}')`;
+      
+      // Apply theme colors dynamically (guarded)
+      try { if (activeTheme) applyThemeColors(activeTheme); } catch (_) {}
 
       // Set profile circle image from Google Drive or fallback to placeholder
       const profileImg = document.getElementById('profileImg');
@@ -6919,15 +7205,22 @@
 
     // Function to get captain details (checks both items array and all players cache)
     async function getCaptainDetails(captainId) {
-      if (!captainId || captainId.trim() === '') return null;
+      console.debug('[CAPTAIN] Getting captain details for ID:', captainId);
+      if (!captainId || captainId.trim() === '') {
+        console.debug('[CAPTAIN] Captain ID is empty or null');
+        return null;
+      }
       
       // Try to find in items array first (auction players)
       let captain = items.find(item => String(item.id).trim() === String(captainId).trim());
+      console.debug('[CAPTAIN] Found in items array:', captain ? captain.name : 'NOT FOUND');
       
       // If not found, fetch from all players cache
       if (!captain) {
+        console.debug('[CAPTAIN] Searching in all players cache...');
         const allPlayers = await fetchAllPlayersForCache();
         captain = allPlayers.find(item => String(item.id).trim() === String(captainId).trim());
+        console.debug('[CAPTAIN] Found in all players cache:', captain ? captain.name : 'NOT FOUND');
       }
       
       if (captain) {
@@ -6994,6 +7287,7 @@
       
       // Get captain details from cache (now async to support all players)
       const captainDetails = await getCaptainDetails(team.captain);
+      console.debug('[TEAM_SLOTS] Captain ID:', team.captain, 'Captain Details:', captainDetails);
       
       // Fetch data in parallel for faster loading
       const [soldPlayers, teamColor] = await Promise.all([
@@ -7050,6 +7344,7 @@
       
       // Build captain card for left side if captain details are available
       if (captainDetails) {
+        console.debug('[TEAM_SLOTS] Building captain card for:', captainDetails.name);
         const avatarConfig = CONFIG.ui.avatarPlaceholder;
         const placeholderUrl = `${avatarConfig.baseUrl}?name=${encodeURIComponent(captainDetails.name)}&size=${avatarConfig.teamSlotSize}&background=${avatarConfig.background}&color=${avatarConfig.color}&bold=${avatarConfig.bold}&font-size=${avatarConfig.fontSize}`;
         const avatarUrl = captainDetails.imageUrl 
@@ -7059,25 +7354,23 @@
         // Determine role icon for captain
         const role = (captainDetails.role || 'Captain').toLowerCase();
         let roleIcon = '🏏'; // Default cricket icon
-        if (role.includes('bowler') && role.includes('bat')) {
-          roleIcon = '🏏⚾'; // All-rounder
-        } else if (role.includes('bowl')) {
-          roleIcon = '⚾'; // Bowler
-        } else if (role.includes('bat')) {
-          roleIcon = '🏏'; // Batsman
-        } else if (role.includes('wicket') || role.includes('keeper') || role.includes('wk')) {
+        if (role.toLowerCase().includes('wicket') || role.includes('keeper') || role.includes('wk')) {
           roleIcon = '🧤'; // Wicket Keeper
-        }
+        } else if (role.toLowerCase().includes('all rounder')) {
+          roleIcon = '🏏⚾'; // All-rounder
+        } else if (role.toLowerCase().includes('bowler')) {
+          roleIcon = '⚾'; // Bowler
+        } else if (role.toLowerCase().includes('batsman')) {
+          roleIcon = '🏏'; // Batsman
+        } 
         
         // Build stats tooltip (exclude N/A values)
         let statsTooltipHTML = '';
         const stats = captainDetails.stats;
         const statsArray = [
           { label: 'Matches', value: stats.matches },
-          { label: 'Innings', value: stats.innings },
           { label: 'Runs', value: stats.runs },
-          { label: 'Wickets', value: stats.wickets },
-          { label: 'Average', value: stats.average }
+          { label: 'Wickets', value: stats.wickets }
         ].filter(stat => stat.value && stat.value !== 'N/A' && stat.value.toString().trim() !== '');
         
         if (statsArray.length > 0) {
@@ -7111,6 +7404,8 @@
             ${statsTooltipHTML}
           </div>
         `;
+      } else {
+        console.debug('[TEAM_SLOTS] No captain details found - captain field is empty or invalid');
       }
       
       html += captainCardHTML;
@@ -7149,7 +7444,7 @@
           
           // Get player stats from cache (instant, no API call)
           let statsTooltipHTML = '';
-          const playerStats = getPlayerStatsFromCache(player.id);
+          const playerStats = await getPlayerStatsFromCache(player.id);
           if (playerStats) {
             const statsArray = [
               { label: 'Matches', value: playerStats.matches },
@@ -8562,7 +8857,180 @@
     console.log('%c🏏 Cricket Auction App Initialized', 'color: #2196F3; font-size: 16px; font-weight: bold;');
     console.log('%cDebug utilities available via window.AuctionDebug', 'color: #4CAF50; font-size: 12px;');
 
+    // Theme Management Functions
+    function applyThemeColors(theme) {
+      const root = document.documentElement;
+      root.style.setProperty('--theme-primary', theme.colors.primary);
+      root.style.setProperty('--theme-secondary', theme.colors.secondary);
+      root.style.setProperty('--theme-accent', theme.colors.accent);
+      root.style.setProperty('--theme-success', theme.colors.success);
+      root.style.setProperty('--theme-warning', theme.colors.warning);
+      root.style.setProperty('--theme-danger', theme.colors.danger);
+      root.style.setProperty('--theme-text', theme.colors.text);
+      root.style.setProperty('--theme-text-secondary', theme.colors.textSecondary);
+    }
+
+    function initializeTheme() {
+      try {
+        const themeRoot = CONFIG && CONFIG.theme ? CONFIG.theme : null;
+        const activeKey = themeRoot && themeRoot.active ? themeRoot.active : 'style-1';
+        const activeTheme = (themeRoot && themeRoot[activeKey]) ? themeRoot[activeKey] : (themeRoot && themeRoot['style-1']) || null;
+        if (!activeTheme) {
+          console.warn('[THEME] Active theme not found; skipping theme init');
+          return;
+        }
+        console.log('%c🎨 Initializing Theme: ' + (activeTheme.name || activeKey), 'color: ' + (activeTheme.colors?.primary || '#2196F3') + '; font-size: 14px; font-weight: bold;');
+        
+        // Apply theme colors
+        try { applyThemeColors(activeTheme); } catch (e) { console.warn('[THEME] applyThemeColors failed', e); }
+        
+        // Set background
+        const card = document.getElementById('card');
+        if (card) {
+          const bg = activeTheme.background || (CONFIG.assets && CONFIG.assets.backgroundImage) || './assets/BG-1.jpg';
+          card.style.backgroundImage = `url('${bg}')`;
+        }
+        
+        // Apply theme to teams table
+        try { applyThemeToTable(activeTheme); } catch (e) { console.warn('[THEME] applyThemeToTable failed', e); }
+        
+        // Update season badge if provided
+        try { updateSeasonBadge(activeTheme); } catch (e) { console.warn('[THEME] updateSeasonBadge failed', e); }
+        
+        // Add animated corner GIFs if enabled
+        if (activeTheme.animations && activeTheme.animations.enabled && activeTheme.animations.cornerGifs) {
+          try { addCornerAnimations(activeTheme.animations.cornerGifs); } catch (e) { console.warn('[THEME] addCornerAnimations failed', e); }
+        }
+      } catch (err) {
+        console.error('[THEME] Initialization error', err);
+      }
+    }
+
+    function applyThemeToTable(theme) {
+      // Update table styles dynamically
+      const style = document.createElement('style');
+      style.id = 'dynamic-theme-styles';
+      
+      // Remove existing dynamic styles if any
+      const existingStyle = document.getElementById('dynamic-theme-styles');
+      if (existingStyle) {
+        existingStyle.remove();
+      }
+      
+      style.textContent = `
+        .teams-table thead {
+          background: ${theme.table.headerGradient};
+        }
+        
+        .teams-table th {
+          color: ${theme.colors.text};
+          text-shadow: 0 0 10px ${theme.colors.primary}50;
+        }
+        
+        .teams-table tbody tr {
+          background: ${theme.table.rowBackground};
+          border-bottom: 1px solid ${theme.table.borderColor};
+        }
+        
+        .teams-table tbody tr:hover {
+          background: ${theme.table.rowBackgroundHover};
+        }
+        
+        .team-name-cell {
+          color: ${theme.colors.primary};
+          text-shadow: ${theme.table.glowEffect || '0 0 10px ' + theme.colors.primary + '30'};
+        }
+        
+        .player-name {
+          color: ${theme.colors.primary};
+          text-shadow: 2px 2px 8px rgba(0, 0, 0, 0.9), ${theme.table.glowEffect || '0 0 25px ' + theme.colors.primary + '60'};
+        }
+        
+        .profile-circle {
+          box-shadow: 0 15px 40px ${theme.colors.primary}50, 0 0 0 15px ${theme.colors.primary}15;
+        }
+        
+        .info-item {
+          border-left-color: ${theme.colors.primary};
+        }
+        
+        .bid-display {
+          background: linear-gradient(135deg, ${theme.colors.primary}20, ${theme.colors.secondary}20);
+          border-color: ${theme.colors.primary};
+          color: ${theme.colors.primary};
+          text-shadow: 0 0 30px ${theme.colors.primary};
+        }
+        
+        .bid-team-name {
+          color: ${theme.colors.success};
+        }
+        
+        .teams-info-header {
+          border-bottom-color: ${theme.colors.primary};
+        }
+        .teams-info-title {
+          color: ${theme.colors.primary};
+          text-shadow: 0 0 20px ${theme.colors.primary}50;
+        }
+        .teams-info-subtitle {
+          color: ${theme.colors.textSecondary};
+        }
+         .team-logo-small {
+           border-color: ${theme.colors.primary};
+           box-shadow: 0 4px 10px ${theme.colors.primary}40;
+         }
+      `;
+      
+      document.head.appendChild(style);
+    }
+
+    function updateSeasonBadge(theme) {
+      const badge = document.getElementById('seasonBadge');
+      const img = document.getElementById('seasonBadgeImg');
+      const text = document.getElementById('seasonBadgeText');
+      if (!badge || !img || !text) return;
+      
+      if (theme.seasonLogo) {
+        img.src = theme.seasonLogo;
+        text.textContent = theme.name || 'Season';
+        badge.style.display = 'flex';
+      } else {
+        badge.style.display = 'none';
+      }
+    }
+
+    function addCornerAnimations(cornerGifs) {
+      // Remove existing corner animations if any
+      const existingCorners = document.querySelectorAll('.corner-animation');
+      existingCorners.forEach(el => el.remove());
+      
+      // Create corner animation container
+      const corners = [
+        { position: 'left-top', src: cornerGifs.leftTop, style: '' },
+        { position: 'right-top', src: cornerGifs.rightTop, style: 'bottom: 0; left: 800px;' },
+        { position: 'left-bottom', src: cornerGifs.leftBottom, style: 'bottom: 10px; left: 10px;' },
+        { position: 'right-bottom', src: cornerGifs.rightBottom, style: 'bottom: 10px; right: 10px;' }
+      ];
+      
+      corners.forEach(corner => {
+        const img = document.createElement('img');
+        img.className = `corner-animation corner-${corner.position}`;
+        img.src = corner.src;
+        img.style.cssText = `
+          position: fixed;
+          ${corner.style}
+          pointer-events: none;
+          z-index: 4;
+          opacity: 0.6;
+          mix-blend-mode: screen;
+        `;
+        document.body.appendChild(img);
+      });
+    }
+
     (async function init() {
+      // Initialize theme first
+      initializeTheme();
       // Control bid increment info visibility based on config
       const bidInfoElement = document.getElementById('bidIncrementInfo');
       if (bidInfoElement) {

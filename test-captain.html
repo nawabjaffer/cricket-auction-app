@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Captain Card Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            background: #1a1a1a;
+            color: white;
+        }
+        .test-section {
+            background: #2a2a2a;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+        }
+        .test-result {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 4px;
+        }
+        .success {
+            background: #1b5e20;
+        }
+        .error {
+            background: #b71c1c;
+        }
+        .warning {
+            background: #f57c00;
+        }
+        .captain-card {
+            background: #333;
+            padding: 20px;
+            border-radius: 12px;
+            max-width: 300px;
+            margin: 20px 0;
+        }
+        .captain-image {
+            width: 200px;
+            height: 200px;
+            border-radius: 50%;
+            object-fit: cover;
+            margin: 0 auto;
+            display: block;
+        }
+        .captain-name {
+            text-align: center;
+            font-size: 24px;
+            font-weight: bold;
+            margin: 15px 0;
+        }
+        .captain-role {
+            text-align: center;
+            font-size: 18px;
+            color: #aaa;
+        }
+        .captain-stats {
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px solid #555;
+        }
+        .stat-item {
+            display: flex;
+            justify-content: space-between;
+            margin: 8px 0;
+        }
+    </style>
+</head>
+<body>
+    <h1>🏏 Captain Card Test</h1>
+    
+    <div class="test-section">
+        <h2>Configuration Check</h2>
+        <div id="configCheck"></div>
+    </div>
+    
+    <div class="test-section">
+        <h2>Test Captain Lookup</h2>
+        <label>Enter Captain ID: <input type="text" id="captainIdInput" value="P001" /></label>
+        <button onclick="testCaptainLookup()">Test Lookup</button>
+        <div id="captainTestResult"></div>
+    </div>
+    
+    <div class="test-section">
+        <h2>Mock Captain Card Display</h2>
+        <div id="captainCardDisplay"></div>
+    </div>
+
+    <script src="config.js"></script>
+    <script>
+        // Check configuration
+        const configCheck = document.getElementById('configCheck');
+        configCheck.innerHTML = `
+            <div class="test-result ${CONFIG ? 'success' : 'error'}">
+                Config loaded: ${CONFIG ? 'YES' : 'NO'}
+            </div>
+            <div class="test-result success">
+                Teams column mapping - Captain: Column ${CONFIG.columnMappings.teams.captain}
+            </div>
+            <div class="test-result success">
+                Default teams count: ${CONFIG.defaultTeams.length}
+            </div>
+        `;
+
+        // Mock data for testing
+        const mockPlayers = [
+            {
+                id: 'P001',
+                name: 'John Smith',
+                role: 'All Rounder',
+                imageUrl: 'https://ui-avatars.com/api/?name=John+Smith&size=200',
+                matches: '50',
+                runs: '1200',
+                wickets: '35'
+            },
+            {
+                id: 'P002',
+                name: 'Mike Johnson',
+                role: 'Batsman',
+                imageUrl: 'https://ui-avatars.com/api/?name=Mike+Johnson&size=200',
+                matches: '45',
+                runs: '1500',
+                wickets: '5'
+            }
+        ];
+
+        const mockTeam = {
+            name: 'Test Team',
+            captain: 'P001',
+            logoUrl: '',
+            playersBought: 0,
+            totalPlayerThreshold: 11,
+            remainingPlayers: 11,
+            allocatedAmount: 100000,
+            remainingPurse: 100000,
+            highestBid: 0
+        };
+
+        function getCaptainDetails(captainId) {
+            console.log('Looking for captain ID:', captainId);
+            
+            if (!captainId || captainId.trim() === '') {
+                console.log('Captain ID is empty');
+                return null;
+            }
+            
+            const captain = mockPlayers.find(p => p.id === captainId);
+            console.log('Found captain:', captain);
+            
+            if (captain) {
+                return {
+                    id: captain.id,
+                    imageUrl: captain.imageUrl,
+                    name: captain.name,
+                    role: captain.role,
+                    stats: {
+                        matches: captain.matches || 'N/A',
+                        runs: captain.runs || 'N/A',
+                        wickets: captain.wickets || 'N/A'
+                    }
+                };
+            }
+            
+            return null;
+        }
+
+        function testCaptainLookup() {
+            const input = document.getElementById('captainIdInput');
+            const resultDiv = document.getElementById('captainTestResult');
+            const captainId = input.value.trim();
+            
+            console.log('Testing captain lookup for ID:', captainId);
+            
+            const captainDetails = getCaptainDetails(captainId);
+            
+            if (captainDetails) {
+                resultDiv.innerHTML = `
+                    <div class="test-result success">
+                        ✅ Found Captain: ${captainDetails.name}
+                    </div>
+                    <pre>${JSON.stringify(captainDetails, null, 2)}</pre>
+                `;
+                
+                // Display captain card
+                displayCaptainCard(captainDetails);
+            } else {
+                resultDiv.innerHTML = `
+                    <div class="test-result error">
+                        ❌ Captain not found for ID: ${captainId}
+                    </div>
+                    <div class="test-result warning">
+                        Available IDs: ${mockPlayers.map(p => p.id).join(', ')}
+                    </div>
+                `;
+                
+                // Clear captain card
+                document.getElementById('captainCardDisplay').innerHTML = '';
+            }
+        }
+
+        function displayCaptainCard(captain) {
+            const cardDiv = document.getElementById('captainCardDisplay');
+            
+            const statsHTML = captain.stats ? `
+                <div class="captain-stats">
+                    <div class="stat-item">
+                        <span>Matches:</span>
+                        <span>${captain.stats.matches}</span>
+                    </div>
+                    <div class="stat-item">
+                        <span>Runs:</span>
+                        <span>${captain.stats.runs}</span>
+                    </div>
+                    <div class="stat-item">
+                        <span>Wickets:</span>
+                        <span>${captain.stats.wickets}</span>
+                    </div>
+                </div>
+            ` : '';
+            
+            cardDiv.innerHTML = `
+                <div class="captain-card">
+                    <img class="captain-image" src="${captain.imageUrl}" alt="${captain.name}">
+                    <div class="captain-name">${captain.name}</div>
+                    <div class="captain-role">${captain.role}</div>
+                    ${statsHTML}
+                </div>
+            `;
+        }
+
+        // Auto-run test on load
+        window.onload = () => {
+            console.log('Page loaded, running initial test...');
+            testCaptainLookup();
+        };
+    </script>
+</body>
+</html>

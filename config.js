@@ -11,7 +11,7 @@ const CONFIG = {
       unsoldPlayers: 'Unsold Players!A:J'  // Track unsold players for second round
     }
   },
-  
+      active: 'style-2',  // Active theme: 'style-1' (default) or 'style-2' (season-6)
   // Google Apps Script Webhook
   webhook: {
     url: 'https://script.google.com/macros/s/AKfycbwbjnz8HR5kfS4WzvSPUxoSKvlEiqZLQ4HioHSoy2T884IQSczO2uGPNMWDEOwARaB0Jg/exec',
@@ -78,7 +78,79 @@ const CONFIG = {
   // Asset Paths
   assets: {
     backgroundImage: './assets/BG.jpg',
-    placeholderMan: './assets/man.jpg'
+    placeholderMan: './assets/man.jpg',
+    getActiveThemeBackground: function() {
+      return CONFIG.theme[CONFIG.theme.active].background;
+    }
+  },
+
+  // Theme Configuration
+  theme: {
+    active: 'style-2',  // Active theme: 'style-1' (default) or 'style-2' (season-6)
+    
+    // Style-1: Default/Original Design
+    'style-1': {
+      name: 'Classic Auction',
+      background: './assets/BG.jpg',
+      colors: {
+        primary: '#2196F3',
+        secondary: '#1976D2',
+        accent: '#1565C0',
+        success: '#4CAF50',
+        warning: '#ff9800',
+        danger: '#f44336',
+        text: '#ffffff',
+        textSecondary: '#aaa'
+      },
+      animations: {
+        enabled: false,
+        cornerGifs: null,
+        waveGifs: null
+      },
+      table: {
+        headerGradient: 'linear-gradient(135deg, #2196F3 0%, #1976D2 100%)',
+        rowBackground: 'rgba(255, 255, 255, 0.03)',
+        rowBackgroundHover: 'rgba(33, 150, 243, 0.1)',
+        borderColor: 'rgba(255, 255, 255, 0.1)'
+      }
+    },
+    
+    // Style-2: Season 6 Themed Design
+    'style-2': {
+      name: 'BCC Season 6',
+      background: './assets/BG-1.jpg',
+      seasonLogo: './assets/BCC Season 6.jpg',
+      colors: {
+        primary: '#FFD700',      // Gold for season 6
+        secondary: '#FF6B35',    // Orange accent
+        accent: '#C41E3A',       // Deep red
+        success: '#00D084',
+        warning: '#FF9F1C',
+        danger: '#E63946',
+        text: '#ffffff',
+        textSecondary: '#d4af37'
+      },
+      animations: {
+        enabled: true,
+        cornerGifs: {
+          leftTop: './assets/extras/left-top-right-bottom-corner.gif',
+          rightTop: './assets/extras/bottom-wave-top-right.gif',
+          leftBottom: './assets/extras/left-bottom-right-top-corner.gif',
+          rightBottom: './assets/extras/arrow-movements-gif.gif'
+        },
+        waveGifs: {
+          topRight: './assets/extras/bottom-wave-top-right.gif',
+          arrows: './assets/extras/arrow-movements-gif.gif'
+        }
+      },
+      table: {
+        headerGradient: 'linear-gradient(135deg, #FFD700 0%, #FF6B35 50%, #C41E3A 100%)',
+        rowBackground: 'rgba(255, 215, 0, 0.05)',
+        rowBackgroundHover: 'rgba(255, 107, 53, 0.2)',
+        borderColor: 'rgba(255, 215, 0, 0.2)',
+        glowEffect: '0 0 20px rgba(255, 215, 0, 0.3)'
+      }
+    }
   },
   
   // UI/UX Settings
@@ -312,3 +384,14 @@ Object.freeze(CONFIG.columnMappings);
 Object.freeze(CONFIG.columnMappings.players);
 Object.freeze(CONFIG.columnMappings.teams);
 Object.freeze(CONFIG.columnMappings.soldPlayers);
+// Freeze theme configuration for safety
+Object.freeze(CONFIG.theme);
+Object.freeze(CONFIG.theme['style-1']);
+Object.freeze(CONFIG.theme['style-1'].colors);
+Object.freeze(CONFIG.theme['style-1'].animations || {});
+Object.freeze(CONFIG.theme['style-1'].table);
+Object.freeze(CONFIG.theme['style-2']);
+Object.freeze(CONFIG.theme['style-2'].colors);
+Object.freeze(CONFIG.theme['style-2'].animations);
+Object.freeze(CONFIG.theme['style-2'].animations.cornerGifs);
+Object.freeze(CONFIG.theme['style-2'].table);
