@@ -1,0 +1,10 @@
+{
+  "name": "auctionApp",
+  "private": true,
+  "scripts": {
+    "dev": "npm --prefix react-auction-app run dev --",
+    "build": "npm --prefix react-auction-app run build --",
+    "lint": "npm --prefix react-auction-app run lint --",
+    "preview": "npm --prefix react-auction-app run preview --"
+  }
+}

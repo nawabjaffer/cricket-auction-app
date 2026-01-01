@@ -135,6 +135,16 @@ export const defaultConfig: AppConfig = {
     'style-2': season6Theme,
   },
   ui: {
+    teamColors: {
+      'Team A': { primary: '#3b82f6', secondary: '#06b6d4' }, // Blue/Cyan (Fauget style)
+      'Team B': { primary: '#ef4444', secondary: '#f97316' }, // Red/Orange
+      'Team C': { primary: '#eab308', secondary: '#84cc16' }, // Yellow/Lime
+      'Team D': { primary: '#a855f7', secondary: '#d946ef' }, // Purple/Pink
+      'Team E': { primary: '#ec4899', secondary: '#f43f5e' }, // Pink/Rose
+      'Team F': { primary: '#14b8a6', secondary: '#22c55e' }, // Teal/Green
+      'Team G': { primary: '#6366f1', secondary: '#8b5cf6' }, // Indigo/Violet
+      'Team H': { primary: '#f59e0b', secondary: '#d97706' }, // Amber
+    },
     animations: {
       soldOverlay: {
         showDelay: 50,

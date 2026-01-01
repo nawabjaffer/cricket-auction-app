@@ -133,6 +133,7 @@ interface UISlice {
   isLoading: boolean;
   error: Error | null;
   activeOverlay: OverlayType;
+  viewingTeamId: string | null;
   notifications: Notification[];
   showHeader: boolean;
   showTeamPanel: boolean;
@@ -142,6 +143,7 @@ interface UISlice {
   setLoading: (loading: boolean) => void;
   setError: (error: Error | null) => void;
   setOverlay: (overlay: OverlayType) => void;
+  setViewingTeamId: (id: string | null) => void;
   toggleHeader: () => void;
   toggleTeamPanel: () => void;
   setTheme: (theme: ThemeMode) => void;
@@ -589,6 +591,7 @@ const createUISlice: StateCreator<
   isLoading: false,
   error: null,
   activeOverlay: null,
+  viewingTeamId: null,
   notifications: [],
   showHeader: false,
   showTeamPanel: false,
@@ -608,6 +611,11 @@ const createUISlice: StateCreator<
   setOverlay: (overlay) =>
     set((state) => {
       state.activeOverlay = overlay;
+    }),
+
+  setViewingTeamId: (id) =>
+    set((state) => {
+      state.viewingTeamId = id;
     }),
 
   toggleHeader: () =>

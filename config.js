@@ -119,7 +119,7 @@ const CONFIG = {
     'style-2': {
       name: 'BCC Season 6',
       background: './assets/BG-1.jpg',
-      seasonLogo: './assets/BCC Season 6.jpg',
+      seasonLogo: './assets/BCC_Logo.png',
       colors: {
         primary: '#FFD700',      // Gold for season 6
         secondary: '#FF6B35',    // Orange accent

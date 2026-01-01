@@ -127,7 +127,10 @@ class GoogleSheetsService {
 
       const cols = this.columnMappings.players;
       
-      return data.values
+      // Skip header row
+      const playerRows = data.values.slice(1);
+
+      return playerRows
         .map((row: string[], index: number): Player | null => {
           // Skip if no base price
           if (!row[cols.basePrice] || row[cols.basePrice].trim() === '' || row[cols.basePrice].trim() === 'N/A') {
@@ -179,16 +182,22 @@ class GoogleSheetsService {
 
       const cols = this.columnMappings.teams;
 
-      return data.values.map((row: string[], index: number): Team => {
+      // Skip header row
+      const teamRows = data.values.slice(1);
+
+      return teamRows.map((row: string[], index: number): Team => {
         const totalPlayerThreshold = Number.parseInt(row[cols.totalPlayerThreshold], 10) || 11;
         const playersBought = Number.parseInt(row[cols.playersBought], 10) || 0;
 
         const name = row[cols.name] || `Team ${index + 1}`;
+        const colors = activeConfig.ui.teamColors?.[name] || { primary: '#3b82f6', secondary: '#06b6d4' };
 
         return {
           id: name,
           name,
           logoUrl: row[cols.logoUrl] || '',
+          primaryColor: colors.primary,
+          secondaryColor: colors.secondary,
           playersBought,
           totalPlayerThreshold,
           remainingPlayers: totalPlayerThreshold - playersBought,
@@ -244,6 +253,7 @@ class GoogleSheetsService {
             basePrice: Number.parseFloat(row[cols.basePrice]) || 0,
             soldAmount: Number.parseFloat(row[cols.soldAmount]) || 0,
             teamName: row[cols.teamName] || '',
+            teamId: row[cols.teamName] || '',
             soldDate: new Date().toISOString(),
           });
         }

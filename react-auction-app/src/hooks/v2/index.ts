@@ -173,6 +173,14 @@ export function useKeyboardShortcutsV2(options: KeyboardOptions = {}) {
   
   const auction = useAuctionV2();
   const store = useAuctionStoreV2();
+  const lastTPressTime = useRef<number>(0);
+  const lastSlashPressTime = useRef<number>(0);
+
+  // Log initial state for debugging
+  useEffect(() => {
+    const state = useAuctionStoreV2.getState();
+    console.log('[KeyboardHook] Initialized. Teams available:', state.teams.length, 'Teams:', state.teams);
+  }, []);
 
   const computeNextBidAmount = useCallback((currentBid: number, multiplier: number) => {
     let increment = 0.1;
@@ -193,13 +201,81 @@ export function useKeyboardShortcutsV2(options: KeyboardOptions = {}) {
       }
 
       const key = e.key.toLowerCase();
+      const code = e.code;
+      console.log('[KeyDown] Raw key:', e.key, 'Lowercase key:', key, 'Code:', code, 'Key length:', e.key.length);
+
+      // Direct team overlay shortcuts: ] [ p o = teams 1-4
+      const teamShortcuts: Record<string, number> = {
+        ']': 0, // Team 1
+        '[': 1, // Team 2
+        'p': 2, // Team 3
+        'o': 3, // Team 4
+      };
+
+      if (teamShortcuts.hasOwnProperty(key)) {
+        const teamIndex = teamShortcuts[key];
+        const state = useAuctionStoreV2.getState();
+        const team = state.teams[teamIndex];
+        
+        if (team) {
+          console.log(`[Shortcut] Opening team overlay for ${team.name} (key: ${key})`);
+          state.setViewingTeamId(team.id);
+          state.setOverlay('team_squad');
+        }
+        return;
+      }
+
+      // Handle 't' for Team Squad Mode (T + 1..8)
+      if (key === 't') {
+        lastTPressTime.current = Date.now();
+        return;
+      }
+
+      // Handle '/' for Team Squad Mode (/ + 1..8)
+      // The '/' key may come as 'Slash' on some keyboards or as '/' directly
+      if (key === '/' || key === 'slash' || e.code === 'Slash') {
+        lastSlashPressTime.current = Date.now();
+        console.log('[Shortcut] / pressed, ready for team number');
+        e.preventDefault(); // Prevent browser search
+        return;
+      }
 
       // Team bid (1-8) - increments bid and records bid for that team
       if (/^[1-8]$/.test(key)) {
         const teamIndex = Number.parseInt(key, 10) - 1;
         const state = useAuctionStoreV2.getState();
         const team = state.teams[teamIndex];
-        if (!team || !state.currentPlayer) return;
+        
+        if (!team) {
+          console.log(`[Shortcut] Team not found at index ${teamIndex}, teams available: ${state.teams.length}`);
+          return;
+        }
+
+        const timeSinceSlash = Date.now() - lastSlashPressTime.current;
+        const timeSinceT = Date.now() - lastTPressTime.current;
+        const isSlashSequence = timeSinceSlash < 1000 && timeSinceSlash > 0;
+        const isTSequence = timeSinceT < 1000 && timeSinceT > 0;
+        
+        console.log(`[Shortcut] Key ${key} pressed. Slash timing: ${timeSinceSlash}ms, T timing: ${timeSinceT}ms, isSlash: ${isSlashSequence}, isT: ${isTSequence}`);
+
+        // Team Squad View (/ + 1-8 OR T then 1-8)
+        if (isSlashSequence || isTSequence) {
+            console.log(`[Shortcut] Opening team overlay for ${team.name}`);
+            state.setViewingTeamId(team.id);
+            state.setOverlay('team_squad');
+            lastSlashPressTime.current = 0;
+            lastTPressTime.current = 0;
+            return;
+        }
+        
+        // Reset timers
+        lastSlashPressTime.current = 0;
+        lastTPressTime.current = 0;
+
+        if (!state.currentPlayer) {
+          console.log('[Shortcut] No current player for bidding');
+          return;
+        }
 
         const nextBid = computeNextBidAmount(state.currentBid, state.bidMultiplier);
         const maxBid = state.getMaxBidForTeam(team);
@@ -208,6 +284,7 @@ export function useKeyboardShortcutsV2(options: KeyboardOptions = {}) {
           return;
         }
 
+        console.log(`[Shortcut] Placing bid for ${team.name} at ₹${nextBid}L`);
         state.selectTeam(team);
         state.placeBid(team.id, team.name, nextBid);
         state.recordAction({ type: 'BID_PLACED', payload: { bid: { teamId: team.id, amount: nextBid } } });
@@ -260,7 +337,13 @@ export function useKeyboardShortcutsV2(options: KeyboardOptions = {}) {
           break;
         case 'escape':
           onEscape?.();
-          auction.closeOverlay();
+          // If viewing team squad, just close the overlay. Otherwise do full close.
+          if (store.activeOverlay === 'team_squad') {
+            store.setOverlay(null);
+            store.setViewingTeamId(null);
+          } else {
+            auction.closeOverlay();
+          }
           break;
         case ' ':
           e.preventDefault();

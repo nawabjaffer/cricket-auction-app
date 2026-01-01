@@ -3,10 +3,11 @@
 // Complete rewrite with modern patterns and improved UX
 // ============================================================================
 
-import React, { useState, useMemo, useRef } from 'react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
+import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query';
 import { AnimatePresence, motion } from 'framer-motion';
 import { clsx } from 'clsx';
+import { googleSheetsService } from './services';
 
 // V2 Components
 import { Button, Card, Kbd, Badge, Modal } from './components/v2/ui';
@@ -24,6 +25,7 @@ import {
   EndOverlay, 
   NotificationContainer,
 } from './components/v2/Overlays';
+import { TeamSquadOverlay } from './components/v2/Overlays/TeamSquadOverlay';
 
 // V2 Hooks
 import { 
@@ -80,6 +82,43 @@ function AuctionAppV2() {
   const { theme, setTheme, isDark } = useThemeV2();
   const { notifications, dismiss: dismissNotification } = useNotificationV2();
   const store = useAuctionStoreV2();
+
+  // Load teams data for V2
+  const teamsQuery = useQuery({
+    queryKey: ['teams-v2'],
+    queryFn: async () => {
+      const teams = await googleSheetsService.fetchTeams();
+      console.log('[AppV2] Fetched teams:', teams);
+      // Convert V1 Team to V2 Team format
+      return teams.map(team => ({
+        id: team.id,
+        name: team.name,
+        logoUrl: team.logoUrl,
+        shortName: team.name.substring(0, 3).toUpperCase(),
+        primaryColor: team.primaryColor || '#3b82f6',
+        secondaryColor: team.secondaryColor || '#06b6d4',
+        config: {
+          maxPlayers: 11,
+          minPlayers: 1,
+          maxUnderAge: 2,
+          underAgeThreshold: 18,
+          totalBudget: team.allocatedAmount || 100000,
+        },
+        captain: team.captain || '',
+        players: [] as any[],
+        remainingBudget: team.remainingPurse || (team.allocatedAmount || 100000),
+        isEligible: true,
+      }));
+    },
+    staleTime: 60000,
+  });
+
+  useEffect(() => {
+    if (teamsQuery.data) {
+      console.log('[AppV2] Loading teams:', teamsQuery.data);
+      store.setTeams(teamsQuery.data);
+    }
+  }, [teamsQuery.data, store]);
 
   // Keyboard shortcuts
   useKeyboardShortcutsV2({
@@ -428,6 +467,7 @@ function AuctionAppV2() {
         hasUnsoldPlayers={auction.unsoldPlayers.some(p => p.canRetry)}
         stats={stats}
       />
+      <TeamSquadOverlay />
 
       {/* Help Modal */}
       <HelpModal isOpen={showHelpModal} onClose={() => setShowHelpModal(false)} />

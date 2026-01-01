@@ -100,6 +100,7 @@ export interface Team {
   readonly primaryColor: string;
   readonly secondaryColor: string;
   readonly config: TeamConfig;
+  readonly captain: string;
   // Dynamic state
   players: SoldPlayer[];
   remainingBudget: number;
@@ -192,6 +193,7 @@ export const OverlayTypes = {
   UNSOLD: 'unsold',
   END: 'end',
   TEAM_VIEW: 'team_view',
+  TEAM_SQUAD: 'team_squad',
   SETTINGS: 'settings',
   HELP: 'help',
 } as const;
@@ -221,6 +223,7 @@ export interface UIState {
   readonly isLoading: boolean;
   readonly error: Error | null;
   readonly activeOverlay: OverlayType;
+  readonly viewingTeamId: string | null;
   readonly notifications: Notification[];
   readonly showHeader: boolean;
   readonly showTeamPanel: boolean;

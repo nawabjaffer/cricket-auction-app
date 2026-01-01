@@ -4,6 +4,7 @@
 // ============================================================================
 
 import { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AnimatePresence, motion } from 'framer-motion';
 import { 
@@ -62,6 +63,8 @@ function AuctionApp() {
   const [showTeamOverlay, setShowTeamOverlay] = useState(false);
   const [showHeader, setShowHeader] = useState(false);
   const [bidMultiplier, setBidMultiplier] = useState(1);
+  const [showTeamSquadView, setShowTeamSquadView] = useState(false);
+  const [selectedTeamForSquad, setSelectedTeamForSquad] = useState<string>('');
 
   // Initialize theme and audio
   const { currentTheme } = useTheme();
@@ -79,6 +82,15 @@ function AuctionApp() {
   const soldPlayers = useSoldPlayers();
   const allTeams = useTeams();
 
+  // Handle team squad view
+  const handleTeamSquadView = (teamId: string) => {
+    console.log('[V1 App] handleTeamSquadView called with teamId:', teamId);
+    console.log('[V1 App] allTeams.length:', allTeams.length);
+    console.log('[V1 App] Setting state - showTeamSquadView: true, selectedTeamForSquad:', teamId);
+    setSelectedTeamForSquad(teamId);
+    setShowTeamSquadView(true);
+  };
+
   // Keyboard shortcuts with team overlay toggle
   useKeyboardShortcuts({ 
     enabled: !showCoinJar,
@@ -86,6 +98,7 @@ function AuctionApp() {
     onEscape: () => setShowTeamOverlay(false),
     onHeaderToggle: () => setShowHeader(prev => !prev),
     onBidMultiplierChange: (multiplier) => setBidMultiplier(multiplier),
+    onTeamSquadView: handleTeamSquadView,
   });
 
   // Initialize audio service
@@ -268,7 +281,7 @@ function AuctionApp() {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
             >
-              <div className="empty-title">No Player Selected</div>
+              <div className="empty-title">Welcome to BCC Auctions</div>
               <div className="empty-hint">Press <kbd>N</kbd> for next player</div>
             </motion.div>
           )}
@@ -560,6 +573,23 @@ function AuctionApp() {
         <HelpModal onClose={() => setShowHelpModal(false)} />
       )}
 
+      {/* Team Squad View Modal (V1) - rendered as portal to escape overflow constraints */}
+      {showTeamSquadView && selectedTeamForSquad && createPortal(
+        <>
+          {console.log('[V1 App Render] Rendering TeamSquadViewModal - showTeamSquadView:', showTeamSquadView, 'selectedTeamForSquad:', selectedTeamForSquad)}
+          <TeamSquadViewModal 
+            teamId={selectedTeamForSquad}
+            teams={allTeams}
+            soldPlayers={soldPlayers}
+            onClose={() => {
+              setShowTeamSquadView(false);
+              setSelectedTeamForSquad('');
+            }}
+          />
+        </>,
+        document.body
+      )}
+
       {/* Notifications */}
       <NotificationContainer 
         notification={notification} 
@@ -643,6 +673,157 @@ function HelpModal({ onClose }: { onClose: () => void }) {
         >
           Got it!
         </button>
+      </div>
+    </div>
+  );
+}
+
+// V1 Team Squad View Modal Component
+interface TeamSquadViewModalProps {
+  teamId: string;
+  teams: any[];
+  soldPlayers: any[];
+  onClose: () => void;
+}
+
+function TeamSquadViewModal({ teamId, teams, soldPlayers, onClose }: TeamSquadViewModalProps) {
+  const team = teams.find(t => t.id === teamId);
+  
+  console.log('[V1 TeamSquadViewModal] Rendering - teamId:', teamId, 'team:', team, 'teams available:', teams.length);
+  
+  if (!team) {
+    console.log('[V1 TeamSquadViewModal] Team not found!');
+    return null;
+  }
+
+  const teamPlayers = soldPlayers.filter(p => p.teamName === team.name);
+  console.log('[V1 TeamSquadViewModal] Rendering modal for:', team.name, 'players:', teamPlayers.length);
+  
+  // Handle ESC key to close modal
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' || e.key === 'Esc') {
+        console.log('[V1 TeamSquadViewModal] ESC pressed, closing modal');
+        onClose();
+      }
+    };
+    
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
+  
+  // Set up colors first
+  const primaryColor = team.primaryColor || '#3b82f6';
+  const secondaryColor = team.secondaryColor || '#06b6d4';
+  
+  // Use player placeholder image from assets
+  const placeholderImage = '/assets/man.jpg';
+
+  
+  let captainImage = placeholderImage;
+  if (team.captain) {
+    const captain = soldPlayers.find(p => p.name.toLowerCase() === team.captain.toLowerCase());
+    if (captain?.imageUrl) {
+      captainImage = captain.imageUrl;
+    }
+  }
+  
+  const midPoint = Math.ceil(teamPlayers.length / 2);
+  const leftColumn = teamPlayers.slice(0, midPoint);
+  const rightColumn = teamPlayers.slice(midPoint);
+  const backgroundStyle = {
+    background: `linear-gradient(135deg, ${primaryColor} 0%, ${secondaryColor} 100%)`,
+  };
+
+  return (
+    <div 
+      className="fixed inset-0 z-[9999] flex items-center justify-center overflow-hidden pointer-events-auto"
+      style={{
+        ...backgroundStyle,
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        zIndex: 9999,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}
+      onClick={onClose}
+    >
+      {/* Decorative Elements */}
+      <div className="absolute top-0 right-0 p-10 opacity-20">
+        <svg width="200" height="200" viewBox="0 0 100 100" fill="white">
+          <path d="M0 0 L50 0 L25 50 Z" />
+          <path d="M50 0 L100 0 L75 50 Z" />
+          <path d="M25 50 L75 50 L50 100 Z" />
+        </svg>
+      </div>
+
+      <div className="container mx-auto px-8 flex flex-row items-center justify-between h-full relative z-10" onClick={e => e.stopPropagation()}>
+        {/* Left Side: Info */}
+        <div className="flex-1 flex flex-col justify-center h-full pt-20 pb-20">
+          <div>
+            <h1 className="text-8xl font-black text-white uppercase leading-none tracking-tighter mb-2">
+              {team.name}
+            </h1>
+            <h2 className="text-6xl font-bold text-white/90 uppercase tracking-widest mb-8">
+              SQUAD
+            </h2>
+            <div className="w-32 h-2 bg-white mb-12" />
+          </div>
+
+          <div className="flex flex-row gap-16">
+            {/* Column 1 */}
+            <div className="flex flex-col gap-4">
+              {leftColumn.map((player) => (
+                <div key={player.id} className="border-b-2 border-white/30 pb-1">
+                  <span className="text-2xl font-bold text-white uppercase tracking-wide">
+                    {player.name}
+                  </span>
+                </div>
+              ))}
+              {leftColumn.length === 0 && (
+                <span className="text-white/50 text-xl italic">No players yet</span>
+              )}
+            </div>
+
+            {/* Column 2 */}
+            <div className="flex flex-col gap-4">
+              {rightColumn.map((player) => (
+                <div key={player.id} className="border-b-2 border-white/30 pb-1">
+                  <span className="text-2xl font-bold text-white uppercase tracking-wide">
+                    {player.name}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Right Side: Captain Image */}
+        <div className="flex-1 h-full flex items-end justify-end relative">
+          <div className="h-[90%] w-full relative">
+            {/* Image Container */}
+            <img 
+              src={captainImage} 
+              alt="Captain" 
+              className="absolute bottom-0 right-0 max-h-full object-contain drop-shadow-2xl"
+              style={{ filter: 'drop-shadow(0 0 20px rgba(0,0,0,0.3))' }}
+              onError={(e) => {
+                console.log('[V1 TeamSquadViewModal] Image failed to load:', captainImage);
+                // Fallback to placeholder on error
+                (e.target as HTMLImageElement).src = placeholderImage;
+              }}
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Close Hint */}
+      <div className="absolute bottom-8 left-8 text-white/60">
+        Press <span className="px-2 py-1 bg-white/20 rounded font-mono text-sm">ESC</span> to close
       </div>
     </div>
   );

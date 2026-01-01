@@ -3,7 +3,7 @@
 // Handles keyboard shortcuts for auction operations
 // ============================================================================
 
-import { useEffect, useCallback, useState } from 'react';
+import { useEffect, useCallback, useState, useRef } from 'react';
 import { activeConfig } from '../config';
 import { useAuction } from './useAuction';
 
@@ -14,6 +14,7 @@ interface KeyboardShortcutOptions {
   onEscape?: () => void;
   onHeaderToggle?: () => void;
   onBidMultiplierChange?: (multiplier: number) => void;
+  onTeamSquadView?: (teamId: string) => void;
 }
 
 // Global bid multiplier state (1 = 100, 2 = 200, etc.)
@@ -23,8 +24,9 @@ let bidMultiplier = 1;
  * Hook for managing keyboard shortcuts
  */
 export function useKeyboardShortcuts(options: KeyboardShortcutOptions = {}) {
-  const { enabled = true, onCustomAction, onViewToggle, onEscape, onHeaderToggle, onBidMultiplierChange } = options;
+  const { enabled = true, onCustomAction, onViewToggle, onEscape, onHeaderToggle, onBidMultiplierChange, onTeamSquadView } = options;
   const [currentMultiplier, setCurrentMultiplier] = useState(1);
+  const lastSlashPressTime = useRef<number>(0);
   
   const auction = useAuction();
   const hotkeys = activeConfig.hotkeys;
@@ -43,7 +45,74 @@ export function useKeyboardShortcuts(options: KeyboardShortcutOptions = {}) {
 
     const key = event.key.toLowerCase();
 
-    // Q key - Increase bid multiplier by 1 (adds +100 to bid increment)
+    // Direct team shortcuts: ], [, p, o for teams 1, 2, 3, 4
+    const teamShortcuts: Record<string, number> = {
+      ']': 0, // Team 1
+      '[': 1, // Team 2
+      'p': 2, // Team 3
+      'o': 3, // Team 4
+    };
+
+    if (teamShortcuts.hasOwnProperty(key)) {
+      event.preventDefault();
+      const teamIndex = teamShortcuts[key];
+      const teams = auction.getEligibleTeams();
+      
+      if (teamIndex < teams.length) {
+        console.log(`[V1 Shortcut] Direct team shortcut: opening ${teams[teamIndex].name} (key: ${key})`);
+        console.log('[V1 Shortcut] Calling onTeamSquadView with teamId:', teams[teamIndex].id);
+        if (onTeamSquadView) {
+          onTeamSquadView(teams[teamIndex].id);
+        } else {
+          console.log('[V1 Shortcut] onTeamSquadView is not defined!');
+        }
+      } else {
+        console.log('[V1 Shortcut] teamIndex', teamIndex, 'out of range, teams.length:', teams.length);
+      }
+      return;
+    }
+
+    // Handle '/' for Team Squad Mode (/ + 1..8)
+    if (key === '/' || key === 'slash' || event.code === 'Slash') {
+      event.preventDefault();
+      lastSlashPressTime.current = Date.now();
+      console.log('[V1 Shortcut] / pressed, ready for team number');
+      return;
+    }
+
+    // Number keys 1-8 for team bidding - increases bid by 100 * multiplier
+    if (/^[1-8]$/.test(key)) {
+      const teamIndex = parseInt(key) - 1;
+      const teams = auction.getEligibleTeams();
+      
+      // Check if this is a team squad view shortcut (/ + 1-8)
+      const timeSinceSlash = Date.now() - lastSlashPressTime.current;
+      const isSlashSequence = timeSinceSlash < 1000 && timeSinceSlash > 0;
+      
+      console.log(`[V1 Shortcut] Key ${key} pressed. Slash timing: ${timeSinceSlash}ms, isSlash: ${isSlashSequence}`);
+
+      if (isSlashSequence && teamIndex < teams.length) {
+        console.log(`[V1 Shortcut] Opening team squad view for team: ${teams[teamIndex].name}`);
+        lastSlashPressTime.current = 0;
+        if (onTeamSquadView) {
+          onTeamSquadView(teams[teamIndex].id);
+        }
+        return;
+      }
+
+      // Regular team bidding
+      lastSlashPressTime.current = 0;
+      event.preventDefault();
+      if (teamIndex < teams.length) {
+        // Select the team
+        auction.selectTeam(teams[teamIndex]);
+        // Increment bid by multiplier amount (each increment = 0.1L)
+        for (let i = 0; i < bidMultiplier; i++) {
+          auction.incrementBid();
+        }
+      }
+      return;
+    }
     if (key === 'q') {
       event.preventDefault();
       bidMultiplier = Math.min(bidMultiplier + 1, 10); // Max 10x (1000)
@@ -154,21 +223,6 @@ export function useKeyboardShortcuts(options: KeyboardShortcutOptions = {}) {
       return;
     }
 
-    // Number keys 1-8 for team bidding - increases bid by 100 * multiplier
-    if (/^[1-8]$/.test(key)) {
-      event.preventDefault();
-      const teams = auction.getEligibleTeams();
-      const teamIndex = parseInt(key) - 1;
-      if (teamIndex < teams.length) {
-        // Select the team
-        auction.selectTeam(teams[teamIndex]);
-        // Increment bid by multiplier amount (each increment = 0.1L)
-        for (let i = 0; i < bidMultiplier; i++) {
-          auction.incrementBid();
-        }
-      }
-      return;
-    }
 
     // Custom action handler
     if (onCustomAction) {

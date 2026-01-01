@@ -31,6 +31,7 @@ export type PlayerRole =
 export interface SoldPlayer extends Player {
   soldAmount: number;
   teamName: string;
+  teamId?: string;
   soldDate: string;
 }
 
@@ -52,6 +53,8 @@ export interface Team {
   highestBid: number;
   captain: string;
   underAgePlayers: number;
+  primaryColor?: string;
+  secondaryColor?: string;
 }
 
 export interface TeamStats {
@@ -296,6 +299,7 @@ export interface UIConfig {
   breakpoints: BreakpointsConfig;
   teamSlotsGrid: TeamSlotsGridConfig;
   teamStatsThresholds: TeamStatsThresholdsConfig;
+  teamColors?: Record<string, { primary: string; secondary: string }>;
 }
 
 export interface TeamSlotsConfig {
