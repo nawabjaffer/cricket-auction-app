@@ -7,10 +7,9 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useAuction } from '../../hooks';
 
 interface BidDisplayProps {
-  showControls?: boolean;
 }
 
-export function BidDisplay({ showControls = true }: BidDisplayProps) {
+export function BidDisplay({}: BidDisplayProps) {
   const { 
     currentBid, 
     previousBid, 

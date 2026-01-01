@@ -8,7 +8,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { clsx } from 'clsx';
 import { Button, Card, AnimatedNumber, Kbd } from './ui';
 import { RoleIcon } from './PlayerCard';
-import type { SoldPlayer, UnsoldPlayer, Player } from '../../types/v2';
+import type { SoldPlayer, UnsoldPlayer } from '../../types/v2';
 
 // ============================================================================
 // BASE OVERLAY WRAPPER

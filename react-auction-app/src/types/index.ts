@@ -41,6 +41,7 @@ export interface UnsoldPlayer extends Player {
 
 // Team Types
 export interface Team {
+  id: string;
   name: string;
   logoUrl: string;
   playersBought: number;

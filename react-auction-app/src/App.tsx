@@ -15,9 +15,8 @@ import {
   IoStar,
   IoPerson,
 } from 'react-icons/io5';
-import { 
-  Header, 
-  TeamSelector,
+import {
+  Header,
   SoldOverlay,
   UnsoldOverlay,
   EndOverlay,
@@ -129,6 +128,32 @@ function AuctionApp() {
           : undefined,
       }}
     >
+      {/* Single full-screen GIF (in front of background, behind UI) */}
+      <div className="corner-gifs" aria-hidden>
+        <img
+          loading="lazy"
+          src="/extras/left-top-right-bottom-corner.gif"
+          alt=""
+          className="corner-gif fullscreen"
+          onError={(e) => {
+            (e.currentTarget as HTMLImageElement).style.display = 'none';
+          }}
+        />
+
+        <img
+          loading="lazy"
+          src="/extras/left-bottom-right-top-corner.gif"
+          alt=""
+          className="corner-gif fullscreen"
+          onError={(e) => {
+            (e.currentTarget as HTMLImageElement).style.display = 'none';
+          }}
+        />
+      </div>
+
+      {/* Full-screen neon light bands (top + bottom) */}
+      <div className="screen-neon-bands" aria-hidden />
+
       {showHeader && (
         <Header 
           onRefresh={refreshAll} 
@@ -159,7 +184,7 @@ function AuctionApp() {
                 }}
                 transition={{ duration: 0.5, ease: [0.32, 0.72, 0, 1] }}
               >
-                <img src="/assets/BCC Season 6.jpg" alt="BCC" className="club-logo" />
+                <img src="/assets/BCC Season 6.png" alt="BCC" className="club-logo" />
                 <span>Brother Cricket Club</span>
               </motion.div>
               <motion.div 
@@ -175,11 +200,22 @@ function AuctionApp() {
                   <span className="neon-player-name">{currentPlayer.name}</span>
                 </div>
                 <span className="neon-role-icon">
-                  {currentPlayer.role === 'Batsman' && <GiCricketBat />}
-                  {currentPlayer.role === 'Bowler' && <IoBaseball />}
-                  {currentPlayer.role === 'All-Rounder' && <IoStar />}
-                  {(currentPlayer.role === 'Wicket-Keeper' || currentPlayer.role === 'Wicket Keeper' || currentPlayer.role === 'Wicket Keeper Batsman') && <GiBaseballGlove />}
-                  {!currentPlayer.role && <IoPerson />}
+                  {(() => {
+                    const roleKey = String(currentPlayer.role ?? '')
+                      .trim()
+                      .toLowerCase()
+                      .replaceAll(' ', '')
+                      .replaceAll('-', '')
+                      .replaceAll('_', '');
+
+                    if (roleKey === 'batsman' || roleKey === 'batter') return <GiCricketBat />;
+                    if (roleKey === 'bowler') return <IoBaseball />;
+                    if (roleKey === 'allrounder' || roleKey === 'allround') return <IoStar />;
+                    if (roleKey.startsWith('wicketkeeper') || roleKey.startsWith('wicketkeeperbatsman') || roleKey === 'wk') {
+                      return <GiBaseballGlove />;
+                    }
+                    return <IoPerson />;
+                  })()}
                 </span>
               </motion.div>
               
@@ -201,7 +237,7 @@ function AuctionApp() {
                   }}
                   transition={{ duration: 0.5, delay: 0.15, ease: [0.32, 0.72, 0, 1] }}
                 >
-                  <span className="role-arrow">▶</span>
+                  <span className="role-arrow">▶▶</span>
                   <span className="role-text">{currentPlayer.role || 'Player'}</span>
                 </motion.div>
                 {statRows.map((row, index) => (

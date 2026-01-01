@@ -290,16 +290,19 @@ export const useAuctionStore = create<AuctionStore>()(
             timestamp: new Date().toISOString(),
           };
 
+          const maxHistory = Math.max(0, Math.floor(activeConfig.auction.undo.historySize || 0));
+          const nextHistory = maxHistory > 0 ? [...bidHistory, newBidEntry].slice(-maxHistory) : [...bidHistory, newBidEntry];
+
           set({
             previousBid: currentBid,
             currentBid: amount,
             selectedTeam: team,
-            bidHistory: [...bidHistory, newBidEntry],
+            bidHistory: nextHistory,
             auctionState: {
               ...get().auctionState,
               currentBid: amount,
               selectedTeam: team,
-              bidHistory: [...bidHistory, newBidEntry],
+              bidHistory: nextHistory,
             },
           });
 
@@ -334,14 +337,17 @@ export const useAuctionStore = create<AuctionStore>()(
               timestamp: new Date().toISOString(),
             };
 
+            const maxHistory = Math.max(0, Math.floor(activeConfig.auction.undo.historySize || 0));
+            const nextHistory = maxHistory > 0 ? [...bidHistory, newBidEntry].slice(-maxHistory) : [...bidHistory, newBidEntry];
+
             set({
               previousBid: currentBid,
               currentBid: newBid,
-              bidHistory: [...bidHistory, newBidEntry],
+              bidHistory: nextHistory,
               auctionState: {
                 ...get().auctionState,
                 currentBid: newBid,
-                bidHistory: [...bidHistory, newBidEntry],
+                bidHistory: nextHistory,
               },
             });
           } else {
@@ -358,32 +364,29 @@ export const useAuctionStore = create<AuctionStore>()(
         },
 
         decrementBid: () => {
-          const { currentBid, currentPlayer, bidHistory, teams } = get();
-          const decrement = activeConfig.auction.bidIncrements.default;
+          const { currentPlayer, bidHistory, teams } = get();
           const minBid = currentPlayer?.basePrice || activeConfig.auction.basePrice;
-          const newBid = Math.max(minBid, currentBid - decrement);
 
-          // Pop last bid from history and restore that team
-          let newHistory = [...bidHistory];
+          // True undo: pop last bid entry and restore the previous bid/team.
+          const newHistory = [...bidHistory];
+          if (newHistory.length > 0) newHistory.pop();
+
           let previousTeam = null;
-          
+          let restoredBid = minBid;
           if (newHistory.length > 0) {
-            newHistory.pop(); // Remove the current bid
-            // Get the previous bid's team (if any)
-            if (newHistory.length > 0) {
-              const prevBid = newHistory[newHistory.length - 1];
-              previousTeam = teams.find(t => t.id === prevBid.teamId) || null;
-            }
+            const prevBid = newHistory[newHistory.length - 1];
+            restoredBid = prevBid.amount;
+            previousTeam = teams.find((t) => t.id === prevBid.teamId) || null;
           }
 
           set({
-            previousBid: currentBid,
-            currentBid: newBid,
+            previousBid: get().currentBid,
+            currentBid: restoredBid,
             selectedTeam: previousTeam,
             bidHistory: newHistory,
             auctionState: {
               ...get().auctionState,
-              currentBid: newBid,
+              currentBid: restoredBid,
               selectedTeam: previousTeam,
               bidHistory: newHistory,
             },

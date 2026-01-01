@@ -8,7 +8,7 @@ import { motion } from 'framer-motion';
 import { clsx } from 'clsx';
 import { GiCricketBat, GiBaseballGlove } from 'react-icons/gi';
 import { IoBaseball, IoStar, IoPerson } from 'react-icons/io5';
-import { Card, Badge, Avatar, AnimatedNumber } from './ui';
+import { Card, Avatar, AnimatedNumber } from './ui';
 import type { Player, PlayerRole, SoldPlayer } from '../../types/v2';
 
 // ============================================================================

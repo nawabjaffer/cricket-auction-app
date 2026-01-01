@@ -4,11 +4,11 @@
 // ============================================================================
 
 import React from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { clsx } from 'clsx';
 import { Card, Badge, Progress, AnimatedNumber, Kbd } from './ui';
 import { SoldPlayerCard } from './PlayerCard';
-import type { Team, SoldPlayer } from '../../types/v2';
+import type { Team } from '../../types/v2';
 
 // ============================================================================
 // TEAM CARD COMPONENT

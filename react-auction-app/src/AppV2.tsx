@@ -3,26 +3,19 @@
 // Complete rewrite with modern patterns and improved UX
 // ============================================================================
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AnimatePresence, motion } from 'framer-motion';
 import { clsx } from 'clsx';
 
 // V2 Components
-import { Button, Card, Spinner, Kbd, Badge, Modal } from './components/v2/ui';
+import { Button, Card, Kbd, Badge, Modal } from './components/v2/ui';
 import { 
-  PlayerCard, 
-  PlayerHero, 
   RoleIcon, 
   RoleBadge, 
-  CompactPlayerCard,
-  SoldPlayerCard,
 } from './components/v2/PlayerCard';
 import { 
-  TeamCard, 
   TeamSelector, 
-  TeamPanel, 
-  TeamTabs, 
   TeamBidOverlay,
 } from './components/v2/TeamComponents';
 import { 
@@ -37,7 +30,6 @@ import {
   useAuctionV2, 
   useKeyboardShortcutsV2, 
   usePlayerStats,
-  useTeamStats,
   useNotificationV2,
   useThemeV2,
   useHotkeyHelpV2,
@@ -48,7 +40,7 @@ import { useAuctionStoreV2 } from './store/v2/auctionStoreV2';
 
 // Icons
 import { GiCricketBat } from 'react-icons/gi';
-import { IoSettings, IoHelp, IoRefresh, IoSunny, IoMoon } from 'react-icons/io5';
+import { IoHelp, IoRefresh, IoSunny, IoMoon } from 'react-icons/io5';
 
 // Create Query Client
 const queryClient = new QueryClient({
@@ -105,23 +97,38 @@ function AuctionAppV2() {
 
   // Computed values
   const eligibleTeams = useMemo(() => auction.getEligibleTeams(), [auction]);
-  const currentPlayerBiddingTeam = useMemo(() => {
-    if (auction.bidHistory.length === 0) return null;
-    const lastBid = auction.bidHistory[auction.bidHistory.length - 1];
-    return lastBid.isWinning ? lastBid.teamName : null;
-  }, [auction.bidHistory]);
 
   // Get last sold player for overlay
   const lastSoldPlayer = useMemo(() => {
-    if (auction.soldPlayers.length === 0) return undefined;
-    return auction.soldPlayers[auction.soldPlayers.length - 1];
+    return auction.soldPlayers.at(-1);
   }, [auction.soldPlayers]);
 
   // Get last unsold player for overlay
   const lastUnsoldPlayer = useMemo(() => {
-    if (auction.unsoldPlayers.length === 0) return undefined;
-    return auction.unsoldPlayers[auction.unsoldPlayers.length - 1];
+    return auction.unsoldPlayers.at(-1);
   }, [auction.unsoldPlayers]);
+
+  // Local override image for player placeholder (from local drive)
+  const [overrideImage, setOverrideImage] = useState<{ playerId: string; dataUrl: string } | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const currentOverrideImage =
+    overrideImage && auction.currentPlayer?.id && overrideImage.playerId === auction.currentPlayer.id
+      ? overrideImage.dataUrl
+      : null;
+
+  const handlePlayerImageFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (!auction.currentPlayer?.id) return;
+      setOverrideImage(typeof reader.result === 'string'
+        ? { playerId: auction.currentPlayer.id, dataUrl: reader.result }
+        : null);
+    };
+    reader.readAsDataURL(file);
+  };
 
   return (
     <div 
@@ -130,12 +137,28 @@ function AuctionAppV2() {
         'relative overflow-hidden'
       )}
     >
-      {/* Animated Background */}
-      <div className="fixed inset-0 -z-10">
+      {/* Animated Background (back layer) */}
+      <div className="fixed inset-0 z-0" aria-hidden>
         <div className="absolute inset-0 bg-gradient-to-br from-accent/5 via-transparent to-accent/10" />
         <div className="absolute top-0 left-1/4 w-96 h-96 bg-accent/10 rounded-full blur-3xl animate-pulse" />
         <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-purple-500/10 rounded-full blur-3xl animate-pulse delay-1000" />
       </div>
+
+      {/* Corner GIFs (mid layer): in front of background, behind UI */}
+      <div className="corner-gifs fixed inset-0 z-[1]" aria-hidden>
+        <img
+          loading="lazy"
+          src="/extras/left-top-right-bottom-corner.gif"
+          alt=""
+          className="corner-gif fullscreen"
+          onError={(e) => {
+            (e.currentTarget as HTMLImageElement).style.display = 'none';
+          }}
+        />
+      </div>
+
+      {/* Full-screen neon light bands (top + bottom) */}
+      <div className="screen-neon-bands" aria-hidden />
 
       {/* Header */}
       <AnimatePresence>
@@ -172,7 +195,7 @@ function AuctionAppV2() {
                   {/* Club Logo */}
                   <div className="flex items-center gap-3">
                     <img 
-                      src="/assets/BCC Season 6.jpg" 
+                      src="/BCC_Logo.png" 
                       alt="BCC" 
                       className="w-12 h-12 rounded-xl object-cover shadow-lg"
                     />
@@ -290,12 +313,38 @@ function AuctionAppV2() {
                 </div>
 
                 {/* Player Image */}
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  style={{ display: 'none' }}
+                  onChange={handlePlayerImageFile}
+                />
                 <div className="relative w-72 h-72 lg:w-96 lg:h-96 rounded-full overflow-hidden ring-4 ring-accent/30 shadow-2xl">
                   <img
-                    src="/placeholder_player.png"
+                    src={currentOverrideImage || auction.currentPlayer?.imageUrl || '/placeholder_player.png'}
                     alt="Player"
                     className="w-full h-full object-cover"
+                    onError={(e) => { (e.target as HTMLImageElement).src = '/placeholder_player.png'; }}
                   />
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    style={{
+                      position: 'absolute',
+                      bottom: 8,
+                      left: '50%',
+                      transform: 'translateX(-50%)',
+                      padding: '6px 10px',
+                      fontSize: 12,
+                      borderRadius: 8,
+                      background: 'rgba(0,0,0,0.55)',
+                      color: '#fff',
+                      border: 'none',
+                    }}
+                  >
+                    Upload
+                  </button>
                 </div>
 
                 {/* Floating Role Icon */}
@@ -424,7 +473,7 @@ interface HeaderProps {
   onThemeToggle: () => void;
 }
 
-function Header({ onRefresh, onShowHelp, bidMultiplier, theme, onThemeToggle }: HeaderProps) {
+function Header({ onRefresh, onShowHelp, bidMultiplier, theme, onThemeToggle }: Readonly<HeaderProps>) {
   return (
     <motion.header
       className="fixed top-0 inset-x-0 z-50 h-16 bg-surface/80 backdrop-blur-xl border-b border-border"
@@ -467,7 +516,7 @@ interface StatCardProps {
   highlight?: boolean;
 }
 
-function StatCard({ label, value, highlight }: StatCardProps) {
+function StatCard({ label, value, highlight }: Readonly<StatCardProps>) {
   return (
     <div className={clsx(
       'p-4 rounded-xl',
@@ -486,7 +535,7 @@ function StatCard({ label, value, highlight }: StatCardProps) {
 // EMPTY STATE COMPONENT
 // ============================================================================
 
-function EmptyState({ onNext }: { onNext: () => void }) {
+function EmptyState({ onNext }: Readonly<{ onNext: () => void }>) {
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -522,7 +571,7 @@ interface ActionBarProps {
   stats: { total: number; sold: number; unsold: number; available: number };
 }
 
-function ActionBar({ onNext, onSold, onUnsold, onUndo, hasPlayer, hasTeam, stats }: ActionBarProps) {
+function ActionBar({ onNext, onSold, onUnsold, onUndo, hasPlayer, hasTeam, stats }: Readonly<ActionBarProps>) {
   return (
     <div className="sticky bottom-0 bg-surface/90 backdrop-blur-xl border-t border-border">
       <div className="max-w-7xl mx-auto px-6 py-4">
@@ -583,7 +632,7 @@ function ActionBar({ onNext, onSold, onUnsold, onUndo, hasPlayer, hasTeam, stats
 // HELP MODAL COMPONENT
 // ============================================================================
 
-function HelpModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
+function HelpModal({ isOpen, onClose }: Readonly<{ isOpen: boolean; onClose: () => void }>) {
   const shortcuts = useHotkeyHelpV2();
 
   return (

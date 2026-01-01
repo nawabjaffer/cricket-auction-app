@@ -4,8 +4,8 @@
 // ============================================================================
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useAuctionStoreV2 } from '../store/v2/auctionStoreV2';
-import type { Team, AvailablePlayer, NotificationType } from '../types/v2';
+import { useAuctionStoreV2 } from '../../store/v2/auctionStoreV2';
+import type { Team, NotificationType } from '../../types/v2';
 
 // ============================================================================
 // AUCTION OPERATIONS HOOK
@@ -23,14 +23,16 @@ export function useAuctionV2() {
   }, [store]);
 
   const placeBid = useCallback((team: Team) => {
+    // IMPORTANT: `store` here is a snapshot; use getState() for current values in the same tick.
+    const { currentBid } = useAuctionStoreV2.getState();
     const maxBid = store.getMaxBidForTeam(team);
-    if (store.currentBid > maxBid) {
+    if (currentBid > maxBid) {
       store.addNotification('error', 'Invalid Bid', `${team.name} cannot afford this bid`);
       return false;
     }
-    store.placeBid(team.id, team.name, store.currentBid);
+    store.placeBid(team.id, team.name, currentBid);
     store.selectTeam(team);
-    store.recordAction({ type: 'BID_PLACED', payload: { bid: { teamId: team.id, amount: store.currentBid } } });
+    store.recordAction({ type: 'BID_PLACED', payload: { bid: { teamId: team.id, amount: currentBid } } });
     return true;
   }, [store]);
 
@@ -89,10 +91,16 @@ export function useAuctionV2() {
 
   const undoLastAction = useCallback(() => {
     const action = store.undoAction();
-    if (action) {
+    if (!action) return;
+
+    if (action.type === 'BID_PLACED') {
       store.undoLastBid();
       store.addNotification('info', 'Action Undone', `Undid: ${action.type}`);
+      return;
     }
+
+    // Prevent incorrect state changes (previously this always popped bid history)
+    store.addNotification('warning', 'Undo Not Supported', `Cannot undo: ${action.type}`);
   }, [store]);
 
   const closeOverlay = useCallback(() => {
@@ -166,6 +174,15 @@ export function useKeyboardShortcutsV2(options: KeyboardOptions = {}) {
   const auction = useAuctionV2();
   const store = useAuctionStoreV2();
 
+  const computeNextBidAmount = useCallback((currentBid: number, multiplier: number) => {
+    let increment = 0.1;
+    if (currentBid >= 20) increment = 1;
+    else if (currentBid >= 10) increment = 0.5;
+    else if (currentBid >= 5) increment = 0.25;
+
+    return Math.round((currentBid + increment * multiplier) * 100) / 100;
+  }, []);
+
   useEffect(() => {
     if (!enabled) return;
 
@@ -177,13 +194,23 @@ export function useKeyboardShortcutsV2(options: KeyboardOptions = {}) {
 
       const key = e.key.toLowerCase();
 
-      // Team selection (1-8)
+      // Team bid (1-8) - increments bid and records bid for that team
       if (/^[1-8]$/.test(key)) {
-        const teamIndex = parseInt(key, 10) - 1;
-        const teams = store.teams;
-        if (teams[teamIndex]) {
-          auction.placeBid(teams[teamIndex]);
+        const teamIndex = Number.parseInt(key, 10) - 1;
+        const state = useAuctionStoreV2.getState();
+        const team = state.teams[teamIndex];
+        if (!team || !state.currentPlayer) return;
+
+        const nextBid = computeNextBidAmount(state.currentBid, state.bidMultiplier);
+        const maxBid = state.getMaxBidForTeam(team);
+        if (nextBid > maxBid) {
+          state.addNotification('error', 'Invalid Bid', `${team.name} cannot afford ₹${nextBid}L`);
+          return;
         }
+
+        state.selectTeam(team);
+        state.placeBid(team.id, team.name, nextBid);
+        state.recordAction({ type: 'BID_PLACED', payload: { bid: { teamId: team.id, amount: nextBid } } });
         return;
       }
 
@@ -215,11 +242,7 @@ export function useKeyboardShortcutsV2(options: KeyboardOptions = {}) {
           auction.markAsUnsold();
           break;
         case 'z':
-          if (e.ctrlKey || e.metaKey) {
-            auction.undoLastAction();
-          } else {
-            auction.undoLastAction();
-          }
+          auction.undoLastAction();
           break;
         case 'arrowup':
           e.preventDefault();
@@ -248,9 +271,9 @@ export function useKeyboardShortcutsV2(options: KeyboardOptions = {}) {
       }
     };
 
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [enabled, auction, store, onViewToggle, onEscape, onHeaderToggle, onBidMultiplierChange]);
+    globalThis.addEventListener('keydown', handleKeyDown);
+    return () => globalThis.removeEventListener('keydown', handleKeyDown);
+  }, [enabled, auction, store, onViewToggle, onEscape, onHeaderToggle, onBidMultiplierChange, computeNextBidAmount]);
 
   return {
     shortcuts: [
@@ -345,11 +368,11 @@ export function useThemeV2() {
   
   const setTheme = useCallback((theme: 'light' | 'dark' | 'system') => {
     store.setTheme(theme);
-    document.documentElement.setAttribute('data-theme', theme);
+    document.documentElement.dataset.theme = theme;
   }, [store]);
 
   useEffect(() => {
-    document.documentElement.setAttribute('data-theme', store.theme);
+    document.documentElement.dataset.theme = store.theme;
   }, [store.theme]);
 
   return {
@@ -405,7 +428,7 @@ export function useDebounce<T>(value: T, delay: number): T {
 export function useLocalStorage<T>(key: string, initialValue: T): [T, (value: T) => void] {
   const [storedValue, setStoredValue] = useState<T>(() => {
     try {
-      const item = window.localStorage.getItem(key);
+      const item = globalThis.localStorage.getItem(key);
       return item ? JSON.parse(item) : initialValue;
     } catch {
       return initialValue;
@@ -415,7 +438,7 @@ export function useLocalStorage<T>(key: string, initialValue: T): [T, (value: T)
   const setValue = useCallback((value: T) => {
     try {
       setStoredValue(value);
-      window.localStorage.setItem(key, JSON.stringify(value));
+      globalThis.localStorage.setItem(key, JSON.stringify(value));
     } catch (error) {
       console.error('Error saving to localStorage:', error);
     }
@@ -429,10 +452,10 @@ export function useLocalStorage<T>(key: string, initialValue: T): [T, (value: T)
 // ============================================================================
 
 export function useMediaQuery(query: string): boolean {
-  const [matches, setMatches] = useState(() => window.matchMedia(query).matches);
+  const [matches, setMatches] = useState(() => globalThis.matchMedia(query).matches);
 
   useEffect(() => {
-    const mediaQuery = window.matchMedia(query);
+    const mediaQuery = globalThis.matchMedia(query);
     const handler = (event: MediaQueryListEvent) => setMatches(event.matches);
     
     mediaQuery.addEventListener('change', handler);
@@ -447,13 +470,15 @@ export function useMediaQuery(query: string): boolean {
 // ============================================================================
 
 export function usePrevious<T>(value: T): T | undefined {
-  const ref = useRef<T>();
-  
+  const [previous, setPrevious] = useState<T | undefined>(undefined);
+  const currentRef = useRef<T>(value);
+
   useEffect(() => {
-    ref.current = value;
+    setPrevious(currentRef.current);
+    currentRef.current = value;
   }, [value]);
 
-  return ref.current;
+  return previous;
 }
 
 // ============================================================================

@@ -74,6 +74,135 @@ body {
   z-index: -1;
 }
 
+/* Corner GIFs - Symmetrical placement at all four corners */
+.corner-gifs {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1; /* sit below main content but above base background */
+  overflow: hidden;
+}
+.corner-gif {
+  position: absolute;
+  width: 50vw;
+  height: 50vh;
+  opacity: 0.85;
+  transform-origin: center;
+  mix-blend-mode: screen;
+  filter: drop-shadow(0 0 30px rgba(167, 240, 45, 0.4)) drop-shadow(0 10px 40px rgba(0,0,0,0.6));
+  animation: cornerGlowPulse 3s ease-in-out infinite;
+  object-fit: cover;
+}
+
+/* Fullscreen single GIF variant (used in AppV2) */
+.corner-gif.fullscreen {
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  transform: none;
+  opacity: 0.8;
+}
+
+/* Full-screen neon bands (top + bottom) */
+.screen-neon-bands {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2; /* above GIFs/background, below main UI (hero-split z:10) */
+}
+
+.screen-neon-bands::before,
+.screen-neon-bands::after {
+  content: '';
+  position: absolute;
+  left: -15vw;
+  right: -15vw;
+  height: 200px;
+  background: radial-gradient(
+    ellipse at 50% 50%,
+    rgba(167, 240, 45, 0.60) 0%,
+    rgba(167, 240, 45, 0.25) 30%,
+    rgba(167, 240, 45, 0.00) 72%
+  );
+  filter: blur(22px);
+  opacity: 0.45;
+  transform: translateZ(0);
+  will-change: opacity, transform;
+  animation: neonBandBreathe 4.2s ease-in-out infinite;
+}
+
+.screen-neon-bands::before {
+  top: -80px;
+}
+
+.screen-neon-bands::after {
+  bottom: -80px;
+  animation-delay: -2.1s;
+}
+
+@keyframes neonBandBreathe {
+  0%,
+  100% {
+    opacity: 0.28;
+    transform: translateZ(0) scaleX(1);
+  }
+  50% {
+    opacity: 0.72;
+    transform: translateZ(0) scaleX(1.08);
+  }
+}
+
+/* Top-Left Corner */
+.corner-gif.tl { 
+  top: 0; 
+  left: 0; 
+  transform: rotate(0deg);
+  animation-delay: 0s;
+}
+
+/* Top-Right Corner - Mirrored horizontally */
+.corner-gif.tr { 
+  top: 0; 
+  right: 0; 
+  transform: scaleX(-1);
+  animation-delay: -0.75s;
+}
+
+/* Bottom-Left Corner - Mirrored vertically */
+.corner-gif.bl { 
+  bottom: 0; 
+  left: 0; 
+  transform: scaleY(-1);
+  animation-delay: -1.5s;
+}
+
+/* Bottom-Right Corner - Mirrored both ways */
+.corner-gif.br { 
+  bottom: 0; 
+  right: 0; 
+  transform: scale(-1, -1);
+  animation-delay: -2.25s;
+}
+
+@keyframes cornerGlowPulse {
+  0%, 100% {
+    filter: drop-shadow(0 0 20px rgba(167, 240, 45, 0.3)) drop-shadow(0 10px 40px rgba(0,0,0,0.6));
+    opacity: 0.8;
+  }
+  50% {
+    filter: drop-shadow(0 0 40px rgba(167, 240, 45, 0.6)) drop-shadow(0 0 60px rgba(0, 212, 255, 0.3)) drop-shadow(0 10px 40px rgba(0,0,0,0.6));
+    opacity: 0.95;
+  }
+}
+
+@media (max-width: 900px) {
+  .corner-gif { 
+    width: 50vw;
+    height: 50vh;
+    opacity: 0.7; 
+  }
+}
+
 #root {
   min-height: 100vh;
 }
@@ -545,6 +674,8 @@ button:focus-visible {
 
 /* Main two-column split layout */
 .hero-split {
+  position: relative;
+  z-index: 10;
   display: grid;
   grid-template-columns: minmax(350px, 1fr) minmax(400px, 1.2fr);
   gap: clamp(2rem, 4vw, 3rem);
@@ -669,12 +800,11 @@ button:focus-visible {
   padding-top: clamp(1rem, 3vw, 2rem);
 }
 
-/* Team Bid Overlay - Centered on player with Apple-style design */
+/* Team Bid Overlay - Horizontally centered with player placeholder */
 .team-bid-overlay {
   position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
+  bottom: 10%;
+  left: 35%;
   z-index: 100;
   pointer-events: none;
 }
@@ -810,9 +940,160 @@ button:focus-visible {
   opacity: 0.5;
 }
 
+/* ============================================================================
+   PLAYER IMAGE VISUAL EFFECTS
+   ============================================================================ */
+
+/* Inverted Curve Lighting Effect - Behind Player Image */
+.player-glow-base {
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 130%;
+  height: 70%;
+  background: 
+    radial-gradient(ellipse 80% 50% at 50% 100%, rgba(167, 240, 45, 0.35) 0%, transparent 50%),
+    radial-gradient(ellipse 60% 40% at 50% 100%, rgba(0, 212, 255, 0.25) 0%, transparent 45%),
+    radial-gradient(ellipse 100% 60% at 50% 100%, rgba(255, 107, 53, 0.15) 0%, transparent 40%);
+  filter: blur(30px);
+  z-index: 5;
+  pointer-events: none;
+  animation: glowBasePulse 4s ease-in-out infinite;
+}
+
+/* Inverted curve shape using clip-path */
+.player-glow-base::before {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 100%;
+  background: 
+    radial-gradient(ellipse 70% 45% at 50% 100%, rgba(167, 240, 45, 0.5) 0%, transparent 60%);
+  clip-path: ellipse(55% 35% at 50% 100%);
+  filter: blur(20px);
+  animation: glowBaseInnerPulse 3s ease-in-out infinite;
+}
+
+@keyframes glowBasePulse {
+  0%, 100% {
+    opacity: 0.8;
+    transform: translateX(-50%) scaleY(1);
+  }
+  50% {
+    opacity: 1;
+    transform: translateX(-50%) scaleY(1.05);
+  }
+}
+
+@keyframes glowBaseInnerPulse {
+  0%, 100% {
+    opacity: 0.6;
+    filter: blur(20px);
+  }
+  50% {
+    opacity: 0.9;
+    filter: blur(25px);
+  }
+}
+
+/* Neon Glow Line at Bottom */
+.neon-bottom-line {
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 80%;
+  height: 4px;
+  background: linear-gradient(90deg, 
+    transparent 0%, 
+    rgba(0, 212, 255, 0.8) 15%,
+    rgba(167, 240, 45, 1) 35%,
+    rgba(255, 255, 255, 1) 50%,
+    rgba(167, 240, 45, 1) 65%,
+    rgba(0, 212, 255, 0.8) 85%,
+    transparent 100%
+  );
+  border-radius: 2px;
+  z-index: 20;
+  animation: neonLineGlow 2s ease-in-out infinite;
+}
+
+.neon-bottom-line::before {
+  content: '';
+  position: absolute;
+  top: -8px;
+  left: 0;
+  right: 0;
+  height: 20px;
+  background: linear-gradient(90deg, 
+    transparent 0%, 
+    rgba(0, 212, 255, 0.4) 15%,
+    rgba(167, 240, 45, 0.6) 35%,
+    rgba(255, 255, 255, 0.7) 50%,
+    rgba(167, 240, 45, 0.6) 65%,
+    rgba(0, 212, 255, 0.4) 85%,
+    transparent 100%
+  );
+  filter: blur(12px);
+  animation: neonLineBlur 2s ease-in-out infinite;
+}
+
+.neon-bottom-line::after {
+  content: '';
+  position: absolute;
+  top: -20px;
+  left: 5%;
+  right: 5%;
+  height: 40px;
+  background: linear-gradient(90deg, 
+    transparent 0%, 
+    rgba(0, 212, 255, 0.2) 20%,
+    rgba(167, 240, 45, 0.3) 50%,
+    rgba(0, 212, 255, 0.2) 80%,
+    transparent 100%
+  );
+  filter: blur(25px);
+}
+
+@keyframes neonLineGlow {
+  0%, 100% {
+    box-shadow: 
+      0 0 10px rgba(167, 240, 45, 0.8),
+      0 0 20px rgba(167, 240, 45, 0.6),
+      0 0 30px rgba(0, 212, 255, 0.4),
+      0 0 40px rgba(0, 212, 255, 0.2);
+    opacity: 0.9;
+  }
+  50% {
+    box-shadow: 
+      0 0 15px rgba(167, 240, 45, 1),
+      0 0 30px rgba(167, 240, 45, 0.8),
+      0 0 45px rgba(0, 212, 255, 0.6),
+      0 0 60px rgba(0, 212, 255, 0.4);
+    opacity: 1;
+  }
+}
+
+@keyframes neonLineBlur {
+  0%, 100% {
+    opacity: 0.7;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+/* ============================================================================
+   END PLAYER IMAGE VISUAL EFFECTS
+   ============================================================================ */
+
 /* Animated glow orbs */
 .glow-orb {
   position: absolute;
+  z-index: 1;
   border-radius: 50%;
   filter: blur(60px);
   opacity: 0.6;
@@ -856,9 +1137,13 @@ button:focus-visible {
 /* Animated rings */
 .ring {
   position: absolute;
+  z-index: 1;
+  top: 50%;
+  left: 50%;
   border-radius: 50%;
   border: 2px solid rgba(167, 240, 45, 0.3);
-  animation: ringPulse 3s ease-out infinite;
+  transform-origin: center;
+  animation: ringPulse 3.6s ease-in-out infinite;
 }
 
 .ring-1 {
@@ -870,22 +1155,26 @@ button:focus-visible {
 .ring-2 {
   width: 400px;
   height: 400px;
-  animation-delay: -1s;
+  animation-delay: -1.2s;
 }
 
 .ring-3 {
   width: 500px;
   height: 500px;
-  animation-delay: -2s;
+  animation-delay: -2.4s;
 }
 
 @keyframes ringPulse {
   0% {
-    transform: scale(0.8);
-    opacity: 0.8;
+    transform: translate(-50%, -50%) scale(0.82);
+    opacity: 0.72;
+  }
+  50% {
+    transform: translate(-50%, -50%) scale(1.1);
+    opacity: 0.28;
   }
   100% {
-    transform: scale(1.4);
+    transform: translate(-50%, -50%) scale(1.42);
     opacity: 0;
   }
 }
@@ -893,6 +1182,7 @@ button:focus-visible {
 /* Particle effects */
 .particles {
   position: absolute;
+  z-index: 1;
   width: 100%;
   height: 100%;
   overflow: hidden;
@@ -988,15 +1278,17 @@ button:focus-visible {
 .float-icon {
   width: 1em;
   height: 1em;
-  color: rgba(167, 240, 45, 0.95);
-  filter: drop-shadow(0 0 25px rgba(167, 240, 45, 0.9)) drop-shadow(0 0 50px rgba(167, 240, 45, 0.6));
+  color: color-mix(in srgb, var(--theme-text) 92%, var(--theme-accent));
+  opacity: 0.9;
+  filter: drop-shadow(0 10px 22px rgba(0, 0, 0, 0.45));
   transition: all 0.3s ease;
 }
 
 .float-icon.small {
   width: 0.8em;
   height: 0.8em;
-  color: rgba(167, 240, 45, 0.9);
+  color: color-mix(in srgb, var(--theme-text) 92%, var(--theme-accent));
+  opacity: 0.75;
 }
 
 /* Orbit positions - 3 items evenly distributed */
@@ -1548,12 +1840,17 @@ button:focus-visible {
 
 .neon-bar {
   width: auto;
-  min-width: 280px;
-  max-width: min(650px, 90vw);
   height: 108px;
   border-radius: 22px;
-  background: linear-gradient(90deg, #a7f02d 0%, #c7ff58 40%, #8fcb1f 100%);
-  box-shadow: 0 10px 40px rgba(167, 240, 45, 0.35), inset 0 0 30px rgba(255, 255, 255, 0.35);
+  background: rgba(167, 240, 45, 0.78);
+  border: 1px solid rgba(167, 240, 45, 0.95);
+  box-shadow:
+    0 18px 55px rgba(0, 0, 0, 0.55),
+    0 0 14px rgba(167, 240, 45, 0.55),
+    0 0 32px rgba(167, 240, 45, 0.45),
+    0 0 60px rgba(167, 240, 45, 0.32);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
   position: relative;
   overflow: visible;
   display: inline-flex;
@@ -1566,8 +1863,8 @@ button:focus-visible {
   content: '';
   position: absolute;
   inset: 0;
-  background: radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0.45), transparent 55%);
-  filter: blur(4px);
+  background: radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.35), transparent 55%);
+  filter: blur(3px);
   pointer-events: none;
 }
 
@@ -1576,10 +1873,10 @@ button:focus-visible {
   z-index: 2;
   font-size: clamp(1.6rem, 3.5vw, 2.6rem);
   font-weight: 800;
-  color: #1a2e05;
+  color: #000;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
-  text-shadow: 0 2px 4px rgba(255, 255, 255, 0.3);
+  letter-spacing: 0.03em;
+  text-shadow: none;
   white-space: nowrap;
 }
 
@@ -1588,15 +1885,17 @@ button:focus-visible {
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  color: white;
+  width: 72px;
+  height: 72px;
+  min-width: 72px;
+  min-height: 72px;
+  color: color-mix(in srgb, var(--theme-text) 92%, var(--theme-accent));
 }
 
 .neon-role-icon svg {
-  width: 64px;
-  height: 64px;
-  fill: white;
-  color: white;
-  filter: drop-shadow(0 4px 15px rgba(255, 255, 255, 0.5)) drop-shadow(0 0 30px rgba(167, 240, 45, 0.4));
+  width: 100%;
+  height: 100%;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
 }
 
 .stat-stack {

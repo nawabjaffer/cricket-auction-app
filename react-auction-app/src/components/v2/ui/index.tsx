@@ -3,8 +3,9 @@
 // Modern React components with accessibility and compound patterns
 // ============================================================================
 
-import React, { forwardRef, createContext, useContext, useId } from 'react';
-import { motion, AnimatePresence, Variants } from 'framer-motion';
+import React, { forwardRef, createContext, useContext } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import type { Variants } from 'framer-motion';
 import { clsx } from 'clsx';
 
 // ============================================================================

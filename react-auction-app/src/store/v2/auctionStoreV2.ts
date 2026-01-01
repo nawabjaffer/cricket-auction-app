@@ -3,9 +3,10 @@
 // Modular state management with better separation of concerns
 // ============================================================================
 
-import { create, StateCreator } from 'zustand';
+import { create } from 'zustand';
 import { devtools, persist, subscribeWithSelector } from 'zustand/middleware';
 import { immer } from 'zustand/middleware/immer';
+import { activeConfig } from '../../config';
 import type {
   Player,
   AvailablePlayer,
@@ -23,6 +24,29 @@ import type {
   ActionRecord,
   AuctionEvent,
 } from '../../types/v2';
+
+type StateCreator<
+  T,
+  Mis extends [keyof import('zustand').StoreMutators<unknown, unknown>, unknown][] = [],
+  Mos extends [keyof import('zustand').StoreMutators<unknown, unknown>, unknown][] = [],
+  U = T,
+> = import('zustand').StateCreator<T, Mis, Mos, U>;
+
+function createStableId(prefix: string): string {
+  try {
+    const uuid = globalThis.crypto?.randomUUID?.();
+    if (uuid) return `${prefix}_${uuid}`;
+  } catch {
+    // ignore
+  }
+  return `${prefix}_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+}
+
+function getUndoHistoryLimit(): number {
+  const configured = activeConfig?.auction?.undo?.historySize;
+  const limit = typeof configured === 'number' ? configured : 50;
+  return Math.max(0, Math.floor(limit));
+}
 
 // ============================================================================
 // SLICE TYPES
@@ -133,7 +157,7 @@ interface HistorySlice {
   maxHistory: number;
   
   // Actions
-  recordAction: (event: AuctionEvent) => void;
+  recordAction: (event: { type: AuctionEvent['type']; payload: unknown }) => void;
   undoAction: () => ActionRecord | null;
   clearHistory: () => void;
 }
@@ -375,7 +399,7 @@ const createBidSlice: StateCreator<
   [['zustand/immer', never]],
   [],
   BidSlice
-> = (set, get) => ({
+> = (set) => ({
   // Initial state
   currentBid: 0.5,
   basePrice: 0.5,
@@ -392,7 +416,7 @@ const createBidSlice: StateCreator<
   placeBid: (teamId, teamName, amount) =>
     set((state) => {
       const bid: Bid = {
-        id: `bid_${Date.now()}`,
+        id: createStableId('bid'),
         teamId,
         teamName,
         amount,
@@ -407,6 +431,10 @@ const createBidSlice: StateCreator<
       });
       
       state.bidHistory.push(bid);
+      const limit = getUndoHistoryLimit();
+      if (limit > 0 && state.bidHistory.length > limit) {
+        state.bidHistory = state.bidHistory.slice(-limit);
+      }
       state.currentBid = amount;
     }),
 
@@ -453,7 +481,11 @@ const createBidSlice: StateCreator<
       
       const lastBid = state.bidHistory.pop();
       if (lastBid && state.bidHistory.length > 0) {
-        const prevBid = state.bidHistory[state.bidHistory.length - 1];
+        const prevBid = state.bidHistory.at(-1);
+        if (!prevBid) {
+          state.currentBid = state.basePrice;
+          return;
+        }
         prevBid.isWinning = true;
         state.currentBid = prevBid.amount;
       } else {
@@ -478,8 +510,9 @@ const createSessionSlice: StateCreator<
   // Actions
   startSession: (config) =>
     set((state) => {
+      const maxUndos = getUndoHistoryLimit();
       state.session = {
-        id: `session_${Date.now()}`,
+        id: createStableId('session'),
         startedAt: Date.now(),
         phase: 'round_1',
         config: {
@@ -488,7 +521,7 @@ const createSessionSlice: StateCreator<
           bidIncrements: [],
           selectionMode: 'sequential',
           enableUndo: true,
-          maxUndos: 3,
+          maxUndos,
           ...config?.config,
         },
         currentPlayerIndex: 0,
@@ -630,13 +663,13 @@ const createHistorySlice: StateCreator<
 > = (set, get) => ({
   // Initial state
   actionHistory: [],
-  maxHistory: 50,
+  maxHistory: getUndoHistoryLimit(),
 
   // Actions
   recordAction: (event) =>
     set((state) => {
       const record: ActionRecord = {
-        id: `action_${Date.now()}`,
+        id: createStableId('action'),
         type: event.type,
         payload: event.payload,
         timestamp: Date.now(),
@@ -645,6 +678,9 @@ const createHistorySlice: StateCreator<
       };
       
       state.actionHistory.push(record);
+
+      // Keep config-driven limit up-to-date (in case config changed at runtime)
+      state.maxHistory = getUndoHistoryLimit();
       
       // Trim history if too long
       if (state.actionHistory.length > state.maxHistory) {

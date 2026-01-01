@@ -13,7 +13,7 @@ const API_BASE = 'https://sheets.googleapis.com/v4/spreadsheets';
  * Implements data fetching with caching and error handling
  */
 class GoogleSheetsService {
-  private cache = new Map<string, { data: unknown; timestamp: number }>();
+  private readonly cache = new Map<string, { data: unknown; timestamp: number }>();
 
   private get config() {
     return activeConfig.googleSheets;
@@ -21,6 +21,49 @@ class GoogleSheetsService {
 
   private get columnMappings() {
     return activeConfig.columnMappings;
+  }
+
+  private normalizePlayerImageUrl(rawValue: string | undefined | null): string {
+    const raw = (rawValue ?? '').trim();
+    const placeholder = activeConfig.assets.placeholderMan;
+
+    if (!raw) return placeholder;
+
+    // Common bad values when the sheet contains only an extension
+    if (/^(jpg|jpeg|png|webp)$/i.test(raw)) return placeholder;
+
+    // Allow app-served assets
+    if (raw.startsWith('/')) return raw;
+
+    // Only attempt URL parsing for http(s)
+    if (!/^https?:\/\//i.test(raw)) return placeholder;
+
+    const extractDriveFileId = (value: string): string | null => {
+      try {
+        const url = new URL(value);
+
+        // https://drive.google.com/file/d/<id>/view
+        const fileMatch = /\/file\/d\/([^/]+)/.exec(url.pathname);
+        if (fileMatch?.[1]) return fileMatch[1];
+
+        // https://drive.google.com/open?id=<id>
+        const idParam = url.searchParams.get('id');
+        if (idParam) return idParam;
+
+        // Sometimes shared links include ?usp=drive_link and other params; fall back to path parsing
+        return null;
+      } catch {
+        return null;
+      }
+    };
+
+    const fileId = extractDriveFileId(raw);
+    if (fileId) {
+      // Direct-view URL suitable for <img src="...">
+      return `https://drive.google.com/uc?export=view&id=${fileId}`;
+    }
+
+    return raw;
   }
 
   /**
@@ -48,14 +91,14 @@ class GoogleSheetsService {
     if (!dobValue || dobValue.trim() === '') return null;
 
     // Check if it's a direct age number
-    const ageNumber = parseInt(dobValue);
-    if (!isNaN(ageNumber) && ageNumber > 0 && ageNumber < 120) {
+    const ageNumber = Number.parseInt(dobValue, 10);
+    if (!Number.isNaN(ageNumber) && ageNumber > 0 && ageNumber < 120) {
       return ageNumber;
     }
 
     // Try to parse as date
     const dobDate = new Date(dobValue);
-    if (!isNaN(dobDate.getTime())) {
+    if (!Number.isNaN(dobDate.getTime())) {
       const today = new Date();
       let age = today.getFullYear() - dobDate.getFullYear();
       const monthDiff = today.getMonth() - dobDate.getMonth();
@@ -100,7 +143,7 @@ class GoogleSheetsService {
 
           return {
             id: playerId,
-            imageUrl: row[cols.imageUrl] || '',
+            imageUrl: this.normalizePlayerImageUrl(row[cols.imageUrl]),
             name: row[cols.name] || 'Unknown Player',
             role: (row[cols.role] || 'Player') as Player['role'],
             age: this.calculateAge(row[cols.dateOfBirth]),
@@ -109,7 +152,7 @@ class GoogleSheetsService {
             wickets: row[cols.wickets] || 'N/A',
             battingBestFigures: row[cols.battingBest] || 'N/A',
             bowlingBestFigures: row[cols.bowlingBest] || 'N/A',
-            basePrice: parseFloat(row[cols.basePrice]) || activeConfig.auction.basePrice,
+            basePrice: Number.parseFloat(row[cols.basePrice]) || activeConfig.auction.basePrice,
             dateOfBirth: row[cols.dateOfBirth] || '',
           };
         })
@@ -137,20 +180,23 @@ class GoogleSheetsService {
       const cols = this.columnMappings.teams;
 
       return data.values.map((row: string[], index: number): Team => {
-        const totalPlayerThreshold = parseInt(row[cols.totalPlayerThreshold]) || 11;
-        const playersBought = parseInt(row[cols.playersBought]) || 0;
+        const totalPlayerThreshold = Number.parseInt(row[cols.totalPlayerThreshold], 10) || 11;
+        const playersBought = Number.parseInt(row[cols.playersBought], 10) || 0;
+
+        const name = row[cols.name] || `Team ${index + 1}`;
 
         return {
-          name: row[cols.name] || `Team ${index + 1}`,
+          id: name,
+          name,
           logoUrl: row[cols.logoUrl] || '',
           playersBought,
           totalPlayerThreshold,
           remainingPlayers: totalPlayerThreshold - playersBought,
-          allocatedAmount: parseFloat(row[cols.allocatedAmount]) || 0,
-          remainingPurse: parseFloat(row[cols.remainingPurse]) || 0,
-          highestBid: parseFloat(row[cols.highestBid]) || 0,
+          allocatedAmount: Number.parseFloat(row[cols.allocatedAmount]) || 0,
+          remainingPurse: Number.parseFloat(row[cols.remainingPurse]) || 0,
+          highestBid: Number.parseFloat(row[cols.highestBid]) || 0,
           captain: row[cols.captain] || '',
-          underAgePlayers: parseInt(row[cols.underAgePlayers]) || 0,
+          underAgePlayers: Number.parseInt(row[cols.underAgePlayers], 10) || 0,
         };
       });
     } catch (error) {
@@ -186,17 +232,17 @@ class GoogleSheetsService {
           
           soldPlayerObjects.push({
             id: playerId.trim(),
-            imageUrl: row[cols.imageUrl] || '',
+            imageUrl: this.normalizePlayerImageUrl(row[cols.imageUrl]),
             name: row[cols.name] || 'Unknown Player',
             role: (row[cols.role] || 'Player') as Player['role'],
-            age: row[cols.age] ? parseInt(row[cols.age]) : null,
+            age: row[cols.age] ? Number.parseInt(row[cols.age], 10) : null,
             matches: row[cols.matches] || '0',
             runs: 'N/A',
             wickets: 'N/A',
             battingBestFigures: row[cols.bestFigures] || 'N/A',
             bowlingBestFigures: row[cols.bestFigures] || 'N/A',
-            basePrice: parseFloat(row[cols.basePrice]) || 0,
-            soldAmount: parseFloat(row[cols.soldAmount]) || 0,
+            basePrice: Number.parseFloat(row[cols.basePrice]) || 0,
+            soldAmount: Number.parseFloat(row[cols.soldAmount]) || 0,
             teamName: row[cols.teamName] || '',
             soldDate: new Date().toISOString(),
           });
@@ -238,16 +284,16 @@ class GoogleSheetsService {
 
           unsoldPlayerObjects.push({
             id: playerId.trim(),
-            imageUrl: row[cols.imageUrl] || '',
+            imageUrl: this.normalizePlayerImageUrl(row[cols.imageUrl]),
             name: row[cols.name] || 'Unknown Player',
             role: (row[cols.role] || 'Player') as Player['role'],
-            age: row[cols.age] ? parseInt(row[cols.age]) : null,
+            age: row[cols.age] ? Number.parseInt(row[cols.age], 10) : null,
             matches: row[cols.matches] || '0',
             runs: 'N/A',
             wickets: 'N/A',
             battingBestFigures: row[cols.bestFigures] || 'N/A',
             bowlingBestFigures: row[cols.bestFigures] || 'N/A',
-            basePrice: parseFloat(row[cols.basePrice]) || 0,
+            basePrice: Number.parseFloat(row[cols.basePrice]) || 0,
             round,
             unsoldDate: row[cols.unsoldDate] || new Date().toISOString(),
           });

@@ -36,12 +36,12 @@ const defaultTheme: Theme = {
 const season6Theme: Theme = {
   name: 'BCC Season 6',
   background: '/assets/BG-1.jpg',
-  seasonLogo: '/assets/BCC Season 6.jpg',
+  seasonLogo: '/BCC_Logo.png',
   colors: {
     primary: '#FFD700',
     secondary: '#FF6B35',
     accent: '#C41E3A',
-    success: '#00D084',
+    success: '#ffffff',
     warning: '#FF9F1C',
     danger: '#E63946',
     text: '#ffffff',
@@ -50,14 +50,14 @@ const season6Theme: Theme = {
   animations: {
     enabled: true,
     cornerGifs: {
-      leftTop: '/assets/extras/left-top-right-bottom-corner.gif',
-      rightTop: '/assets/extras/bottom-wave-top-right.gif',
-      leftBottom: '/assets/extras/left-bottom-right-top-corner.gif',
-      rightBottom: '/assets/extras/arrow-movements-gif.gif',
+      leftTop: '/extras/left-top-right-bottom-corner.gif',
+      rightTop: '/extras/bottom-wave-top-right.gif',
+      leftBottom: '/extras/left-bottom-right-top-corner.gif',
+      rightBottom: '/extras/arrow-movements-gif.gif',
     },
     waveGifs: {
-      topRight: '/assets/extras/bottom-wave-top-right.gif',
-      arrows: '/assets/extras/arrow-movements-gif.gif',
+      topRight: '/extras/bottom-wave-top-right.gif',
+      arrows: '/extras/arrow-movements-gif.gif',
     },
   },
   table: {
@@ -219,10 +219,10 @@ export const defaultConfig: AppConfig = {
     },
   },
   defaultTeams: [
-    { name: 'Team A', logoUrl: '', playersBought: 0, totalPlayerThreshold: 11, remainingPlayers: 11, allocatedAmount: 100000, remainingPurse: 100000, highestBid: 0, captain: '', underAgePlayers: 0 },
-    { name: 'Team B', logoUrl: '', playersBought: 0, totalPlayerThreshold: 11, remainingPlayers: 11, allocatedAmount: 100000, remainingPurse: 100000, highestBid: 0, captain: '', underAgePlayers: 0 },
-    { name: 'Team C', logoUrl: '', playersBought: 0, totalPlayerThreshold: 11, remainingPlayers: 11, allocatedAmount: 100000, remainingPurse: 100000, highestBid: 0, captain: '', underAgePlayers: 0 },
-    { name: 'Team D', logoUrl: '', playersBought: 0, totalPlayerThreshold: 11, remainingPlayers: 11, allocatedAmount: 100000, remainingPurse: 100000, highestBid: 0, captain: '', underAgePlayers: 0 },
+    { id: 'team-a', name: 'Team A', logoUrl: '', playersBought: 0, totalPlayerThreshold: 11, remainingPlayers: 11, allocatedAmount: 100000, remainingPurse: 100000, highestBid: 0, captain: '', underAgePlayers: 0 },
+    { id: 'team-b', name: 'Team B', logoUrl: '', playersBought: 0, totalPlayerThreshold: 11, remainingPlayers: 11, allocatedAmount: 100000, remainingPurse: 100000, highestBid: 0, captain: '', underAgePlayers: 0 },
+    { id: 'team-c', name: 'Team C', logoUrl: '', playersBought: 0, totalPlayerThreshold: 11, remainingPlayers: 11, allocatedAmount: 100000, remainingPurse: 100000, highestBid: 0, captain: '', underAgePlayers: 0 },
+    { id: 'team-d', name: 'Team D', logoUrl: '', playersBought: 0, totalPlayerThreshold: 11, remainingPlayers: 11, allocatedAmount: 100000, remainingPurse: 100000, highestBid: 0, captain: '', underAgePlayers: 0 },
   ],
   columnMappings: {
     players: {
@@ -305,7 +305,7 @@ export const tournamentConfigs: Record<string, TournamentConfig> = {
     name: 'BCC Cricket League',
     season: 'Season 6',
     venue: 'Main Stadium',
-    logoUrl: '/assets/BCC Season 6.jpg',
+    logoUrl: '/BCC_Logo.png',
     theme: 'style-2',
     googleSheets: defaultConfig.googleSheets,
     webhook: defaultConfig.webhook,
