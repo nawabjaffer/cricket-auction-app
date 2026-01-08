@@ -4,16 +4,10 @@ import { createRoot } from 'react-dom/client'
 // V1 - Original App (with Google Sheets integration)
 import App from './App.tsx'
 import './index.css'
-import AppV2 from './AppV2.tsx';
 
-// V2 - New Major Version (work in progress - no data loading yet)
-// import AppV2 from './AppV2.tsx'
-// import './styles/v2.css'
+// V2 features archived for future development in separate feature branches
 
-// Set to false to use V1 (stable), true for V2 (WIP)
-const USE_V2 = false;
-
-const RootApp = USE_V2 ? AppV2 : App; // V2 not ready yet, using V1
+const RootApp = App; // Using V1 (stable)
 
 class ErrorBoundary extends Component<
   { children: ReactNode },
