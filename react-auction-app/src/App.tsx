@@ -696,8 +696,11 @@ function TeamSquadViewModal({ teamId, teams, soldPlayers, onClose }: TeamSquadVi
     return null;
   }
 
-  const teamPlayers = soldPlayers.filter(p => p.teamName === team.name);
+  // Filter players by both teamId and teamName for accurate matching
+  const teamPlayers = soldPlayers.filter(p => p.teamId === team.id || p.teamName === team.name);
   console.log('[V1 TeamSquadViewModal] Rendering modal for:', team.name, 'players:', teamPlayers.length);
+  console.log('[V1 TeamSquadViewModal] All sold players:', soldPlayers.map(p => ({ name: p.name, teamId: p.teamId, teamName: p.teamName })));
+  console.log('[V1 TeamSquadViewModal] Filtered team players:', teamPlayers.map(p => p.name));
   
   // Handle ESC key to close modal
   useEffect(() => {
@@ -717,7 +720,7 @@ function TeamSquadViewModal({ teamId, teams, soldPlayers, onClose }: TeamSquadVi
   const secondaryColor = team.secondaryColor || '#06b6d4';
   
   // Use player placeholder image from assets
-  const placeholderImage = '/assets/man.jpg';
+  const placeholderImage = '/placeholder_player.png';
 
   
   let captainImage = placeholderImage;
@@ -752,36 +755,63 @@ function TeamSquadViewModal({ teamId, teams, soldPlayers, onClose }: TeamSquadVi
       }}
       onClick={onClose}
     >
-      {/* Decorative Elements */}
-      <div className="absolute top-0 right-0 p-10 opacity-20">
-        <svg width="200" height="200" viewBox="0 0 100 100" fill="white">
-          <path d="M0 0 L50 0 L25 50 Z" />
-          <path d="M50 0 L100 0 L75 50 Z" />
-          <path d="M25 50 L75 50 L50 100 Z" />
+      {/* Decorative Elements (Geometric shapes from reference) */}
+      <div className="absolute top-4 right-8 opacity-15">
+        {/* Top right geometric pattern - hexagons and triangles */}
+        <svg width="300" height="300" viewBox="0 0 300 300" fill="none" stroke="white" strokeWidth="2">
+          {/* Hexagon */}
+          <polygon points="150,20 190,45 190,95 150,120 110,95 110,45" />
+          <polygon points="210,70 250,95 250,145 210,170 170,145 170,95" />
+          <polygon points="90,70 130,95 130,145 90,170 50,145 50,95" />
+          {/* Triangles */}
+          <polygon points="240,20 270,70 210,70" />
+          <polygon points="150,150 180,200 120,200" />
+          <polygon points="60,20 90,70 30,70" />
+        </svg>
+      </div>
+      <div className="absolute bottom-4 left-4 opacity-10">
+        {/* Bottom left geometric pattern */}
+        <svg width="250" height="250" viewBox="0 0 250 250" fill="none" stroke="white" strokeWidth="2">
+          <polygon points="125,10 165,35 165,85 125,110 85,85 85,35" />
+          <polygon points="185,60 225,85 225,135 185,160 145,135 145,85" />
+          <polygon points="200,120 230,170 170,170" />
         </svg>
       </div>
 
       <div className="container mx-auto px-8 flex flex-row items-center justify-between h-full relative z-10" onClick={e => e.stopPropagation()}>
         {/* Left Side: Info */}
-        <div className="flex-1 flex flex-col justify-center h-full pt-20 pb-20">
-          <div>
-            <h1 className="text-8xl font-black text-white uppercase leading-none tracking-tighter mb-2">
+        <div className="flex-1 flex flex-col justify-between h-full py-16 pl-40 ml-12">
+          {/* Heading Section - Top Left */}
+          <div className="mb-auto pt-8">
+            <h1 
+              className="text-7xl font-black text-white uppercase leading-[0.8] tracking-tight mb-4"
+              style={{
+                textShadow: '0 0 40px rgba(255, 255, 255, 0.3), 0 0 80px rgba(255, 255, 255, 0.2), 0 4px 20px rgba(0, 0, 0, 0.5)'
+              }}
+            >
               {team.name}
             </h1>
-            <h2 className="text-6xl font-bold text-white/90 uppercase tracking-widest mb-8">
+            <div className="w-36 h-1.5 bg-white mb-4 shadow-lg" />
+            <h2 
+              className="text-5xl font-bold text-white uppercase tracking-[0.3em]"
+              style={{
+                textShadow: '0 0 30px rgba(255, 255, 255, 0.25), 0 0 60px rgba(255, 255, 255, 0.15), 0 2px 15px rgba(0, 0, 0, 0.4)'
+              }}
+            >
               SQUAD
             </h2>
-            <div className="w-32 h-2 bg-white mb-12" />
           </div>
 
-          <div className="flex flex-row gap-16">
+          {/* Player List Section - Vertical Center, Left Aligned */}
+          <div className="flex flex-row gap-24 pl-6 mb-auto">
             {/* Column 1 */}
-            <div className="flex flex-col gap-4">
+            <div className="flex flex-col gap-6 min-w-[300px]">
               {leftColumn.map((player) => (
-                <div key={player.id} className="border-b-2 border-white/30 pb-1">
-                  <span className="text-2xl font-bold text-white uppercase tracking-wide">
+                <div key={player.id} className="relative pb-2.5">
+                  <span className="text-[1.7rem] font-bold text-black uppercase tracking-wide block leading-tight">
                     {player.name}
                   </span>
+                  <div className="absolute bottom-0 left-0 right-0 h-[2.5px] bg-white/85" />
                 </div>
               ))}
               {leftColumn.length === 0 && (
@@ -790,27 +820,34 @@ function TeamSquadViewModal({ teamId, teams, soldPlayers, onClose }: TeamSquadVi
             </div>
 
             {/* Column 2 */}
-            <div className="flex flex-col gap-4">
+            <div className="flex flex-col gap-6 min-w-[300px]">
               {rightColumn.map((player) => (
-                <div key={player.id} className="border-b-2 border-white/30 pb-1">
-                  <span className="text-2xl font-bold text-white uppercase tracking-wide">
+                <div key={player.id} className="relative pb-2.5">
+                  <span className="text-[1.7rem] font-bold text-black uppercase tracking-wide block leading-tight">
                     {player.name}
                   </span>
+                  <div className="absolute bottom-0 left-0 right-0 h-[2.5px] bg-white/85" />
                 </div>
               ))}
             </div>
           </div>
+
+          {/* Spacer for bottom */}
+          <div className="h-16"></div>
         </div>
 
         {/* Right Side: Captain Image */}
-        <div className="flex-1 h-full flex items-end justify-end relative">
-          <div className="h-[90%] w-full relative">
+        <div className="flex-1 h-full flex items-end justify-end relative pr-12">
+          <div className="h-[85%] w-full relative">
             {/* Image Container */}
             <img 
               src={captainImage} 
               alt="Captain" 
-              className="absolute bottom-0 right-0 max-h-full object-contain drop-shadow-2xl"
-              style={{ filter: 'drop-shadow(0 0 20px rgba(0,0,0,0.3))' }}
+              className="absolute bottom-0 right-0 h-full w-auto object-contain"
+              style={{ 
+                filter: 'drop-shadow(0 10px 40px rgba(0,0,0,0.5))',
+                maxWidth: '100%'
+              }}
               onError={(e) => {
                 console.log('[V1 TeamSquadViewModal] Image failed to load:', captainImage);
                 // Fallback to placeholder on error
@@ -822,7 +859,7 @@ function TeamSquadViewModal({ teamId, teams, soldPlayers, onClose }: TeamSquadVi
       </div>
 
       {/* Close Hint */}
-      <div className="absolute bottom-8 left-8 text-white/60">
+      <div className="absolute bottom-8 left-8 text-white/70 text-sm">
         Press <span className="px-2 py-1 bg-white/20 rounded font-mono text-sm">ESC</span> to close
       </div>
     </div>
