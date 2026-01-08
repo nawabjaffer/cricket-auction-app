@@ -4652,12 +4652,6 @@
 
   <div class="card-wrapper">
     <div class="card" id="card">
-
-      <div id="seasonBadge" class="season-badge" style="display:none;">
-        <img id="seasonBadgeImg" alt="Season Logo" />
-        <div class="season-text" id="seasonBadgeText">Season</div>
-      </div>
-
       <div class="player-id-badge" id="playerId">001</div>
   
 
@@ -8897,10 +8891,6 @@
         // Update season badge if provided
         try { updateSeasonBadge(activeTheme); } catch (e) { console.warn('[THEME] updateSeasonBadge failed', e); }
         
-        // Add animated corner GIFs if enabled
-        if (activeTheme.animations && activeTheme.animations.enabled && activeTheme.animations.cornerGifs) {
-          try { addCornerAnimations(activeTheme.animations.cornerGifs); } catch (e) { console.warn('[THEME] addCornerAnimations failed', e); }
-        }
       } catch (err) {
         console.error('[THEME] Initialization error', err);
       }
@@ -8999,34 +8989,6 @@
       }
     }
 
-    function addCornerAnimations(cornerGifs) {
-      // Remove existing corner animations if any
-      const existingCorners = document.querySelectorAll('.corner-animation');
-      existingCorners.forEach(el => el.remove());
-      
-      // Create corner animation container
-      const corners = [
-        { position: 'left-top', src: cornerGifs.leftTop, style: '' },
-        { position: 'right-top', src: cornerGifs.rightTop, style: 'bottom: 0; left: 800px;' },
-        { position: 'left-bottom', src: cornerGifs.leftBottom, style: 'bottom: 10px; left: 10px;' },
-        { position: 'right-bottom', src: cornerGifs.rightBottom, style: 'bottom: 10px; right: 10px;' }
-      ];
-      
-      corners.forEach(corner => {
-        const img = document.createElement('img');
-        img.className = `corner-animation corner-${corner.position}`;
-        img.src = corner.src;
-        img.style.cssText = `
-          position: fixed;
-          ${corner.style}
-          pointer-events: none;
-          z-index: 4;
-          opacity: 0.6;
-          mix-blend-mode: screen;
-        `;
-        document.body.appendChild(img);
-      });
-    }
 
     (async function init() {
       // Initialize theme first

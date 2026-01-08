@@ -102,11 +102,6 @@ const CONFIG = {
         text: '#ffffff',
         textSecondary: '#aaa'
       },
-      animations: {
-        enabled: false,
-        cornerGifs: null,
-        waveGifs: null
-      },
       table: {
         headerGradient: 'linear-gradient(135deg, #2196F3 0%, #1976D2 100%)',
         rowBackground: 'rgba(255, 255, 255, 0.03)',
@@ -129,19 +124,6 @@ const CONFIG = {
         danger: '#E63946',
         text: '#ffffff',
         textSecondary: '#d4af37'
-      },
-      animations: {
-        enabled: true,
-        cornerGifs: {
-          leftTop: './assets/extras/left-top-right-bottom-corner.gif',
-          rightTop: './assets/extras/bottom-wave-top-right.gif',
-          leftBottom: './assets/extras/left-bottom-right-top-corner.gif',
-          rightBottom: './assets/extras/arrow-movements-gif.gif'
-        },
-        waveGifs: {
-          topRight: './assets/extras/bottom-wave-top-right.gif',
-          arrows: './assets/extras/arrow-movements-gif.gif'
-        }
       },
       table: {
         headerGradient: 'linear-gradient(135deg, #FFD700 0%, #FF6B35 50%, #C41E3A 100%)',
@@ -392,6 +374,4 @@ Object.freeze(CONFIG.theme['style-1'].animations || {});
 Object.freeze(CONFIG.theme['style-1'].table);
 Object.freeze(CONFIG.theme['style-2']);
 Object.freeze(CONFIG.theme['style-2'].colors);
-Object.freeze(CONFIG.theme['style-2'].animations);
-Object.freeze(CONFIG.theme['style-2'].animations.cornerGifs);
 Object.freeze(CONFIG.theme['style-2'].table);
