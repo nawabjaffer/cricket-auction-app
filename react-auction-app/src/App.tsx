@@ -35,7 +35,7 @@ import {
 } from './hooks';
 import { audioService } from './services';
 import { useActiveOverlay, useNotification, useCurrentPlayer, useSoldPlayers, useUnsoldPlayers, useAvailablePlayers, useTeams } from './store';
-import { getAlternativeDriveUrl, getCorsproxiedUrl } from './utils/driveImage';
+import { getAlternativeDriveUrl } from './utils/driveImage';
 import './index.css';
 
 // Create Query Client
@@ -354,24 +354,14 @@ function AuctionApp() {
                   onError={(e) => {
                     const img = e.target as HTMLImageElement;
                     
-                    // Try alternative Drive URL if primary failed
+                    // Try alternative if primary failed and it's a Drive URL
                     if (playerImageUrl && playerImageUrl.includes('drive.google.com')) {
-                      // First try: alternative Drive URL (thumbnail)
-                      if (!img.src.includes('cors-anywhere')) {
+                      // Only try alternative if we haven't already
+                      if (!img.src.includes('/api/proxy-drive')) {
                         const altUrl = getAlternativeDriveUrl(playerImageUrl);
                         if (altUrl && img.src !== altUrl) {
                           console.log('[App] Trying alternative Drive URL:', altUrl);
                           img.src = altUrl;
-                          return;
-                        }
-                      }
-                      
-                      // Second try: CORS proxy for localhost development
-                      if (!img.src.includes('cors-anywhere')) {
-                        const proxiedUrl = getCorsproxiedUrl(playerImageUrl);
-                        if (proxiedUrl !== playerImageUrl) {
-                          console.log('[App] Trying CORS proxy URL (for localhost):', proxiedUrl);
-                          img.src = proxiedUrl;
                           return;
                         }
                       }
