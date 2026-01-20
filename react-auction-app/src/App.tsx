@@ -31,6 +31,7 @@ import {
   useKeyboardShortcuts, 
   useTheme,
   useHotkeyHelp,
+  useImagePreload,
 } from './hooks';
 import { audioService } from './services';
 import { useActiveOverlay, useNotification, useCurrentPlayer, useSoldPlayers, useUnsoldPlayers, useAvailablePlayers, useTeams } from './store';
@@ -123,6 +124,13 @@ function AuctionApp() {
     { label: 'Bowling Best', value: currentPlayer?.bowlingBestFigures || '—' },
     { label: 'Highest Score', value: currentPlayer?.battingBestFigures || '—' },
   ]), [currentPlayer]);
+
+  // Preload player image with retry logic
+  const { loadedUrl: playerImageUrl } = useImagePreload(currentPlayer?.imageUrl, {
+    maxRetries: 3,
+    retryDelay: 300,
+    timeout: 3000,
+  });
 
   // Loading state
   if (isLoading) {
@@ -341,15 +349,12 @@ function AuctionApp() {
             >
               {currentPlayer && (
                 <img 
-                  src={currentPlayer.imageUrl || '/placeholder_player.png'} 
+                  src={playerImageUrl || '/placeholder_player.png'} 
                   alt={currentPlayer.name}
                   className="placeholder-image"
                   onError={(e) => {
-                    console.error('[App] Image failed to load:', currentPlayer.imageUrl);
+                    console.error('[App] Image display error:', playerImageUrl);
                     (e.target as HTMLImageElement).src = '/placeholder_player.png';
-                  }}
-                  onLoad={() => {
-                    console.log('[App] Image loaded successfully:', currentPlayer.imageUrl);
                   }}
                 />
               )}

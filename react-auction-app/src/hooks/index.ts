@@ -12,4 +12,4 @@ export {
   useRefreshData,
 } from './useData';
 export { useKeyboardShortcuts, useHotkeyHelp } from './useKeyboardShortcuts';
-export { useTheme, useThemeClasses } from './useTheme';
+export { useTheme, useThemeClasses } from './useTheme';export { useImagePreload } from './useImagePreload';
