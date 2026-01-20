@@ -357,13 +357,29 @@ function AuctionApp() {
                     // Try alternative if primary failed and it's a Drive URL
                     if (playerImageUrl && playerImageUrl.includes('drive.google.com')) {
                       // Only try alternative if we haven't already
-                      if (!img.src.includes('/api/proxy-drive')) {
+                      if (!img.src.includes('/api/proxy-drive') && !img.src.includes('ui-avatars')) {
                         const altUrl = getAlternativeDriveUrl(playerImageUrl);
                         if (altUrl && img.src !== altUrl) {
                           console.log('[App] Trying alternative Drive URL:', altUrl);
                           img.src = altUrl;
                           return;
                         }
+                      }
+                      
+                      // Final fallback: generate avatar from player name using ui-avatars
+                      // This service has CORS enabled and works on localhost
+                      if (!img.src.includes('ui-avatars')) {
+                        const playerInitials = currentPlayer.name
+                          .split(' ')
+                          .map(word => word[0])
+                          .join('')
+                          .toUpperCase()
+                          .slice(0, 2);
+                        
+                        const avatarUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(playerInitials)}&background=1976D2&color=ffffff&size=400&bold=true`;
+                        console.log('[App] Using generated avatar for', currentPlayer.name, ':', avatarUrl);
+                        img.src = avatarUrl;
+                        return;
                       }
                     }
                     
