@@ -15,17 +15,27 @@ interface CoinJarProps {
 
 export function CoinJar({ onAnimationComplete, isAnimating, playerName }: CoinJarProps) {
   const [showResult, setShowResult] = useState(false);
+  const [selectedCoinIndex, setSelectedCoinIndex] = useState<number | null>(null);
+  const [pickedCoins, setPickedCoins] = useState<number[]>([]);
 
   const handleAnimationComplete = useCallback(() => {
-    setShowResult(true);
+    // Pick a random coin during the animation
+    const randomIndex = Math.floor(Math.random() * 20);
+    setSelectedCoinIndex(randomIndex);
+    setPickedCoins([randomIndex]);
+    
+    setTimeout(() => {
+      setShowResult(true);
+    }, 600);
+
     setTimeout(() => {
       setShowResult(false);
       onAnimationComplete();
-    }, 1500);
+    }, 2100);
   }, [onAnimationComplete]);
 
   // Play coin shake sound when animating
-  if (isAnimating) {
+  if (isAnimating && !selectedCoinIndex) {
     audioService.playCoinShake();
   }
 
@@ -51,39 +61,59 @@ export function CoinJar({ onAnimationComplete, isAnimating, playerName }: CoinJa
             {/* Coin Jar */}
             <motion.div
               className="relative w-48 h-64 mx-auto"
-              animate={!showResult ? {
-                rotate: [-5, 5, -5, 5, -3, 3, 0],
-                y: [0, -10, 0, -10, 0],
+              animate={!selectedCoinIndex ? {
+                rotate: [-8, 8, -8, 8, -5, 5, 0],
+                y: [0, -15, 0, -15, 0],
               } : {}}
               transition={{
-                duration: 0.5,
-                repeat: showResult ? 0 : 5,
+                duration: 0.4,
+                repeat: selectedCoinIndex ? 0 : 6,
                 onComplete: handleAnimationComplete,
               }}
             >
-              {/* Jar Body */}
-              <div className="absolute bottom-0 w-full h-48 bg-gradient-to-b from-amber-200/30 to-amber-400/30 rounded-b-3xl border-4 border-amber-500/50 backdrop-blur-sm overflow-hidden">
-                {/* Coins inside */}
-                <div className="absolute bottom-0 w-full h-32 flex flex-wrap justify-center items-end gap-1 p-2">
-                  {Array.from({ length: 20 }).map((_, i) => (
-                    <motion.div
-                      key={i}
-                      className="w-6 h-6 bg-yellow-400 rounded-full shadow-lg"
-                      style={{
-                        backgroundImage: 'linear-gradient(135deg, #ffd700 0%, #ffb700 50%, #ffd700 100%)',
-                      }}
-                      animate={!showResult ? {
-                        y: [0, -20, 0, -15, 0],
-                        rotate: [0, 180, 360],
-                      } : {}}
-                      transition={{
-                        duration: 0.3,
-                        delay: i * 0.02,
-                        repeat: showResult ? 0 : Infinity,
-                      }}
-                    />
-                  ))}
-                </div>
+              {/* Outer Jar Body */}
+              <div className="absolute bottom-0 w-full h-48 bg-gradient-to-b from-blue-200/20 to-blue-300/20 rounded-b-3xl border-4 border-blue-400/40 backdrop-blur-sm overflow-hidden">
+                
+                {/* Inner Bowl/Container with coins */}
+                <motion.div 
+                  className="absolute bottom-2 left-1/2 -translate-x-1/2 w-40 h-32 bg-gradient-to-b from-amber-100 to-amber-200 rounded-3xl border-2 border-amber-300 shadow-inner overflow-hidden"
+                  animate={!selectedCoinIndex ? {
+                    rotate: [-10, 10, -8, 8, -5, 5, 0],
+                  } : {}}
+                  transition={{
+                    duration: 0.4,
+                    repeat: selectedCoinIndex ? 0 : 6,
+                  }}
+                >
+                  {/* Coins inside */}
+                  <div className="absolute bottom-0 w-full h-28 flex flex-wrap justify-center items-end gap-2 p-3">
+                    {Array.from({ length: 20 }).map((_, i) => (
+                      <motion.div
+                        key={i}
+                        className={`w-6 h-6 rounded-full shadow-lg transition-all ${
+                          pickedCoins.includes(i) ? 'ring-4 ring-green-400 scale-110' : ''
+                        }`}
+                        style={{
+                          backgroundImage: 'linear-gradient(135deg, #ffd700 0%, #ffb700 50%, #ffd700 100%)',
+                        }}
+                        animate={!selectedCoinIndex ? {
+                          y: [0, -25, 0, -20, 0],
+                          rotate: [0, 180, 360],
+                        } : selectedCoinIndex === i ? {
+                          y: [0, -80],
+                          x: [0, 40],
+                          scale: [1, 1.3],
+                          rotate: [0, 720],
+                        } : {}}
+                        transition={{
+                          duration: selectedCoinIndex === i ? 0.6 : 0.3,
+                          delay: selectedCoinIndex === i ? 0.1 : i * 0.02,
+                          repeat: selectedCoinIndex ? 0 : Infinity,
+                        }}
+                      />
+                    ))}
+                  </div>
+                </motion.div>
               </div>
 
               {/* Jar Lid */}
