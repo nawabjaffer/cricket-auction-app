@@ -20,6 +20,19 @@ export function extractDriveFileId(url: string): string | null {
 }
 
 /**
+ * Get the best Drive URL for displaying images
+ * Uses lh3.googleusercontent.com which has better CORS support
+ */
+export function getDriveImageUrl(originalUrl: string): string | null {
+  const fileId = extractDriveFileId(originalUrl);
+  if (!fileId) return null;
+  
+  // Use lh3.googleusercontent.com - this works on localhost and has CORS support
+  // This is the same CDN Google uses for photos
+  return `https://lh3.googleusercontent.com/d/${fileId}=w800`;
+}
+
+/**
  * Get a proxied image URL for development
  * Uses local Vite proxy to bypass CORS issues
  */
@@ -42,13 +55,6 @@ export function getAlternativeDriveUrl(originalUrl: string): string | null {
   const fileId = extractDriveFileId(originalUrl);
   if (!fileId) return null;
   
-  const isDevelopment = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-  
-  // For localhost, use proxied URL
-  if (isDevelopment) {
-    return getProxiedDriveUrl(fileId);
-  }
-  
-  // For production, try thumbnail
+  // Try thumbnail endpoint which often works better
   return `https://drive.google.com/thumbnail?id=${fileId}&sz=w600`;
 }

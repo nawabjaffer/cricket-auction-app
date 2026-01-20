@@ -35,7 +35,7 @@ import {
 } from './hooks';
 import { audioService } from './services';
 import { useActiveOverlay, useNotification, useCurrentPlayer, useSoldPlayers, useUnsoldPlayers, useAvailablePlayers, useTeams } from './store';
-import { getAlternativeDriveUrl } from './utils/driveImage';
+import { getDriveImageUrl, extractDriveFileId } from './utils/driveImage';
 import './index.css';
 
 // Create Query Client
@@ -126,8 +126,22 @@ function AuctionApp() {
     { label: 'Highest Score', value: currentPlayer?.battingBestFigures || '—' },
   ]), [currentPlayer]);
 
+  // Transform Drive URL to use lh3.googleusercontent.com for better loading
+  const transformedImageUrl = useMemo(() => {
+    if (!currentPlayer?.imageUrl) return null;
+    
+    // Check if it's a Drive URL and transform it
+    const driveUrl = getDriveImageUrl(currentPlayer.imageUrl);
+    if (driveUrl) {
+      console.log('[App] Transformed Drive URL:', driveUrl);
+      return driveUrl;
+    }
+    
+    return currentPlayer.imageUrl;
+  }, [currentPlayer?.imageUrl]);
+
   // Preload player image - simple URL tracking
-  const { loadedUrl: playerImageUrl, isLoading: isImageLoading } = useImagePreload(currentPlayer?.imageUrl);
+  const { loadedUrl: playerImageUrl, isLoading: isImageLoading } = useImagePreload(transformedImageUrl);
 
   // Loading state
   if (isLoading) {
@@ -350,17 +364,33 @@ function AuctionApp() {
                   <AnimatePresence>
                     {isImageLoading && (
                       <motion.div
-                        className="absolute inset-0 flex items-center justify-center bg-black/40 rounded-lg z-10"
+                        className="absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-b from-black/60 to-black/80 rounded-lg z-10"
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
-                        transition={{ duration: 0.2 }}
+                        transition={{ duration: 0.3 }}
                       >
+                        {/* Cricket ball spinner */}
                         <motion.div
-                          className="w-16 h-16 border-4 border-transparent border-t-yellow-400 border-r-yellow-400 rounded-full"
+                          className="relative w-20 h-20"
                           animate={{ rotate: 360 }}
-                          transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
-                        />
+                          transition={{ duration: 1.5, repeat: Infinity, ease: 'linear' }}
+                        >
+                          <div className="absolute inset-0 rounded-full bg-gradient-to-br from-red-500 to-red-700 shadow-lg" />
+                          <div className="absolute inset-2 rounded-full border-2 border-dashed border-white/40" />
+                          <motion.div 
+                            className="absolute inset-0 rounded-full bg-white/10"
+                            animate={{ opacity: [0.2, 0.5, 0.2] }}
+                            transition={{ duration: 1, repeat: Infinity }}
+                          />
+                        </motion.div>
+                        <motion.p
+                          className="mt-4 text-white/70 text-sm font-medium"
+                          animate={{ opacity: [0.5, 1, 0.5] }}
+                          transition={{ duration: 1.5, repeat: Infinity }}
+                        >
+                          Loading player...
+                        </motion.p>
                       </motion.div>
                     )}
                   </AnimatePresence>
@@ -374,20 +404,29 @@ function AuctionApp() {
                     onError={(e) => {
                       const img = e.target as HTMLImageElement;
                       
-                      // Try alternative if primary failed and it's a Drive URL
-                      if (playerImageUrl && playerImageUrl.includes('drive.google.com')) {
-                        // Only try alternative if we haven't already
-                        if (!img.src.includes('/api/proxy-drive') && !img.src.includes('ui-avatars')) {
-                          const altUrl = getAlternativeDriveUrl(playerImageUrl);
-                          if (altUrl && img.src !== altUrl) {
-                            console.log('[App] Trying alternative Drive URL:', altUrl);
-                            img.src = altUrl;
-                            return;
-                          }
+                      // Try alternative URLs for Drive images
+                      const originalUrl = currentPlayer.imageUrl || '';
+                      const fileId = extractDriveFileId(originalUrl);
+                      
+                      if (fileId) {
+                        // Try different endpoints in order
+                        if (img.src.includes('lh3.googleusercontent.com') && !img.src.includes('thumbnail')) {
+                          // Try thumbnail endpoint
+                          const thumbnailUrl = `https://drive.google.com/thumbnail?id=${fileId}&sz=w600`;
+                          console.log('[App] Trying thumbnail URL:', thumbnailUrl);
+                          img.src = thumbnailUrl;
+                          return;
+                        }
+                        
+                        if (img.src.includes('thumbnail') && !img.src.includes('uc?export')) {
+                          // Try export view endpoint
+                          const exportUrl = `https://drive.google.com/uc?export=view&id=${fileId}`;
+                          console.log('[App] Trying export URL:', exportUrl);
+                          img.src = exportUrl;
+                          return;
                         }
                         
                         // Final fallback: generate avatar from player name using ui-avatars
-                        // This service works on localhost when crossOrigin is not enforced
                         if (!img.src.includes('ui-avatars')) {
                           const playerInitials = currentPlayer.name
                             .split(' ')
@@ -396,7 +435,7 @@ function AuctionApp() {
                             .toUpperCase()
                             .slice(0, 2);
                           
-                          const avatarUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(playerInitials)}&background=1976D2&color=ffffff&size=400&bold=true`;
+                          const avatarUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(playerInitials)}&background=1976D2&color=ffffff&size=400&bold=true&format=svg`;
                           console.log('[App] Using generated avatar for', currentPlayer.name, ':', avatarUrl);
                           img.src = avatarUrl;
                           return;
