@@ -84,7 +84,11 @@ export function PlayerCard({
           alt={player.name}
           className="w-full h-full object-cover object-top"
           onError={(e) => {
+            console.error('[PlayerCard] Image failed to load for', player.name, ':', player.imageUrl);
             (e.target as HTMLImageElement).src = '/assets/man.jpg';
+          }}
+          onLoad={() => {
+            console.log('[PlayerCard] Image loaded for', player.name, ':', player.imageUrl);
           }}
         />
         

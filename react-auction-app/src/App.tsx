@@ -339,11 +339,27 @@ function AuctionApp() {
               animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
               transition={{ duration: 0.7, delay: 0.15, ease: [0.32, 0.72, 0, 1] }}
             >
-              <img 
-                src="/placeholder_player.png" 
-                alt="Player placeholder"
-                className="placeholder-image"
-              />
+              {currentPlayer && (
+                <img 
+                  src={currentPlayer.imageUrl || '/placeholder_player.png'} 
+                  alt={currentPlayer.name}
+                  className="placeholder-image"
+                  onError={(e) => {
+                    console.error('[App] Image failed to load:', currentPlayer.imageUrl);
+                    (e.target as HTMLImageElement).src = '/placeholder_player.png';
+                  }}
+                  onLoad={() => {
+                    console.log('[App] Image loaded successfully:', currentPlayer.imageUrl);
+                  }}
+                />
+              )}
+              {!currentPlayer && (
+                <img 
+                  src="/placeholder_player.png" 
+                  alt="Player placeholder"
+                  className="placeholder-image"
+                />
+              )}
             </motion.div>
 
             {/* Animated rings */}
@@ -521,7 +537,11 @@ function AuctionApp() {
                             src={player.imageUrl || '/placeholder_player.png'} 
                             alt={player.name}
                             onError={(e) => {
+                              console.error('[SquadView] Image failed to load for', player.name, ':', player.imageUrl);
                               (e.target as HTMLImageElement).src = '/placeholder_player.png';
+                            }}
+                            onLoad={() => {
+                              console.log('[SquadView] Image loaded for', player.name, ':', player.imageUrl);
                             }}
                           />
                         </div>
