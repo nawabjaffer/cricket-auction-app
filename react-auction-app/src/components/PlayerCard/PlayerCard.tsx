@@ -83,7 +83,6 @@ export function PlayerCard({
           src={player.imageUrl || '/assets/man.jpg'}
           alt={player.name}
           className="w-full h-full object-cover object-top"
-          crossOrigin="anonymous"
           loading="lazy"
           onError={(e) => {
             console.error('[PlayerCard] Image failed, using placeholder for', player.name);

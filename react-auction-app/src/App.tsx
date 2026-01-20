@@ -349,7 +349,6 @@ function AuctionApp() {
                   src={playerImageUrl || '/placeholder_player.png'} 
                   alt={currentPlayer.name}
                   className="placeholder-image"
-                  crossOrigin="anonymous"
                   loading="eager"
                   onError={(e) => {
                     const img = e.target as HTMLImageElement;
@@ -367,7 +366,7 @@ function AuctionApp() {
                       }
                       
                       // Final fallback: generate avatar from player name using ui-avatars
-                      // This service has CORS enabled and works on localhost
+                      // This service works on localhost when crossOrigin is not enforced
                       if (!img.src.includes('ui-avatars')) {
                         const playerInitials = currentPlayer.name
                           .split(' ')
@@ -572,7 +571,6 @@ function AuctionApp() {
                           <img 
                             src={player.imageUrl || '/placeholder_player.png'} 
                             alt={player.name}
-                            crossOrigin="anonymous"
                             loading="lazy"
                             onError={(e) => {
                               console.error('[SquadView] Image failed, using placeholder for', player.name);
