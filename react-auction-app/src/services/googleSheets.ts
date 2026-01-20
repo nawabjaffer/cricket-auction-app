@@ -35,34 +35,61 @@ class GoogleSheetsService {
     // Allow app-served assets
     if (raw.startsWith('/')) return raw;
 
-    // Only attempt URL parsing for http(s)
-    if (!/^https?:\/\//i.test(raw)) return placeholder;
+    // Normalize scheme-less drive links
+    const value = /^https?:\/\//i.test(raw)
+      ? raw
+      : raw.startsWith('drive.google.com') || raw.startsWith('docs.google.com')
+        ? `https://${raw}`
+        : raw;
 
-    const extractDriveFileId = (value: string): string | null => {
+    const buildDriveViewUrl = (fileId: string) => `https://drive.google.com/uc?export=view&id=${fileId}`;
+
+    // Allow bare Drive file IDs (common in sheets); detect long base64-ish tokens
+    const looksLikeDriveId = /^[A-Za-z0-9_-]{20,}$/.test(value);
+    if (looksLikeDriveId) {
+      return buildDriveViewUrl(value);
+    }
+
+    // Only attempt URL parsing for http(s) after normalization
+    if (!/^https?:\/\//i.test(value)) return placeholder;
+
+    const normalizeDriveUrl = (value: string): string | null => {
       try {
         const url = new URL(value);
 
+        // Direct googleusercontent links are already file-serving; keep as-is
+        if (url.hostname.includes('googleusercontent.com')) {
+          return url.toString();
+        }
+
+        if (!url.hostname.includes('drive.google.com')) return null;
+
         // https://drive.google.com/file/d/<id>/view
         const fileMatch = /\/file\/d\/([^/]+)/.exec(url.pathname);
-        if (fileMatch?.[1]) return fileMatch[1];
+        if (fileMatch?.[1]) return buildDriveViewUrl(fileMatch[1]);
 
-        // https://drive.google.com/open?id=<id>
-        const idParam = url.searchParams.get('id');
-        if (idParam) return idParam;
+        // https://drive.google.com/uc?id=<id>&export=view|download
+        const ucIdParam = url.searchParams.get('id');
+        if (ucIdParam) return buildDriveViewUrl(ucIdParam);
 
-        // Sometimes shared links include ?usp=drive_link and other params; fall back to path parsing
+        // https://drive.google.com/thumbnail?id=<id>
+        const thumbnailId = url.searchParams.get('thumbnail') || url.searchParams.get('thumb');
+        if (thumbnailId) return buildDriveViewUrl(thumbnailId);
+
+        // /d/<id> without /file prefix (rare shared links)
+        const looseMatch = /\/d\/([^/]+)/.exec(url.pathname);
+        if (looseMatch?.[1]) return buildDriveViewUrl(looseMatch[1]);
+
         return null;
       } catch {
         return null;
       }
     };
 
-    const fileId = extractDriveFileId(raw);
-    if (fileId) {
-      // Direct-view URL suitable for <img src="...">
-      return `https://drive.google.com/uc?export=view&id=${fileId}`;
-    }
+    const normalizedDriveUrl = normalizeDriveUrl(value);
+    if (normalizedDriveUrl) return normalizedDriveUrl;
 
+    // Non-drive URLs are allowed but returned as-is so images continue to load
     return raw;
   }
 

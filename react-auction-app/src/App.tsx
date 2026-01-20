@@ -33,7 +33,7 @@ import {
   useHotkeyHelp,
 } from './hooks';
 import { audioService } from './services';
-import { useActiveOverlay, useNotification, useCurrentPlayer, useSoldPlayers, useTeams } from './store';
+import { useActiveOverlay, useNotification, useCurrentPlayer, useSoldPlayers, useUnsoldPlayers, useAvailablePlayers, useTeams } from './store';
 import './index.css';
 
 // Create Query Client
@@ -80,6 +80,8 @@ function AuctionApp() {
   const notification = useNotification();
   const currentPlayer = useCurrentPlayer();
   const soldPlayers = useSoldPlayers();
+  const unsoldPlayers = useUnsoldPlayers();
+  const availablePlayers = useAvailablePlayers();
   const allTeams = useTeams();
 
   // Handle team squad view
@@ -581,6 +583,7 @@ function AuctionApp() {
             teamId={selectedTeamForSquad}
             teams={allTeams}
             soldPlayers={soldPlayers}
+            allPlayers={[...soldPlayers, ...unsoldPlayers, ...availablePlayers]}
             onClose={() => {
               setShowTeamSquadView(false);
               setSelectedTeamForSquad('');
@@ -683,10 +686,11 @@ interface TeamSquadViewModalProps {
   teamId: string;
   teams: any[];
   soldPlayers: any[];
+  allPlayers: any[];
   onClose: () => void;
 }
 
-function TeamSquadViewModal({ teamId, teams, soldPlayers, onClose }: TeamSquadViewModalProps) {
+function TeamSquadViewModal({ teamId, teams, soldPlayers, allPlayers, onClose }: TeamSquadViewModalProps) {
   const team = teams.find(t => t.id === teamId);
   
   console.log('[V1 TeamSquadViewModal] Rendering - teamId:', teamId, 'team:', team, 'teams available:', teams.length);
@@ -722,12 +726,20 @@ function TeamSquadViewModal({ teamId, teams, soldPlayers, onClose }: TeamSquadVi
   // Use player placeholder image from assets
   const placeholderImage = '/placeholder_player.png';
 
-  
+  // Find captain image from all players (sold, unsold, available)
   let captainImage = placeholderImage;
   if (team.captain) {
-    const captain = soldPlayers.find(p => p.name.toLowerCase() === team.captain.toLowerCase());
-    if (captain?.imageUrl) {
+    const captain = allPlayers.find(p => p.name?.toLowerCase() === team.captain?.toLowerCase());
+    console.log('[V1 TeamSquadViewModal] Looking for captain:', team.captain, 'Found:', captain?.name, 'ImageUrl:', captain?.imageUrl);
+    if (captain?.imageUrl && captain.imageUrl !== placeholderImage) {
       captainImage = captain.imageUrl;
+    }
+  } else {
+    // If no captain specified, use the first team player's image
+    const firstPlayer = teamPlayers[0];
+    if (firstPlayer?.imageUrl && firstPlayer.imageUrl !== placeholderImage) {
+      captainImage = firstPlayer.imageUrl;
+      console.log('[V1 TeamSquadViewModal] No captain, using first player:', firstPlayer.name, 'ImageUrl:', firstPlayer.imageUrl);
     }
   }
   
