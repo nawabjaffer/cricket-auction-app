@@ -42,7 +42,10 @@ class GoogleSheetsService {
         ? `https://${raw}`
         : raw;
 
-    const buildDriveViewUrl = (fileId: string) => `https://drive.google.com/uc?export=view&id=${fileId}`;
+    const buildDriveViewUrl = (fileId: string) => {
+      // Use standard uc endpoint for Drive images
+      return `https://drive.google.com/uc?export=view&id=${fileId}`;
+    };
 
     // Allow bare Drive file IDs (common in sheets); detect long base64-ish tokens
     const looksLikeDriveId = /^[A-Za-z0-9_-]{20,}$/.test(value);

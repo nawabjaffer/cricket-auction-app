@@ -35,6 +35,7 @@ import {
 } from './hooks';
 import { audioService } from './services';
 import { useActiveOverlay, useNotification, useCurrentPlayer, useSoldPlayers, useUnsoldPlayers, useAvailablePlayers, useTeams } from './store';
+import { getAlternativeDriveUrl } from './utils/driveImage';
 import './index.css';
 
 // Create Query Client
@@ -125,12 +126,8 @@ function AuctionApp() {
     { label: 'Highest Score', value: currentPlayer?.battingBestFigures || '—' },
   ]), [currentPlayer]);
 
-  // Preload player image with retry logic
-  const { loadedUrl: playerImageUrl } = useImagePreload(currentPlayer?.imageUrl, {
-    maxRetries: 3,
-    retryDelay: 300,
-    timeout: 3000,
-  });
+  // Preload player image - simple URL tracking
+  const { loadedUrl: playerImageUrl } = useImagePreload(currentPlayer?.imageUrl);
 
   // Loading state
   if (isLoading) {
@@ -355,8 +352,19 @@ function AuctionApp() {
                   crossOrigin="anonymous"
                   loading="eager"
                   onError={(e) => {
-                    console.error('[App] Image display error, falling back to placeholder');
-                    (e.target as HTMLImageElement).src = '/placeholder_player.png';
+                    const img = e.target as HTMLImageElement;
+                    // Try alternative Drive URL if primary failed
+                    if (playerImageUrl && playerImageUrl.includes('drive.google.com')) {
+                      const altUrl = getAlternativeDriveUrl(playerImageUrl);
+                      if (altUrl && img.src !== altUrl) {
+                        console.log('[App] Trying alternative Drive URL:', altUrl);
+                        img.src = altUrl;
+                        return;
+                      }
+                    }
+                    // Final fallback to placeholder
+                    console.warn('[App] Image loading failed, using placeholder for', currentPlayer.name);
+                    img.src = '/placeholder_player.png';
                   }}
                 />
               )}
