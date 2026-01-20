@@ -159,6 +159,13 @@ export const useAuctionStore = create<AuctionStore>()(
 
         // === Player Selection Actions ===
         selectPlayer: (player) => {
+          console.log('[Auction] Player Selected:', {
+            id: player.id,
+            name: player.name,
+            role: player.role,
+            imageUrl: player.imageUrl,
+            basePrice: player.basePrice,
+          });
           set({
             currentPlayer: player,
             currentBid: player.basePrice,
@@ -180,6 +187,7 @@ export const useAuctionStore = create<AuctionStore>()(
           const { availablePlayers, selectionMode } = get();
           
           if (availablePlayers.length === 0) {
+            console.log('[Auction] No more players available');
             set({ 
               notification: { type: 'info', message: 'No more players available' },
               activeOverlay: 'end',
@@ -195,6 +203,15 @@ export const useAuctionStore = create<AuctionStore>()(
             const randomIndex = Math.floor(Math.random() * availablePlayers.length);
             nextPlayer = availablePlayers[randomIndex];
           }
+
+          console.log('[Auction] Next Player Selected:', {
+            id: nextPlayer.id,
+            name: nextPlayer.name,
+            role: nextPlayer.role,
+            imageUrl: nextPlayer.imageUrl,
+            basePrice: nextPlayer.basePrice,
+            selectionMode,
+          });
 
           get().selectPlayer(nextPlayer);
         },
