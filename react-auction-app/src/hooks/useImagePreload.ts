@@ -19,15 +19,20 @@ export function useImagePreload(
 ) {
   const { timeout = 100 } = options;
   const [loadedUrl, setLoadedUrl] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
     if (!imageUrl) {
       setLoadedUrl(null);
+      setIsLoading(false);
       return;
     }
 
     let isMounted = true;
     let timeoutId: ReturnType<typeof setTimeout>;
+
+    // Show loading state immediately
+    setIsLoading(true);
 
     // Simple delayed state update to ensure img src is set
     // This gives React time to render and allows browser to handle image loading
@@ -44,6 +49,6 @@ export function useImagePreload(
     };
   }, [imageUrl, timeout]);
 
-  return { loadedUrl };
+  return { loadedUrl, isLoading };
 }
 

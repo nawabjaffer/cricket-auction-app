@@ -127,7 +127,7 @@ function AuctionApp() {
   ]), [currentPlayer]);
 
   // Preload player image - simple URL tracking
-  const { loadedUrl: playerImageUrl } = useImagePreload(currentPlayer?.imageUrl);
+  const { loadedUrl: playerImageUrl, isLoading: isImageLoading } = useImagePreload(currentPlayer?.imageUrl);
 
   // Loading state
   if (isLoading) {
@@ -345,48 +345,74 @@ function AuctionApp() {
               transition={{ duration: 0.7, delay: 0.15, ease: [0.32, 0.72, 0, 1] }}
             >
               {currentPlayer && (
-                <img 
-                  src={playerImageUrl || '/placeholder_player.png'} 
-                  alt={currentPlayer.name}
-                  className="placeholder-image"
-                  loading="eager"
-                  onError={(e) => {
-                    const img = e.target as HTMLImageElement;
-                    
-                    // Try alternative if primary failed and it's a Drive URL
-                    if (playerImageUrl && playerImageUrl.includes('drive.google.com')) {
-                      // Only try alternative if we haven't already
-                      if (!img.src.includes('/api/proxy-drive') && !img.src.includes('ui-avatars')) {
-                        const altUrl = getAlternativeDriveUrl(playerImageUrl);
-                        if (altUrl && img.src !== altUrl) {
-                          console.log('[App] Trying alternative Drive URL:', altUrl);
-                          img.src = altUrl;
+                <>
+                  {/* Loading Spinner Overlay */}
+                  <AnimatePresence>
+                    {isImageLoading && (
+                      <motion.div
+                        className="absolute inset-0 flex items-center justify-center bg-black/40 rounded-lg z-10"
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        transition={{ duration: 0.2 }}
+                      >
+                        <motion.div
+                          className="w-16 h-16 border-4 border-transparent border-t-yellow-400 border-r-yellow-400 rounded-full"
+                          animate={{ rotate: 360 }}
+                          transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
+                        />
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+
+                  {/* Actual Image */}
+                  <img 
+                    src={playerImageUrl || '/placeholder_player.png'} 
+                    alt={currentPlayer.name}
+                    className="placeholder-image"
+                    loading="eager"
+                    onError={(e) => {
+                      const img = e.target as HTMLImageElement;
+                      
+                      // Try alternative if primary failed and it's a Drive URL
+                      if (playerImageUrl && playerImageUrl.includes('drive.google.com')) {
+                        // Only try alternative if we haven't already
+                        if (!img.src.includes('/api/proxy-drive') && !img.src.includes('ui-avatars')) {
+                          const altUrl = getAlternativeDriveUrl(playerImageUrl);
+                          if (altUrl && img.src !== altUrl) {
+                            console.log('[App] Trying alternative Drive URL:', altUrl);
+                            img.src = altUrl;
+                            return;
+                          }
+                        }
+                        
+                        // Final fallback: generate avatar from player name using ui-avatars
+                        // This service works on localhost when crossOrigin is not enforced
+                        if (!img.src.includes('ui-avatars')) {
+                          const playerInitials = currentPlayer.name
+                            .split(' ')
+                            .map(word => word[0])
+                            .join('')
+                            .toUpperCase()
+                            .slice(0, 2);
+                          
+                          const avatarUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(playerInitials)}&background=1976D2&color=ffffff&size=400&bold=true`;
+                          console.log('[App] Using generated avatar for', currentPlayer.name, ':', avatarUrl);
+                          img.src = avatarUrl;
                           return;
                         }
                       }
                       
-                      // Final fallback: generate avatar from player name using ui-avatars
-                      // This service works on localhost when crossOrigin is not enforced
-                      if (!img.src.includes('ui-avatars')) {
-                        const playerInitials = currentPlayer.name
-                          .split(' ')
-                          .map(word => word[0])
-                          .join('')
-                          .toUpperCase()
-                          .slice(0, 2);
-                        
-                        const avatarUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(playerInitials)}&background=1976D2&color=ffffff&size=400&bold=true`;
-                        console.log('[App] Using generated avatar for', currentPlayer.name, ':', avatarUrl);
-                        img.src = avatarUrl;
-                        return;
-                      }
-                    }
-                    
-                    // Final fallback to placeholder
-                    console.warn('[App] Image loading failed, using placeholder for', currentPlayer.name);
-                    img.src = '/placeholder_player.png';
-                  }}
-                />
+                      // Final fallback to placeholder
+                      console.warn('[App] Image loading failed, using placeholder for', currentPlayer.name);
+                      img.src = '/placeholder_player.png';
+                    }}
+                    onLoad={() => {
+                      // Image loaded successfully - loading spinner will fade out
+                      console.log('[App] Image loaded successfully for', currentPlayer.name);
+                    }}
+                  />
+                </>
               )}
               {!currentPlayer && (
                 <img 
