@@ -1,6 +1,6 @@
 // ============================================================================
 // USE IMAGE PRELOAD HOOK
-// Handles robust image loading with retry logic for Drive URLs
+// Handles robust image loading with timeout retry for Drive URLs
 // ============================================================================
 
 import { useEffect, useState } from 'react';
@@ -12,86 +12,109 @@ interface UseImagePreloadOptions {
 }
 
 /**
- * Preloads an image with retry logic
- * Useful for handling flaky Drive URLs that need time to respond
+ * Tracks image URL and validity without using Image() object
+ * Avoids CORS issues by letting browser handle loading naturally
  */
 export function useImagePreload(
   imageUrl: string | undefined | null,
   options: UseImagePreloadOptions = {}
 ) {
-  const { maxRetries = 3, retryDelay = 500, timeout = 5000 } = options;
+  const { maxRetries = 2, retryDelay = 1000, timeout = 8000 } = options;
   const [loadedUrl, setLoadedUrl] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [retryCount, setRetryCount] = useState(0);
 
   useEffect(() => {
     if (!imageUrl) {
       setLoadedUrl(null);
       setError(null);
+      setRetryCount(0);
       return;
     }
 
     let isMounted = true;
-    let retryCount = 0;
     let timeoutId: ReturnType<typeof setTimeout>;
+    let hasLoaded = false;
 
-    const attemptLoad = () => {
+    const startAttempt = () => {
       if (!isMounted) return;
 
       setIsLoading(true);
-      const img = new Image();
+      
+      console.log(`[useImagePreload] Attempt ${retryCount + 1}/${maxRetries + 1}: ${imageUrl}`);
 
-      // Set timeout for the image load
-      timeoutId = setTimeout(() => {
-        if (isMounted && !img.complete) {
-          console.warn(`[useImagePreload] Timeout loading image (${retryCount}/${maxRetries}):`, imageUrl);
-          if (retryCount < maxRetries) {
-            retryCount++;
-            setTimeout(attemptLoad, retryDelay);
-          } else {
-            setError('Image load timeout');
+      // Create a fetch request to check if the image is accessible
+      // This works better with CORS than Image() object
+      fetch(imageUrl, { 
+        method: 'HEAD',
+        mode: 'no-cors',
+        cache: 'reload'
+      })
+        .then(() => {
+          if (isMounted && !hasLoaded) {
+            hasLoaded = true;
+            console.log('[useImagePreload] Image fetch successful:', imageUrl);
+            setLoadedUrl(imageUrl);
+            setError(null);
             setIsLoading(false);
+            setRetryCount(0);
           }
-        }
-      }, timeout);
+        })
+        .catch((err) => {
+          if (isMounted && !hasLoaded) {
+            console.warn(`[useImagePreload] Fetch attempt failed:`, err.message);
+            
+            // For Drive URLs, the fetch might fail due to CORS, but the image still works
+            // in img tags. So we'll just assume it's valid and let the browser handle it
+            if (imageUrl.includes('drive.google.com') || imageUrl.includes('googleusercontent.com')) {
+              console.log('[useImagePreload] Google Drive URL detected - trusting browser to load');
+              hasLoaded = true;
+              setLoadedUrl(imageUrl);
+              setError(null);
+              setIsLoading(false);
+              setRetryCount(0);
+              return;
+            }
 
-      img.onload = () => {
-        if (isMounted) {
-          clearTimeout(timeoutId);
-          console.log('[useImagePreload] Image loaded successfully:', imageUrl);
+            // For non-Drive URLs, retry
+            if (retryCount < maxRetries) {
+              console.log(`[useImagePreload] Retrying in ${retryDelay}ms... (${retryCount + 1}/${maxRetries})`);
+              timeoutId = setTimeout(() => {
+                if (isMounted) {
+                  setRetryCount(prev => prev + 1);
+                  startAttempt();
+                }
+              }, retryDelay);
+            } else {
+              console.error('[useImagePreload] All retries exhausted for:', imageUrl);
+              setError('Image failed to load after retries');
+              setIsLoading(false);
+            }
+          }
+        });
+
+      // Also set a timeout as fallback - assume success after timeout
+      timeoutId = setTimeout(() => {
+        if (isMounted && !hasLoaded) {
+          console.log('[useImagePreload] Timeout reached - assuming image is loadable:', imageUrl);
+          hasLoaded = true;
           setLoadedUrl(imageUrl);
           setError(null);
           setIsLoading(false);
+          setRetryCount(0);
         }
-      };
-
-      img.onerror = () => {
-        if (isMounted) {
-          clearTimeout(timeoutId);
-          console.warn(`[useImagePreload] Image load failed (${retryCount}/${maxRetries}):`, imageUrl);
-
-          if (retryCount < maxRetries) {
-            retryCount++;
-            console.log(`[useImagePreload] Retrying in ${retryDelay}ms...`);
-            setTimeout(attemptLoad, retryDelay);
-          } else {
-            setError('Image failed to load after retries');
-            setIsLoading(false);
-          }
-        }
-      };
-
-      // Trigger the load
-      img.src = imageUrl;
+      }, timeout);
     };
 
-    attemptLoad();
+    startAttempt();
 
     return () => {
       isMounted = false;
       clearTimeout(timeoutId);
     };
-  }, [imageUrl, maxRetries, retryDelay, timeout]);
+  }, [imageUrl, maxRetries, retryDelay, timeout, retryCount]);
 
   return { loadedUrl, isLoading, error };
 }
+

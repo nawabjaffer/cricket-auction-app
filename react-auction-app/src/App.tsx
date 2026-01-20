@@ -352,8 +352,10 @@ function AuctionApp() {
                   src={playerImageUrl || '/placeholder_player.png'} 
                   alt={currentPlayer.name}
                   className="placeholder-image"
+                  crossOrigin="anonymous"
+                  loading="eager"
                   onError={(e) => {
-                    console.error('[App] Image display error:', playerImageUrl);
+                    console.error('[App] Image display error, falling back to placeholder');
                     (e.target as HTMLImageElement).src = '/placeholder_player.png';
                   }}
                 />
@@ -541,12 +543,11 @@ function AuctionApp() {
                           <img 
                             src={player.imageUrl || '/placeholder_player.png'} 
                             alt={player.name}
+                            crossOrigin="anonymous"
+                            loading="lazy"
                             onError={(e) => {
-                              console.error('[SquadView] Image failed to load for', player.name, ':', player.imageUrl);
+                              console.error('[SquadView] Image failed, using placeholder for', player.name);
                               (e.target as HTMLImageElement).src = '/placeholder_player.png';
-                            }}
-                            onLoad={() => {
-                              console.log('[SquadView] Image loaded for', player.name, ':', player.imageUrl);
                             }}
                           />
                         </div>
