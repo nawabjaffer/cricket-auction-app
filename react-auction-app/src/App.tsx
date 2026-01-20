@@ -141,7 +141,7 @@ function AuctionApp() {
   }, [currentPlayer?.imageUrl]);
 
   // Preload player image - simple URL tracking
-  const { loadedUrl: playerImageUrl, isLoading: isImageLoading } = useImagePreload(transformedImageUrl);
+  const { loadedUrl: playerImageUrl, isLoading: isImageLoading, onImageLoad } = useImagePreload(transformedImageUrl);
 
   // Loading state
   if (isLoading) {
@@ -445,10 +445,12 @@ function AuctionApp() {
                       // Final fallback to placeholder
                       console.warn('[App] Image loading failed, using placeholder for', currentPlayer.name);
                       img.src = '/placeholder_player.png';
+                      onImageLoad(); // Mark loading complete even on fallback
                     }}
                     onLoad={() => {
-                      // Image loaded successfully - loading spinner will fade out
+                      // Image loaded successfully - hide loading spinner
                       console.log('[App] Image loaded successfully for', currentPlayer.name);
+                      onImageLoad();
                     }}
                   />
                 </>

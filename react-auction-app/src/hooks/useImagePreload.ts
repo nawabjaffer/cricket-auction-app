@@ -3,7 +3,7 @@
 // Tracks image URLs and lets browser handle loading naturally
 // ============================================================================
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 
 interface UseImagePreloadOptions {
   timeout?: number;
@@ -20,6 +20,11 @@ export function useImagePreload(
   const { timeout = 100 } = options;
   const [loadedUrl, setLoadedUrl] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+
+  // Callback to mark loading as complete
+  const onImageLoad = useCallback(() => {
+    setIsLoading(false);
+  }, []);
 
   useEffect(() => {
     if (!imageUrl) {
@@ -49,6 +54,6 @@ export function useImagePreload(
     };
   }, [imageUrl, timeout]);
 
-  return { loadedUrl, isLoading };
+  return { loadedUrl, isLoading, onImageLoad };
 }
 
