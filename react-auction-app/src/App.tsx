@@ -35,7 +35,7 @@ import {
 } from './hooks';
 import { audioService } from './services';
 import { useActiveOverlay, useNotification, useCurrentPlayer, useSoldPlayers, useUnsoldPlayers, useAvailablePlayers, useTeams } from './store';
-import { getAlternativeDriveUrl } from './utils/driveImage';
+import { getAlternativeDriveUrl, getCorsproxiedUrl } from './utils/driveImage';
 import './index.css';
 
 // Create Query Client
@@ -353,15 +353,30 @@ function AuctionApp() {
                   loading="eager"
                   onError={(e) => {
                     const img = e.target as HTMLImageElement;
+                    
                     // Try alternative Drive URL if primary failed
                     if (playerImageUrl && playerImageUrl.includes('drive.google.com')) {
-                      const altUrl = getAlternativeDriveUrl(playerImageUrl);
-                      if (altUrl && img.src !== altUrl) {
-                        console.log('[App] Trying alternative Drive URL:', altUrl);
-                        img.src = altUrl;
-                        return;
+                      // First try: alternative Drive URL (thumbnail)
+                      if (!img.src.includes('cors-anywhere')) {
+                        const altUrl = getAlternativeDriveUrl(playerImageUrl);
+                        if (altUrl && img.src !== altUrl) {
+                          console.log('[App] Trying alternative Drive URL:', altUrl);
+                          img.src = altUrl;
+                          return;
+                        }
+                      }
+                      
+                      // Second try: CORS proxy for localhost development
+                      if (!img.src.includes('cors-anywhere')) {
+                        const proxiedUrl = getCorsproxiedUrl(playerImageUrl);
+                        if (proxiedUrl !== playerImageUrl) {
+                          console.log('[App] Trying CORS proxy URL (for localhost):', proxiedUrl);
+                          img.src = proxiedUrl;
+                          return;
+                        }
                       }
                     }
+                    
                     // Final fallback to placeholder
                     console.warn('[App] Image loading failed, using placeholder for', currentPlayer.name);
                     img.src = '/placeholder_player.png';

@@ -3,6 +3,9 @@
 // Helper functions for handling Google Drive image URLs
 // ============================================================================
 
+// CORS proxy for development - helps with localhost CORS issues
+const CORS_PROXY = 'https://cors-anywhere.herokuapp.com/';
+
 /**
  * Extract file ID from a Google Drive URL
  */
@@ -21,19 +24,26 @@ export function extractDriveFileId(url: string): string | null {
 
 /**
  * Create multiple image URL variants for a Drive file
- * Returns them in order of preference
+ * Returns them in order of preference, including CORS proxy versions for localhost
  */
 export function getDriveImageUrlVariants(fileId: string): string[] {
-  return [
+  const isDevelopment = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+  
+  const variants = [
     // Primary: direct view
     `https://drive.google.com/uc?export=view&id=${fileId}`,
     
     // Alternative: thumbnail endpoint
     `https://drive.google.com/thumbnail?id=${fileId}&sz=w600`,
     
-    // Fallback: open viewer (less ideal for img tags but might work)
-    `https://drive.google.com/file/d/${fileId}/preview`,
+    // For development/localhost: use CORS proxy
+    ...(isDevelopment ? [
+      `${CORS_PROXY}https://drive.google.com/uc?export=view&id=${fileId}`,
+      `${CORS_PROXY}https://drive.google.com/thumbnail?id=${fileId}&sz=w600`,
+    ] : []),
   ];
+  
+  return variants;
 }
 
 /**
@@ -43,6 +53,24 @@ export function getAlternativeDriveUrl(originalUrl: string): string | null {
   const fileId = extractDriveFileId(originalUrl);
   if (!fileId) return null;
   
-  // Try the thumbnail endpoint as a fallback
-  return `https://drive.google.com/thumbnail?id=${fileId}&sz=w600`;
+  const isDevelopment = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+  
+  // Try thumbnail first
+  const thumbnail = `https://drive.google.com/thumbnail?id=${fileId}&sz=w600`;
+  
+  // For localhost, wrap with CORS proxy
+  if (isDevelopment) {
+    return `${CORS_PROXY}${thumbnail}`;
+  }
+  
+  return thumbnail;
+}
+
+/**
+ * Get a CORS proxy-wrapped URL for development
+ */
+export function getCorsproxiedUrl(url: string): string {
+  const isDevelopment = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+  if (!isDevelopment) return url;
+  return `${CORS_PROXY}${url}`;
 }
