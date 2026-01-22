@@ -4,7 +4,7 @@
 // ============================================================================
 
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { googleSheetsService, imagePreloaderService } from '../services';
 import { useAuctionStore } from '../store';
 import type { Player, Team, SoldPlayer, UnsoldPlayer } from '../types';
@@ -112,12 +112,16 @@ export function usePlayersQuery() {
 
 /**
  * Combined hook for all initial data loading with image preloading
+ * Waits for BOTH data AND images to be preloaded before marking as ready
  */
 export function useInitialData() {
   const teamsQuery = useTeamsQuery();
   const playersQuery = usePlayersQuery();
   const soldPlayersQuery = useSoldPlayersQuery();
   const unsoldPlayersQuery = useUnsoldPlayersQuery();
+
+  // Track preload state
+  const [isPreloadingComplete, setIsPreloadingComplete] = useState(false);
 
   // Collect all player images for preloading
   const allPlayerImages = useMemo(() => {
@@ -142,8 +146,11 @@ export function useInitialData() {
   }, [playersQuery.data, soldPlayersQuery.data?.players, unsoldPlayersQuery.data?.players]);
 
   // Trigger image preloading when all data is available
+  // IMPORTANT: This now waits for preload to complete before allowing app to render
   useEffect(() => {
     if (allPlayerImages.length > 0 && !imagePreloaderService.isCurrentlyPreloading()) {
+      setIsPreloadingComplete(false); // Mark preload as in-progress
+      
       console.log('[useInitialData] Starting image preload for', allPlayerImages.length, 'images');
       imagePreloaderService.preloadImages(allPlayerImages, {
         maxConcurrent: 6,
@@ -155,18 +162,26 @@ export function useInitialData() {
             failed: result.failed.length,
             successRate: `${result.successRate.toFixed(1)}%`,
           });
+          // Mark preload as complete - app can now render
+          setIsPreloadingComplete(true);
         })
         .catch(error => {
           console.error('[useInitialData] Image preload error:', error);
+          // Even if preload fails, allow app to render with cached/fallback images
+          setIsPreloadingComplete(true);
         });
     }
   }, [allPlayerImages.length]); // Only trigger when count changes
 
-  const isLoading = 
+  // Data loading state
+  const isDataLoading = 
     teamsQuery.isLoading || 
     playersQuery.isLoading || 
     soldPlayersQuery.isLoading || 
     unsoldPlayersQuery.isLoading;
+
+  // Combined loading state: Show loading until BOTH data is ready AND images are preloaded
+  const isLoading = isDataLoading || (allPlayerImages.length > 0 && !isPreloadingComplete);
 
   const isError = 
     teamsQuery.isError || 

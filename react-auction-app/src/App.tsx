@@ -729,16 +729,44 @@ function AuctionApp() {
 
 // Loading Screen
 function LoadingScreen() {
+  const cacheStats = imageCacheService.getStats();
+  const totalCached = cacheStats.total;
+  const successfulCached = cacheStats.successful;
+  const loadPercentage = totalCached > 0 ? Math.round((successfulCached / totalCached) * 100) : 0;
+
   return (
     <div className="min-h-screen bg-[var(--theme-background)] flex items-center justify-center">
       <div className="text-center">
         <div className="text-6xl mb-4 animate-bounce">🏏</div>
-        <div className="text-xl font-semibold text-[var(--theme-text-primary)]">
-          Loading Auction Data...
+        <div className="text-xl font-semibold text-[var(--theme-text-primary)] mb-4">
+          Loading Auction Data & Images...
         </div>
-        <div className="mt-4 w-48 h-2 bg-[var(--theme-secondary)]/20 rounded-full overflow-hidden mx-auto">
-          <div className="h-full bg-[var(--theme-accent)] rounded-full animate-pulse" 
-               style={{ width: '60%' }} />
+        
+        {/* Main progress bar */}
+        <div className="mt-6 w-64 h-3 bg-[var(--theme-secondary)]/20 rounded-full overflow-hidden mx-auto shadow-lg">
+          <div 
+            className="h-full bg-gradient-to-r from-[var(--theme-accent)] to-[var(--theme-secondary)] rounded-full animate-pulse transition-all duration-500" 
+            style={{ width: `${loadPercentage}%` }} 
+          />
+        </div>
+
+        {/* Progress text */}
+        <div className="mt-4 text-[var(--theme-text-secondary)] text-sm">
+          {totalCached > 0 ? (
+            <>
+              <div>Images loaded: {successfulCached} / {totalCached}</div>
+              <div className="text-xs mt-1 opacity-75">{loadPercentage}% complete</div>
+            </>
+          ) : (
+            <div>Preparing images...</div>
+          )}
+        </div>
+
+        {/* Status indicator */}
+        <div className="mt-6 flex justify-center gap-2">
+          <div className="w-2 h-2 bg-[var(--theme-accent)] rounded-full animate-bounce" style={{ animationDelay: '0s' }} />
+          <div className="w-2 h-2 bg-[var(--theme-accent)] rounded-full animate-bounce" style={{ animationDelay: '0.2s' }} />
+          <div className="w-2 h-2 bg-[var(--theme-accent)] rounded-full animate-bounce" style={{ animationDelay: '0.4s' }} />
         </div>
       </div>
     </div>
