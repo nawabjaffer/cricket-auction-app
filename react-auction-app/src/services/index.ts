@@ -8,3 +8,5 @@ export { googleSheetsService } from './googleSheets';
 export { webhookService } from './webhook';
 export type { WebhookPayload, SoldPlayerPayload, UnsoldPlayerPayload, MoveUnsoldToSoldPayload } from './webhook';
 export { audioService } from './audio';
+export { imageCacheService } from './imageCache';
+export { imagePreloaderService } from './imagePreloader';

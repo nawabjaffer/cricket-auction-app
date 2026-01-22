@@ -1,17 +1,20 @@
 // ============================================================================
 // USE IMAGE PRELOAD HOOK
-// Tracks image URLs and lets browser handle loading naturally
+// Tracks image URLs and uses cache for fast loading
 // ============================================================================
 
 import { useEffect, useState, useCallback } from 'react';
+import { imageCacheService } from '../services/imageCache';
 
 interface UseImagePreloadOptions {
   timeout?: number;
 }
 
 /**
- * Simple image URL tracking without validation
- * Avoids CORS/fetch issues by letting browser handle image loading
+ * Image preload hook with cache awareness
+ * - Checks image cache first (session memory + localStorage)
+ * - Shows loading state only if image not in cache
+ * - Immediate display for cached images
  */
 export function useImagePreload(
   imageUrl: string | undefined | null,
@@ -36,10 +39,21 @@ export function useImagePreload(
     let isMounted = true;
     let timeoutId: ReturnType<typeof setTimeout>;
 
-    // Show loading state immediately
+    // Check cache first for instant display
+    const cachedImage = imageCacheService.getFromCache(imageUrl);
+    
+    if (cachedImage && cachedImage.status === 'success') {
+      // Image is in cache and was successfully loaded before
+      console.log('[useImagePreload] Using cached image (successful):', imageUrl);
+      setLoadedUrl(imageUrl);
+      setIsLoading(false);
+      return;
+    }
+
+    // Show loading state only for non-cached images
     setIsLoading(true);
 
-    // Simple delayed state update to ensure img src is set
+    // Delayed state update to ensure img src is set
     // This gives React time to render and allows browser to handle image loading
     timeoutId = setTimeout(() => {
       if (isMounted) {

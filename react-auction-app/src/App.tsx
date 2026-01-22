@@ -33,7 +33,7 @@ import {
   useHotkeyHelp,
   useImagePreload,
 } from './hooks';
-import { audioService } from './services';
+import { audioService, imageCacheService } from './services';
 import { useActiveOverlay, useNotification, useCurrentPlayer, useSoldPlayers, useUnsoldPlayers, useAvailablePlayers, useTeams } from './store';
 import { getDriveImageUrl, extractDriveFileId } from './utils/driveImage';
 import './index.css';
@@ -404,6 +404,9 @@ function AuctionApp() {
                     onError={(e) => {
                       const img = e.target as HTMLImageElement;
                       
+                      // Record failed URL in cache
+                      imageCacheService.markAsFailed(playerImageUrl || '');
+                      
                       // Try alternative URLs for Drive images
                       const originalUrl = currentPlayer.imageUrl || '';
                       const fileId = extractDriveFileId(originalUrl);
@@ -448,6 +451,8 @@ function AuctionApp() {
                       onImageLoad(); // Mark loading complete even on fallback
                     }}
                     onLoad={() => {
+                      // Mark image as successfully loaded in cache
+                      imageCacheService.markAsLoaded(playerImageUrl || '');
                       // Image loaded successfully - hide loading spinner
                       console.log('[App] Image loaded successfully for', currentPlayer.name);
                       onImageLoad();

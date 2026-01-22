@@ -12,4 +12,6 @@ export {
   useRefreshData,
 } from './useData';
 export { useKeyboardShortcuts, useHotkeyHelp } from './useKeyboardShortcuts';
-export { useTheme, useThemeClasses } from './useTheme';export { useImagePreload } from './useImagePreload';
+export { useTheme, useThemeClasses } from './useTheme';
+export { useImagePreload } from './useImagePreload';
+export { useImagePreloaderInit } from './useImagePreloaderInit';

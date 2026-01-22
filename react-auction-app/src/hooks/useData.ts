@@ -4,8 +4,8 @@
 // ============================================================================
 
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect } from 'react';
-import { googleSheetsService } from '../services';
+import { useEffect, useMemo } from 'react';
+import { googleSheetsService, imagePreloaderService } from '../services';
 import { useAuctionStore } from '../store';
 import type { Player, Team, SoldPlayer, UnsoldPlayer } from '../types';
 
@@ -111,13 +111,56 @@ export function usePlayersQuery() {
 }
 
 /**
- * Combined hook for all initial data loading
+ * Combined hook for all initial data loading with image preloading
  */
 export function useInitialData() {
   const teamsQuery = useTeamsQuery();
   const playersQuery = usePlayersQuery();
   const soldPlayersQuery = useSoldPlayersQuery();
   const unsoldPlayersQuery = useUnsoldPlayersQuery();
+
+  // Collect all player images for preloading
+  const allPlayerImages = useMemo(() => {
+    const images = new Set<string>();
+
+    // Available players
+    playersQuery.data?.forEach(player => {
+      if (player.imageUrl) images.add(player.imageUrl);
+    });
+
+    // Sold players
+    soldPlayersQuery.data?.players.forEach(player => {
+      if (player.imageUrl) images.add(player.imageUrl);
+    });
+
+    // Unsold players
+    unsoldPlayersQuery.data?.players.forEach(player => {
+      if (player.imageUrl) images.add(player.imageUrl);
+    });
+
+    return Array.from(images);
+  }, [playersQuery.data, soldPlayersQuery.data?.players, unsoldPlayersQuery.data?.players]);
+
+  // Trigger image preloading when all data is available
+  useEffect(() => {
+    if (allPlayerImages.length > 0 && !imagePreloaderService.isCurrentlyPreloading()) {
+      console.log('[useInitialData] Starting image preload for', allPlayerImages.length, 'images');
+      imagePreloaderService.preloadImages(allPlayerImages, {
+        maxConcurrent: 6,
+        timeout: 15000,
+      })
+        .then(result => {
+          console.log('[useInitialData] Image preload complete:', {
+            successful: result.successful.length,
+            failed: result.failed.length,
+            successRate: `${result.successRate.toFixed(1)}%`,
+          });
+        })
+        .catch(error => {
+          console.error('[useInitialData] Image preload error:', error);
+        });
+    }
+  }, [allPlayerImages.length]); // Only trigger when count changes
 
   const isLoading = 
     teamsQuery.isLoading || 
