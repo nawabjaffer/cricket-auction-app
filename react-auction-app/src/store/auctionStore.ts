@@ -189,7 +189,19 @@ export const useAuctionStore = create<AuctionStore>()(
         },
 
         selectNextPlayer: () => {
-          const { availablePlayers, selectionMode } = get();
+          const { availablePlayers, selectionMode, bidHistory, selectedTeam, currentBid, currentPlayer } = get();
+          
+          // Prevent skipping if there's active bidding
+          if (currentPlayer && (bidHistory.length > 0 || selectedTeam || currentBid > currentPlayer.basePrice)) {
+            console.log('[Auction] Cannot skip player during active bidding');
+            set({ 
+              notification: { 
+                type: 'warning', 
+                message: 'Cannot skip player during active bidding. Mark as Sold (S) or Unsold (U) first.' 
+              }
+            });
+            return;
+          }
           
           if (availablePlayers.length === 0) {
             console.log('[Auction] No more players available');
