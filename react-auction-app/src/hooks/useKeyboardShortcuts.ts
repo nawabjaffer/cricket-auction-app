@@ -45,6 +45,15 @@ export function useKeyboardShortcuts(options: KeyboardShortcutOptions = {}) {
 
     const key = event.key.toLowerCase();
 
+    // Jump to player prompt
+    if (key === hotkeys.jumpToPlayer.toLowerCase()) {
+      event.preventDefault();
+      if (onCustomAction) {
+        onCustomAction('jumpToPlayer');
+      }
+      return;
+    }
+
     // Direct team shortcuts: ], [, p, o for teams 1, 2, 3, 4
     const teamShortcuts: Record<string, number> = {
       ']': 0, // Team 1
@@ -104,12 +113,10 @@ export function useKeyboardShortcuts(options: KeyboardShortcutOptions = {}) {
       lastSlashPressTime.current = 0;
       event.preventDefault();
       if (teamIndex < teams.length) {
-        // Select the team
-        auction.selectTeam(teams[teamIndex]);
-        // Increment bid by multiplier amount (each increment = 0.1L)
-        for (let i = 0; i < bidMultiplier; i++) {
-          auction.incrementBid();
-        }
+        const team = teams[teamIndex];
+        // Select and bid in one action while enforcing alternation rules
+        auction.selectTeam(team);
+        auction.raiseBidForTeam(team, bidMultiplier);
       }
       return;
     }

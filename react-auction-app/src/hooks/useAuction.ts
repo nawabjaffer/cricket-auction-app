@@ -55,6 +55,10 @@ export function useAuction() {
     return store.placeBid(amount, team);
   }, [store]);
 
+  const raiseBidForTeam = useCallback((team: Team, steps = 1) => {
+    return store.raiseBidForTeam(team, steps);
+  }, [store]);
+
   // === Auction Outcomes ===
   const markAsSold = useCallback(async () => {
     const { currentPlayer, currentBid, selectedTeam } = store;
@@ -130,6 +134,10 @@ export function useAuction() {
     store.startRound2();
   }, [store]);
 
+  const jumpToPlayerIndex = useCallback((index: number) => {
+    return store.jumpToPlayerIndex(index);
+  }, [store]);
+
   // === Overlay Management ===
   const closeOverlay = useCallback(() => {
     store.setOverlay(null);
@@ -196,6 +204,7 @@ export function useAuction() {
     decrementBid,
     resetBid,
     placeBid,
+    raiseBidForTeam,
 
     // Outcome Actions
     markAsSold,
@@ -211,6 +220,9 @@ export function useAuction() {
 
     // Reset
     resetAuction,
+
+    // Jump helpers
+    jumpToPlayerIndex,
 
     // Computed
     getEligibleTeams,

@@ -39,6 +39,7 @@ interface AuctionStore {
   currentBid: number;
   previousBid: number;
   bidHistory: BidHistory[];
+  lastBidTeamId: string | null;
   
   // UI state
   isLoading: boolean;
@@ -78,6 +79,8 @@ interface AuctionStore {
   incrementBid: () => void;
   decrementBid: () => void;
   resetBid: () => void;
+  raiseBidForTeam: (team: Team, steps?: number) => boolean;
+  jumpToPlayerIndex: (index: number) => boolean;
   
   // Auction outcomes
   markAsSold: () => void;
@@ -139,6 +142,7 @@ export const useAuctionStore = create<AuctionStore>()(
         currentBid: activeConfig.auction.basePrice,
         previousBid: 0,
         bidHistory: [],
+        lastBidTeamId: null,
         isLoading: false,
         error: null,
         notification: null,
@@ -172,6 +176,7 @@ export const useAuctionStore = create<AuctionStore>()(
             previousBid: 0,
             selectedTeam: null,
             bidHistory: [],
+            lastBidTeamId: null,
             auctionState: {
               ...get().auctionState,
               currentPlayer: player,
@@ -236,6 +241,7 @@ export const useAuctionStore = create<AuctionStore>()(
             previousBid: 0,
             selectedTeam: null,
             bidHistory: [],
+            lastBidTeamId: null,
             auctionState: initialAuctionState,
           });
         },
@@ -281,9 +287,19 @@ export const useAuctionStore = create<AuctionStore>()(
 
         // === Bidding Actions ===
         placeBid: (amount, team) => {
-          const { currentPlayer, currentBid, bidHistory } = get();
+          const { currentPlayer, currentBid, bidHistory, lastBidTeamId } = get();
           
           if (!currentPlayer) return false;
+
+          if (lastBidTeamId === team.id && bidHistory.length > 0) {
+            set({
+              notification: {
+                type: 'warning',
+                message: `${team.name} must wait for another team to bid before bidding again`,
+              },
+            });
+            return false;
+          }
 
           // Validate bid using rules service
           const rulesService = new AuctionRulesService();
@@ -315,6 +331,7 @@ export const useAuctionStore = create<AuctionStore>()(
             currentBid: amount,
             selectedTeam: team,
             bidHistory: nextHistory,
+            lastBidTeamId: team.id,
             auctionState: {
               ...get().auctionState,
               currentBid: amount,
@@ -326,58 +343,93 @@ export const useAuctionStore = create<AuctionStore>()(
           return true;
         },
 
+        raiseBidForTeam: (team, steps = 1) => {
+          const { currentBid, currentPlayer, bidHistory, lastBidTeamId } = get();
+
+          if (!currentPlayer) {
+            set({
+              notification: {
+                type: 'warning',
+                message: 'Select a player before bidding',
+              },
+            });
+            return false;
+          }
+
+          if (lastBidTeamId === team.id && bidHistory.length > 0) {
+            set({
+              notification: {
+                type: 'warning',
+                message: `${team.name} must wait for another team to bid before bidding again`,
+              },
+            });
+            return false;
+          }
+
+          const increment = activeConfig.auction.bidIncrements.default;
+          const safeSteps = Math.max(1, Math.floor(steps));
+          const newBid = currentBid + increment * safeSteps;
+
+          const rulesService = new AuctionRulesService();
+          const maxBid = rulesService.calculateMaxBid(team);
+
+          if (newBid > maxBid) {
+            set({
+              notification: {
+                type: 'warning',
+                message: `${team.name} cannot bid more than ₹${maxBid.toFixed(2)}L`,
+              },
+            });
+            return false;
+          }
+
+          const newBidEntry: BidHistory = {
+            teamId: team.id,
+            teamName: team.name,
+            amount: newBid,
+            timestamp: new Date().toISOString(),
+          };
+
+          const maxHistory = Math.max(0, Math.floor(activeConfig.auction.undo.historySize || 0));
+          const nextHistory = maxHistory > 0 ? [...bidHistory, newBidEntry].slice(-maxHistory) : [...bidHistory, newBidEntry];
+
+          set({
+            previousBid: currentBid,
+            currentBid: newBid,
+            selectedTeam: team,
+            bidHistory: nextHistory,
+            lastBidTeamId: team.id,
+            auctionState: {
+              ...get().auctionState,
+              currentBid: newBid,
+              selectedTeam: team,
+              bidHistory: nextHistory,
+            },
+          });
+
+          return true;
+        },
+
         incrementBid: () => {
-          const { currentBid, selectedTeam, currentPlayer, bidHistory } = get();
+          const { selectedTeam } = get();
+
+          if (selectedTeam) {
+            get().raiseBidForTeam(selectedTeam, 1);
+            return;
+          }
+
+          const { currentBid } = get();
           const increment = activeConfig.auction.bidIncrements.default;
           const newBid = currentBid + increment;
 
-          // Check if selected team can afford the new bid
-          if (selectedTeam && currentPlayer) {
-            const rulesService = new AuctionRulesService();
-            const maxBid = rulesService.calculateMaxBid(selectedTeam);
-            
-            if (newBid > maxBid) {
-              set({ 
-                notification: {
-                  type: 'warning', 
-                  message: `${selectedTeam.name} cannot bid more than ₹${maxBid.toFixed(2)}L` 
-                } 
-              });
-              return;
-            }
-
-            // Add to bid history when team is selected
-            const newBidEntry: BidHistory = {
-              teamId: selectedTeam.id,
-              teamName: selectedTeam.name,
-              amount: newBid,
-              timestamp: new Date().toISOString(),
-            };
-
-            const maxHistory = Math.max(0, Math.floor(activeConfig.auction.undo.historySize || 0));
-            const nextHistory = maxHistory > 0 ? [...bidHistory, newBidEntry].slice(-maxHistory) : [...bidHistory, newBidEntry];
-
-            set({
-              previousBid: currentBid,
+          set({
+            previousBid: currentBid,
+            currentBid: newBid,
+            auctionState: {
+              ...get().auctionState,
               currentBid: newBid,
-              bidHistory: nextHistory,
-              auctionState: {
-                ...get().auctionState,
-                currentBid: newBid,
-                bidHistory: nextHistory,
-              },
-            });
-          } else {
-            // No team selected, just increment without history
-            set({
-              previousBid: currentBid,
-              currentBid: newBid,
-              auctionState: {
-                ...get().auctionState,
-                currentBid: newBid,
-              },
-            });
-          }
+            },
+          });
         },
 
         decrementBid: () => {
@@ -401,6 +453,7 @@ export const useAuctionStore = create<AuctionStore>()(
             currentBid: restoredBid,
             selectedTeam: previousTeam,
             bidHistory: newHistory,
+            lastBidTeamId: previousTeam?.id || null,
             auctionState: {
               ...get().auctionState,
               currentBid: restoredBid,
@@ -418,6 +471,7 @@ export const useAuctionStore = create<AuctionStore>()(
             previousBid: get().currentBid,
             currentBid: basePrice,
             selectedTeam: null,
+            lastBidTeamId: null,
             auctionState: {
               ...get().auctionState,
               currentBid: basePrice,
@@ -607,6 +661,7 @@ export const useAuctionStore = create<AuctionStore>()(
               type: 'info', 
               message: `Round 2 started with ${round2Players.length} players` 
             },
+            lastBidTeamId: null,
           });
         },
 
@@ -635,7 +690,40 @@ export const useAuctionStore = create<AuctionStore>()(
             currentRound: 1,
             isRound2Active: false,
             auctionState: initialAuctionState,
+            lastBidTeamId: null,
           });
+        },
+
+        jumpToPlayerIndex: (index) => {
+          const { availablePlayers } = get();
+
+          if (!Number.isFinite(index) || index < 1 || index > availablePlayers.length) {
+            set({
+              notification: {
+                type: 'error',
+                message: `Enter a player number between 1 and ${availablePlayers.length}`,
+              },
+            });
+            return false;
+          }
+
+          const target = availablePlayers[index - 1];
+          if (!target) {
+            return false;
+          }
+
+          const reordered = [
+            ...availablePlayers.slice(index - 1),
+            ...availablePlayers.slice(0, index - 1),
+          ];
+
+          set({
+            availablePlayers: reordered,
+            lastBidTeamId: null,
+          });
+
+          get().selectPlayer(target);
+          return true;
         },
 
         // === Computed Values ===

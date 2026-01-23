@@ -3,7 +3,7 @@
 // Root component with providers and layout
 // ============================================================================
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AnimatePresence, motion } from 'framer-motion';
@@ -67,6 +67,10 @@ function AuctionApp() {
   const [bidMultiplier, setBidMultiplier] = useState(1);
   const [showTeamSquadView, setShowTeamSquadView] = useState(false);
   const [selectedTeamForSquad, setSelectedTeamForSquad] = useState<string>('');
+  const [showJumpModal, setShowJumpModal] = useState(false);
+  const [jumpInput, setJumpInput] = useState('');
+  const [jumpError, setJumpError] = useState('');
+  const jumpInputRef = useRef<HTMLInputElement>(null);
 
   // Initialize theme and audio
   const { currentTheme } = useTheme();
@@ -103,7 +107,55 @@ function AuctionApp() {
     onHeaderToggle: () => setShowHeader(prev => !prev),
     onBidMultiplierChange: (multiplier) => setBidMultiplier(multiplier),
     onTeamSquadView: handleTeamSquadView,
+    onCustomAction: (action) => {
+      if (action === 'jumpToPlayer') {
+        setJumpError('');
+        setJumpInput('');
+        setShowJumpModal(true);
+      }
+    },
   });
+
+  // Focus jump input when modal opens
+  useEffect(() => {
+    if (showJumpModal) {
+      const frame = requestAnimationFrame(() => jumpInputRef.current?.focus());
+      return () => cancelAnimationFrame(frame);
+    }
+  }, [showJumpModal]);
+
+  const handleJumpSubmit = () => {
+    if (auction.selectionMode !== 'sequential') {
+      setJumpError('Jump works in sequential mode only');
+      return;
+    }
+
+    if (!availablePlayers.length) {
+      setJumpError('No available players to jump to');
+      return;
+    }
+
+    const numericIndex = parseInt(jumpInput, 10);
+    if (!Number.isFinite(numericIndex)) {
+      setJumpError('Enter a player number');
+      return;
+    }
+
+    if (numericIndex < 1 || numericIndex > availablePlayers.length) {
+      setJumpError(`Enter a number between 1 and ${availablePlayers.length}`);
+      return;
+    }
+
+    const success = auction.jumpToPlayerIndex(numericIndex);
+    if (!success) {
+      setJumpError('Unable to jump to that player');
+      return;
+    }
+
+    setShowJumpModal(false);
+    setJumpInput('');
+    setJumpError('');
+  };
 
   // Initialize audio service
   useEffect(() => {
@@ -698,6 +750,56 @@ function AuctionApp() {
       {/* Help Modal */}
       {showHelpModal && (
         <HelpModal onClose={() => setShowHelpModal(false)} />
+      )}
+
+      {/* Jump to Player Modal */}
+      {showJumpModal && createPortal(
+        <div 
+          className="fixed inset-0 z-[11000] bg-black/70 backdrop-blur-sm flex items-center justify-center px-4"
+          onClick={() => setShowJumpModal(false)}
+        >
+          <div 
+            className="bg-[var(--theme-background)] border border-[var(--theme-accent)]/30 rounded-2xl shadow-2xl w-[420px] max-w-full p-6" 
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="text-xl font-semibold text-[var(--theme-text-primary)] mb-2">Jump to Player</div>
+            <p className="text-sm text-[var(--theme-text-secondary)] mb-4">
+              Enter the player number in sequential order and press Enter to go. Press Esc to close.
+            </p>
+            <div className="flex items-center gap-3">
+              <input
+                ref={jumpInputRef}
+                value={jumpInput}
+                onChange={(e) => setJumpInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    handleJumpSubmit();
+                  }
+                  if (e.key === 'Escape') {
+                    e.preventDefault();
+                    setShowJumpModal(false);
+                  }
+                }}
+                className="flex-1 rounded-lg bg-white/10 border border-white/15 px-4 py-3 text-lg text-white focus:outline-none focus:border-[var(--theme-accent)] shadow-inner"
+                placeholder={availablePlayers.length ? `1 - ${availablePlayers.length}` : 'No players available'}
+                inputMode="numeric"
+              />
+              <button
+                type="button"
+                onClick={handleJumpSubmit}
+                className="px-4 py-3 rounded-lg bg-[var(--theme-accent)] text-white font-semibold shadow-lg hover:brightness-110 transition"
+              >
+                Go
+              </button>
+            </div>
+            <div className="mt-2 text-xs text-[var(--theme-text-secondary)]">Hotkey: Press F</div>
+            {jumpError && (
+              <div className="mt-3 text-sm text-red-300">{jumpError}</div>
+            )}
+          </div>
+        </div>,
+        document.body
       )}
 
       {/* Team Squad View Modal (V1) - rendered as portal to escape overflow constraints */}
