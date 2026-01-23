@@ -34,8 +34,8 @@ import {
   useImagePreload,
 } from './hooks';
 import { audioService, imageCacheService } from './services';
-import { useActiveOverlay, useNotification, useCurrentPlayer, useSoldPlayers, useUnsoldPlayers, useAvailablePlayers, useTeams } from './store';
-import { getDriveImageUrl, extractDriveFileId } from './utils/driveImage';
+import { useActiveOverlay, useNotification, useCurrentPlayer, useSoldPlayers, useUnsoldPlayers, useAvailablePlayers, useOriginalPlayers, useTeams } from './store';
+import { extractDriveFileId } from './utils/driveImage';
 import './index.css';
 
 // Create Query Client
@@ -71,6 +71,12 @@ function AuctionApp() {
   const [jumpInput, setJumpInput] = useState('');
   const [jumpError, setJumpError] = useState('');
   const jumpInputRef = useRef<HTMLInputElement>(null);
+  
+  // Image polling state
+  const [imageLoadingState, setImageLoadingState] = useState<'loading' | 'loaded' | 'error'>('loading');
+  const [currentImageAttempt, setCurrentImageAttempt] = useState(0);
+  const imagePollingTimeoutRef = useRef<number | null>(null);
+  const currentPlayerIdRef = useRef<string | null>(null);
 
   // Initialize theme and audio
   const { currentTheme } = useTheme();
@@ -88,6 +94,7 @@ function AuctionApp() {
   const soldPlayers = useSoldPlayers();
   const unsoldPlayers = useUnsoldPlayers();
   const availablePlayers = useAvailablePlayers();
+  const allPlayers = useOriginalPlayers();
   const allTeams = useTeams();
 
   // Handle team squad view
@@ -108,10 +115,19 @@ function AuctionApp() {
     onBidMultiplierChange: (multiplier) => setBidMultiplier(multiplier),
     onTeamSquadView: handleTeamSquadView,
     onCustomAction: (action) => {
+      console.log('[App] onCustomAction called with:', action);
       if (action === 'jumpToPlayer') {
+        console.log('[App] Opening jump modal - current state:', { showJumpModal, jumpInput, jumpError });
+        // Reset state completely
         setJumpError('');
         setJumpInput('');
         setShowJumpModal(true);
+        
+        // Force focus on input after a short delay
+        setTimeout(() => {
+          jumpInputRef.current?.focus();
+          console.log('[App] Input focused, showJumpModal:', true);
+        }, 100);
       }
     },
   });
@@ -119,39 +135,55 @@ function AuctionApp() {
   // Focus jump input when modal opens
   useEffect(() => {
     if (showJumpModal) {
-      const frame = requestAnimationFrame(() => jumpInputRef.current?.focus());
+      console.log('[App] Jump modal opened');
+      const frame = requestAnimationFrame(() => {
+        console.log('[App] Focusing jump input');
+        jumpInputRef.current?.focus();
+      });
       return () => cancelAnimationFrame(frame);
     }
   }, [showJumpModal]);
 
   const handleJumpSubmit = () => {
     if (auction.selectionMode !== 'sequential') {
-      setJumpError('Jump works in sequential mode only');
+      setJumpError('Sequential mode only');
       return;
     }
 
     if (!availablePlayers.length) {
-      setJumpError('No available players to jump to');
+      setJumpError('No players available');
       return;
     }
 
-    const numericIndex = parseInt(jumpInput, 10);
-    if (!Number.isFinite(numericIndex)) {
-      setJumpError('Enter a player number');
+    const playerId = jumpInput.trim();
+    if (!playerId) {
+      setJumpError('Enter player ID');
       return;
     }
 
-    if (numericIndex < 1 || numericIndex > availablePlayers.length) {
-      setJumpError(`Enter a number between 1 and ${availablePlayers.length}`);
+    // Find player by ID
+    const targetPlayer = allPlayers.find(p => p.id === playerId);
+    if (!targetPlayer) {
+      setJumpError(`ID "${playerId}" not found`);
       return;
     }
 
-    const success = auction.jumpToPlayerIndex(numericIndex);
+    // Check if player is still available
+    const isAvailable = availablePlayers.some(p => p.id === playerId);
+    if (!isAvailable) {
+      setJumpError(`${targetPlayer.name} already sold`);
+      return;
+    }
+
+    // Jump to player
+    const success = auction.jumpToPlayerId(playerId);
     if (!success) {
-      setJumpError('Unable to jump to that player');
+      setJumpError('Unable to jump');
       return;
     }
 
+    // Close modal and reset state
+    console.log('[App] Jump successful - closing modal');
     setShowJumpModal(false);
     setJumpInput('');
     setJumpError('');
@@ -178,22 +210,137 @@ function AuctionApp() {
     { label: 'Highest Score', value: currentPlayer?.battingBestFigures || '—' },
   ]), [currentPlayer]);
 
-  // Transform Drive URL to use lh3.googleusercontent.com for better loading
+  // Transform Drive URL to use most reliable endpoint first
   const transformedImageUrl = useMemo(() => {
     if (!currentPlayer?.imageUrl) return null;
     
-    // Check if it's a Drive URL and transform it
-    const driveUrl = getDriveImageUrl(currentPlayer.imageUrl);
-    if (driveUrl) {
-      console.log('[App] Transformed Drive URL:', driveUrl);
-      return driveUrl;
+    // Check if it's a Drive URL and use export view (most reliable)
+    const fileId = extractDriveFileId(currentPlayer.imageUrl);
+    if (fileId) {
+      const exportUrl = `https://drive.google.com/uc?export=view&id=${fileId}`;
+      console.log('[App] Using Drive export URL:', exportUrl);
+      return exportUrl;
     }
     
     return currentPlayer.imageUrl;
   }, [currentPlayer?.imageUrl]);
 
   // Preload player image - simple URL tracking
-  const { loadedUrl: playerImageUrl, isLoading: isImageLoading, onImageLoad } = useImagePreload(transformedImageUrl);
+  const { onImageLoad } = useImagePreload(transformedImageUrl);
+
+  // Async image polling with exponential backoff
+  const imgRef = useRef<HTMLImageElement>(null);
+  
+  // Get all possible image URLs for retry
+  const getImageUrlVariants = (player: typeof currentPlayer) => {
+    if (!player?.imageUrl) return [];
+    
+    const fileId = extractDriveFileId(player.imageUrl);
+    if (!fileId) return [player.imageUrl];
+    
+    // Return all possible Drive URL variants in priority order
+    return [
+      `https://drive.google.com/uc?export=view&id=${fileId}`,
+      `https://drive.google.com/thumbnail?id=${fileId}&sz=w800`,
+      `https://lh3.googleusercontent.com/d/${fileId}=w800`,
+      `https://drive.google.com/uc?export=download&id=${fileId}`,
+      `https://drive.google.com/thumbnail?id=${fileId}&sz=w600`,
+    ];
+  };
+  
+  // Test if image URL is accessible
+  const testImageUrl = (url: string): Promise<boolean> => {
+    return new Promise((resolve) => {
+      const testImg = new Image();
+      testImg.onload = () => resolve(true);
+      testImg.onerror = () => resolve(false);
+      testImg.src = url;
+      
+      // Timeout after 5 seconds
+      setTimeout(() => resolve(false), 5000);
+    });
+  };
+  
+  // Async polling effect - retry loading actual images
+  useEffect(() => {
+    if (!currentPlayer?.id) {
+      setImageLoadingState('error');
+      return;
+    }
+    
+    // Check if this is a new player
+    if (currentPlayerIdRef.current !== currentPlayer.id) {
+      console.log('[App] New player detected:', currentPlayer.name);
+      currentPlayerIdRef.current = currentPlayer.id;
+      setCurrentImageAttempt(0);
+      setImageLoadingState('loading');
+      
+      // Clear any existing polling timeout
+      if (imagePollingTimeoutRef.current) {
+        clearTimeout(imagePollingTimeoutRef.current);
+        imagePollingTimeoutRef.current = null;
+      }
+    }
+    
+    // Start async polling
+    const pollImage = async () => {
+      const urlVariants = getImageUrlVariants(currentPlayer);
+      const maxAttempts = 15; // Try up to 15 times before giving up
+      
+      if (currentImageAttempt >= maxAttempts) {
+        console.warn('[App] Max polling attempts reached for', currentPlayer.name);
+        setImageLoadingState('error');
+        return;
+      }
+      
+      // Calculate which URL variant to try based on attempt
+      const variantIndex = currentImageAttempt % urlVariants.length;
+      const urlToTry = urlVariants[variantIndex];
+      
+      console.log(`[App] Polling attempt ${currentImageAttempt + 1}/${maxAttempts} for ${currentPlayer.name}`);
+      console.log(`[App] Testing URL variant ${variantIndex + 1}/${urlVariants.length}:`, urlToTry.substring(0, 80));
+      
+      const isAccessible = await testImageUrl(urlToTry);
+      
+      // Check if player changed during async operation
+      if (currentPlayerIdRef.current !== currentPlayer.id) {
+        console.log('[App] Player changed during polling, aborting');
+        return;
+      }
+      
+      if (isAccessible) {
+        console.log('[App] ✅ Image accessible! Setting as source');
+        if (imgRef.current) {
+          imgRef.current.src = urlToTry;
+        }
+        setImageLoadingState('loaded');
+      } else {
+        console.log('[App] ❌ Image not accessible, scheduling retry...');
+        setCurrentImageAttempt(prev => prev + 1);
+        
+        // Exponential backoff: 500ms, 1s, 2s, 4s, max 5s
+        const backoffDelay = Math.min(500 * Math.pow(2, Math.floor(currentImageAttempt / urlVariants.length)), 5000);
+        console.log(`[App] Next retry in ${backoffDelay}ms`);
+        
+        imagePollingTimeoutRef.current = setTimeout(() => {
+          pollImage();
+        }, backoffDelay);
+      }
+    };
+    
+    // Start polling if we're in loading state
+    if (imageLoadingState === 'loading') {
+      pollImage();
+    }
+    
+    // Cleanup
+    return () => {
+      if (imagePollingTimeoutRef.current) {
+        clearTimeout(imagePollingTimeoutRef.current);
+        imagePollingTimeoutRef.current = null;
+      }
+    };
+  }, [currentPlayer?.id, currentImageAttempt, imageLoadingState]);
 
   // Loading state
   if (isLoading) {
@@ -419,7 +566,7 @@ function AuctionApp() {
                 <>
                   {/* Loading Spinner Overlay */}
                   <AnimatePresence>
-                    {isImageLoading && (
+                    {imageLoadingState === 'loading' && (
                       <motion.div
                         className="absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-b from-black/60 to-black/80 rounded-lg z-10"
                         initial={{ opacity: 0 }}
@@ -446,7 +593,9 @@ function AuctionApp() {
                           animate={{ opacity: [0.5, 1, 0.5] }}
                           transition={{ duration: 1.5, repeat: Infinity }}
                         >
-                          Loading player...
+                          {imageLoadingState === 'loading' && currentImageAttempt > 0 
+                            ? `Loading image... (attempt ${currentImageAttempt})`
+                            : 'Loading player...'}
                         </motion.p>
                       </motion.div>
                     )}
@@ -454,65 +603,46 @@ function AuctionApp() {
 
                   {/* Actual Image */}
                   <img 
-                    src={playerImageUrl || '/placeholder_player.png'} 
+                    ref={imgRef}
+                    src={imageLoadingState === 'error' ? (
+                      // Show avatar only after all polling attempts fail
+                      currentPlayer.name ? 
+                        `https://ui-avatars.com/api/?name=${encodeURIComponent(
+                          currentPlayer.name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2)
+                        )}&background=1976D2&color=ffffff&size=400&bold=true&format=svg` 
+                        : '/placeholder_player.png'
+                    ) : (transformedImageUrl || '/placeholder_player.png')} 
                     alt={currentPlayer.name}
                     className="placeholder-image"
                     loading="eager"
-                    onError={(e) => {
-                      const img = e.target as HTMLImageElement;
+                    onLoad={(e) => {
+                      const loadedUrl = (e.target as HTMLImageElement).src;
                       
-                      // Record failed URL in cache
-                      imageCacheService.markAsFailed(playerImageUrl || '');
-                      
-                      // Try alternative URLs for Drive images
-                      const originalUrl = currentPlayer.imageUrl || '';
-                      const fileId = extractDriveFileId(originalUrl);
-                      
-                      if (fileId) {
-                        // Try different endpoints in order
-                        if (img.src.includes('lh3.googleusercontent.com') && !img.src.includes('thumbnail')) {
-                          // Try thumbnail endpoint
-                          const thumbnailUrl = `https://drive.google.com/thumbnail?id=${fileId}&sz=w600`;
-                          console.log('[App] Trying thumbnail URL:', thumbnailUrl);
-                          img.src = thumbnailUrl;
-                          return;
-                        }
-                        
-                        if (img.src.includes('thumbnail') && !img.src.includes('uc?export')) {
-                          // Try export view endpoint
-                          const exportUrl = `https://drive.google.com/uc?export=view&id=${fileId}`;
-                          console.log('[App] Trying export URL:', exportUrl);
-                          img.src = exportUrl;
-                          return;
-                        }
-                        
-                        // Final fallback: generate avatar from player name using ui-avatars
-                        if (!img.src.includes('ui-avatars')) {
-                          const playerInitials = currentPlayer.name
-                            .split(' ')
-                            .map(word => word[0])
-                            .join('')
-                            .toUpperCase()
-                            .slice(0, 2);
-                          
-                          const avatarUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(playerInitials)}&background=1976D2&color=ffffff&size=400&bold=true&format=svg`;
-                          console.log('[App] Using generated avatar for', currentPlayer.name, ':', avatarUrl);
-                          img.src = avatarUrl;
-                          return;
-                        }
+                      // Don't mark as loaded if it's placeholder or avatar (means polling failed)
+                      if (loadedUrl.includes('placeholder_player.png') || loadedUrl.includes('ui-avatars.com')) {
+                        console.log('[App] Fallback image loaded for', currentPlayer.name);
+                        onImageLoad();
+                        return;
                       }
                       
-                      // Final fallback to placeholder
-                      console.warn('[App] Image loading failed, using placeholder for', currentPlayer.name);
-                      img.src = '/placeholder_player.png';
-                      onImageLoad(); // Mark loading complete even on fallback
-                    }}
-                    onLoad={() => {
-                      // Mark image as successfully loaded in cache
-                      imageCacheService.markAsLoaded(playerImageUrl || '');
-                      // Image loaded successfully - hide loading spinner
-                      console.log('[App] Image loaded successfully for', currentPlayer.name);
+                      console.log('[App] ✅ Actual image loaded successfully for', currentPlayer.name);
+                      imageCacheService.markAsLoaded(loadedUrl);
+                      setImageLoadingState('loaded');
                       onImageLoad();
+                    }}
+                    onError={(e) => {
+                      const img = e.target as HTMLImageElement;
+                      const failedUrl = img.src;
+                      
+                      // If the async-selected URL failed, continue polling
+                      if (imageLoadingState === 'loaded' && !failedUrl.includes('placeholder') && !failedUrl.includes('ui-avatars')) {
+                        console.warn('[App] Image that passed polling test failed to load:', failedUrl.substring(0, 80));
+                        console.warn('[App] Resuming polling...');
+                        setImageLoadingState('loading');
+                        setCurrentImageAttempt(prev => prev + 1);
+                      }
+                      
+                      imageCacheService.markAsFailed(failedUrl);
                     }}
                   />
                 </>
@@ -702,8 +832,36 @@ function AuctionApp() {
                             alt={player.name}
                             loading="lazy"
                             onError={(e) => {
+                              const img = e.target as HTMLImageElement;
+                              let attempt = parseInt(img.getAttribute('data-squad-error-attempt') || '0', 10);
+                              attempt++;
+                              img.setAttribute('data-squad-error-attempt', attempt.toString());
+                              
+                              // Prevent infinite loop - max 3 attempts
+                              if (attempt > 3) {
+                                console.warn('[SquadView] Max error attempts reached for', player.name);
+                                img.src = '/placeholder_player.png';
+                                return;
+                              }
+                              
+                              // Try fallback
+                              if (attempt === 1) {
+                                const playerInitials = player.name
+                                  .split(' ')
+                                  .map(word => word[0])
+                                  .join('')
+                                  .toUpperCase()
+                                  .slice(0, 2);
+                                
+                                const avatarUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(playerInitials)}&background=1976D2&color=ffffff&size=200&bold=true&format=svg`;
+                                console.log('[SquadView] Trying avatar for', player.name);
+                                img.src = avatarUrl;
+                                return;
+                              }
+                              
+                              // Final fallback
                               console.error('[SquadView] Image failed, using placeholder for', player.name);
-                              (e.target as HTMLImageElement).src = '/placeholder_player.png';
+                              img.src = '/placeholder_player.png';
                             }}
                           />
                         </div>
@@ -757,36 +915,35 @@ function AuctionApp() {
         <HelpModal onClose={() => setShowHelpModal(false)} />
       )}
 
-      {/* Jump to Player Modal */}
-      {showJumpModal && createPortal(
+      {/* Jump to Player Modal - Bottom Left Corner */}
+      {showJumpModal && (() => {
+        console.log('[App] 🎯 Rendering jump modal - showJumpModal:', showJumpModal);
+        return createPortal(
         <div 
-          className="fixed inset-0 z-[11000] bg-black/90 backdrop-blur-lg flex items-center justify-center px-4"
-          onClick={(e) => {
-            e.stopPropagation();
-            setShowJumpModal(false);
-          }}
-          onKeyDown={(e) => {
-            if (e.key === 'Escape') {
-              e.preventDefault();
-              setShowJumpModal(false);
-            }
+          className="fixed bottom-4 left-4 z-[11000]"
+          style={{
+            position: 'fixed',
+            bottom: '16px',
+            left: '16px',
+            zIndex: 11000,
           }}
         >
           <div 
-            className="bg-gradient-to-br from-slate-900 to-slate-800 border-2 border-[var(--theme-accent)] rounded-3xl shadow-2xl w-[520px] max-w-full p-8" 
+            className="bg-slate-900/95 backdrop-blur-md border border-slate-700 rounded-lg shadow-lg p-3" 
             onClick={(e) => e.stopPropagation()}
             style={{
-              boxShadow: '0 0 60px rgba(33, 150, 243, 0.5), 0 20px 80px rgba(0, 0, 0, 0.8)'
+              boxShadow: '0 4px 12px rgba(0, 0, 0, 0.5)',
+              minWidth: '200px',
             }}
           >
-            <div className="text-3xl font-bold text-white mb-3 text-center">🎯 Jump to Player</div>
-            <p className="text-base text-gray-300 mb-6 text-center">
-              Enter the player number (1-{availablePlayers.length}) in sequential order
-            </p>
-            <div className="flex items-center gap-4 mb-4">
+            <div className="text-sm font-medium text-slate-300 mb-2 flex items-center gap-2">
+              <span>🎯</span>
+              <span>Jump to Player ID</span>
+            </div>
+            <div className="flex items-center gap-2">
               <input
                 ref={jumpInputRef}
-                type="number"
+                type="text"
                 value={jumpInput}
                 onChange={(e) => setJumpInput(e.target.value)}
                 onKeyDown={(e) => {
@@ -803,14 +960,10 @@ function AuctionApp() {
                 }}
                 onClick={(e) => e.stopPropagation()}
                 autoFocus
-                className="flex-1 rounded-xl bg-white/20 border-2 border-white/30 px-6 py-4 text-2xl text-white font-bold text-center focus:outline-none focus:border-[var(--theme-accent)] focus:bg-white/30 focus:ring-4 focus:ring-[var(--theme-accent)]/30 shadow-inner transition-all"
-                placeholder={availablePlayers.length ? `1 to ${availablePlayers.length}` : 'No players'}
-                min="1"
-                max={availablePlayers.length}
+                className="flex-1 rounded bg-slate-800 border border-slate-600 px-3 py-1.5 text-sm text-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all"
+                placeholder="Enter ID"
                 style={{
-                  minHeight: '70px',
-                  fontSize: '32px',
-                  fontWeight: '700'
+                  minWidth: '120px',
                 }}
               />
               <button
@@ -819,28 +972,24 @@ function AuctionApp() {
                   e.stopPropagation();
                   handleJumpSubmit();
                 }}
-                className="px-8 py-4 rounded-xl bg-[var(--theme-accent)] text-white text-xl font-bold shadow-lg hover:brightness-110 hover:scale-105 transition-all"
-                style={{
-                  minHeight: '70px',
-                  minWidth: '110px'
-                }}
+                className="px-3 py-1.5 rounded bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition-all"
               >
-                GO
+                Go
               </button>
             </div>
-            <div className="flex items-center justify-between text-sm text-gray-400 px-2">
-              <span>💡 Hotkey: <kbd className="px-2 py-1 bg-white/10 rounded font-mono font-bold">F</kbd></span>
-              <span>Close: <kbd className="px-2 py-1 bg-white/10 rounded font-mono font-bold">ESC</kbd></span>
+            <div className="text-xs text-slate-500 mt-1.5">
+              Press F • ESC to close
             </div>
             {jumpError && (
-              <div className="mt-4 p-3 rounded-lg bg-red-500/20 border border-red-500/40 text-red-200 text-center font-semibold animate-pulse">
-                ⚠️ {jumpError}
+              <div className="mt-2 p-2 rounded bg-red-900/50 border border-red-700/50 text-red-200 text-xs">
+                {jumpError}
               </div>
             )}
           </div>
         </div>,
         document.body
-      )}
+      );
+      })()}
 
       {/* Team Squad View Modal (V1) - rendered as portal to escape overflow constraints */}
       {showTeamSquadView && selectedTeamForSquad && createPortal(
