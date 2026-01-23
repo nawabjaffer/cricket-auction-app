@@ -160,7 +160,7 @@ class GoogleSheetsService {
       // Skip header row
       const playerRows = data.values.slice(1);
 
-      return playerRows
+      const players = playerRows
         .map((row: string[], index: number): Player | null => {
           // Skip if no base price
           if (!row[cols.basePrice] || row[cols.basePrice].trim() === '' || row[cols.basePrice].trim() === 'N/A') {
@@ -190,6 +190,22 @@ class GoogleSheetsService {
           };
         })
         .filter((player: Player | null): player is Player => player !== null);
+
+      // Log all loaded players with their IDs
+      console.log('[GoogleSheets] ✅ Players loaded from Google Sheets:', {
+        totalRows: playerRows.length,
+        validPlayers: players.length,
+        excludedCount: excludeSoldIds.length,
+        players: players.map((p: Player, idx: number) => ({
+          index: idx + 1,
+          id: p.id,
+          name: p.name,
+          basePrice: p.basePrice,
+          imageUrl: p.imageUrl ? `${p.imageUrl.substring(0, 50)}...` : 'NO_IMAGE',
+        })),
+      });
+
+      return players;
     } catch (error) {
       console.error('[GoogleSheets] Error fetching players:', error);
       return [];
@@ -215,7 +231,7 @@ class GoogleSheetsService {
       // Skip header row
       const teamRows = data.values.slice(1);
 
-      return teamRows.map((row: string[], index: number): Team => {
+      const teams = teamRows.map((row: string[], index: number): Team => {
         const totalPlayerThreshold = Number.parseInt(row[cols.totalPlayerThreshold], 10) || 11;
         const playersBought = Number.parseInt(row[cols.playersBought], 10) || 0;
 
@@ -238,6 +254,20 @@ class GoogleSheetsService {
           underAgePlayers: Number.parseInt(row[cols.underAgePlayers], 10) || 0,
         };
       });
+
+      // Log all loaded teams
+      console.log('[GoogleSheets] ✅ Teams loaded from Google Sheets:', {
+        totalTeams: teams.length,
+        teams: teams.map((t: Team) => ({
+          name: t.name,
+          playersBought: t.playersBought,
+          totalThreshold: t.totalPlayerThreshold,
+          remainingPurse: t.remainingPurse,
+          allocatedAmount: t.allocatedAmount,
+        })),
+      });
+
+      return teams;
     } catch (error) {
       console.error('[GoogleSheets] Error fetching teams:', error);
       return activeConfig.defaultTeams;

@@ -32,24 +32,39 @@ export function useKeyboardShortcuts(options: KeyboardShortcutOptions = {}) {
   const hotkeys = activeConfig.hotkeys;
 
   const handleKeyDown = useCallback((event: KeyboardEvent) => {
-    // Don't handle if user is typing in an input
+    // Don't handle if shortcuts are disabled
+    if (!enabled) {
+      console.log('[Hotkey] Shortcuts disabled, ignoring key:', event.key);
+      return;
+    }
+
     const target = event.target as HTMLElement;
+    const key = event.key.toLowerCase();
+    
+    console.log('[Hotkey] Key pressed:', key, 'target:', target.tagName, 'enabled:', enabled);
+
+    // Don't handle if user is typing in an input (unless it's the jump modal input which we want to capture)
     if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
+      console.log('[Hotkey] Input/textarea detected, skipping');
       return;
     }
 
     // Don't handle if modifier keys are pressed (except for specific combos)
     if (event.metaKey || event.ctrlKey || event.altKey) {
+      console.log('[Hotkey] Modifier key detected, skipping');
       return;
     }
 
-    const key = event.key.toLowerCase();
-
     // Jump to player prompt
     if (key === hotkeys.jumpToPlayer.toLowerCase()) {
+      console.log('[Hotkey] F key matched! hotkeys.jumpToPlayer =', hotkeys.jumpToPlayer);
       event.preventDefault();
+      console.log('[Hotkey] F key pressed - jumpToPlayer');
       if (onCustomAction) {
+        console.log('[Hotkey] Calling onCustomAction with jumpToPlayer');
         onCustomAction('jumpToPlayer');
+      } else {
+        console.log('[Hotkey] onCustomAction is not defined!');
       }
       return;
     }

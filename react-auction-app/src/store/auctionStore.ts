@@ -27,6 +27,7 @@ interface AuctionStore {
   // === State ===
   // Player pools
   availablePlayers: Player[];
+  originalPlayers: Player[]; // Track original list for jump-to-player functionality
   soldPlayers: SoldPlayer[];
   unsoldPlayers: UnsoldPlayer[];
   
@@ -81,6 +82,7 @@ interface AuctionStore {
   resetBid: () => void;
   raiseBidForTeam: (team: Team, steps?: number) => boolean;
   jumpToPlayerIndex: (index: number) => boolean;
+  jumpToPlayerId: (playerId: string) => boolean;
   
   // Auction outcomes
   markAsSold: () => void;
@@ -134,6 +136,7 @@ export const useAuctionStore = create<AuctionStore>()(
       (set, get) => ({
         // === Initial State ===
         availablePlayers: [],
+        originalPlayers: [],
         soldPlayers: [],
         unsoldPlayers: [],
         teams: [],
@@ -153,7 +156,7 @@ export const useAuctionStore = create<AuctionStore>()(
         auctionState: initialAuctionState,
 
         // === Data Loading Actions ===
-        setPlayers: (players) => set({ availablePlayers: players }),
+        setPlayers: (players) => set({ availablePlayers: players, originalPlayers: players }),
         
         setTeams: (teams) => set({ teams }),
         
@@ -690,6 +693,7 @@ export const useAuctionStore = create<AuctionStore>()(
         resetAuction: () => {
           set({
             availablePlayers: [],
+            originalPlayers: [],
             soldPlayers: [],
             unsoldPlayers: [],
             currentPlayer: null,
@@ -707,26 +711,52 @@ export const useAuctionStore = create<AuctionStore>()(
         },
 
         jumpToPlayerIndex: (index) => {
-          const { availablePlayers } = get();
+          const { availablePlayers, originalPlayers } = get();
 
-          if (!Number.isFinite(index) || index < 1 || index > availablePlayers.length) {
+          if (!Number.isFinite(index) || index < 1 || index > originalPlayers.length) {
             set({
               notification: {
                 type: 'error',
-                message: `Enter a player number between 1 and ${availablePlayers.length}`,
+                message: `Enter a player number between 1 and ${originalPlayers.length}`,
               },
             });
             return false;
           }
 
-          const target = availablePlayers[index - 1];
-          if (!target) {
+          // Find the player by their original position in originalPlayers (not availablePlayers)
+          // This ensures we always jump to the SAME player ID regardless of queue state
+          const targetPlayer = originalPlayers[index - 1];
+          
+          if (!targetPlayer) {
             return false;
           }
 
+          console.log('[Store] Jump to player index:', {
+            requestedIndex: index,
+            targetPlayerId: targetPlayer.id,
+            targetPlayerName: targetPlayer.name,
+            availablePlayerCount: availablePlayers.length,
+            totalPlayerCount: originalPlayers.length,
+          });
+
+          // Find this player in the current available queue
+          const currentPosition = availablePlayers.findIndex(p => p.id === targetPlayer.id);
+          
+          if (currentPosition === -1) {
+            // Player not in available queue (already sold)
+            set({
+              notification: {
+                type: 'error',
+                message: `Player "${targetPlayer.name}" is not available (already sold)`,
+              },
+            });
+            return false;
+          }
+
+          // Reorder: Move this player to front
           const reordered = [
-            ...availablePlayers.slice(index - 1),
-            ...availablePlayers.slice(0, index - 1),
+            ...availablePlayers.slice(currentPosition),
+            ...availablePlayers.slice(0, currentPosition),
           ];
 
           set({
@@ -734,7 +764,60 @@ export const useAuctionStore = create<AuctionStore>()(
             lastBidTeamId: null,
           });
 
-          get().selectPlayer(target);
+          get().selectPlayer(targetPlayer);
+          return true;
+        },
+
+        jumpToPlayerId: (playerId) => {
+          const { availablePlayers } = get();
+
+          if (!playerId || typeof playerId !== 'string') {
+            set({
+              notification: {
+                type: 'error',
+                message: 'Invalid player ID',
+              },
+            });
+            return false;
+          }
+
+          console.log('[Store] Jump to player by ID:', playerId);
+
+          // Find player in available queue
+          const currentPosition = availablePlayers.findIndex(p => p.id === playerId);
+          
+          if (currentPosition === -1) {
+            // Player not found in available queue
+            set({
+              notification: {
+                type: 'error',
+                message: `Player ID "${playerId}" not available`,
+              },
+            });
+            return false;
+          }
+
+          const targetPlayer = availablePlayers[currentPosition];
+
+          console.log('[Store] Found player:', {
+            playerId: targetPlayer.id,
+            playerName: targetPlayer.name,
+            currentPosition,
+            availableCount: availablePlayers.length,
+          });
+
+          // Reorder: Move this player to front
+          const reordered = [
+            ...availablePlayers.slice(currentPosition),
+            ...availablePlayers.slice(0, currentPosition),
+          ];
+
+          set({
+            availablePlayers: reordered,
+            lastBidTeamId: null,
+          });
+
+          get().selectPlayer(targetPlayer);
           return true;
         },
 
@@ -787,6 +870,7 @@ export const useCurrentBid = () => useAuctionStore((state) => state.currentBid);
 export const useSelectedTeam = () => useAuctionStore((state) => state.selectedTeam);
 export const useTeams = () => useAuctionStore((state) => state.teams);
 export const useAvailablePlayers = () => useAuctionStore((state) => state.availablePlayers);
+export const useOriginalPlayers = () => useAuctionStore((state) => state.originalPlayers);
 export const useSoldPlayers = () => useAuctionStore((state) => state.soldPlayers);
 export const useUnsoldPlayers = () => useAuctionStore((state) => state.unsoldPlayers);
 export const useNotification = () => useAuctionStore((state) => state.notification);

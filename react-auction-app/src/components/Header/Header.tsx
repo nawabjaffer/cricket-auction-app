@@ -167,7 +167,7 @@ export function Header({ onRefresh, onShowHelp, bidMultiplier = 1, onJumpToPlaye
                       onClick={() => { onJumpToPlayer(); setIsMenuOpen(false); }}
                     >
                       <span className="item-icon">🎯</span>
-                      <span className="item-text">Jump to Player</span>
+                      <span className="item-text">Jump to Player ID</span>
                       <span className="item-badge">Press F</span>
                     </button>
                   )}

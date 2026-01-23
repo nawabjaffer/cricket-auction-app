@@ -138,6 +138,10 @@ export function useAuction() {
     return store.jumpToPlayerIndex(index);
   }, [store]);
 
+  const jumpToPlayerId = useCallback((playerId: string) => {
+    return store.jumpToPlayerId(playerId);
+  }, [store]);
+
   // === Overlay Management ===
   const closeOverlay = useCallback(() => {
     store.setOverlay(null);
@@ -223,6 +227,7 @@ export function useAuction() {
 
     // Jump helpers
     jumpToPlayerIndex,
+    jumpToPlayerId,
 
     // Computed
     getEligibleTeams,
