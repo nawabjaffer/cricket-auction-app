@@ -101,7 +101,7 @@ function AuctionApp() {
 
   // Keyboard shortcuts with team overlay toggle
   useKeyboardShortcuts({ 
-    enabled: !showCoinJar,
+    enabled: !showCoinJar && !showJumpModal,
     onViewToggle: () => setShowTeamOverlay(prev => !prev),
     onEscape: () => setShowTeamOverlay(false),
     onHeaderToggle: () => setShowHeader(prev => !prev),
@@ -245,6 +245,11 @@ function AuctionApp() {
           onRefresh={refreshAll} 
           onShowHelp={() => setShowHelpModal(true)}
           bidMultiplier={bidMultiplier}
+          onJumpToPlayer={() => {
+            setJumpError('');
+            setJumpInput('');
+            setShowJumpModal(true);
+          }}
         />
       )}
 
@@ -755,11 +760,20 @@ function AuctionApp() {
       {/* Jump to Player Modal */}
       {showJumpModal && createPortal(
         <div 
-          className="fixed inset-0 z-[11000] bg-black/80 backdrop-blur-md flex items-center justify-center px-4"
-          onClick={() => setShowJumpModal(false)}
+          className="fixed inset-0 z-[11000] bg-black/90 backdrop-blur-lg flex items-center justify-center px-4"
+          onClick={(e) => {
+            e.stopPropagation();
+            setShowJumpModal(false);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === 'Escape') {
+              e.preventDefault();
+              setShowJumpModal(false);
+            }
+          }}
         >
           <div 
-            className="bg-gradient-to-br from-slate-900 to-slate-800 border-2 border-[var(--theme-accent)] rounded-3xl shadow-2xl w-[500px] max-w-full p-8" 
+            className="bg-gradient-to-br from-slate-900 to-slate-800 border-2 border-[var(--theme-accent)] rounded-3xl shadow-2xl w-[520px] max-w-full p-8" 
             onClick={(e) => e.stopPropagation()}
             style={{
               boxShadow: '0 0 60px rgba(33, 150, 243, 0.5), 0 20px 80px rgba(0, 0, 0, 0.8)'
@@ -767,51 +781,59 @@ function AuctionApp() {
           >
             <div className="text-3xl font-bold text-white mb-3 text-center">🎯 Jump to Player</div>
             <p className="text-base text-gray-300 mb-6 text-center">
-              Enter the player number in sequential order
+              Enter the player number (1-{availablePlayers.length}) in sequential order
             </p>
             <div className="flex items-center gap-4 mb-4">
               <input
                 ref={jumpInputRef}
-                type="text"
+                type="number"
                 value={jumpInput}
                 onChange={(e) => setJumpInput(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') {
                     e.preventDefault();
+                    e.stopPropagation();
                     handleJumpSubmit();
                   }
                   if (e.key === 'Escape') {
                     e.preventDefault();
+                    e.stopPropagation();
                     setShowJumpModal(false);
                   }
                 }}
-                className="flex-1 rounded-xl bg-white/20 border-2 border-white/30 px-6 py-4 text-2xl text-white font-bold text-center focus:outline-none focus:border-[var(--theme-accent)] focus:bg-white/30 shadow-inner transition-all"
-                placeholder={availablePlayers.length ? `Enter 1-${availablePlayers.length}` : 'No players'}
-                inputMode="numeric"
+                onClick={(e) => e.stopPropagation()}
+                autoFocus
+                className="flex-1 rounded-xl bg-white/20 border-2 border-white/30 px-6 py-4 text-2xl text-white font-bold text-center focus:outline-none focus:border-[var(--theme-accent)] focus:bg-white/30 focus:ring-4 focus:ring-[var(--theme-accent)]/30 shadow-inner transition-all"
+                placeholder={availablePlayers.length ? `1 to ${availablePlayers.length}` : 'No players'}
+                min="1"
+                max={availablePlayers.length}
                 style={{
-                  minHeight: '64px',
-                  fontSize: '28px',
+                  minHeight: '70px',
+                  fontSize: '32px',
                   fontWeight: '700'
                 }}
               />
               <button
                 type="button"
-                onClick={handleJumpSubmit}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleJumpSubmit();
+                }}
                 className="px-8 py-4 rounded-xl bg-[var(--theme-accent)] text-white text-xl font-bold shadow-lg hover:brightness-110 hover:scale-105 transition-all"
                 style={{
-                  minHeight: '64px',
-                  minWidth: '100px'
+                  minHeight: '70px',
+                  minWidth: '110px'
                 }}
               >
                 GO
               </button>
             </div>
             <div className="flex items-center justify-between text-sm text-gray-400 px-2">
-              <span>💡 Hotkey: Press <kbd className="px-2 py-1 bg-white/10 rounded font-mono">F</kbd></span>
-              <span>Press <kbd className="px-2 py-1 bg-white/10 rounded font-mono">ESC</kbd> to close</span>
+              <span>💡 Hotkey: <kbd className="px-2 py-1 bg-white/10 rounded font-mono font-bold">F</kbd></span>
+              <span>Close: <kbd className="px-2 py-1 bg-white/10 rounded font-mono font-bold">ESC</kbd></span>
             </div>
             {jumpError && (
-              <div className="mt-4 p-3 rounded-lg bg-red-500/20 border border-red-500/40 text-red-200 text-center font-semibold">
+              <div className="mt-4 p-3 rounded-lg bg-red-500/20 border border-red-500/40 text-red-200 text-center font-semibold animate-pulse">
                 ⚠️ {jumpError}
               </div>
             )}

@@ -13,9 +13,10 @@ interface HeaderProps {
   onRefresh?: () => void;
   onShowHelp?: () => void;
   bidMultiplier?: number;
+  onJumpToPlayer?: () => void;
 }
 
-export function Header({ onRefresh, onShowHelp, bidMultiplier = 1 }: HeaderProps) {
+export function Header({ onRefresh, onShowHelp, bidMultiplier = 1, onJumpToPlayer }: HeaderProps) {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   
@@ -159,6 +160,17 @@ export function Header({ onRefresh, onShowHelp, bidMultiplier = 1 }: HeaderProps
                       {selectionMode === 'sequential' ? 'Tap to randomize' : 'Tap for sequence'}
                     </span>
                   </button>
+
+                  {onJumpToPlayer && selectionMode === 'sequential' && (
+                    <button 
+                      className="menu-item"
+                      onClick={() => { onJumpToPlayer(); setIsMenuOpen(false); }}
+                    >
+                      <span className="item-icon">🎯</span>
+                      <span className="item-text">Jump to Player</span>
+                      <span className="item-badge">Press F</span>
+                    </button>
+                  )}
 
                   {onRefresh && (
                     <button 
