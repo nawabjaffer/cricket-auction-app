@@ -4947,6 +4947,19 @@
   </audio>
   
   <script>
+    // Production Mode - Debug logging disabled
+    const PRODUCTION_MODE = true;
+    if (PRODUCTION_MODE) {
+      // Stub out console methods in production
+      const noop = () => {};
+      if (typeof console !== 'undefined') {
+        console.debug = noop;
+        console.info = noop;
+        // Keep console.error for critical issues
+        // Keep styled console.log for initialization message
+      }
+    }
+  
     // Configuration loaded from config.js
     const SHEET_ID = CONFIG.googleSheets.sheetId;
     const SHEET_RANGE = CONFIG.googleSheets.ranges.players;
@@ -5011,20 +5024,16 @@
           })),
           timestamp: Date.now()
         };
-        localStorage.setItem(AUCTION_STATE_KEY, JSON.stringify(state));
-        console.debug('[STATE] Auction state saved - currentPlayer:', currentPlayer?.name, '(ID:', currentPlayer?.id, ') currentBid:', currentBid, 'lastBiddingTeam:', lastBiddingTeam, 'bidIncrement:', currentBidIncrement);
-      } catch (e) {
-        console.error('[STATE] Failed to save auction state:', e);
+        localStorage.setItem(AUCTION_STATE_KEY, JSON.stringify(state));      } catch (e) {
+        typeof console !== 'undefined' && console.error && console.error('[STATE] Failed to save auction state:', e);
       }
     }
     
     // Save bid history to localStorage
     function saveBidHistory() {
       try {
-        localStorage.setItem(UNDO_HISTORY_KEY, JSON.stringify(bidHistory));
-        console.debug('[UNDO] Bid history saved -', bidHistory.length, 'entries');
-      } catch (e) {
-        console.error('[UNDO] Failed to save bid history:', e);
+        localStorage.setItem(UNDO_HISTORY_KEY, JSON.stringify(bidHistory));      } catch (e) {
+        typeof console !== 'undefined' && console.error && console.error('[UNDO] Failed to save bid history:', e);
       }
     }
     
@@ -5033,11 +5042,9 @@
       try {
         const savedHistory = localStorage.getItem(UNDO_HISTORY_KEY);
         if (savedHistory) {
-          bidHistory = JSON.parse(savedHistory);
-          console.debug('[UNDO] Bid history restored -', bidHistory.length, 'entries');
-        }
+          bidHistory = JSON.parse(savedHistory);        }
       } catch (e) {
-        console.error('[UNDO] Failed to restore bid history:', e);
+        typeof console !== 'undefined' && console.error && console.error('[UNDO] Failed to restore bid history:', e);
         bidHistory = [];
       }
     }
@@ -5060,25 +5067,21 @@
         bidHistory = bidHistory.slice(0, CONFIG.auction.undo.historySize);
       }
       
-      saveBidHistory();
-      console.debug('[UNDO] Bid added to history:', bidEntry);
-      
+      saveBidHistory();      
       // Update undo button state
       updateUndoButtonState();
     }
     
     // Undo last bid
     function undoLastBid() {
-      if (!CONFIG.auction.undo.enabled || bidHistory.length === 0) {
-        console.debug('[UNDO] No bids to undo or undo disabled');
-        return false;
+      if (!CONFIG.auction.undo.enabled || bidHistory.length === 0) {        return false;
       }
       
       const lastBid = bidHistory.shift(); // Remove from beginning
       const team = teams[lastBid.teamIndex];
       
       if (!team) {
-        console.error('[UNDO] Team not found for undo operation');
+        typeof console !== 'undefined' && console.error && console.error('[UNDO] Team not found for undo operation');
         return false;
       }
       
@@ -5096,10 +5099,7 @@
       saveAuctionState();
       
       // Update undo button state
-      updateUndoButtonState();
-      
-      console.debug('[UNDO] Undid bid by', lastBid.teamName, '- reverted to ₹' + currentBid.toLocaleString());
-      showNotification(`Undid bid by ${lastBid.teamName} - reverted to ₹${currentBid.toLocaleString()}`, 'info');
+      updateUndoButtonState();      showNotification(`Undid bid by ${lastBid.teamName} - reverted to ₹${currentBid.toLocaleString()}`, 'info');
       
       return true;
     }
@@ -5124,9 +5124,7 @@
         
         // Check if state is recent (within 24 hours)
         const hoursSinceLastSave = (Date.now() - state.timestamp) / (1000 * 60 * 60);
-        if (hoursSinceLastSave > 24) {
-          console.debug('[STATE] Saved state is too old, starting fresh');
-          return false;
+        if (hoursSinceLastSave > 24) {          return false;
         }
         
         // Restore state
@@ -5168,32 +5166,23 @@
               team.highestBid = savedTeam.highestBid;
               team.underAgePlayers = savedTeam.underAgePlayers || 0;
             }
-          });
-          console.debug('[STATE] Team stats restored including under-age player counts');
-        }
+          });        }
         
         // Find current player by ID (more reliable than index when items array changes)
         if (state.currentPlayerId) {
           const playerIndex = items.findIndex(item => item.id === state.currentPlayerId);
           if (playerIndex !== -1) {
-            currentIndex = playerIndex;
-            console.debug('[STATE] Found player by ID:', state.currentPlayerId, 'at index:', currentIndex);
-          } else {
-            console.warn('[STATE] Could not find player with ID:', state.currentPlayerId, '- using saved index:', state.currentIndex);
-            currentIndex = state.currentIndex;
+            currentIndex = playerIndex;          } else {            currentIndex = state.currentIndex;
           }
         } else {
           currentIndex = state.currentIndex;
-        }
-        
-        console.debug('[STATE] Auction state restored - currentIndex:', currentIndex, 'player:', items[currentIndex]?.name, 'currentBid:', currentBid, 'basePrice:', basePrice, 'lastBiddingTeam:', lastBiddingTeam, 'bidIncrement:', currentBidIncrement);
-        
+        }        
         // Restore bid history
         restoreBidHistory();
         
         return true;
       } catch (e) {
-        console.error('[STATE] Failed to restore auction state:', e);
+        typeof console !== 'undefined' && console.error && console.error('[STATE] Failed to restore auction state:', e);
         return false;
       }
     }
@@ -5203,18 +5192,14 @@
       try {
         localStorage.removeItem(AUCTION_STATE_KEY);
         localStorage.removeItem(UNDO_HISTORY_KEY);
-        bidHistory = []; // Clear in-memory history
-        console.debug('[STATE] Auction state and bid history cleared');
-      } catch (e) {
-        console.error('[STATE] Failed to clear auction state:', e);
+        bidHistory = []; // Clear in-memory history      } catch (e) {
+        typeof console !== 'undefined' && console.error && console.error('[STATE] Failed to clear auction state:', e);
       }
     }
     
     // Webhook functions to update Google Sheets
     async function sendToWebhook(action, playerData) {
-      if (!CONFIG.webhook.url) {
-        console.debug('[WEBHOOK] No webhook URL configured, skipping');
-        return;
+      if (!CONFIG.webhook.url) {        return;
       }
       
       try {
@@ -5228,33 +5213,17 @@
             action: action,
             ...playerData
           })
-        });
-        
-        console.debug('[WEBHOOK] Sent', action, 'for player:', playerData.playerName);
-        
+        });        
         // If this was a sold player action, refresh teams data after delay
         if (action === 'updateSoldPlayer' || action === 'moveUnsoldToSold') {
-          setTimeout(async () => {
-            console.debug('[WEBHOOK] Fetching updated teams data after', action, '...');
-            await fetchTeamsData();
-            console.debug('[WEBHOOK] Teams data refreshed successfully');
-          }, CONFIG.webhook.updateDelay);
+          setTimeout(async () => {            await fetchTeamsData();          }, CONFIG.webhook.updateDelay);
         }
       } catch (error) {
-        console.error('[WEBHOOK] Error sending', action, ':', error);
+        typeof console !== 'undefined' && console.error && console.error('[WEBHOOK] Error sending', action, ':', error);
       }
     }
     
-    async function updateSoldPlayerSheet(player, team, soldPrice, basePrice) {
-      console.debug('[WEBHOOK] updateSoldPlayerSheet - Team stats being sent:', {
-        teamName: team.name,
-        playersBought: team.playersBought,
-        underAgePlayers: team.underAgePlayers,
-        remainingPlayers: team.remainingPlayers,
-        remainingPurse: team.remainingPurse,
-        highestBid: team.highestBid
-      });
-      
+    async function updateSoldPlayerSheet(player, team, soldPrice, basePrice) {      
       await sendToWebhook('updateSoldPlayer', {
         playerId: player.id,
         playerName: player.name,
@@ -5291,16 +5260,7 @@
       });
     }
     
-    async function moveUnsoldToSoldSheet(player, team, soldPrice, basePrice) {
-      console.debug('[WEBHOOK] moveUnsoldToSoldSheet - Team stats being sent:', {
-        teamName: team.name,
-        playersBought: team.playersBought,
-        underAgePlayers: team.underAgePlayers,
-        remainingPlayers: team.remainingPlayers,
-        remainingPurse: team.remainingPurse,
-        highestBid: team.highestBid
-      });
-      
+    async function moveUnsoldToSoldSheet(player, team, soldPrice, basePrice) {      
       await sendToWebhook('moveUnsoldToSold', {
         playerId: player.id,
         playerName: player.name,
@@ -5489,15 +5449,7 @@
       },
       
       // Helper function to log current rules (for debugging)
-      logRules: function() {
-        console.debug('[AUCTION_RULES] Current auction rules configuration:');
-        console.debug('[AUCTION_RULES] - Minimum Player Base Price:', this.minimumPlayerBasePrice);
-        console.debug('[AUCTION_RULES] - Safe Fund Buffer Percent:', this.safeFundBufferPercent);
-        console.debug('[AUCTION_RULES] - Base Price:', basePrice);
-        console.debug('[AUCTION_RULES] - Current Bid Increment:', currentBidIncrement);
-        console.debug('[AUCTION_RULES] - Bid Increment Range:', CONFIG.auction.bidIncrements.minimum, '-', CONFIG.auction.bidIncrements.maximum);
-        console.debug('[AUCTION_RULES] - Team Stats Thresholds:', CONFIG.ui.teamStatsThresholds);
-      }
+      logRules: function() {      }
     };
     
     function preloadImage(url) {
@@ -5508,13 +5460,9 @@
       return new Promise((resolve, reject) => {
         const img = new Image();
         img.onload = () => {
-          imageCache.set(url, img);
-          console.debug('[IMAGE_CACHE] Preloaded image:', url.substring(0, 50) + '...');
-          resolve(img);
+          imageCache.set(url, img);          resolve(img);
         };
-        img.onerror = () => {
-          console.warn('⚠️ Failed to preload image:', url.substring(0, 50) + '...');
-          reject();
+        img.onerror = () => {          reject();
         };
         img.src = url;
       });
@@ -5535,13 +5483,8 @@
     
     function preloadAllPlayerImages() {
       // Optimized: Only preload if not already cached
-      if (imageCache.size >= items.length * 0.5) {
-        console.debug('[IMAGE_CACHE] Most images already cached, skipping bulk preload');
-        return;
-      }
-      
-      console.debug('[IMAGE_CACHE] Starting to preload player images...');
-      const promises = items.slice(0, 10).map(item => { // Preload only first 10
+      if (imageCache.size >= items.length * 0.5) {        return;
+      }      const promises = items.slice(0, 10).map(item => { // Preload only first 10
         if (item && item.imageUrl) {
           const imageUrl = convertDriveLinkToDirect(item.imageUrl);
           if (!imageCache.has(imageUrl)) {
@@ -5551,9 +5494,7 @@
         return Promise.resolve();
       });
       
-      Promise.all(promises).then(() => {
-        console.debug(`[IMAGE_CACHE] Preloaded ${imageCache.size} images`);
-        // Lazy load remaining images in background
+      Promise.all(promises).then(() => {        // Lazy load remaining images in background
         setTimeout(() => {
           items.slice(10).forEach(item => {
             if (item && item.imageUrl) {
@@ -5567,9 +5508,7 @@
       });
     }
     
-    function preloadTeamLogos() {
-      console.debug('[IMAGE_CACHE] Preloading team logos...');
-      teams.forEach(team => {
+    function preloadTeamLogos() {      teams.forEach(team => {
         if (team && team.logoUrl) {
           const logoUrl = convertDriveLinkToDirect(team.logoUrl);
           if (!imageCache.has(logoUrl)) {
@@ -5600,63 +5539,41 @@
       coinShakeSound.load();
       
       // Log audio readiness
-      soldSound.addEventListener('canplaythrough', () => {
-        console.debug('[AUDIO] Sold sound ready to play (canplaythrough) - Ready state:', soldSound.readyState, 'Duration:', soldSound.duration);
-      });
-      unsoldSound.addEventListener('canplaythrough', () => {
-        console.debug('[AUDIO] Unsold sound ready to play (canplaythrough)');
-      });
+      soldSound.addEventListener('canplaythrough', () => {      });
+      unsoldSound.addEventListener('canplaythrough', () => {      });
       
-      soldSound.addEventListener('loadeddata', () => {
-        console.debug('[AUDIO] Sold sound data loaded');
-      });
+      soldSound.addEventListener('loadeddata', () => {      });
       
       // Log errors
       soldSound.addEventListener('error', (e) => {
-        console.error('✗ Sold sound error:', e, soldSound.error);
+        typeof console !== 'undefined' && console.error && console.error('✗ Sold sound error:', e, soldSound.error);
         if (soldSound.error) {
-          console.error('  Error code:', soldSound.error.code);
-          console.error('  Error message:', soldSound.error.message);
+          typeof console !== 'undefined' && console.error && console.error('  Error code:', soldSound.error.code);
+          typeof console !== 'undefined' && console.error && console.error('  Error message:', soldSound.error.message);
         }
       });
       unsoldSound.addEventListener('error', (e) => {
-        console.error('✗ Unsold sound error:', e, unsoldSound.error);
+        typeof console !== 'undefined' && console.error && console.error('✗ Unsold sound error:', e, unsoldSound.error);
       });
       
       // Unlock audio on first user interaction (for browser autoplay policy)
-      const unlockAudio = () => {
-        console.debug('[AUDIO] Unlocking audio on user interaction...');
-        
+      const unlockAudio = () => {        
         // Unlock sold sound
         const soldPromise = soldSound.play().then(() => {
           soldSound.pause();
-          soldSound.currentTime = 0;
-          console.debug('[AUDIO] Sold audio unlocked successfully');
-        }).catch(e => {
-          console.warn('⚠️ Sold audio unlock failed:', e.name, e.message);
-        });
+          soldSound.currentTime = 0;        }).catch(e => {        });
         
         // Unlock unsold sound
         const unsoldPromise = unsoldSound.play().then(() => {
           unsoldSound.pause();
-          unsoldSound.currentTime = 0;
-          console.debug('[AUDIO] Unsold audio unlocked successfully');
-        }).catch(e => {
-          console.warn('⚠️ Unsold audio unlock failed:', e.name, e.message);
-        });
+          unsoldSound.currentTime = 0;        }).catch(e => {        });
         
         // Unlock coin shake sound
         const coinShakePromise = coinShakeSound.play().then(() => {
           coinShakeSound.pause();
-          coinShakeSound.currentTime = 0;
-          console.debug('[AUDIO] Coin shake audio unlocked successfully');
-        }).catch(e => {
-          console.warn('⚠️ Coin shake audio unlock failed:', e.name, e.message);
-        });
+          coinShakeSound.currentTime = 0;        }).catch(e => {        });
         
-        Promise.all([soldPromise, unsoldPromise, coinShakePromise]).then(() => {
-          console.debug('[AUDIO] All audio elements unlocked successfully');
-        });
+        Promise.all([soldPromise, unsoldPromise, coinShakePromise]).then(() => {        });
       };
       
       // Listen for first user interaction
@@ -5666,12 +5583,9 @@
     
     function playSoldSound() {
       if (!soldSound) {
-        console.error('✗ Sold sound element not found');
+        typeof console !== 'undefined' && console.error && console.error('✗ Sold sound element not found');
         return;
-      }
-      
-      console.debug('[AUDIO] Attempting to play sold sound - Ready state:', soldSound.readyState, 'Source:', soldSound.src || soldSound.currentSrc, 'Volume:', soldSound.volume, 'Muted:', soldSound.muted);
-      
+      }      
       // Function to actually play the sound
       const attemptPlay = () => {
         soldSound.currentTime = 0; // Reset to start
@@ -5680,39 +5594,28 @@
         
         if (playPromise !== undefined) {
           playPromise
-            .then(() => {
-              console.debug('[AUDIO] Sold sound playing successfully - Duration:', soldSound.duration);
-            })
+            .then(() => {            })
             .catch(e => {
-              console.error('✗ Error playing sold sound:', e);
-              console.error('Error name:', e.name);
-              console.error('Error message:', e.message);
+              typeof console !== 'undefined' && console.error && console.error('✗ Error playing sold sound:', e);
+              typeof console !== 'undefined' && console.error && console.error('Error name:', e.name);
+              typeof console !== 'undefined' && console.error && console.error('Error message:', e.message);
               if (soldSound.error) {
-                console.error('Audio error code:', soldSound.error.code);
-                console.error('Audio error message:', soldSound.error.message);
+                typeof console !== 'undefined' && console.error && console.error('Audio error code:', soldSound.error.code);
+                typeof console !== 'undefined' && console.error && console.error('Audio error message:', soldSound.error.message);
               }
               
               // Try to provide helpful feedback
-              if (e.name === 'NotAllowedError') {
-                console.warn('⚠️ Audio playback blocked by browser. User interaction may be required.');
-                console.warn('💡 Try clicking anywhere on the page first to enable audio.');
-              } else if (e.name === 'NotSupportedError') {
-                console.error('⚠️ Audio format not supported or file cannot be loaded.');
+              if (e.name === 'NotAllowedError') {              } else if (e.name === 'NotSupportedError') {
+                typeof console !== 'undefined' && console.error && console.error('⚠️ Audio format not supported or file cannot be loaded.');
               }
             });
         }
       };
       
       // Check if audio is ready to play (readyState >= 3 means HAVE_FUTURE_DATA)
-      if (soldSound.readyState >= 3) {
-        console.debug('[AUDIO] Audio is ready (readyState >= 3), playing immediately');
-        attemptPlay();
-      } else {
-        console.debug('[AUDIO] Audio not fully loaded (readyState:', soldSound.readyState + '), waiting for canplay event...');
-        // Wait for audio to be ready
-        soldSound.addEventListener('canplay', function onCanPlay() {
-          console.debug('[AUDIO] Audio now ready after waiting, attempting playback');
-          soldSound.removeEventListener('canplay', onCanPlay);
+      if (soldSound.readyState >= 3) {        attemptPlay();
+      } else {        // Wait for audio to be ready
+        soldSound.addEventListener('canplay', function onCanPlay() {          soldSound.removeEventListener('canplay', onCanPlay);
           attemptPlay();
         }, { once: true });
         
@@ -5723,46 +5626,30 @@
     
     function playUnsoldSound() {
       if (!unsoldSound) {
-        console.error('✗ Unsold sound element not found');
+        typeof console !== 'undefined' && console.error && console.error('✗ Unsold sound element not found');
         return;
-      }
-      
-      console.debug('[AUDIO] Attempting to play unsold sound...');
-      unsoldSound.currentTime = 0; // Reset to start
+      }      unsoldSound.currentTime = 0; // Reset to start
       
       const playPromise = unsoldSound.play();
       
       if (playPromise !== undefined) {
         playPromise
-          .then(() => console.debug('[AUDIO] Unsold sound playing successfully'))
-          .catch(e => {
-            console.error('✗ Error playing unsold sound:', e);
-            if (e.name === 'NotAllowedError') {
-              console.warn('⚠️ Audio playback blocked by browser. User interaction may be required.');
-            }
+          .then(() =>            if (e.name === 'NotAllowedError') {            }
           });
       }
     }
     
     function playCoinShakeSound() {
       if (!coinShakeSound) {
-        console.error('✗ Coin shake sound element not found');
+        typeof console !== 'undefined' && console.error && console.error('✗ Coin shake sound element not found');
         return;
-      }
-      
-      console.debug('[AUDIO] Attempting to play coin shake sound...');
-      coinShakeSound.currentTime = 0; // Reset to start
+      }      coinShakeSound.currentTime = 0; // Reset to start
       
       const playPromise = coinShakeSound.play();
       
       if (playPromise !== undefined) {
         playPromise
-          .then(() => console.debug('[AUDIO] Coin shake sound playing successfully'))
-          .catch(e => {
-            console.error('✗ Error playing coin shake sound:', e);
-            if (e.name === 'NotAllowedError') {
-              console.warn('⚠️ Audio playback blocked by browser. User interaction may be required.');
-            }
+          .then(() =>            if (e.name === 'NotAllowedError') {            }
           });
       }
     }
@@ -5774,9 +5661,7 @@
         const resp = await fetch(url);
         const data = await resp.json();
         
-        if (!data.values || data.values.length === 0) {
-          console.debug('[DATA_FETCH] No sold players found in sheet');
-          return { ids: [], players: [] };
+        if (!data.values || data.values.length === 0) {          return { ids: [], players: [] };
         }
         
         const cols = CONFIG.columnMappings.soldPlayers;
@@ -5804,12 +5689,9 @@
             };
             soldPlayerObjects.push(playerObj);
           }
-        }
-        
-        console.debug('[DATA_FETCH] Found', soldPlayerIds.length, 'already sold players in sheet');
-        return { ids: soldPlayerIds, players: soldPlayerObjects };
+        }        return { ids: soldPlayerIds, players: soldPlayerObjects };
       } catch (error) {
-        console.error('Error fetching already sold players:', error);
+        typeof console !== 'undefined' && console.error && console.error('Error fetching already sold players:', error);
         return { ids: [], players: [] };
       }
     }
@@ -5821,9 +5703,7 @@
         const resp = await fetch(url);
         const data = await resp.json();
         
-        if (!data.values || data.values.length === 0) {
-          console.debug('[DATA_FETCH] No unsold players found in sheet');
-          return { ids: [], players: [] };
+        if (!data.values || data.values.length === 0) {          return { ids: [], players: [] };
         }
         
         const cols = CONFIG.columnMappings.unsoldPlayers;
@@ -5853,12 +5733,9 @@
             };
             unsoldPlayerObjects.push(playerObj);
           }
-        }
-        
-        console.debug('[DATA_FETCH] Found', unsoldPlayerIds.length, 'unsold players (Round 1) in sheet');
-        return { ids: unsoldPlayerIds, players: unsoldPlayerObjects };
+        }        return { ids: unsoldPlayerIds, players: unsoldPlayerObjects };
       } catch (error) {
-        console.error('Error fetching unsold players:', error);
+        typeof console !== 'undefined' && console.error && console.error('Error fetching unsold players:', error);
         return { ids: [], players: [] };
       }
     }
@@ -5870,16 +5747,11 @@
       
       // Populate soldPlayers and unsoldPlayers arrays from sheet data
       soldPlayers = soldData.players;
-      unsoldPlayers = unsoldData.players;
-      
-      console.debug('[DATA_FETCH] Loaded from sheets:', soldPlayers.length, 'sold players,', unsoldPlayers.length, 'unsold players');
-      
+      unsoldPlayers = unsoldData.players;      
       const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(SHEET_RANGE)}?key=${API_KEY}`;
       const resp = await fetch(url);
-      const data = await resp.json();
-      console.debug('[DATA_FETCH] Fetched player sheet data - Rows:', data.values?.length || 0);
-      if (!data.values) {
-        console.error('No data found in sheet');
+      const data = await resp.json();      if (!data.values) {
+        typeof console !== 'undefined' && console.error && console.error('No data found in sheet');
         return;
       }
       // Map sheet columns using CONFIG.columnMappings.players
@@ -5896,9 +5768,7 @@
           const playerId = row[cols.id] || `P${String(index + 1).padStart(3, '0')}`;
           
           // Skip if player is already sold (exists in Sold Players sheet)
-          if (soldData.ids.includes(playerId.trim())) {
-            console.debug('[DATA_FETCH] Skipping already sold player:', playerId, row[cols.name]);
-            return null;
+          if (soldData.ids.includes(playerId.trim())) {            return null;
           }
           
           // Calculate or extract age from DOB column
@@ -5945,22 +5815,14 @@
       originalItemCount = items.length;
       
       // Note: soldPlayers and unsoldPlayers arrays are already populated from sheet data above
-      // They don't need to be filtered from items array
-      
-      console.debug('[DATA_FETCH] Loaded', items.length, 'players for auction');
-      console.debug('[DATA_FETCH] Already sold:', soldPlayers.length, 'players');
-      console.debug('[DATA_FETCH] Already unsold (Round 1):', unsoldPlayers.length, 'players');
-      console.debug('[DATA_FETCH] Excluded:', soldData.ids.length, 'sold players from items');
-    }
+      // They don't need to be filtered from items array    }
 
     async function fetchTeamsData() {
       const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(TEAMS_SHEET_RANGE)}?key=${API_KEY}`;
       try {
         const resp = await fetch(url);
-        const data = await resp.json();
-        console.debug('[DATA_FETCH] Fetched teams data - Rows:', data.values?.length || 0);
-        if (!data.values) {
-          console.error('No teams found in sheet');
+        const data = await resp.json();        if (!data.values) {
+          typeof console !== 'undefined' && console.error && console.error('No teams found in sheet');
           return;
         }
         // Map team columns using CONFIG.columnMappings.teams
@@ -5970,17 +5832,7 @@
           const playersBought = parseInt(row[cols.playersBought]) || 0;
           const underAgePlayers = parseInt(row[cols.underAgePlayers]) || 0;
           const remainingPurse = parseFloat(row[cols.remainingPurse]) || 0;
-          const highestBid = parseFloat(row[cols.highestBid]) || 0;
-          
-          console.debug('[DATA_FETCH] Team from sheet:', {
-            name: row[cols.name],
-            playersBought: playersBought,
-            underAgePlayers: underAgePlayers,
-            remainingPurse: remainingPurse,
-            highestBid: highestBid,
-            captain: row[cols.captain] || '(empty)'
-          });
-          
+          const highestBid = parseFloat(row[cols.highestBid]) || 0;          
           return {
             name: row[cols.name] || `Team ${index + 1}`,
             logoUrl: row[cols.logoUrl] || '',
@@ -5996,10 +5848,7 @@
         });
         
         // Sync underAgePlayers count from soldPlayers array as validation/backup
-        await syncUnderAgePlayersFromSoldData();
-        
-        console.debug('[DATA_FETCH] Loaded teams:', teams.length, 'teams with', teams.map(t => t.name).join(', '));
-        populateTeamDropdown();
+        await syncUnderAgePlayersFromSoldData();        populateTeamDropdown();
         populateTeamStatusIndicator(); // Initialize team status indicator
         
         // If teams info overlay is open, refresh it
@@ -6021,7 +5870,7 @@
           }
         }
       } catch (error) {
-        console.error('Error fetching teams:', error);
+        typeof console !== 'undefined' && console.error && console.error('Error fetching teams:', error);
         // Load default teams from config if fetch fails
         teams = CONFIG.defaultTeams.map(team => ({...team})); // Clone the default teams
         populateTeamDropdown();
@@ -6030,12 +5879,8 @@
     }
     
     // Sync underAgePlayers count from soldPlayers data
-    async function syncUnderAgePlayersFromSoldData() {
-      console.debug('[SYNC] Starting under-age sync - soldPlayers.length:', soldPlayers.length);
-      
-      if (!soldPlayers || soldPlayers.length === 0) {
-        console.debug('[SYNC] No sold players to sync under-age count from');
-        return;
+    async function syncUnderAgePlayersFromSoldData() {      
+      if (!soldPlayers || soldPlayers.length === 0) {        return;
       }
       
       try {
@@ -6044,13 +5889,8 @@
         const resp = await fetch(url);
         const data = await resp.json();
         
-        if (!data.values || data.values.length === 0) {
-          console.debug('[SYNC] No sold players data in sheet');
-          return;
-        }
-        
-        console.debug('[SYNC] Sold Players sheet has', data.values.length - 1, 'rows (excluding header)');
-        
+        if (!data.values || data.values.length === 0) {          return;
+        }        
         const cols = CONFIG.columnMappings.soldPlayers;
         
         // Reset all team under-age counts first
@@ -6064,28 +5904,16 @@
           const row = data.values[i];
           const age = row[cols.age] ? parseInt(row[cols.age]) : null;
           const teamName = row[cols.teamName] || '';
-          const playerName = row[cols.name] || 'Unknown';
-          
-          console.debug('[SYNC] Checking player:', playerName, '| Age:', age, '| Team:', teamName);
-          
+          const playerName = row[cols.name] || 'Unknown';          
           if (age !== null && age < CONFIG.auction.rules.underAgeLimit && teamName) {
             // Find the team and increment their underAgePlayers count
             const team = teams.find(t => t.name === teamName);
             if (team) {
               team.underAgePlayers = (team.underAgePlayers || 0) + 1;
-              totalUnderAgeFound++;
-              console.debug('[SYNC] ✓ Under-age player found! Team', teamName, 'now has', team.underAgePlayers, 'under-age players');
-            } else {
-              console.warn('[SYNC] ✗ Team not found:', teamName);
-            }
+              totalUnderAgeFound++;            } else {            }
           }
-        }
-        
-        console.debug('[SYNC] ===== SYNC COMPLETE =====');
-        console.debug('[SYNC] Total under-age players found:', totalUnderAgeFound);
-        console.debug('[SYNC] Team under-age counts:', teams.map(t => `${t.name}: ${t.underAgePlayers || 0}`).join(', '));
-      } catch (error) {
-        console.error('[SYNC] Error syncing under-age player counts:', error);
+        }      } catch (error) {
+        typeof console !== 'undefined' && console.error && console.error('[SYNC] Error syncing under-age player counts:', error);
       }
     }
 
@@ -6124,9 +5952,7 @@
                       url.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
       
       if (idMatch && idMatch[1]) {
-        const fileId = idMatch[1];
-        console.debug('[IMAGE_CACHE] Converting Google Drive URL to direct link - File ID:', fileId);
-        // Use thumbnail format which works better for embedding and is more reliable
+        const fileId = idMatch[1];        // Use thumbnail format which works better for embedding and is more reliable
         // Use w600 for faster loading (sufficient for 450px circle)
         return `https://drive.google.com/thumbnail?id=${fileId}&sz=w600`;
       }
@@ -6161,16 +5987,12 @@
       
       if (imageSrc && imageSrc.trim() !== '') {
         // Check if image is already in cache
-        if (imageCache.has(imageSrc)) {
-          console.debug('[IMAGE_CACHE] Using cached image for player:', item.name);
-          profileImg.src = imageSrc;
+        if (imageCache.has(imageSrc)) {          profileImg.src = imageSrc;
         } else {
           // Try to load the Google Drive image
           profileImg.src = imageSrc;
           // Set error handler for fallback
-          profileImg.onerror = function() {
-            console.warn('Failed to load image from Google Drive, using fallback for:', item.name);
-            this.onerror = null; // Prevent infinite loop
+          profileImg.onerror = function() {            this.onerror = null; // Prevent infinite loop
             this.src = fallbackUrl;
           };
         }
@@ -6389,33 +6211,20 @@
           const isSold = soldPlayers.some(p => p.id === item.id);
           const isUnsold = unsoldPlayers.some(p => p.id === item.id);
           return !isSold && !isUnsold;
-        });
-        
-        console.debug('[AUCTION_FLOW] === FIRST ROUND CHECK ===');
-        console.debug('[AUCTION_FLOW] Items in array:', items.length);
-        console.debug('[AUCTION_FLOW] Unprocessed players:', unprocessedPlayers.length, '| IDs:', unprocessedPlayers.map(p => p.id).join(', '));
-        console.debug('[AUCTION_FLOW] Sold:', soldPlayers.length, '| Unsold for R2:', unsoldPlayers.length);
-        console.debug('[AUCTION_FLOW] Original items:', originalItemCount);
-        
+        });        
         // If NO unprocessed players remain in items array, move to unsold round
         if (unprocessedPlayers.length === 0) {
           allPlayersShown = true;
           
-          if (unsoldPlayers.length > 0) {
-            console.warn(`[AUCTION_FLOW] ⚠️ TRANSITIONING TO UNSOLD ROUND - All ${items.length} players processed, ${unsoldPlayers.length} unsold players will be shown in second round`);
-            // Replace items with unsold players for second round
+          if (unsoldPlayers.length > 0) {            // Replace items with unsold players for second round
             items = [...unsoldPlayers];
             showUnsoldRoundMessage();
             return;
           } else {
-            // No unsold players - auction complete!
-            console.debug('[AUCTION_FLOW] All players sold - Auction complete!');
-            showEndScreen();
+            // No unsold players - auction complete!            showEndScreen();
             return;
           }
-        } else {
-          console.debug('[AUCTION_FLOW] First round continues - Still', unprocessedPlayers.length, 'unprocessed players in items array');
-        }
+        } else {        }
       }
       
       // For sequential mode, check if we've reached the end of all players in first round
@@ -6423,16 +6232,12 @@
         allPlayersShown = true;
         
         // Check if there are unsold players
-        if (unsoldPlayers.length > 0) {
-          console.debug(`[AUCTION_FLOW] First round complete - ${unsoldPlayers.length} unsold players will be shown in second round`);
-          // Replace items with unsold players for second round
+        if (unsoldPlayers.length > 0) {          // Replace items with unsold players for second round
           items = [...unsoldPlayers];
           showUnsoldRoundMessage();
           return;
         } else {
-          // No unsold players - auction complete!
-          console.debug('[AUCTION_FLOW] All players sold - Auction complete!');
-          showEndScreen();
+          // No unsold players - auction complete!          showEndScreen();
           return;
         }
       }
@@ -6443,20 +6248,11 @@
         const remainingUnsoldPlayers = items.filter((item) => {
           const isSold = soldPlayers.some(p => p.id === item.id);
           return !isSold;
-        });
-        
-        console.debug('[AUCTION_FLOW] Unsold round status - Remaining:', remainingUnsoldPlayers.length);
-        
-        if (remainingUnsoldPlayers.length === 0) {
-          console.debug('[AUCTION_FLOW] Unsold round complete - All players have been processed');
-          
+        });        
+        if (remainingUnsoldPlayers.length === 0) {          
           // Check if there are still unsold players after second round
-          if (unsoldPlayers.length > 0) {
-            console.debug(`[AUCTION_FLOW] ${unsoldPlayers.length} players remain unsold - Showing completion prompt`);
-            showCompletionPrompt();
-          } else {
-            console.debug('[AUCTION_FLOW] All players sold after unsold round - Auction complete!');
-            showEndScreen();
+          if (unsoldPlayers.length > 0) {            showCompletionPrompt();
+          } else {            showEndScreen();
           }
           return;
         }
@@ -6476,18 +6272,8 @@
     
     function showRandomPlayerSelection() {
       // Prevent duplicate calls while animation is running
-      if (isAnimationInProgress) {
-        console.debug('[RANDOM_SELECTION] Animation already in progress, skipping duplicate call');
-        return;
-      }
-      
-      console.debug('[RANDOM_SELECTION] === RANDOM SELECTION START ===');
-      console.debug('[RANDOM_SELECTION] Total items.length:', items.length);
-      console.debug('[RANDOM_SELECTION] Sold players:', soldPlayers.length);
-      console.debug('[RANDOM_SELECTION] Unsold players:', unsoldPlayers.length);
-      console.debug('[RANDOM_SELECTION] Round:', isShowingUnsoldRound ? 'UNSOLD' : 'FIRST');
-      console.debug('[RANDOM_SELECTION] Original item count:', originalItemCount);
-      
+      if (isAnimationInProgress) {        return;
+      }      
       // Get list of players not yet shown
       // In first round: exclude sold and unsold
       // In unsold round: only exclude sold (we're showing unsold players)
@@ -6502,13 +6288,8 @@
           const isUnsold = unsoldPlayers.some(p => p.id === item.id);
           return !isSold && !isUnsold;
         }
-      });
-      
-      console.debug('[RANDOM_SELECTION] Available players for selection:', availablePlayers.length, '| IDs:', availablePlayers.map(p => p.id).join(', '));
-      
-      if (availablePlayers.length === 0) {
-        console.warn('[RANDOM_SELECTION] ⚠️ NO AVAILABLE PLAYERS for random selection');
-        
+      });      
+      if (availablePlayers.length === 0) {        
         // Check if we should move to unsold round or end auction
         if (!allPlayersShown && !isShowingUnsoldRound) {
           // Check how many unprocessed players remain in items array
@@ -6516,26 +6297,17 @@
             const isSold = soldPlayers.some(p => p.id === item.id);
             const isUnsold = unsoldPlayers.some(p => p.id === item.id);
             return !isSold && !isUnsold;
-          });
-          
-          console.debug('[RANDOM_SELECTION] === CHECKING COMPLETION ===');
-          console.debug('[RANDOM_SELECTION] Items in array:', items.length);
-          console.debug('[RANDOM_SELECTION] Unprocessed players:', unprocessedPlayers.length);
-          console.debug('[RANDOM_SELECTION] Sold:', soldPlayers.length, '| Unsold:', unsoldPlayers.length);
-          console.debug('[RANDOM_SELECTION] Should move to unsold round?', unprocessedPlayers.length === 0);
-          
+          });          
           if (unprocessedPlayers.length === 0) {
             allPlayersShown = true;
-            if (unsoldPlayers.length > 0) {
-              console.warn(`[RANDOM_SELECTION] ⚠️ TRANSITIONING TO UNSOLD ROUND from showRandomPlayerSelection - ${unsoldPlayers.length} unsold players`);
-              items = [...unsoldPlayers];
+            if (unsoldPlayers.length > 0) {              items = [...unsoldPlayers];
               showUnsoldRoundMessage();
               return;
             }
           } else {
-            console.error('[RANDOM_SELECTION] ❌ ERROR: No available players for selection but', unprocessedPlayers.length, 'unprocessed players still exist!');
-            console.error('[RANDOM_SELECTION] Unprocessed player IDs:', unprocessedPlayers.map(p => p.id).join(', '));
-            console.error('[RANDOM_SELECTION] This indicates a filtering logic error in availablePlayers calculation');
+            typeof console !== 'undefined' && console.error && console.error('[RANDOM_SELECTION] ❌ ERROR: No available players for selection but', unprocessedPlayers.length, 'unprocessed players still exist!');
+            typeof console !== 'undefined' && console.error && console.error('[RANDOM_SELECTION] Unprocessed player IDs:', unprocessedPlayers.map(p => p.id).join(', '));
+            typeof console !== 'undefined' && console.error && console.error('[RANDOM_SELECTION] This indicates a filtering logic error in availablePlayers calculation');
           }
         }
         
@@ -6547,10 +6319,7 @@
       // Select random player from available players
       const randomIndex = Math.floor(Math.random() * availablePlayers.length);
       const selectedPlayer = availablePlayers[randomIndex];
-      const playerIndex = items.findIndex(p => p.id === selectedPlayer.id);
-      
-      console.debug(`[RANDOM_SELECTION] Selected player ${selectedPlayer.id} - ${selectedPlayer.name}`);
-      
+      const playerIndex = items.findIndex(p => p.id === selectedPlayer.id);      
       // Show coin jar animation
       showCoinJarAnimation(selectedPlayer.id, () => {
         // After animation completes, show the selected player
@@ -6702,9 +6471,7 @@
     }
     
     // Completion prompt and end screen functions
-    function showCompletionPrompt() {
-      console.debug('[COMPLETION] Showing completion prompt for unsold players');
-      const prompt = document.getElementById('completionPrompt');
+    function showCompletionPrompt() {      const prompt = document.getElementById('completionPrompt');
       prompt.classList.add('show');
     }
     
@@ -6714,9 +6481,7 @@
     }
     
     // Next random prompt functions
-    function showNextRandomPrompt() {
-      console.debug('[RANDOM_SELECTION] Showing next random prompt');
-      const prompt = document.getElementById('nextRandomPrompt');
+    function showNextRandomPrompt() {      const prompt = document.getElementById('nextRandomPrompt');
       prompt.classList.add('show');
     }
     
@@ -6725,9 +6490,7 @@
       prompt.classList.remove('show');
     }
     
-    function restartUnsoldAuction() {
-      console.debug('[COMPLETION] Restarting auction for unsold players');
-      hideCompletionPrompt();
+    function restartUnsoldAuction() {      hideCompletionPrompt();
       
       // Reset for another unsold round
       items = [...unsoldPlayers];
@@ -6791,9 +6554,7 @@
       document.addEventListener('keydown', continueHandler);
     }
     
-    function showEndScreen() {
-      console.debug('[COMPLETION] Showing end screen - Auction complete!');
-      hideCompletionPrompt();
+    function showEndScreen() {      hideCompletionPrompt();
       
       // Clear saved state since auction is complete
       clearAuctionState();
@@ -6805,8 +6566,7 @@
       if (CONFIG.audio.files.sold) {
         const audio = new Audio(CONFIG.audio.files.sold);
         audio.volume = CONFIG.audio.volume;
-        audio.play().catch(err => console.debug('[AUDIO] End screen audio play failed:', err));
-      }
+        audio.play().catch(err =>      }
     }
     
     // Teams Info Overlay Functions
@@ -7081,17 +6841,13 @@
               teamColorCache.set(logoUrl, defaultColor);
               resolve(defaultColor);
             }
-          } catch (err) {
-            console.warn('Color extraction failed:', err);
-            const defaultColor = { r: 33, g: 150, b: 243 };
+          } catch (err) {            const defaultColor = { r: 33, g: 150, b: 243 };
             teamColorCache.set(logoUrl, defaultColor);
             resolve(defaultColor);
           }
         };
         
-        img.onerror = () => {
-          console.warn('Logo failed to load for color extraction');
-          const defaultColor = { r: 33, g: 150, b: 243 };
+        img.onerror = () => {          const defaultColor = { r: 33, g: 150, b: 243 };
           teamColorCache.set(logoUrl, defaultColor);
           resolve(defaultColor);
         };
@@ -7154,12 +6910,9 @@
             wickets: row[cols.wickets] || 'N/A',
             basePrice: row[cols.basePrice] || ''
           };
-        });
-        
-        console.debug('[PLAYER_CACHE] Cached', allPlayersCache.length, 'players');
-        return allPlayersCache;
+        });        return allPlayersCache;
       } catch (error) {
-        console.error('Error fetching all players for cache:', error);
+        typeof console !== 'undefined' && console.error && console.error('Error fetching all players for cache:', error);
         return [];
       }
     }
@@ -7198,24 +6951,14 @@
     }
 
     // Function to get captain details (checks both items array and all players cache)
-    async function getCaptainDetails(captainId) {
-      console.debug('[CAPTAIN] Getting captain details for ID:', captainId);
-      if (!captainId || captainId.trim() === '') {
-        console.debug('[CAPTAIN] Captain ID is empty or null');
-        return null;
+    async function getCaptainDetails(captainId) {      if (!captainId || captainId.trim() === '') {        return null;
       }
       
       // Try to find in items array first (auction players)
-      let captain = items.find(item => String(item.id).trim() === String(captainId).trim());
-      console.debug('[CAPTAIN] Found in items array:', captain ? captain.name : 'NOT FOUND');
-      
+      let captain = items.find(item => String(item.id).trim() === String(captainId).trim());      
       // If not found, fetch from all players cache
-      if (!captain) {
-        console.debug('[CAPTAIN] Searching in all players cache...');
-        const allPlayers = await fetchAllPlayersForCache();
-        captain = allPlayers.find(item => String(item.id).trim() === String(captainId).trim());
-        console.debug('[CAPTAIN] Found in all players cache:', captain ? captain.name : 'NOT FOUND');
-      }
+      if (!captain) {        const allPlayers = await fetchAllPlayersForCache();
+        captain = allPlayers.find(item => String(item.id).trim() === String(captainId).trim());      }
       
       if (captain) {
         return {
@@ -7280,9 +7023,7 @@
       const team = teams[teamIndex];
       
       // Get captain details from cache (now async to support all players)
-      const captainDetails = await getCaptainDetails(team.captain);
-      console.debug('[TEAM_SLOTS] Captain ID:', team.captain, 'Captain Details:', captainDetails);
-      
+      const captainDetails = await getCaptainDetails(team.captain);      
       // Fetch data in parallel for faster loading
       const [soldPlayers, teamColor] = await Promise.all([
         fetchSoldPlayersForTeam(team.name),
@@ -7337,9 +7078,7 @@
       let captainCardHTML = '';
       
       // Build captain card for left side if captain details are available
-      if (captainDetails) {
-        console.debug('[TEAM_SLOTS] Building captain card for:', captainDetails.name);
-        const avatarConfig = CONFIG.ui.avatarPlaceholder;
+      if (captainDetails) {        const avatarConfig = CONFIG.ui.avatarPlaceholder;
         const placeholderUrl = `${avatarConfig.baseUrl}?name=${encodeURIComponent(captainDetails.name)}&size=${avatarConfig.teamSlotSize}&background=${avatarConfig.background}&color=${avatarConfig.color}&bold=${avatarConfig.bold}&font-size=${avatarConfig.fontSize}`;
         const avatarUrl = captainDetails.imageUrl 
           ? convertDriveLinkToDirect(captainDetails.imageUrl)
@@ -7398,9 +7137,7 @@
             ${statsTooltipHTML}
           </div>
         `;
-      } else {
-        console.debug('[TEAM_SLOTS] No captain details found - captain field is empty or invalid');
-      }
+      } else {      }
       
       html += captainCardHTML;
       html += '</div>'; // Close captain-card-container
@@ -7546,7 +7283,7 @@
         
         return soldPlayers;
       } catch (error) {
-        console.error('Error fetching sold players:', error);
+        typeof console !== 'undefined' && console.error && console.error('Error fetching sold players:', error);
         return [];
       }
     }
@@ -7571,17 +7308,7 @@
           teamRemainingPlayers: teamData.remainingPlayers,
           teamRemainingPurse: teamData.remainingPurse,
           teamHighestBid: teamData.highestBid
-        };
-        
-        console.debug('[WEBHOOK] Saving sold player:', playerData.name, 'to team:', teamName, 'for bid:', bidAmount);
-        console.debug('[WEBHOOK] Team stats being sent:', {
-          playersBought: soldData.teamPlayersBought,
-          u19PlayersBought: soldData.teamU19PlayersBought,
-          remainingPlayers: soldData.teamRemainingPlayers,
-          remainingPurse: soldData.teamRemainingPurse,
-          highestBid: soldData.teamHighestBid
-        });
-        
+        };        
         const webhookUrl = CONFIG.webhook.url;
         
         const response = await fetch(webhookUrl, {
@@ -7591,20 +7318,13 @@
             'Content-Type': 'application/json',
           },
           body: JSON.stringify(soldData)
-        });
-        
-        console.debug('[WEBHOOK] Request sent (no-cors mode) - Waiting', CONFIG.webhook.updateDelay / 1000, 'seconds for Google Sheets update...');
-        
+        });        
         // Wait for Google Sheets to update, then refresh teams data
-        setTimeout(async () => {
-          console.debug('[WEBHOOK] Fetching updated teams data after webhook delay...');
-          await fetchTeamsData();
-          console.debug('[WEBHOOK] Teams data refreshed successfully');
-        }, CONFIG.webhook.updateDelay);
+        setTimeout(async () => {          await fetchTeamsData();        }, CONFIG.webhook.updateDelay);
         
         return true;
       } catch (error) {
-        console.error('Error saving sold player:', error);
+        typeof console !== 'undefined' && console.error && console.error('Error saving sold player:', error);
         return false;
       }
     }
@@ -7662,9 +7382,7 @@
       // Increment under-age player count if applicable
       const currentPlayer = items[currentIndex];
       if (currentPlayer && currentPlayer.age && parseInt(currentPlayer.age) < AUCTION_RULES.underAgeLimit) {
-        selectedTeam.underAgePlayers = (selectedTeam.underAgePlayers || 0) + 1;
-        console.debug('[AUCTION_FLOW] Under-age player sold - Team:', selectedTeam.name, 'Under-age count:', selectedTeam.underAgePlayers);
-      }
+        selectedTeam.underAgePlayers = (selectedTeam.underAgePlayers || 0) + 1;      }
       
       // Now save to Google Sheets with UPDATED team info
       if (items[currentIndex]) {
@@ -7727,9 +7445,7 @@
       // Increment under-age player count if applicable
       const currentPlayer = items[currentIndex];
       if (currentPlayer && currentPlayer.age && parseInt(currentPlayer.age) < AUCTION_RULES.underAgeLimit) {
-        selectedTeam.underAgePlayers = (selectedTeam.underAgePlayers || 0) + 1;
-        console.debug('[AUCTION_FLOW] Under-age player sold - Team:', selectedTeam.name, 'Under-age count:', selectedTeam.underAgePlayers);
-      }
+        selectedTeam.underAgePlayers = (selectedTeam.underAgePlayers || 0) + 1;      }
       
       // Now save to Google Sheets with UPDATED team info
       if (items[currentIndex]) {
@@ -7763,9 +7479,7 @@
       const team = teams[teamIndex];
       
       // Check if the same team is trying to bid consecutively
-      if (lastBiddingTeamIndex !== null && lastBiddingTeamIndex === teamIndex) {
-        console.debug('[AUCTION_FLOW] Consecutive bid blocked - Team:', team.name, 'must wait for opponent to bid');
-        updateBidTeamDisplay(team);
+      if (lastBiddingTeamIndex !== null && lastBiddingTeamIndex === teamIndex) {        updateBidTeamDisplay(team);
         return;
       }
       
@@ -8140,10 +7854,7 @@
         if (selectedTeamIndex !== '' && teams[selectedTeamIndex]) {
           selectedTeam = teams[selectedTeamIndex];
         }
-      }
-      
-      console.debug('[TEAM_SELECTION] Selected team index:', selectedTeamIndex, '| Team:', selectedTeam?.name || 'None');
-      
+      }      
       if (selectedTeam) {
         
         // Set team name with explicit styling to ensure visibility
@@ -8154,14 +7865,10 @@
         stampTeamName.style.color = '#4CAF50';
         stampTeamName.style.fontSize = '26px';
         stampTeamName.style.fontWeight = '700';
-        stampTeamName.style.textTransform = 'uppercase';
-        console.debug('[TEAM_SELECTION] Team stamp name set to:', selectedTeam.name);
-        
+        stampTeamName.style.textTransform = 'uppercase';        
         // Set team logo as background image if available
         if (selectedTeam.logoUrl && selectedTeam.logoUrl.trim() !== '') {
-          const logoSrc = convertDriveLinkToDirect(selectedTeam.logoUrl);
-          console.debug('[TEAM_SELECTION] Setting team logo background:', logoSrc.substring(0, 50) + '...');
-          
+          const logoSrc = convertDriveLinkToDirect(selectedTeam.logoUrl);          
           // Set background properties explicitly
           stamp.style.backgroundImage = `linear-gradient(135deg, rgba(20, 20, 20, 0.25) 0%, rgba(10, 10, 10, 0.40) 100%), url("${logoSrc}")`;
           stamp.style.backgroundSize = 'cover';
@@ -8174,9 +7881,7 @@
           if (stampContent) {
             stampContent.style.background = 'radial-gradient(circle, rgba(0, 0, 0, 0.20) 0%, rgba(0, 0, 0, 0.35) 100%)';
           }
-        } else {
-          console.debug('[TEAM_SELECTION] No team logo URL provided, using default background');
-          stamp.style.backgroundImage = 'linear-gradient(135deg, rgba(20, 20, 20, 0.85) 0%, rgba(10, 10, 10, 0.90) 100%)';
+        } else {          stamp.style.backgroundImage = 'linear-gradient(135deg, rgba(20, 20, 20, 0.85) 0%, rgba(10, 10, 10, 0.90) 100%)';
           stamp.style.backgroundSize = 'cover';
           stamp.style.backgroundPosition = 'center';
           stamp.style.backgroundRepeat = 'no-repeat';
@@ -8187,9 +7892,7 @@
             stampContent.style.background = 'radial-gradient(circle, rgba(0, 0, 0, 0.30) 0%, rgba(0, 0, 0, 0.50) 100%)';
           }
         }
-      } else {
-        console.warn('⚠️ No team selected or invalid index');
-        stampTeamName.textContent = 'TEAM';
+      } else {        stampTeamName.textContent = 'TEAM';
         stampTeamName.style.display = 'block';
         stampTeamName.style.visibility = 'visible';
         stampTeamName.style.opacity = '1';
@@ -8241,9 +7944,7 @@
         
         // Mark player as sold
         if (items[currentIndex]) {
-          soldPlayers.push(items[currentIndex]);
-          console.debug('[AUCTION_FLOW] Player sold:', items[currentIndex].name, '- Total sold:', soldPlayers.length);
-          
+          soldPlayers.push(items[currentIndex]);          
           // Update Google Sheets
           const soldPlayer = items[currentIndex];
           if (isShowingUnsoldRound) {
@@ -8263,16 +7964,12 @@
             // Remove from unsoldPlayers array
             const unsoldIndex = unsoldPlayers.findIndex(p => p.id === soldPlayerId);
             if (unsoldIndex !== -1) {
-              unsoldPlayers.splice(unsoldIndex, 1);
-              console.debug('[AUCTION_FLOW] Removed from unsold list - Remaining unsold:', unsoldPlayers.length);
-            }
+              unsoldPlayers.splice(unsoldIndex, 1);            }
             
             // Remove from items array (so random selection doesn't pick it)
             const itemsIndex = items.findIndex(p => p.id === soldPlayerId);
             if (itemsIndex !== -1) {
-              items.splice(itemsIndex, 1);
-              console.debug('[AUCTION_FLOW] Removed from items list - Remaining items:', items.length);
-              
+              items.splice(itemsIndex, 1);              
               // Adjust currentIndex if needed
               if (currentIndex >= items.length && items.length > 0) {
                 currentIndex = items.length - 1;
@@ -8343,15 +8040,11 @@
           }
           unsoldRoundCount[playerId]++;
           
-          const currentRound = unsoldRoundCount[playerId];
-          console.debug('[AUCTION_FLOW] Player marked as unsold:', currentPlayer.name, '- Round:', currentRound, '- Total unsold:', unsoldPlayers.length);
-          
+          const currentRound = unsoldRoundCount[playerId];          
           if (currentRound === 1) {
             // First time unsold - add to unsold list for second round
             if (!isShowingUnsoldRound) {
-              unsoldPlayers.push(currentPlayer);
-              console.debug('[AUCTION_FLOW] Added to unsold list for second round');
-            }
+              unsoldPlayers.push(currentPlayer);            }
             
             // Update Google Sheets - add to unsold sheet
             updateUnsoldPlayerSheet(currentPlayer, basePrice, 'Round 1');
@@ -8369,9 +8062,7 @@
             // Remove from items array
             const itemsIndex = items.findIndex(p => p.id === playerId);
             if (itemsIndex !== -1) {
-              items.splice(itemsIndex, 1);
-              console.debug('[AUCTION_FLOW] Player removed from auction (unsold 2x) - Remaining items:', items.length);
-              
+              items.splice(itemsIndex, 1);              
               // Adjust currentIndex if needed
               if (currentIndex >= items.length && items.length > 0) {
                 currentIndex = items.length - 1;
@@ -8379,10 +8070,7 @@
             }
             
             // Update Google Sheets - mark as finally unsold
-            updateUnsoldPlayerSheet(currentPlayer, basePrice, 'Round 2 - Final');
-            
-            console.debug('[AUCTION_FLOW] Player finally unsold (2x) - Total finally unsold:', finallyUnsoldPlayers.length);
-          }
+            updateUnsoldPlayerSheet(currentPlayer, basePrice, 'Round 2 - Final');          }
           
           // Don't save here - will be saved when next player is shown via showItem()
         }
@@ -8402,16 +8090,12 @@
       // Find player by ID
       const playerIndex = items.findIndex(item => String(item.id) === String(playerId));
       
-      if (playerIndex !== -1) {
-        console.debug('[AUCTION_FLOW] Jumping to player ID:', playerId, 'at index:', playerIndex);
-        
+      if (playerIndex !== -1) {        
         // Hide sold/unsold overlays when jumping to new player
         clearSoldUnsoldOverlays();
         
         showItem(playerIndex);
-      } else {
-        console.warn('Player with ID', playerId, 'not found');
-        alert(`Player with ID ${playerId} not found!`);
+      } else {        alert(`Player with ID ${playerId} not found!`);
       }
     }
     
@@ -8476,9 +8160,7 @@
       const isNextRandomPromptVisible = nextRandomPrompt && nextRandomPrompt.classList.contains('show');
       
       // Handle next random prompt - Enter to draw next player
-      if (isNextRandomPromptVisible && e.key === 'Enter') {
-        console.debug('[RANDOM_SELECTION] Enter pressed - triggering next random draw');
-        hideNextRandomPrompt();
+      if (isNextRandomPromptVisible && e.key === 'Enter') {        hideNextRandomPrompt();
         clearSoldUnsoldOverlays();
         // Trigger next item which will call showRandomPlayerSelection
         nextItem();
@@ -8678,7 +8360,7 @@
               showFullscreenNotification('Fullscreen Mode Activated');
             })
             .catch((err) => {
-              console.error('Error entering fullscreen:', err);
+              typeof console !== 'undefined' && console.error && console.error('Error entering fullscreen:', err);
               showFullscreenNotification('Fullscreen Not Supported');
             });
         } else {
@@ -8704,7 +8386,7 @@
               showFullscreenNotification('Fullscreen Mode Deactivated');
             })
             .catch((err) => {
-              console.error('Error exiting fullscreen:', err);
+              typeof console !== 'undefined' && console.error && console.error('Error exiting fullscreen:', err);
             });
         }
       }
@@ -8804,17 +8486,13 @@
       // Test bid validation for a specific team
       testBid: (teamIndex, bidAmount) => {
         if (teamIndex < 0 || teamIndex >= teams.length) {
-          console.error('Invalid team index. Valid range: 0 -', teams.length - 1);
+          typeof console !== 'undefined' && console.error && console.error('Invalid team index. Valid range: 0 -', teams.length - 1);
           return;
         }
         const team = teams[teamIndex];
         const player = items[currentIndex];
         const playerAge = player ? parseInt(player.age) : null;
-        const validation = AUCTION_RULES.validateBid(team, bidAmount, basePrice, playerAge);
-        console.log('[DEBUG] BID VALIDATION TEST - Team:', team.name, '| Bid:', bidAmount, '| Player Age:', playerAge);
-        console.log('[DEBUG] Result:', validation.valid ? '✓ VALID' : '✗ INVALID', validation.valid ? '' : '| Reason: ' + validation.message);
-        console.log('[DEBUG] Max Allowed Bid:', AUCTION_RULES.calculateMaxBid(team));
-        return validation;
+        const validation = AUCTION_RULES.validateBid(team, bidAmount, basePrice, playerAge);        return validation;
       },
       
       // Get all teams status
@@ -8876,7 +8554,7 @@
         console.log('%c🎨 Initializing Theme: ' + (activeTheme.name || activeKey), 'color: ' + (activeTheme.colors?.primary || '#2196F3') + '; font-size: 14px; font-weight: bold;');
         
         // Apply theme colors
-        try { applyThemeColors(activeTheme); } catch (e) { console.warn('[THEME] applyThemeColors failed', e); }
+        try { applyThemeColors(activeTheme); } catch (e) { }
         
         // Set background
         const card = document.getElementById('card');
@@ -8886,13 +8564,13 @@
         }
         
         // Apply theme to teams table
-        try { applyThemeToTable(activeTheme); } catch (e) { console.warn('[THEME] applyThemeToTable failed', e); }
+        try { applyThemeToTable(activeTheme); } catch (e) { }
         
         // Update season badge if provided
-        try { updateSeasonBadge(activeTheme); } catch (e) { console.warn('[THEME] updateSeasonBadge failed', e); }
+        try { updateSeasonBadge(activeTheme); } catch (e) { }
         
       } catch (err) {
-        console.error('[THEME] Initialization error', err);
+        typeof console !== 'undefined' && console.error && console.error('[THEME] Initialization error', err);
       }
     }
 
@@ -9054,31 +8732,20 @@
             const isAlreadyUnsold = currentPlayer && unsoldPlayers.some(p => p.id === currentPlayer.id);
             
             if (isAlreadySold || isAlreadyUnsold) {
-              // Player was already processed - move to next player
-              console.debug('[RESUME] Current player already processed (sold/unsold), moving to next player');
-              nextItem();
+              // Player was already processed - move to next player              nextItem();
             } else {
               // Save the restored values before showItem resets them
               const savedBid = currentBid;
               const savedBidIncrement = currentBidIncrement;
               const savedLastTeam = lastBiddingTeam;
-              const savedLastTeamIndex = lastBiddingTeamIndex;
-              
-              console.debug('[RESUME] Before showItem - currentBid:', currentBid, 'savedBid:', savedBid, 'lastBiddingTeam:', lastBiddingTeam);
-              
+              const savedLastTeamIndex = lastBiddingTeamIndex;              
               // Show current player
-              showItem(currentIndex);
-              
-              console.debug('[RESUME] After showItem - currentBid:', currentBid);
-              
+              showItem(currentIndex);              
               // Restore all the saved values
               currentBid = savedBid;
               currentBidIncrement = savedBidIncrement;
               lastBiddingTeam = savedLastTeam;
-              lastBiddingTeamIndex = savedLastTeamIndex;
-              
-              console.debug('[RESUME] After restore - currentBid:', currentBid);
-              
+              lastBiddingTeamIndex = savedLastTeamIndex;              
               // Update all displays
               updateBidDisplay();
               updateBidIncrementDisplay();
@@ -9111,30 +8778,19 @@
           const isAlreadyUnsold = currentPlayer && unsoldPlayers.some(p => p.id === currentPlayer.id);
           
           if (isAlreadySold || isAlreadyUnsold) {
-            // Player was already processed - move to next player
-            console.debug('[RESUME] Sequential - Current player already processed (sold/unsold), moving to next player');
-            nextItem();
+            // Player was already processed - move to next player            nextItem();
           } else {
             // Save the restored values before showItem resets them
             const savedBid = currentBid;
             const savedBidIncrement = currentBidIncrement;
             const savedLastTeam = lastBiddingTeam;
-            const savedLastTeamIndex = lastBiddingTeamIndex;
-            
-            console.debug('[RESUME] Sequential - Before showItem - currentBid:', currentBid, 'savedBid:', savedBid, 'lastBiddingTeam:', lastBiddingTeam);
-            
-            showItem(currentIndex);
-            
-            console.debug('[RESUME] Sequential - After showItem - currentBid:', currentBid);
-            
+            const savedLastTeamIndex = lastBiddingTeamIndex;            
+            showItem(currentIndex);            
             // Restore all the saved values
             currentBid = savedBid;
             currentBidIncrement = savedBidIncrement;
             lastBiddingTeam = savedLastTeam;
-            lastBiddingTeamIndex = savedLastTeamIndex;
-            
-            console.debug('[RESUME] Sequential - After restore - currentBid:', currentBid);
-            
+            lastBiddingTeamIndex = savedLastTeamIndex;            
             // Update all displays
             updateBidDisplay();
             updateBidIncrementDisplay();
