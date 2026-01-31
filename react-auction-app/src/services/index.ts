@@ -10,3 +10,7 @@ export type { WebhookPayload, SoldPlayerPayload, UnsoldPlayerPayload, MoveUnsold
 export { audioService } from './audio';
 export { imageCacheService } from './imageCache';
 export { imagePreloaderService } from './imagePreloader';
+export { biddingService } from './bidding';
+export type { BidEvent } from './bidding';
+export { authService } from './auth';
+export type { TeamCredentials, AuthSession } from './auth';

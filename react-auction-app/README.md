@@ -5,7 +5,40 @@ A modern, feature-rich cricket player auction management system built with React
 ![React](https://img.shields.io/badge/React-18-blue)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.0-blue)
 ![Tailwind CSS](https://img.shields.io/badge/Tailwind-3.0-blue)
+
 ![Vite](https://img.shields.io/badge/Vite-5.0-purple)
+
+## 📱 Mobile Bidding & QR Code Access
+
+- **Mobile Bidding Interface**: Teams can log in from their mobile devices to place bids in real time. The mobile interface is optimized for touch and small screens.
+- **QR Code Access**: Scan the QR code displayed on the main auction screen to instantly open the mobile bidding interface on your device.
+- **Team Authentication**: Each team has a unique username and password for secure access. Credentials are managed in `src/services/auth.ts`.
+
+### Mobile Bidding URL
+
+The mobile bidding interface is available at:
+
+```
+/mobile-bidding
+```
+
+Or scan the QR code shown on the main auction app screen.
+
+### Team Login Credentials
+
+| Team Name           | Username   | Password   |
+|---------------------|------------|------------|
+| Royal Challengers   | royal      | rcb2024    |
+| Super Kings         | kings      | csk2024    |
+| Titans              | titans     | gt2024     |
+| Capitals            | capitals   | dc2024     |
+| Warriors            | warriors   | lsg2024    |
+| Riders              | riders     | kkr2024    |
+| Indians             | indians    | mi2024     |
+| Sunrisers           | sunrisers  | srh2024    |
+
+See `src/services/auth.ts` for details or to update credentials.
+
 
 ## ✨ Features
 
@@ -17,6 +50,7 @@ A modern, feature-rich cricket player auction management system built with React
 - 📊 **Live Statistics** - Real-time tracking of auction progress
 - 🔊 **Sound Effects** - Audio feedback for sold/unsold events
 - 📱 **Responsive Design** - Works on desktop and tablets
+
 
 ## 🚀 Quick Start
 

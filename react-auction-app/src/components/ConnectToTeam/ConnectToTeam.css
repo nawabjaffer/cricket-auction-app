@@ -1,0 +1,98 @@
+/* CONNECT TO TEAM MODAL STYLES */
+.connect-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(20, 20, 40, 0.65);
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.connect-modal {
+  background: #222a3a;
+  border-radius: 20px;
+  box-shadow: 0 8px 40px rgba(0,0,0,0.35);
+  padding: 2rem 2.5rem;
+  min-width: 320px;
+  max-width: 95vw;
+  width: 400px;
+  position: relative;
+  color: #fff;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+.connect-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+}
+.connect-header h2 {
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin: 0;
+}
+.connect-close {
+  background: none;
+  border: none;
+  color: #fff;
+  font-size: 1.5rem;
+  cursor: pointer;
+  padding: 0.25rem 0.5rem;
+  border-radius: 8px;
+  transition: background 0.2s;
+}
+.connect-close:hover {
+  background: rgba(255,255,255,0.08);
+}
+.connect-team-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  justify-content: center;
+}
+.connect-team-btn {
+  background: #334155;
+  color: #fff;
+  border: none;
+  border-radius: 12px;
+  padding: 0.75rem 1.25rem;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s, transform 0.2s;
+}
+.connect-team-btn.selected,
+.connect-team-btn:active {
+  background: #2563eb;
+  color: #fff;
+  transform: scale(1.05);
+}
+.connect-details {
+  margin-top: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.25rem;
+}
+.connect-qr-section {
+  margin-bottom: 1rem;
+}
+.connect-info {
+  background: rgba(255,255,255,0.05);
+  border-radius: 12px;
+  padding: 1rem 1.5rem;
+  font-size: 1rem;
+  width: 100%;
+  text-align: left;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+}
+.connect-info strong {
+  color: #60a5fa;
+}
+.connect-info a {
+  color: #38bdf8;
+  text-decoration: underline;
+  word-break: break-all;
+}

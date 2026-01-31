@@ -1,0 +1,614 @@
+/* ============================================================================
+   TEAM SQUAD VIEW - STYLES
+   Full-screen team display with captain image and player roster
+   Layout: Left (players list) | Right (captain image + name)
+   ============================================================================ */
+
+/* Main Container - Full Screen Overlay */
+.team-squad-view {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  cursor: pointer;
+}
+
+/* Decorative Elements Container */
+.tsv-decorative-elements {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+/* Geometric Pattern SVGs */
+.tsv-geo-pattern {
+  position: absolute;
+  opacity: 0.12;
+  color: white;
+  stroke-width: 1.5;
+}
+
+.tsv-geo-top-right {
+  top: 2rem;
+  right: 4rem;
+  width: 280px;
+  height: 280px;
+}
+
+.tsv-geo-bottom-left {
+  bottom: 2rem;
+  left: 2rem;
+  width: 220px;
+  height: 220px;
+}
+
+/* Ambient Light Effects */
+.tsv-ambient-light {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(100px);
+  opacity: 0.15;
+}
+
+.tsv-ambient-1 {
+  top: -20%;
+  right: -10%;
+  width: 60vw;
+  height: 60vh;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.4) 0%, transparent 70%);
+}
+
+.tsv-ambient-2 {
+  bottom: -20%;
+  left: -10%;
+  width: 50vw;
+  height: 50vh;
+  background: radial-gradient(circle, rgba(0, 0, 0, 0.3) 0%, transparent 70%);
+}
+
+/* Main Content Container */
+.tsv-content {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  max-width: 1600px;
+  height: 100%;
+  padding: 4rem 6rem;
+  gap: 4rem;
+  cursor: default;
+  position: relative;
+  z-index: 10;
+}
+
+/* ============================================================================
+   LEFT SECTION - Player Names List
+   ============================================================================ */
+
+.tsv-left-section {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: flex-start;
+  height: 100%;
+  padding: 2rem 0;
+  max-width: 600px;
+}
+
+/* Team Header */
+.tsv-team-header {
+  margin-bottom: 3rem;
+}
+
+.tsv-team-name {
+  font-size: clamp(3rem, 6vw, 5rem);
+  font-weight: 900;
+  color: white;
+  text-transform: uppercase;
+  line-height: 0.9;
+  letter-spacing: -0.02em;
+  margin: 0;
+  text-shadow: 
+    0 0 40px rgba(255, 255, 255, 0.3),
+    0 4px 20px rgba(0, 0, 0, 0.4);
+}
+
+.tsv-team-underline {
+  width: 120px;
+  height: 4px;
+  background: white;
+  margin: 1rem 0;
+  box-shadow: 0 2px 10px rgba(255, 255, 255, 0.3);
+}
+
+.tsv-squad-label {
+  font-size: clamp(1.5rem, 3vw, 2.5rem);
+  font-weight: 700;
+  color: white;
+  text-transform: uppercase;
+  letter-spacing: 0.25em;
+  margin: 0;
+  text-shadow: 
+    0 0 30px rgba(255, 255, 255, 0.25),
+    0 2px 15px rgba(0, 0, 0, 0.3);
+}
+
+/* Players List Container */
+.tsv-players-list {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  width: 100%;
+  overflow-y: auto;
+  max-height: 50vh;
+  padding-right: 1rem;
+
+  /* Custom Scrollbar */
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.3) transparent;
+}
+
+.tsv-players-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.tsv-players-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.tsv-players-list::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.3);
+  border-radius: 3px;
+}
+
+.tsv-players-list::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.5);
+}
+
+/* Players Grid - Two Columns for Many Players */
+.tsv-players-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1rem 3rem;
+  width: 100%;
+}
+
+@media (max-width: 1200px) {
+  .tsv-players-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Individual Player Item */
+.tsv-player-item {
+  position: relative;
+  padding-bottom: 0.5rem;
+}
+
+.tsv-player-name {
+  display: block;
+  font-size: clamp(1.1rem, 2vw, 1.5rem);
+  font-weight: 700;
+  color: rgba(0, 0, 0, 0.85);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  line-height: 1.4;
+}
+
+.tsv-player-underline {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: rgba(255, 255, 255, 0.7);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+}
+
+/* Empty State */
+.tsv-empty-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3rem;
+}
+
+.tsv-empty-text {
+  font-size: 1.25rem;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.6);
+  font-style: italic;
+}
+
+/* Team Stats Summary */
+.tsv-team-stats {
+  display: flex;
+  align-items: center;
+  gap: 2rem;
+  margin-top: 2rem;
+  padding-top: 2rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.tsv-stat-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.tsv-stat-value {
+  font-size: 1.75rem;
+  font-weight: 800;
+  color: white;
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+}
+
+.tsv-stat-label {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.7);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.tsv-stat-divider {
+  width: 1px;
+  height: 40px;
+  background: rgba(255, 255, 255, 0.3);
+}
+
+/* ============================================================================
+   RIGHT SECTION - Captain Image & Name
+   ============================================================================ */
+
+.tsv-right-section {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  max-width: 700px;
+  position: relative;
+}
+
+.tsv-captain-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  height: 100%;
+  position: relative;
+}
+
+/* Captain Image Wrapper */
+.tsv-captain-image-wrapper {
+  position: relative;
+  height: 80%;
+  width: 100%;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.tsv-captain-image {
+  max-height: 100%;
+  max-width: 100%;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  object-position: bottom center;
+  filter: drop-shadow(0 20px 60px rgba(0, 0, 0, 0.4));
+  transition: opacity 0.4s ease, transform 0.4s ease;
+}
+
+.tsv-captain-image.loading {
+  opacity: 0;
+  transform: scale(0.95);
+}
+
+.tsv-captain-image.loaded {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.tsv-captain-fallback {
+  opacity: 0.8;
+}
+
+/* Captain Placeholder */
+.tsv-captain-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 300px;
+  height: 400px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 20px;
+  backdrop-filter: blur(10px);
+}
+
+.tsv-placeholder-icon {
+  font-size: 6rem;
+  opacity: 0.3;
+}
+
+/* Image Loading State */
+.tsv-image-loading {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 20px;
+}
+
+.tsv-loading-spinner {
+  width: 60px;
+  height: 60px;
+  border: 4px solid rgba(255, 255, 255, 0.2);
+  border-top-color: white;
+  border-radius: 50%;
+  animation: tsv-spin 1s linear infinite;
+}
+
+@keyframes tsv-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Captain Info */
+.tsv-captain-info {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 1.5rem;
+  text-align: center;
+}
+
+.tsv-captain-badge {
+  display: inline-block;
+  padding: 0.35rem 1rem;
+  background: rgba(255, 255, 255, 0.2);
+  backdrop-filter: blur(10px);
+  border-radius: 20px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: white;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+}
+
+.tsv-captain-name {
+  font-size: clamp(1.5rem, 3vw, 2.5rem);
+  font-weight: 800;
+  color: white;
+  text-transform: uppercase;
+  margin: 0;
+  text-shadow: 
+    0 0 30px rgba(255, 255, 255, 0.3),
+    0 4px 15px rgba(0, 0, 0, 0.4);
+}
+
+/* ============================================================================
+   CLOSE HINT
+   ============================================================================ */
+
+.tsv-close-hint {
+  position: absolute;
+  bottom: 2rem;
+  left: 2rem;
+  font-size: 0.875rem;
+  color: rgba(255, 255, 255, 0.6);
+  z-index: 20;
+}
+
+.tsv-close-hint kbd {
+  display: inline-block;
+  padding: 0.25rem 0.75rem;
+  margin: 0 0.25rem;
+  background: rgba(255, 255, 255, 0.15);
+  backdrop-filter: blur(10px);
+  border-radius: 6px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
+  color: white;
+}
+
+/* ============================================================================
+   RESPONSIVE ADJUSTMENTS
+   ============================================================================ */
+
+@media (max-width: 1200px) {
+  .tsv-content {
+    padding: 3rem 4rem;
+    gap: 2rem;
+  }
+
+  .tsv-left-section {
+    max-width: 450px;
+  }
+
+  .tsv-right-section {
+    max-width: 500px;
+  }
+}
+
+@media (max-width: 900px) {
+  .tsv-content {
+    flex-direction: column-reverse;
+    padding: 2rem;
+    gap: 2rem;
+    justify-content: flex-start;
+    padding-top: 4rem;
+  }
+
+  .tsv-left-section,
+  .tsv-right-section {
+    max-width: 100%;
+    width: 100%;
+    height: auto;
+  }
+
+  .tsv-left-section {
+    align-items: center;
+    text-align: center;
+  }
+
+  .tsv-team-header {
+    align-items: center;
+    text-align: center;
+  }
+
+  .tsv-team-underline {
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  .tsv-players-list {
+    max-height: 30vh;
+    padding-right: 0;
+  }
+
+  .tsv-players-grid {
+    justify-items: center;
+  }
+
+  .tsv-player-item {
+    text-align: center;
+  }
+
+  .tsv-team-stats {
+    justify-content: center;
+  }
+
+  .tsv-captain-image-wrapper {
+    height: auto;
+    max-height: 40vh;
+  }
+
+  .tsv-captain-container {
+    height: auto;
+  }
+
+  .tsv-geo-top-right {
+    width: 150px;
+    height: 150px;
+    top: 1rem;
+    right: 1rem;
+  }
+
+  .tsv-geo-bottom-left {
+    width: 120px;
+    height: 120px;
+    bottom: 1rem;
+    left: 1rem;
+  }
+}
+
+@media (max-width: 600px) {
+  .tsv-content {
+    padding: 1.5rem;
+  }
+
+  .tsv-team-name {
+    font-size: 2.5rem;
+  }
+
+  .tsv-squad-label {
+    font-size: 1.25rem;
+  }
+
+  .tsv-player-name {
+    font-size: 1rem;
+  }
+
+  .tsv-captain-name {
+    font-size: 1.25rem;
+  }
+
+  .tsv-close-hint {
+    bottom: 1rem;
+    left: 1rem;
+    font-size: 0.75rem;
+  }
+}
+
+/* ============================================================================
+   ANIMATIONS
+   ============================================================================ */
+
+/* Entry Animation for Player Items */
+.tsv-player-item {
+  animation: tsv-slideIn 0.4s ease-out forwards;
+  opacity: 0;
+}
+
+@keyframes tsv-slideIn {
+  from {
+    opacity: 0;
+    transform: translateX(-15px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* Staggered animation delays - applied via inline styles or JS */
+.tsv-player-item:nth-child(1) { animation-delay: 0.05s; }
+.tsv-player-item:nth-child(2) { animation-delay: 0.1s; }
+.tsv-player-item:nth-child(3) { animation-delay: 0.15s; }
+.tsv-player-item:nth-child(4) { animation-delay: 0.2s; }
+.tsv-player-item:nth-child(5) { animation-delay: 0.25s; }
+.tsv-player-item:nth-child(6) { animation-delay: 0.3s; }
+.tsv-player-item:nth-child(7) { animation-delay: 0.35s; }
+.tsv-player-item:nth-child(8) { animation-delay: 0.4s; }
+.tsv-player-item:nth-child(9) { animation-delay: 0.45s; }
+.tsv-player-item:nth-child(10) { animation-delay: 0.5s; }
+.tsv-player-item:nth-child(11) { animation-delay: 0.55s; }
+.tsv-player-item:nth-child(12) { animation-delay: 0.6s; }
+
+/* Subtle float animation for captain image */
+@keyframes tsv-float {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+.tsv-captain-image.loaded {
+  animation: tsv-float 4s ease-in-out infinite;
+}
+
+/* Ambient light pulse */
+@keyframes tsv-pulse {
+  0%, 100% {
+    opacity: 0.1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.2;
+    transform: scale(1.05);
+  }
+}
+
+.tsv-ambient-1 {
+  animation: tsv-pulse 6s ease-in-out infinite;
+}
+
+.tsv-ambient-2 {
+  animation: tsv-pulse 8s ease-in-out infinite;
+  animation-delay: -3s;
+}

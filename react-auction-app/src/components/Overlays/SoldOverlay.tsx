@@ -3,8 +3,10 @@
 // Apple-style reveal animation when a player is sold
 // ============================================================================
 
+import { useState, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useSoldPlayers } from '../../store';
+import { extractDriveFileId } from '../../utils/driveImage';
 
 // Pre-generated particles (deterministic, outside component)
 const CELEBRATION_PARTICLES = Array.from({ length: 30 }, (_, i) => ({
@@ -23,8 +25,40 @@ interface SoldOverlayProps {
 export function SoldOverlay({ isVisible, onClose }: Readonly<SoldOverlayProps>) {
   const soldPlayers = useSoldPlayers();
   const lastSoldPlayer = soldPlayers.at(-1);
+  const [imageError, setImageError] = useState(false);
+
+  // Transform Drive URL for better loading
+  const playerImageUrl = useMemo(() => {
+    if (!lastSoldPlayer?.imageUrl) return null;
+    
+    const fileId = extractDriveFileId(lastSoldPlayer.imageUrl);
+    if (fileId) {
+      return `https://drive.google.com/uc?export=view&id=${fileId}`;
+    }
+    return lastSoldPlayer.imageUrl;
+  }, [lastSoldPlayer?.imageUrl]);
+
+  // Generate fallback avatar
+  const getFallbackAvatar = useCallback((name: string) => {
+    const initials = name
+      .split(' ')
+      .map(word => word[0])
+      .join('')
+      .toUpperCase()
+      .slice(0, 2);
+    return `https://ui-avatars.com/api/?name=${encodeURIComponent(initials)}&background=22c55e&color=ffffff&size=400&bold=true&format=svg`;
+  }, []);
+
+  // Reset image error when player changes
+  const handleImageError = useCallback(() => {
+    setImageError(true);
+  }, []);
 
   if (!lastSoldPlayer) return null;
+
+  const displayImageUrl = imageError 
+    ? getFallbackAvatar(lastSoldPlayer.name) 
+    : (playerImageUrl || '/placeholder_player.png');
 
   return (
     <AnimatePresence>
@@ -55,7 +89,7 @@ export function SoldOverlay({ isVisible, onClose }: Readonly<SoldOverlayProps>) 
 
           {/* Main content card */}
           <motion.div
-            className="overlay-card-apple"
+            className="overlay-card-apple overlay-card-transparent"
             initial={{ y: 100, opacity: 0, scale: 0.9 }}
             animate={{ y: 0, opacity: 1, scale: 1 }}
             exit={{ y: 100, opacity: 0, scale: 0.9 }}
@@ -86,22 +120,20 @@ export function SoldOverlay({ isVisible, onClose }: Readonly<SoldOverlayProps>) 
               />
             </motion.div>
 
-            {/* Player image section */}
+            {/* Player image section - transparent background */}
             <motion.div 
-              className="player-image-section"
+              className="player-image-section player-image-transparent"
               initial={{ clipPath: 'inset(100% 0 0 0)' }}
               animate={{ clipPath: 'inset(0% 0 0 0)' }}
               transition={{ duration: 0.6, ease: [0.32, 0.72, 0, 1], delay: 0.2 }}
             >
               <img
-                src={lastSoldPlayer.imageUrl || '/placeholder_player.png'}
+                src={displayImageUrl}
                 alt={lastSoldPlayer.name}
-                className="player-overlay-image"
-                onError={(e) => {
-                  (e.target as HTMLImageElement).src = '/placeholder_player.png';
-                }}
+                className="player-overlay-image player-image-no-bg"
+                onError={handleImageError}
               />
-              <div className="image-gradient-overlay sold-gradient" />
+              <div className="image-gradient-overlay sold-gradient-transparent" />
             </motion.div>
 
             {/* Player info */}

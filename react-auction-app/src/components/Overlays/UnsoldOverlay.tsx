@@ -3,8 +3,10 @@
 // Apple-style reveal animation when a player goes unsold
 // ============================================================================
 
+import { useState, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useUnsoldPlayers } from '../../store';
+import { extractDriveFileId } from '../../utils/driveImage';
 
 // Pre-generated particles (deterministic, outside component)
 const FALLING_PARTICLES = Array.from({ length: 20 }, (_, i) => ({
@@ -23,8 +25,40 @@ interface UnsoldOverlayProps {
 export function UnsoldOverlay({ isVisible, onClose }: Readonly<UnsoldOverlayProps>) {
   const unsoldPlayers = useUnsoldPlayers();
   const lastUnsoldPlayer = unsoldPlayers.at(-1);
+  const [imageError, setImageError] = useState(false);
+
+  // Transform Drive URL for better loading
+  const playerImageUrl = useMemo(() => {
+    if (!lastUnsoldPlayer?.imageUrl) return null;
+    
+    const fileId = extractDriveFileId(lastUnsoldPlayer.imageUrl);
+    if (fileId) {
+      return `https://drive.google.com/uc?export=view&id=${fileId}`;
+    }
+    return lastUnsoldPlayer.imageUrl;
+  }, [lastUnsoldPlayer?.imageUrl]);
+
+  // Generate fallback avatar
+  const getFallbackAvatar = useCallback((name: string) => {
+    const initials = name
+      .split(' ')
+      .map(word => word[0])
+      .join('')
+      .toUpperCase()
+      .slice(0, 2);
+    return `https://ui-avatars.com/api/?name=${encodeURIComponent(initials)}&background=ef4444&color=ffffff&size=400&bold=true&format=svg`;
+  }, []);
+
+  // Handle image error
+  const handleImageError = useCallback(() => {
+    setImageError(true);
+  }, []);
 
   if (!lastUnsoldPlayer) return null;
+
+  const displayImageUrl = imageError 
+    ? getFallbackAvatar(lastUnsoldPlayer.name) 
+    : (playerImageUrl || '/placeholder_player.png');
 
   return (
     <AnimatePresence>
@@ -55,7 +89,7 @@ export function UnsoldOverlay({ isVisible, onClose }: Readonly<UnsoldOverlayProp
 
           {/* Main content card */}
           <motion.div
-            className="overlay-card-apple unsold-card"
+            className="overlay-card-apple unsold-card overlay-card-transparent"
             initial={{ y: 100, opacity: 0, scale: 0.9 }}
             animate={{ y: 0, opacity: 1, scale: 1 }}
             exit={{ y: 100, opacity: 0, scale: 0.9 }}
@@ -81,22 +115,20 @@ export function UnsoldOverlay({ isVisible, onClose }: Readonly<UnsoldOverlayProp
               <span className="badge-text">UNSOLD</span>
             </motion.div>
 
-            {/* Player image section */}
+            {/* Player image section - transparent background */}
             <motion.div 
-              className="player-image-section unsold-image"
+              className="player-image-section unsold-image player-image-transparent"
               initial={{ clipPath: 'inset(100% 0 0 0)' }}
               animate={{ clipPath: 'inset(0% 0 0 0)' }}
               transition={{ duration: 0.6, ease: [0.32, 0.72, 0, 1], delay: 0.2 }}
             >
               <img
-                src={lastUnsoldPlayer.imageUrl || '/placeholder_player.png'}
+                src={displayImageUrl}
                 alt={lastUnsoldPlayer.name}
-                className="player-overlay-image grayscale"
-                onError={(e) => {
-                  (e.target as HTMLImageElement).src = '/placeholder_player.png';
-                }}
+                className="player-overlay-image player-image-no-bg grayscale"
+                onError={handleImageError}
               />
-              <div className="image-gradient-overlay unsold-gradient" />
+              <div className="image-gradient-overlay unsold-gradient-transparent" />
               
               {/* X mark overlay */}
               <motion.div 

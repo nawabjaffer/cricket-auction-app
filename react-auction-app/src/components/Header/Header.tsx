@@ -4,6 +4,7 @@
 // ============================================================================
 
 import { useState, useRef, useEffect } from 'react';
+import { ConnectToTeam } from '../ConnectToTeam';
 import { motion, AnimatePresence } from 'framer-motion';
 import { getActiveTheme } from '../../config';
 import { useAuction } from '../../hooks';
@@ -14,9 +15,10 @@ interface HeaderProps {
   onShowHelp?: () => void;
   bidMultiplier?: number;
   onJumpToPlayer?: () => void;
+  onShowConnectToTeam?: () => void;
 }
 
-export function Header({ onRefresh, onShowHelp, bidMultiplier = 1, onJumpToPlayer }: HeaderProps) {
+export function Header({ onRefresh, onShowHelp, bidMultiplier = 1, onJumpToPlayer, onShowConnectToTeam }: HeaderProps) {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   
@@ -160,6 +162,18 @@ export function Header({ onRefresh, onShowHelp, bidMultiplier = 1, onJumpToPlaye
                       {selectionMode === 'sequential' ? 'Tap to randomize' : 'Tap for sequence'}
                     </span>
                   </button>
+
+                  {/* Connect to Team - QR Modal */}
+                  {onShowConnectToTeam && (
+                    <button
+                      className="menu-item"
+                      onClick={() => { onShowConnectToTeam(); setIsMenuOpen(false); }}
+                    >
+                      <span className="item-icon">🔗</span>
+                      <span className="item-text">Connect to Team</span>
+                      <span className="item-badge">QR & Login</span>
+                    </button>
+                  )}
 
                   {onJumpToPlayer && selectionMode === 'sequential' && (
                     <button 
