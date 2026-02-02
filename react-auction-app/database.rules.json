@@ -1,0 +1,17 @@
+{
+  "rules": {
+    ".read": true,
+    ".write": true,
+    "auction": {
+      "currentState": {
+        ".read": true,
+        ".write": true
+      },
+      "mobileBids": {
+        ".read": true,
+        ".write": true,
+        ".indexOn": ["timestamp", "processed"]
+      }
+    }
+  }
+}

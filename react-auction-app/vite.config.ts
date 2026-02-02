@@ -5,6 +5,9 @@ import react from '@vitejs/plugin-react'
 export default defineConfig({
   plugins: [react()],
   server: {
+    // Expose on network for mobile device testing
+    host: true,
+    port: 5173,
     proxy: {
       // Proxy Drive URLs through dev server to bypass CORS
       '/api/proxy-drive': {
@@ -21,4 +24,5 @@ export default defineConfig({
         },
       },
     },
-  },})
+  },
+})

@@ -5,6 +5,7 @@
 
 import { motion, AnimatePresence } from 'framer-motion';
 import { useSoldPlayers, useUnsoldPlayers, useTeams } from '../../store';
+import { TeamLogo } from '../TeamLogo';
 
 interface EndOverlayProps {
   isVisible: boolean;
@@ -131,13 +132,7 @@ export function EndOverlay({ isVisible, onClose, onStartRound2 }: EndOverlayProp
                         <span className="text-lg font-bold text-[var(--theme-text-secondary)]">
                           #{index + 1}
                         </span>
-                        {team.logoUrl && (
-                          <img 
-                            src={team.logoUrl} 
-                            alt={team.name} 
-                            className="w-8 h-8 rounded-full object-cover"
-                          />
-                        )}
+                        <TeamLogo logoUrl={team.logoUrl} teamName={team.name} size="md" />
                         <span className="font-semibold text-[var(--theme-text-primary)]">
                           {team.name}
                         </span>

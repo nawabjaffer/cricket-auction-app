@@ -90,6 +90,8 @@ export const TEAM_CREDENTIALS: TeamCredentials[] = [
   },
 ];
 
+let activeTeamCredentials: TeamCredentials[] = [...TEAM_CREDENTIALS];
+
 const SESSION_STORAGE_KEY = 'auction_team_session';
 
 /**
@@ -107,7 +109,7 @@ class AuthService {
    * Generate unique client ID
    */
   private generateClientId(): string {
-    return `client_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    return `client_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
   }
 
   /**
@@ -143,7 +145,7 @@ class AuthService {
    * Authenticate team with credentials
    */
   login(username: string, password: string): { success: boolean; error?: string; session?: AuthSession } {
-    const credentials = TEAM_CREDENTIALS.find(
+    const credentials = activeTeamCredentials.find(
       c => c.username.toLowerCase() === username.toLowerCase() && c.password === password
     );
 
@@ -212,10 +214,25 @@ class AuthService {
   }
 
   /**
+   * Replace credentials using runtime team data
+   */
+  setTeamCredentials(credentials: TeamCredentials[]): void {
+    if (credentials.length === 0) return;
+    activeTeamCredentials = credentials;
+  }
+
+  /**
+   * Get active team credentials
+   */
+  getTeamCredentials(): TeamCredentials[] {
+    return activeTeamCredentials;
+  }
+
+  /**
    * Get all team names (for display)
    */
   getTeamList(): Array<{ teamId: string; teamName: string; primaryColor: string }> {
-    return TEAM_CREDENTIALS.map(c => ({
+    return activeTeamCredentials.map(c => ({
       teamId: c.teamId,
       teamName: c.teamName,
       primaryColor: c.primaryColor,
@@ -226,7 +243,7 @@ class AuthService {
    * Verify credentials match team
    */
   verifyTeam(teamId: string, username: string, password: string): boolean {
-    return TEAM_CREDENTIALS.some(
+    return activeTeamCredentials.some(
       c => c.teamId === teamId && c.username === username && c.password === password
     );
   }

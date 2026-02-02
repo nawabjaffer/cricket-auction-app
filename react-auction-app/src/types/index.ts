@@ -260,14 +260,14 @@ export interface UIAnimationsConfig {
 
 export interface AvatarPlaceholderConfig {
   baseUrl: string;
-  cardSize: number;
-  teamSlotSize: number;
-  teamStatusSize: number;
-  background: string;
-  color: string;
-  bold: boolean;
-  fontSize: number;
-  teamStatusFontSize: number;
+  cardSize?: number;
+  teamSlotSize?: number;
+  teamStatusSize?: number;
+  background?: string;
+  color?: string;
+  bold?: boolean;
+  fontSize?: number;
+  teamStatusFontSize?: number;
 }
 
 export interface BreakpointsConfig {

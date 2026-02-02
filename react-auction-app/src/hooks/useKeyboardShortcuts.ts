@@ -13,6 +13,7 @@ interface KeyboardShortcutOptions {
   onViewToggle?: () => void;
   onEscape?: () => void;
   onHeaderToggle?: () => void;
+  onCarouselToggle?: () => void;
   onBidMultiplierChange?: (multiplier: number) => void;
   onTeamSquadView?: (teamId: string) => void;
 }
@@ -24,7 +25,7 @@ let bidMultiplier = 1;
  * Hook for managing keyboard shortcuts
  */
 export function useKeyboardShortcuts(options: KeyboardShortcutOptions = {}) {
-  const { enabled = true, onCustomAction, onViewToggle, onEscape, onHeaderToggle, onBidMultiplierChange, onTeamSquadView } = options;
+  const { enabled = true, onCustomAction, onViewToggle, onEscape, onHeaderToggle, onCarouselToggle, onBidMultiplierChange, onTeamSquadView } = options;
   const [currentMultiplier, setCurrentMultiplier] = useState(1);
   const lastSlashPressTime = useRef<number>(0);
   
@@ -245,12 +246,20 @@ export function useKeyboardShortcuts(options: KeyboardShortcutOptions = {}) {
       return;
     }
 
+    // - key - Toggle analytics carousel visibility
+    if (key === '-') {
+      event.preventDefault();
+      if (onCarouselToggle) {
+        onCarouselToggle();
+      }
+      return;
+    }
 
     // Custom action handler
     if (onCustomAction) {
       onCustomAction(key);
     }
-  }, [auction, hotkeys, onCustomAction, onViewToggle, onEscape, onHeaderToggle, onBidMultiplierChange]);
+  }, [auction, hotkeys, onCustomAction, onViewToggle, onEscape, onHeaderToggle, onCarouselToggle, onBidMultiplierChange]);
 
   useEffect(() => {
     if (!enabled) return;
@@ -303,6 +312,7 @@ export function useHotkeyHelp() {
     { key: 'Z', description: 'Undo last bid' },
     { key: 'T', description: 'Toggle team view' },
     { key: '=', description: 'Toggle header' },
+    { key: '-', description: 'Toggle analytics carousel' },
   ];
 
   return hotkeyList;

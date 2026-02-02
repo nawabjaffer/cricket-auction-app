@@ -16,3 +16,5 @@ export { MobileBidding } from './MobileBidding';
 export { QRCode } from './QRCode';
 export { ConnectToTeam } from './ConnectToTeam';
 export { AnalyticsCarousel } from './AnalyticsCarousel';
+export { TeamLogo } from './TeamLogo';
+export { PlayerImage } from './PlayerImage';

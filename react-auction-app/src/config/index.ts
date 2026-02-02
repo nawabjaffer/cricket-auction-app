@@ -165,15 +165,11 @@ export const defaultConfig: AppConfig = {
       },
     },
     avatarPlaceholder: {
-      baseUrl: 'https://ui-avatars.com/api/',
+      // Using local placeholder image instead of external service
+      baseUrl: '/placeholder_player.png',
       cardSize: 450,
       teamSlotSize: 300,
       teamStatusSize: 80,
-      background: '2196F3',
-      color: 'fff',
-      bold: true,
-      fontSize: 0.4,
-      teamStatusFontSize: 0.5,
     },
     breakpoints: {
       desktop: 1600,

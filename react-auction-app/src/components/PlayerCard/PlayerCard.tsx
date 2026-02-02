@@ -4,6 +4,8 @@
 // ============================================================================
 
 import { motion } from 'framer-motion';
+import { GiCricketBat, GiBaseballGlove } from 'react-icons/gi';
+import { IoBaseball, IoStar } from 'react-icons/io5';
 import type { Player } from '../../types';
 import { activeConfig } from '../../config';
 
@@ -26,11 +28,11 @@ export function PlayerCard({
 }: PlayerCardProps) {
   const getRoleIcon = (role: Player['role']) => {
     switch (role) {
-      case 'Batsman': return '🏏';
-      case 'Bowler': return '🎯';
-      case 'All-Rounder': return '⭐';
-      case 'Wicket-Keeper': return '🧤';
-      default: return '🏏';
+      case 'Batsman': return <GiCricketBat className="inline-block" />;
+      case 'Bowler': return <IoBaseball className="inline-block" />;
+      case 'All-Rounder': return <IoStar className="inline-block" />;
+      case 'Wicket-Keeper': return <GiBaseballGlove className="inline-block" />;
+      default: return <GiCricketBat className="inline-block" />;
     }
   };
 

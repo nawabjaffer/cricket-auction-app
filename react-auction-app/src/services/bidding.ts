@@ -57,10 +57,10 @@ class BiddingService {
   };
 
   private bidQueue: BidQueueItem[] = [];
-  private bidListeners: Set<BidListener> = new Set();
-  private stateListeners: Set<StateListener> = new Set();
+  private readonly bidListeners: Set<BidListener> = new Set();
+  private readonly stateListeners: Set<StateListener> = new Set();
   private processingInterval: ReturnType<typeof setInterval> | null = null;
-  private broadcastChannel: BroadcastChannel | null = null;
+  private readonly broadcastChannel: BroadcastChannel | null = null;
 
   constructor() {
     // Initialize BroadcastChannel for cross-tab communication
@@ -79,7 +79,7 @@ class BiddingService {
    * Generate unique bid ID
    */
   private generateBidId(): string {
-    return `bid_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    return `bid_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
   }
 
   /**
@@ -287,15 +287,16 @@ class BiddingService {
     const messageType = data.type as string;
     
     switch (messageType) {
-      case 'bid_submitted':
+      case 'bid_submitted': {
         // Another tab submitted a bid - add to our queue if not duplicate
         const bid = data.bid as BidEvent;
-        if (!this.bidQueue.find(b => b.id === bid.id)) {
+        if (!this.bidQueue.some(b => b.id === bid.id)) {
           this.bidQueue.push({ ...bid, processed: false });
         }
         break;
+      }
       
-      case 'bid_accepted':
+      case 'bid_accepted': {
         // Sync state from another tab
         const acceptedBid = data.bid as BidEvent;
         if (acceptedBid.timestamp > this.state.lastProcessedTimestamp) {
@@ -305,6 +306,7 @@ class BiddingService {
           this.notifyStateListeners();
         }
         break;
+      }
       
       case 'auction_started':
         this.state.isActive = true;

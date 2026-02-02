@@ -1,39 +1,33 @@
 // ============================================================================
-// QRCode COMPONENT (SVG, NO DEPENDENCY)
+// QRCode COMPONENT - Using qrcode.react library
 // ============================================================================
 import React from 'react';
-
-// Minimal QR code generator (uses QRCode.js via CDN fallback if needed)
-// For production, consider using 'qrcode.react' or 'react-qr-code' package
+import { QRCodeSVG } from 'qrcode.react';
 
 interface QRCodeProps {
   value: string;
   size?: number;
   bgColor?: string;
+  fgColor?: string;
   className?: string;
 }
 
 export const QRCode: React.FC<QRCodeProps> = ({
   value,
   size = 180,
-  bgColor = '#fff',
+  bgColor = '#ffffff',
+  fgColor = '#000000',
   className = '',
 }) => {
-  // Use a simple SVG fallback if no QR lib
-  // For demo, use Google Chart API
-  const src = `https://chart.googleapis.com/chart?cht=qr&chs=${size}x${size}&chl=${encodeURIComponent(
-    value
-  )}&chld=L|0`;
-
   return (
-    <img
-      src={src}
-      alt="QR Code"
-      width={size}
-      height={size}
-      style={{ background: bgColor }}
+    <QRCodeSVG
+      value={value}
+      size={size}
+      bgColor={bgColor}
+      fgColor={fgColor}
+      level="M"
+      marginSize={2}
       className={className}
-      draggable={false}
     />
   );
 };

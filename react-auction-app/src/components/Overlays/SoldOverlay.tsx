@@ -3,7 +3,7 @@
 // Apple-style reveal animation when a player is sold
 // ============================================================================
 
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useSoldPlayers } from '../../store';
 import { extractDriveFileId } from '../../utils/driveImage';
@@ -25,40 +25,58 @@ interface SoldOverlayProps {
 export function SoldOverlay({ isVisible, onClose }: Readonly<SoldOverlayProps>) {
   const soldPlayers = useSoldPlayers();
   const lastSoldPlayer = soldPlayers.at(-1);
+  const [currentUrlIndex, setCurrentUrlIndex] = useState(0);
   const [imageError, setImageError] = useState(false);
 
-  // Transform Drive URL for better loading
-  const playerImageUrl = useMemo(() => {
-    if (!lastSoldPlayer?.imageUrl) return null;
+  // Get image URL from last sold player
+  const playerImageUrl = lastSoldPlayer?.imageUrl ?? '';
+
+  // Generate multiple URL formats to try for player image
+  const imageUrls = useMemo(() => {
+    if (!playerImageUrl) return [];
     
-    const fileId = extractDriveFileId(lastSoldPlayer.imageUrl);
+    const urls: string[] = [];
+    const fileId = extractDriveFileId(playerImageUrl);
+    
     if (fileId) {
-      return `https://drive.google.com/uc?export=view&id=${fileId}`;
+      // Try lh3 first (best CORS support), then thumbnail, then direct export
+      urls.push(
+        `https://lh3.googleusercontent.com/d/${fileId}=s800`,
+        `https://drive.google.com/thumbnail?id=${fileId}&sz=w800`,
+        `https://drive.google.com/uc?export=view&id=${fileId}`
+      );
+    } else {
+      urls.push(playerImageUrl);
     }
-    return lastSoldPlayer.imageUrl;
-  }, [lastSoldPlayer?.imageUrl]);
+    
+    return urls;
+  }, [playerImageUrl]);
 
-  // Generate fallback avatar
-  const getFallbackAvatar = useCallback((name: string) => {
-    const initials = name
-      .split(' ')
-      .map(word => word[0])
-      .join('')
-      .toUpperCase()
-      .slice(0, 2);
-    return `https://ui-avatars.com/api/?name=${encodeURIComponent(initials)}&background=22c55e&color=ffffff&size=400&bold=true&format=svg`;
+  // Generate fallback - use placeholder instead of avatar letters
+  const getFallbackImage = useCallback(() => {
+    return '/placeholder_player.png';
   }, []);
 
-  // Reset image error when player changes
+  // Reset state when player changes
+  useEffect(() => {
+    setCurrentUrlIndex(0);
+    setImageError(false);
+  }, [lastSoldPlayer?.id]);
+
+  // Handle image error - try next URL
   const handleImageError = useCallback(() => {
-    setImageError(true);
-  }, []);
+    if (currentUrlIndex < imageUrls.length - 1) {
+      setCurrentUrlIndex(prev => prev + 1);
+    } else {
+      setImageError(true);
+    }
+  }, [currentUrlIndex, imageUrls.length]);
 
   if (!lastSoldPlayer) return null;
 
-  const displayImageUrl = imageError 
-    ? getFallbackAvatar(lastSoldPlayer.name) 
-    : (playerImageUrl || '/placeholder_player.png');
+  const displayImageUrl = imageError || imageUrls.length === 0
+    ? getFallbackImage() 
+    : imageUrls[currentUrlIndex];
 
   return (
     <AnimatePresence>

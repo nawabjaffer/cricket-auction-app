@@ -5,13 +5,16 @@
 
 // Firebase configuration - Replace with your Firebase project credentials
 const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || 'your-api-key',
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || 'your-project.firebaseapp.com',
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || 'your-project-id',
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || 'your-project.appspot.com',
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || '123456789',
-  appId: import.meta.env.VITE_FIREBASE_APP_ID || '1:123456789:web:abc123',
+  apiKey: 'AIzaSyBazxXTsWddS3r_i-0VhUaC2QqknheEzpQ',
+  authDomain: 'e-auction-store.firebaseapp.com',
+  projectId: 'e-auction-store',
+  storageBucket: 'e-auction-store.firebasestorage.app',
+  messagingSenderId: '830797180032',
+  appId: '1:830797180032:web:a0f0a92678ecc36fedca65',
+  measurementId: 'G-FER452EYST',
 };
+
+
 
 // Types for Firestore data
 export interface FirestoreBid {
@@ -70,6 +73,7 @@ const listeners: Map<string, UnsubscribeFn> = new Map();
  */
 class FirebaseService {
   private isInitialized = false;
+  private broadcastChannel: BroadcastChannel | null = null;
   private auctionState: FirestoreAuctionState = {
     currentPlayerId: null,
     currentPlayerName: null,
@@ -120,8 +124,10 @@ class FirebaseService {
   private setupBroadcastChannel(): void {
     if (typeof BroadcastChannel === 'undefined') return;
 
+    if (this.broadcastChannel) return;
+
     const channel = new BroadcastChannel('auction_firebase_sync');
-    
+
     channel.onmessage = (event) => {
       const { type, data } = event.data;
       
@@ -137,8 +143,13 @@ class FirebaseService {
       }
     };
 
+    this.broadcastChannel = channel;
+
     // Store for cleanup
-    listeners.set('broadcast', () => channel.close());
+    listeners.set('broadcast', () => {
+      this.broadcastChannel?.close();
+      this.broadcastChannel = null;
+    });
   }
 
   /**
@@ -146,13 +157,15 @@ class FirebaseService {
    */
   private broadcastStateUpdate(): void {
     if (typeof BroadcastChannel === 'undefined') return;
-    
-    const channel = new BroadcastChannel('auction_firebase_sync');
-    channel.postMessage({
+
+    if (!this.broadcastChannel) {
+      this.setupBroadcastChannel();
+    }
+
+    this.broadcastChannel?.postMessage({
       type: 'state_update',
       data: this.auctionState,
     });
-    channel.close();
   }
 
   /**
@@ -160,13 +173,15 @@ class FirebaseService {
    */
   private broadcastNewBid(bid: FirestoreBid): void {
     if (typeof BroadcastChannel === 'undefined') return;
-    
-    const channel = new BroadcastChannel('auction_firebase_sync');
-    channel.postMessage({
+
+    if (!this.broadcastChannel) {
+      this.setupBroadcastChannel();
+    }
+
+    this.broadcastChannel?.postMessage({
       type: 'new_bid',
       data: bid,
     });
-    channel.close();
   }
 
   /**

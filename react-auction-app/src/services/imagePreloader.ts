@@ -79,7 +79,7 @@ class ImagePreloaderService {
           const fallbackUrls = [
             `https://drive.google.com/thumbnail?id=${fileId}&sz=w400`,
             `https://drive.google.com/uc?export=view&id=${fileId}`,
-            `https://ui-avatars.com/api/?name=Player&background=1976D2&color=ffffff&size=400&bold=true&format=svg`,
+            '/placeholder_player.png',
           ];
 
           for (const fallbackUrl of fallbackUrls) {

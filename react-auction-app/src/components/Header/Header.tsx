@@ -5,19 +5,23 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { IoClose, IoMenu, IoLink, IoRefresh, IoShuffle, IoList, IoSearch } from 'react-icons/io5';
 import { getActiveTheme } from '../../config';
 import { useAuction } from '../../hooks';
 import { useAvailablePlayers, useSoldPlayers, useUnsoldPlayers, useSelectionMode, useTeams } from '../../store';
 
 interface HeaderProps {
   onRefresh?: () => void;
+  onResetAuction?: () => void;
   onShowHelp?: () => void;
   bidMultiplier?: number;
   onJumpToPlayer?: () => void;
   onShowConnectToTeam?: () => void;
+  showConnectionStatus?: boolean;
+  onDismissConnectionStatus?: () => void;
 }
 
-export function Header({ onRefresh, onShowHelp, bidMultiplier = 1, onJumpToPlayer, onShowConnectToTeam }: HeaderProps) {
+export function Header({ onRefresh, onResetAuction, onShowHelp, bidMultiplier = 1, onJumpToPlayer, onShowConnectToTeam, showConnectionStatus = false, onDismissConnectionStatus }: HeaderProps) {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   
@@ -44,6 +48,35 @@ export function Header({ onRefresh, onShowHelp, bidMultiplier = 1, onJumpToPlaye
 
   return (
     <header className="header-minimal">
+      {/* Firebase Connection Status Banner */}
+      <AnimatePresence>
+        {showConnectionStatus && (
+          <motion.div
+            className="connection-status-banner"
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.2 }}
+          >
+            <div className="banner-content">
+              <div className="banner-indicator">
+                <div className="pulse-dot" />
+              </div>
+              <span className="banner-text">Firebase Connected - Mobile devices can sync</span>
+              {onDismissConnectionStatus && (
+                <button
+                  className="banner-close"
+                  onClick={onDismissConnectionStatus}
+                  aria-label="Dismiss"
+                >
+                  <IoClose />
+                </button>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <div className="header-content">
         {/* Left - Title */}
         <div className="header-title">
@@ -94,7 +127,7 @@ export function Header({ onRefresh, onShowHelp, bidMultiplier = 1, onJumpToPlaye
             whileTap={{ scale: 0.95 }}
           >
             <span className="menu-icon">
-              {isMenuOpen ? '✕' : '☰'}
+              {isMenuOpen ? <IoClose /> : <IoMenu />}
             </span>
           </motion.button>
 
@@ -153,7 +186,7 @@ export function Header({ onRefresh, onShowHelp, bidMultiplier = 1, onJumpToPlaye
                     className="menu-item"
                     onClick={() => { toggleSelectionMode(); }}
                   >
-                    <span className="item-icon">{selectionMode === 'sequential' ? '📋' : '🎲'}</span>
+                    <span className="item-icon">{selectionMode === 'sequential' ? <IoList /> : <IoShuffle />}</span>
                     <span className="item-text">
                       {selectionMode === 'sequential' ? 'Sequential Mode' : 'Random Mode'}
                     </span>
@@ -168,7 +201,7 @@ export function Header({ onRefresh, onShowHelp, bidMultiplier = 1, onJumpToPlaye
                       className="menu-item"
                       onClick={() => { onShowConnectToTeam(); setIsMenuOpen(false); }}
                     >
-                      <span className="item-icon">🔗</span>
+                      <span className="item-icon"><IoLink /></span>
                       <span className="item-text">Connect to Team</span>
                       <span className="item-badge">QR & Login</span>
                     </button>
@@ -179,7 +212,7 @@ export function Header({ onRefresh, onShowHelp, bidMultiplier = 1, onJumpToPlaye
                       className="menu-item"
                       onClick={() => { onJumpToPlayer(); setIsMenuOpen(false); }}
                     >
-                      <span className="item-icon">🎯</span>
+                      <span className="item-icon"><IoSearch /></span>
                       <span className="item-text">Jump to Player ID</span>
                       <span className="item-badge">Press F</span>
                     </button>
@@ -190,8 +223,25 @@ export function Header({ onRefresh, onShowHelp, bidMultiplier = 1, onJumpToPlaye
                       className="menu-item"
                       onClick={() => { onRefresh(); setIsMenuOpen(false); }}
                     >
-                      <span className="item-icon">↻</span>
+                      <span className="item-icon"><IoRefresh /></span>
                       <span className="item-text">Refresh Data</span>
+                      <span className="item-badge">Reload sheets</span>
+                    </button>
+                  )}
+
+                  {onResetAuction && (
+                    <button 
+                      className="menu-item danger"
+                      onClick={() => {
+                        if (confirm('Reset entire auction? This will clear all bids and reload from Google Sheets. This action cannot be undone!')) {
+                          onResetAuction();
+                          setIsMenuOpen(false);
+                        }
+                      }}
+                    >
+                      <span className="item-icon"><IoRefresh /></span>
+                      <span className="item-text">Reset Auction</span>
+                      <span className="item-badge warning">Clear all bids</span>
                     </button>
                   )}
 

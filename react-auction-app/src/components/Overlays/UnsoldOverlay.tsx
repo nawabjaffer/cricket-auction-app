@@ -3,8 +3,9 @@
 // Apple-style reveal animation when a player goes unsold
 // ============================================================================
 
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { IoCloseCircle } from 'react-icons/io5';
 import { useUnsoldPlayers } from '../../store';
 import { extractDriveFileId } from '../../utils/driveImage';
 
@@ -25,40 +26,55 @@ interface UnsoldOverlayProps {
 export function UnsoldOverlay({ isVisible, onClose }: Readonly<UnsoldOverlayProps>) {
   const unsoldPlayers = useUnsoldPlayers();
   const lastUnsoldPlayer = unsoldPlayers.at(-1);
+  const [currentUrlIndex, setCurrentUrlIndex] = useState(0);
   const [imageError, setImageError] = useState(false);
 
-  // Transform Drive URL for better loading
-  const playerImageUrl = useMemo(() => {
-    if (!lastUnsoldPlayer?.imageUrl) return null;
+  // Generate multiple URL formats to try for player image
+  const imageUrls = useMemo(() => {
+    if (!lastUnsoldPlayer?.imageUrl) return [];
     
+    const urls: string[] = [];
     const fileId = extractDriveFileId(lastUnsoldPlayer.imageUrl);
+    
     if (fileId) {
-      return `https://drive.google.com/uc?export=view&id=${fileId}`;
+      // Try lh3 first (best CORS support)
+      urls.push(`https://lh3.googleusercontent.com/d/${fileId}=s800`);
+      // Try thumbnail endpoint
+      urls.push(`https://drive.google.com/thumbnail?id=${fileId}&sz=w800`);
+      // Try direct export
+      urls.push(`https://drive.google.com/uc?export=view&id=${fileId}`);
+    } else {
+      urls.push(lastUnsoldPlayer.imageUrl);
     }
-    return lastUnsoldPlayer.imageUrl;
+    
+    return urls;
   }, [lastUnsoldPlayer?.imageUrl]);
 
-  // Generate fallback avatar
-  const getFallbackAvatar = useCallback((name: string) => {
-    const initials = name
-      .split(' ')
-      .map(word => word[0])
-      .join('')
-      .toUpperCase()
-      .slice(0, 2);
-    return `https://ui-avatars.com/api/?name=${encodeURIComponent(initials)}&background=ef4444&color=ffffff&size=400&bold=true&format=svg`;
+  // Generate fallback - use placeholder instead of avatar letters
+  const getFallbackImage = useCallback(() => {
+    return '/placeholder_player.png';
   }, []);
 
-  // Handle image error
+  // Reset state when player changes
+  useEffect(() => {
+    setCurrentUrlIndex(0);
+    setImageError(false);
+  }, [lastUnsoldPlayer?.id]);
+
+  // Handle image error - try next URL
   const handleImageError = useCallback(() => {
-    setImageError(true);
-  }, []);
+    if (currentUrlIndex < imageUrls.length - 1) {
+      setCurrentUrlIndex(prev => prev + 1);
+    } else {
+      setImageError(true);
+    }
+  }, [currentUrlIndex, imageUrls.length]);
 
   if (!lastUnsoldPlayer) return null;
 
-  const displayImageUrl = imageError 
-    ? getFallbackAvatar(lastUnsoldPlayer.name) 
-    : (playerImageUrl || '/placeholder_player.png');
+  const displayImageUrl = imageError || imageUrls.length === 0
+    ? getFallbackImage() 
+    : imageUrls[currentUrlIndex];
 
   return (
     <AnimatePresence>
@@ -137,7 +153,7 @@ export function UnsoldOverlay({ isVisible, onClose }: Readonly<UnsoldOverlayProp
                 animate={{ scale: 1, rotate: 0 }}
                 transition={{ type: 'spring', stiffness: 200, damping: 15, delay: 0.5 }}
               >
-                ✕
+                <IoCloseCircle />
               </motion.div>
             </motion.div>
 

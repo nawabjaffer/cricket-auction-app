@@ -1,13 +1,14 @@
 import { Component, StrictMode, type ReactNode } from 'react'
 import { createRoot } from 'react-dom/client'
+import { BrowserRouter, Routes, Route } from 'react-router-dom'
 
 // V1 - Original App (with Google Sheets integration)
 import App from './App.tsx'
+import { MobileBiddingPage } from './components/MobileBidding/MobileBidding.tsx'
+import FirebaseDiagnostics from './pages/Diagnostics.tsx'
 import './index.css'
 
 // V2 features archived for future development in separate feature branches
-
-const RootApp = App; // Using V1 (stable)
 
 class ErrorBoundary extends Component<
   { children: ReactNode },
@@ -44,7 +45,13 @@ class ErrorBoundary extends Component<
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <ErrorBoundary>
-      <RootApp />
+      <BrowserRouter>
+        <Routes>
+          <Route path="/" element={<App />} />
+          <Route path="/mobile-bidding" element={<MobileBiddingPage />} />
+          <Route path="/diagnostics" element={<FirebaseDiagnostics />} />
+        </Routes>
+      </BrowserRouter>
     </ErrorBoundary>
   </StrictMode>,
 )

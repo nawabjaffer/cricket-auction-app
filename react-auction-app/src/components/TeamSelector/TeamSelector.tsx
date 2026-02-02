@@ -4,10 +4,12 @@
 // ============================================================================
 
 import { motion } from 'framer-motion';
+import { IoRibbon } from 'react-icons/io5';
 import type { Team } from '../../types';
 import { useAuction } from '../../hooks';
 import { AuctionRulesService } from '../../services';
 import { useTeams } from '../../store';
+import { TeamLogo } from '../TeamLogo';
 
 interface TeamSelectorProps {
   onTeamSelect?: (team: Team) => void;
@@ -110,23 +112,14 @@ function TeamCard({
 
       {/* Team Logo & Name */}
       <div className="flex items-center gap-3 mb-3">
-        {team.logoUrl && (
-          <img 
-            src={team.logoUrl} 
-            alt={team.name} 
-            className="w-12 h-12 rounded-full object-cover bg-white"
-            onError={(e) => {
-              (e.target as HTMLImageElement).style.display = 'none';
-            }}
-          />
-        )}
+        <TeamLogo logoUrl={team.logoUrl} teamName={team.name} size="lg" />
         <div>
           <h4 className={`font-bold truncate ${isSelected ? 'text-white' : 'text-[var(--theme-text-primary)]'}`}>
             {team.name}
           </h4>
           {team.captain && (
-            <div className={`text-xs ${isSelected ? 'text-white/80' : 'text-[var(--theme-text-secondary)]'}`}>
-              👑 {team.captain}
+            <div className={`text-xs flex items-center gap-1 ${isSelected ? 'text-white/80' : 'text-[var(--theme-text-secondary)]'}`}>
+              <IoRibbon className="text-yellow-500" /> {team.captain}
             </div>
           )}
         </div>

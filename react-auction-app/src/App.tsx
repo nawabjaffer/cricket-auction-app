@@ -3,7 +3,7 @@
 // Root component with providers and layout
 // ============================================================================
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AnimatePresence, motion } from 'framer-motion';
@@ -15,6 +15,8 @@ import {
   IoBaseball,
   IoStar,
   IoPerson,
+  IoClose,
+  IoSearch,
 } from 'react-icons/io5';
 import {
   Header,
@@ -36,6 +38,7 @@ import {
   useHotkeyHelp,
   useImagePreload,
 } from './hooks';
+import { useRealtimeDesktopSync } from './hooks/useRealtimeSync';
 import { audioService, imageCacheService } from './services';
 import { useActiveOverlay, useNotification, useCurrentPlayer, useSoldPlayers, useUnsoldPlayers, useAvailablePlayers, useOriginalPlayers, useTeams } from './store';
 import { extractDriveFileId } from './utils/driveImage';
@@ -78,6 +81,9 @@ function AuctionApp() {
   // Connect to Team modal state
   const [showConnectToTeamModal, setShowConnectToTeamModal] = useState(false);
   
+  // Analytics carousel state
+  const [showCarousel, setShowCarousel] = useState(true);
+  
   // Image polling state
   const [imageLoadingState, setImageLoadingState] = useState<'loading' | 'loaded' | 'error'>('loading');
   const [currentImageAttempt, setCurrentImageAttempt] = useState(0);
@@ -87,12 +93,24 @@ function AuctionApp() {
   // Initialize theme and audio
   const { currentTheme } = useTheme();
   
+  // Initialize Firebase Realtime Database sync for desktop (broadcasts state to mobile devices)
+  useRealtimeDesktopSync();
+  
+  // Connection status indicator
+  const [showConnectionStatus, setShowConnectionStatus] = useState(true);
+  
   // Load initial data
   const { isLoading, isError, error } = useInitialData();
   const { refreshAll } = useRefreshData();
 
   // Auction state
   const auction = useAuction();
+
+  // Handle reset auction
+  const handleResetAuction = useCallback(() => {
+    auction.resetAuction();
+    refreshAll();
+  }, [auction, refreshAll]);
   const selectedTeam = auction.selectedTeam;
   const activeOverlay = useActiveOverlay();
   const notification = useNotification();
@@ -118,6 +136,7 @@ function AuctionApp() {
     onViewToggle: () => setShowTeamOverlay(prev => !prev),
     onEscape: () => setShowTeamOverlay(false),
     onHeaderToggle: () => setShowHeader(prev => !prev),
+    onCarouselToggle: () => setShowCarousel(prev => !prev),
     onBidMultiplierChange: (multiplier) => setBidMultiplier(multiplier),
     onTeamSquadView: handleTeamSquadView,
     onCustomAction: (action) => {
@@ -216,20 +235,23 @@ function AuctionApp() {
     { label: 'Highest Score', value: currentPlayer?.battingBestFigures || '—' },
   ]), [currentPlayer]);
 
+  // Get current player image URL
+  const playerImageUrl = currentPlayer?.imageUrl ?? null;
+
   // Transform Drive URL to use most reliable endpoint first
   const transformedImageUrl = useMemo(() => {
-    if (!currentPlayer?.imageUrl) return null;
+    if (!playerImageUrl) return null;
     
     // Check if it's a Drive URL and use export view (most reliable)
-    const fileId = extractDriveFileId(currentPlayer.imageUrl);
+    const fileId = extractDriveFileId(playerImageUrl);
     if (fileId) {
       const exportUrl = `https://drive.google.com/uc?export=view&id=${fileId}`;
       console.log('[App] Using Drive export URL:', exportUrl);
       return exportUrl;
     }
     
-    return currentPlayer.imageUrl;
-  }, [currentPlayer?.imageUrl]);
+    return playerImageUrl;
+  }, [playerImageUrl]);
 
   // Preload player image - simple URL tracking
   const { onImageLoad } = useImagePreload(transformedImageUrl);
@@ -266,26 +288,33 @@ function AuctionApp() {
       setTimeout(() => resolve(false), 5000);
     });
   };
+
+  // Reset image state when player changes
+  const currentPlayerId = currentPlayer?.id ?? null;
+  useEffect(() => {
+    if (!currentPlayerId) return;
+    
+    // Reset on player change
+    currentPlayerIdRef.current = currentPlayerId;
+    setCurrentImageAttempt(0);
+    setImageLoadingState('loading');
+    
+    // Clear any existing polling timeout
+    if (imagePollingTimeoutRef.current) {
+      clearTimeout(imagePollingTimeoutRef.current);
+      imagePollingTimeoutRef.current = null;
+    }
+  }, [currentPlayerId]);
   
   // Async polling effect - retry loading actual images
   useEffect(() => {
     if (!currentPlayer?.id) {
-      setImageLoadingState('error');
       return;
     }
     
-    // Check if this is a new player
-    if (currentPlayerIdRef.current !== currentPlayer.id) {
-      console.log('[App] New player detected:', currentPlayer.name);
-      currentPlayerIdRef.current = currentPlayer.id;
-      setCurrentImageAttempt(0);
-      setImageLoadingState('loading');
-      
-      // Clear any existing polling timeout
-      if (imagePollingTimeoutRef.current) {
-        clearTimeout(imagePollingTimeoutRef.current);
-        imagePollingTimeoutRef.current = null;
-      }
+    // Only run if we're in loading state
+    if (imageLoadingState !== 'loading') {
+      return;
     }
     
     // Start async polling
@@ -346,7 +375,7 @@ function AuctionApp() {
         imagePollingTimeoutRef.current = null;
       }
     };
-  }, [currentPlayer?.id, currentImageAttempt, imageLoadingState]);
+  }, [currentPlayer, currentImageAttempt, imageLoadingState, getImageUrlVariants, testImageUrl]);
 
   // Loading state
   if (isLoading) {
@@ -395,7 +424,8 @@ function AuctionApp() {
 
       {showHeader && (
         <Header 
-          onRefresh={refreshAll} 
+          onRefresh={refreshAll}
+          onResetAuction={handleResetAuction}
           onShowHelp={() => setShowHelpModal(true)}
           bidMultiplier={bidMultiplier}
           onJumpToPlayer={() => {
@@ -404,6 +434,8 @@ function AuctionApp() {
             setShowJumpModal(true);
           }}
           onShowConnectToTeam={() => setShowConnectToTeamModal(true)}
+          showConnectionStatus={showConnectionStatus}
+          onDismissConnectionStatus={() => setShowConnectionStatus(false)}
         />
       )}
 
@@ -563,8 +595,8 @@ function AuctionApp() {
             
             {/* Particle effects */}
             <div className="particles">
-              {[...Array(12)].map((_, i) => (
-                <span key={i} className="particle" style={{ '--i': i } as React.CSSProperties} />
+              {Array.from({ length: 12 }, (_, i) => (
+                <span key={`particle-${i}`} className="particle" style={{ '--i': i } as React.CSSProperties} />
               ))}
             </div>
 
@@ -617,22 +649,15 @@ function AuctionApp() {
                   {/* Actual Image */}
                   <img 
                     ref={imgRef}
-                    src={imageLoadingState === 'error' ? (
-                      // Show avatar only after all polling attempts fail
-                      currentPlayer.name ? 
-                        `https://ui-avatars.com/api/?name=${encodeURIComponent(
-                          currentPlayer.name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2)
-                        )}&background=1976D2&color=ffffff&size=400&bold=true&format=svg` 
-                        : '/placeholder_player.png'
-                    ) : (transformedImageUrl || '/placeholder_player.png')} 
+                    src={imageLoadingState === 'error' ? '/placeholder_player.png' : (transformedImageUrl || '/placeholder_player.png')} 
                     alt={currentPlayer.name}
                     className="placeholder-image"
                     loading="eager"
                     onLoad={(e) => {
                       const loadedUrl = (e.target as HTMLImageElement).src;
                       
-                      // Don't mark as loaded if it's placeholder or avatar (means polling failed)
-                      if (loadedUrl.includes('placeholder_player.png') || loadedUrl.includes('ui-avatars.com')) {
+                      // Don't mark as loaded if it's placeholder (means polling failed)
+                      if (loadedUrl.includes('placeholder_player.png')) {
                         console.log('[App] Fallback image loaded for', currentPlayer.name);
                         onImageLoad();
                         return;
@@ -648,7 +673,7 @@ function AuctionApp() {
                       const failedUrl = img.src;
                       
                       // If the async-selected URL failed, continue polling
-                      if (imageLoadingState === 'loaded' && !failedUrl.includes('placeholder') && !failedUrl.includes('ui-avatars')) {
+                      if (imageLoadingState === 'loaded' && !failedUrl.includes('placeholder')) {
                         console.warn('[App] Image that passed polling test failed to load:', failedUrl.substring(0, 80));
                         console.warn('[App] Resuming polling...');
                         setImageLoadingState('loading');
@@ -789,7 +814,7 @@ function AuctionApp() {
                 className="panel-close-btn"
                 onClick={() => setShowTeamOverlay(false)}
               >
-                <span>✕</span>
+                <IoClose />
               </button>
 
               {/* Team Tabs */}
@@ -846,29 +871,22 @@ function AuctionApp() {
                             loading="lazy"
                             onError={(e) => {
                               const img = e.target as HTMLImageElement;
-                              let attempt = parseInt(img.getAttribute('data-squad-error-attempt') || '0', 10);
-                              attempt++;
-                              img.setAttribute('data-squad-error-attempt', attempt.toString());
+                              const currentAttempt = Number.parseInt(img.dataset.squadErrorAttempt ?? '0', 10);
+                              const nextAttempt = currentAttempt + 1;
+                              img.dataset.squadErrorAttempt = nextAttempt.toString();
                               
                               // Prevent infinite loop - max 3 attempts
-                              if (attempt > 3) {
+                              if (nextAttempt > 3) {
                                 console.warn('[SquadView] Max error attempts reached for', player.name);
                                 img.src = '/placeholder_player.png';
                                 return;
                               }
                               
                               // Try fallback
-                              if (attempt === 1) {
-                                const playerInitials = player.name
-                                  .split(' ')
-                                  .map(word => word[0])
-                                  .join('')
-                                  .toUpperCase()
-                                  .slice(0, 2);
-                                
-                                const avatarUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(playerInitials)}&background=1976D2&color=ffffff&size=200&bold=true&format=svg`;
-                                console.log('[SquadView] Trying avatar for', player.name);
-                                img.src = avatarUrl;
+                              if (nextAttempt === 1) {
+                                // Use placeholder image
+                                console.log('[SquadView] Trying placeholder for', player.name);
+                                img.src = '/placeholder_player.png';
                                 return;
                               }
                               
@@ -950,7 +968,7 @@ function AuctionApp() {
             }}
           >
             <div className="text-sm font-medium text-slate-300 mb-2 flex items-center gap-2">
-              <span>🎯</span>
+              <IoSearch />
               <span>Jump to Player ID</span>
             </div>
             <div className="flex items-center gap-2">
@@ -1025,8 +1043,8 @@ function AuctionApp() {
         onClear={auction.clearNotification} 
       />
 
-      {/* Analytics Carousel - Bottom of screen */}
-      <AnalyticsCarousel />
+      {/* Analytics Carousel - Bottom of screen (toggle with '-' key) */}
+      <AnalyticsCarousel visible={showCarousel} />
     </div>
   );
 }
@@ -1041,7 +1059,7 @@ function LoadingScreen() {
   return (
     <div className="min-h-screen bg-[var(--theme-background)] flex items-center justify-center">
       <div className="text-center">
-        <div className="text-6xl mb-4 animate-bounce">🏏</div>
+        <div className="text-6xl mb-4 animate-bounce"><GiCricketBat /></div>
         <div className="text-xl font-semibold text-[var(--theme-text-primary)] mb-4">
           Loading Auction Data & Images...
         </div>

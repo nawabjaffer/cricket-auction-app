@@ -1,169 +1,98 @@
 /* ============================================================================
-   ANALYTICS CAROUSEL STYLES
-   Running carousel at bottom of screen with auction stats
+   ANALYTICS CAROUSEL - Running Marquee Style
+   Continuous scrolling text from left to right
    ============================================================================ */
 
-.analytics-carousel {
+.analytics-carousel-marquee {
   position: fixed;
   bottom: 0;
   left: 0;
   right: 0;
-  background: linear-gradient(180deg, transparent 0%, rgba(0, 0, 0, 0.85) 20%, rgba(0, 0, 0, 0.95) 100%);
+  height: 48px;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.7) 0%, rgba(0, 0, 0, 0.95) 100%);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
-  padding: 0.75rem 1.5rem 1rem;
   z-index: 100;
   border-top: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-.carousel-track {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  gap: 1.5rem;
   overflow: hidden;
-  padding: 0.5rem 0;
-}
-
-.carousel-item {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  padding: 0.5rem 1rem;
-  background: rgba(255, 255, 255, 0.08);
-  border-radius: 100px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  white-space: nowrap;
-  min-width: fit-content;
-  transition: all 0.3s ease;
 }
 
-.carousel-item:hover {
-  background: rgba(255, 255, 255, 0.12);
-  transform: translateY(-2px);
+.marquee-track {
+  width: 100%;
+  overflow: hidden;
+  position: relative;
 }
 
-.carousel-item.highlight {
-  background: linear-gradient(135deg, rgba(59, 130, 246, 0.3) 0%, rgba(147, 51, 234, 0.3) 100%);
-  border-color: rgba(59, 130, 246, 0.5);
-  box-shadow: 0 4px 15px rgba(59, 130, 246, 0.2);
-}
-
-.item-icon {
-  font-size: 1.25rem;
-}
-
-.item-label {
-  font-size: 0.75rem;
-  color: rgba(255, 255, 255, 0.6);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  font-weight: 500;
-}
-
-.item-value {
-  font-size: 0.9rem;
-  color: white;
-  font-weight: 700;
-}
-
-.carousel-item.highlight .item-value {
-  background: linear-gradient(90deg, #60a5fa, #a78bfa);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-}
-
-/* Progress Dots */
-.carousel-dots {
+.marquee-content {
   display: flex;
-  justify-content: center;
-  gap: 0.375rem;
-  margin-top: 0.5rem;
+  width: max-content;
+  animation: marquee-scroll 60s linear infinite;
 }
 
-.carousel-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  border: none;
-  background: rgba(255, 255, 255, 0.3);
-  cursor: pointer;
-  transition: all 0.3s ease;
-  padding: 0;
+.marquee-text {
+  display: inline-block;
+  white-space: nowrap;
+  padding-right: 100px;
+  font-size: 1rem;
+  font-weight: 600;
+  color: white;
+  letter-spacing: 0.5px;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
 }
 
-.carousel-dot:hover {
-  background: rgba(255, 255, 255, 0.5);
+/* Marquee animation - right to left scroll */
+@keyframes marquee-scroll {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
 }
 
-.carousel-dot.active {
-  width: 18px;
-  border-radius: 3px;
-  background: linear-gradient(90deg, #3b82f6, #8b5cf6);
+/* Pause on hover */
+.analytics-carousel-marquee:hover .marquee-content {
+  animation-play-state: paused;
+}
+
+/* Gradient fade edges */
+.analytics-carousel-marquee::before,
+.analytics-carousel-marquee::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 80px;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.analytics-carousel-marquee::before {
+  left: 0;
+  background: linear-gradient(90deg, rgba(0, 0, 0, 0.95) 0%, transparent 100%);
+}
+
+.analytics-carousel-marquee::after {
+  right: 0;
+  background: linear-gradient(90deg, transparent 0%, rgba(0, 0, 0, 0.95) 100%);
 }
 
 /* Responsive */
-@media (max-width: 1024px) {
-  .carousel-track {
-    gap: 1rem;
-  }
-  
-  .carousel-item {
-    padding: 0.4rem 0.75rem;
-  }
-  
-  .item-icon {
-    font-size: 1rem;
-  }
-  
-  .item-label {
-    font-size: 0.65rem;
-  }
-  
-  .item-value {
-    font-size: 0.8rem;
-  }
-}
-
 @media (max-width: 768px) {
-  .analytics-carousel {
-    padding: 0.5rem 1rem 0.75rem;
+  .analytics-carousel-marquee {
+    height: 40px;
   }
   
-  .carousel-track {
-    gap: 0.75rem;
-  }
-  
-  .carousel-item {
-    padding: 0.35rem 0.6rem;
-  }
-  
-  .item-label {
-    display: none;
+  .marquee-text {
+    font-size: 0.85rem;
   }
 }
 
-/* Animation for highlight pulse */
-@keyframes pulse-highlight {
-  0%, 100% {
-    box-shadow: 0 4px 15px rgba(59, 130, 246, 0.2);
+/* Reduced motion preference */
+@media (prefers-reduced-motion: reduce) {
+  .marquee-content {
+    animation: none;
   }
-  50% {
-    box-shadow: 0 4px 25px rgba(59, 130, 246, 0.4);
-  }
-}
-
-.carousel-item.highlight {
-  animation: pulse-highlight 2s ease-in-out infinite;
-}
-
-/* Scrollbar hide for overflow */
-.carousel-track::-webkit-scrollbar {
-  display: none;
-}
-
-.carousel-track {
-  -ms-overflow-style: none;
-  scrollbar-width: none;
 }

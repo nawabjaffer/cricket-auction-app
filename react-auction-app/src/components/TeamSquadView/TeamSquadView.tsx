@@ -86,15 +86,9 @@ export function TeamSquadView({
     return () => globalThis.removeEventListener('keydown', handleKeyDown);
   }, [onClose]);
 
-  // Generate fallback avatar URL
-  const getFallbackAvatar = useCallback((name: string) => {
-    const initials = name
-      .split(' ')
-      .map(word => word[0])
-      .join('')
-      .toUpperCase()
-      .slice(0, 2);
-    return `https://ui-avatars.com/api/?name=${encodeURIComponent(initials)}&background=transparent&color=ffffff&size=600&bold=true&format=svg`;
+  // Generate fallback image URL - use placeholder
+  const getFallbackImage = useCallback(() => {
+    return '/placeholder_player.png';
   }, []);
 
   if (!team) {
@@ -231,7 +225,7 @@ export function TeamSquadView({
                     console.warn('[TeamSquadView] Captain image failed to load');
                     setCaptainImageError(true);
                   }}
-                  getFallbackAvatar={getFallbackAvatar}
+                  getFallbackImage={getFallbackImage}
                 />
 
                 {/* Loading Overlay */}
@@ -282,7 +276,7 @@ interface CaptainImageProps {
   readonly teamPlayers: SoldPlayer[];
   readonly onLoad: () => void;
   readonly onError: () => void;
-  readonly getFallbackAvatar: (name: string) => string;
+  readonly getFallbackImage: () => string;
 }
 
 function CaptainImage({
@@ -292,7 +286,7 @@ function CaptainImage({
   teamPlayers,
   onLoad,
   onError,
-  getFallbackAvatar,
+  getFallbackImage,
 }: CaptainImageProps) {
   // Case 1: Captain has image URL and no error
   if (captainData?.imageUrl && !captainImageError) {
@@ -307,11 +301,11 @@ function CaptainImage({
     );
   }
 
-  // Case 2: Captain exists but image failed - show avatar
+  // Case 2: Captain exists but image failed - show placeholder
   if (captainData?.name) {
     return (
       <img
-        src={getFallbackAvatar(captainData.name)}
+        src={getFallbackImage()}
         alt={captainData.name}
         className="tsv-captain-image tsv-captain-fallback loaded"
       />
@@ -322,11 +316,11 @@ function CaptainImage({
   if (teamPlayers[0]) {
     return (
       <img
-        src={teamPlayers[0].imageUrl || getFallbackAvatar(teamPlayers[0].name)}
+        src={teamPlayers[0].imageUrl || getFallbackImage()}
         alt={teamPlayers[0].name}
         className="tsv-captain-image loaded"
         onError={(e) => {
-          (e.target as HTMLImageElement).src = getFallbackAvatar(teamPlayers[0].name);
+          (e.target as HTMLImageElement).src = getFallbackImage();
         }}
       />
     );
