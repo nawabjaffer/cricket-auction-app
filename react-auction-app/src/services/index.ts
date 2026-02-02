@@ -26,3 +26,8 @@ export { authService as adminAuthService } from './authService';
 export type { AdminAccount, AdminSession } from './authService';
 export { featureFlagsService } from './featureFlagsService';
 export type { FeatureFlag, FeatureFlags } from './featureFlagsService';
+
+// V3 Premium Services
+export { premiumService } from './premiumService';
+export { cameraManager } from './cameraManager';
+export { obsService } from './obsService';

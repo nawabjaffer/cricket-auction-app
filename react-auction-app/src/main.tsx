@@ -10,6 +10,7 @@ import FirebaseDiagnostics from './pages/Diagnostics.tsx'
 import AdminLogin from './components/AdminLogin/AdminLogin'
 import AdminPage from './pages/AdminPage'
 import CameraPage from './pages/CameraPage'
+import LivePage from './pages/LivePage'
 import './index.css'
 
 setupDebugConsole();
@@ -59,6 +60,7 @@ createRoot(document.getElementById('root')!).render(
           <Route path="/admin/login" element={<AdminLogin />} />
           <Route path="/admin" element={<AdminPage />} />
           <Route path="/camera" element={<CameraPage />} />
+          <Route path="/live" element={<LivePage />} />
         </Routes>
       </BrowserRouter>
     </ErrorBoundary>

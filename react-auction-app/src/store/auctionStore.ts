@@ -20,6 +20,7 @@ import { activeConfig } from '../config';
 import { AuctionRulesService } from '../services/auctionRules';
 import { auctionPersistence } from '../services/auctionPersistence';
 import { realtimeSync } from '../services/realtimeSync';
+import { premiumService } from '../services/premiumService';
 
 // Initialize persistence with database when available
 const initializePersistence = async () => {
@@ -31,7 +32,9 @@ const initializePersistence = async () => {
     const db = realtimeSync.getDatabase();
     if (db) {
       auctionPersistence.initialize(db);
+      premiumService.initialize(db);
       console.log('[Store] Auction persistence initialized');
+      console.log('[Store] Premium service initialized');
       return;
     }
     await new Promise(resolve => setTimeout(resolve, 500));

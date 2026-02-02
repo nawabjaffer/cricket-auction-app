@@ -5,12 +5,13 @@
 
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { IoClose, IoSave, IoRefresh, IoDownload } from 'react-icons/io5';
+import { IoClose, IoSave, IoRefresh, IoDownload, IoVideocam } from 'react-icons/io5';
 import { auctionPersistence, type AdminSettings } from '../../services/auctionPersistence';
 import { googleSheetsService } from '../../services';
 import { useAuctionStore } from '../../store/auctionStore';
 import { exportSoldPlayers } from '../../utils/exportData';
 import FeatureFlagsTab from './FeatureFlagsTab';
+import StreamingTab from './StreamingTab';
 import './AdminPanel.css';
 import type { Team } from '../../types';
 
@@ -21,7 +22,7 @@ interface AdminPanelProps {
 }
 
 export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps) {
-  const [activeTab, setActiveTab] = useState<'theme' | 'teams' | 'players' | 'export' | 'features' | 'reset'>('theme');
+  const [activeTab, setActiveTab] = useState<'theme' | 'teams' | 'players' | 'export' | 'features' | 'streaming' | 'reset'>('theme');
   const [isSaving, setIsSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'success' | 'error'>('idle');
 
@@ -298,6 +299,13 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
           onClick={() => setActiveTab('features')}
         >
           Features
+        </button>
+        <button
+          className={`admin-tab ${activeTab === 'streaming' ? 'active' : ''}`}
+          onClick={() => setActiveTab('streaming')}
+        >
+          <IoVideocam style={{ marginRight: 4 }} />
+          Streaming
         </button>
         <button
           className={`admin-tab ${activeTab === 'reset' ? 'active' : ''}`}
@@ -625,6 +633,11 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
               {/* Features Tab */}
               {activeTab === 'features' && (
                 <FeatureFlagsTab onStatusChange={setSaveStatus} />
+              )}
+
+              {/* Streaming Tab - V3 Premium */}
+              {activeTab === 'streaming' && (
+                <StreamingTab onClose={onClose} />
               )}
 
               {/* Reset Tab */}
