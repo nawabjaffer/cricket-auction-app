@@ -23,3 +23,4 @@ export { useBroadcastDesktopSync, useBroadcastMobileSync } from './useBroadcastS
 export type { BroadcastMobileSyncState } from './useBroadcastSync';
 export { useRealtimeDesktopSync, useRealtimeMobileSync } from './useRealtimeSync';
 export type { RealtimeMobileSyncState } from './useRealtimeSync';
+export { useMotionSensor } from './useMotionSensor';

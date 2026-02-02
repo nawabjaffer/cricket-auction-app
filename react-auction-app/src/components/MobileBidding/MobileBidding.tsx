@@ -2,15 +2,17 @@
 // MOBILE BIDDING PAGE
 // Real-time mobile interface for teams to raise bids
 // Uses Firebase Realtime Database for cross-device synchronization
+// Includes gesture-based bidding with device motion sensor
 // ============================================================================
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { GiCricketBat } from 'react-icons/gi';
-import { IoWifi, IoWifiOutline } from 'react-icons/io5';
+import { IoWifi, IoWifiOutline, IoSwapVertical } from 'react-icons/io5';
 import { authService } from '../../services';
 import type { AuthSession } from '../../services';
 import { useRealtimeMobileSync } from '../../hooks/useRealtimeSync';
+import { useMotionSensor } from '../../hooks/useMotionSensor';
 import { TeamLogo } from '../TeamLogo/TeamLogo';
 import { PlayerImage } from '../PlayerImage/PlayerImage';
 import './MobileBidding.css';
@@ -30,6 +32,7 @@ export function MobileBiddingPage() {
   const [feedback, setFeedback] = useState<BidFeedback | null>(null);
   const [bidCount, setBidCount] = useState(0);
   const [lastSoldPlayer, setLastSoldPlayer] = useState<{name: string; amount: number; winnerTeam: string} | null>(null);
+  const [motionEnabled, setMotionEnabled] = useState(false);
   const lastPlayerIdRef = useRef<string | null>(null);
   
   // Use Firebase Realtime Database for cross-device sync
@@ -129,6 +132,52 @@ export function MobileBiddingPage() {
 
     setIsLoading(false);
   }, [username, password]);
+
+  // Motion sensor hook
+  const { isSupported: motionSupported, isActive: motionActive, toggleMotionSensor } = useMotionSensor({
+    enabled: motionEnabled && session !== null,
+    threshold: 2.5,
+    cooldown: 600,
+    onMotionDetected: (motion) => {
+      if (motion === 'raise') {
+        console.log('[MobileBidding] 🎯 Motion detected - raising bid');
+        // Trigger raise bid after a tiny delay for better UX
+        setTimeout(() => {
+          if (currentPlayer && isConnected) {
+            handleRaiseBid();
+          }
+        }, 100);
+      }
+    },
+  });
+
+  // Toggle motion sensor with permission handling
+  const handleToggleMotionSensor = useCallback(async () => {
+    if (!motionSupported) {
+      setFeedback({
+        type: 'error',
+        message: 'Motion sensor not supported on this device',
+        timestamp: Date.now(),
+      });
+      return;
+    }
+
+    const success = await toggleMotionSensor();
+    if (success) {
+      setMotionEnabled(!motionEnabled);
+      setFeedback({
+        type: 'success',
+        message: motionEnabled ? 'Gesture bidding disabled' : 'Gesture bidding enabled - raise your phone to bid!',
+        timestamp: Date.now(),
+      });
+    } else {
+      setFeedback({
+        type: 'error',
+        message: 'Motion sensor permission denied. Please enable in settings.',
+        timestamp: Date.now(),
+      });
+    }
+  }, [motionSupported, toggleMotionSensor, motionEnabled]);
 
   // Handle logout
   const handleLogout = useCallback(() => {
@@ -350,11 +399,45 @@ export function MobileBiddingPage() {
           <span className="bid-count">{bidCount} bids placed</span>
         </div>
         <div className="header-actions">
+          {/* Motion Sensor Toggle Button */}
+          {motionSupported && (
+            <motion.button
+              className={`motion-sensor-button ${motionActive ? 'active' : ''}`}
+              onClick={handleToggleMotionSensor}
+              whileTap={{ scale: 0.95 }}
+              title={motionActive ? 'Gesture bidding active' : 'Enable gesture bidding'}
+            >
+              <IoSwapVertical size={20} />
+            </motion.button>
+          )}
           <button className="logout-button" onClick={handleLogout}>
             Logout
           </button>
         </div>
       </header>
+
+      {/* Motion Sensor Indicator */}
+      <AnimatePresence>
+        {motionActive && (
+          <motion.div
+            className="motion-sensor-indicator"
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+          >
+            <div className="indicator-content">
+              <motion.div
+                className="motion-pulse"
+                animate={{ scale: [1, 1.1, 1] }}
+                transition={{ duration: 1, repeat: Infinity }}
+              >
+                <IoSwapVertical size={16} />
+              </motion.div>
+              <span className="indicator-text">Gesture bidding enabled - Raise your phone to bid</span>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Connection Status */}
       <div className={`connection-status ${isConnected ? 'connected' : 'disconnected'}`}>

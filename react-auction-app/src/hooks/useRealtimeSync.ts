@@ -277,7 +277,7 @@ export function useRealtimeMobileSync(): RealtimeMobileSyncState {
     secondaryColor: syncState.selectedTeam.secondaryColor,
   } : null;
 
-  const teams: Team[] = syncState.teams.map(t => ({
+  const teams: Team[] = (syncState.teams || []).map(t => ({
     id: t.id,
     name: t.name,
     logoUrl: t.logoUrl,
