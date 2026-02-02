@@ -136,7 +136,6 @@ export function MobileBiddingPage() {
   // Motion sensor hook
   const { isSupported: motionSupported, isActive: motionActive, toggleMotionSensor } = useMotionSensor({
     enabled: motionEnabled && session !== null,
-    threshold: 2.5,
     cooldown: 600,
     onMotionDetected: (motion) => {
       if (motion === 'raise') {
@@ -267,6 +266,26 @@ export function MobileBiddingPage() {
       timestamp: Date.now(),
     });
   }, [myTeam, currentPlayer, currentBid, submitBid]);
+
+  useEffect(() => {
+    if (!session) return;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const key = event.key.toLowerCase();
+      if (key === 'm') {
+        event.preventDefault();
+        handleRaiseBid();
+        return;
+      }
+      if (key === 'n') {
+        event.preventDefault();
+        handleStopBidding();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [session, handleRaiseBid, handleStopBidding]);
 
   // Clear feedback after 3 seconds
   useEffect(() => {

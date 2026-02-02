@@ -18,6 +18,31 @@ import type {
 } from '../types';
 import { activeConfig } from '../config';
 import { AuctionRulesService } from '../services/auctionRules';
+import { auctionPersistence } from '../services/auctionPersistence';
+import { realtimeSync } from '../services/realtimeSync';
+
+// Initialize persistence with database when available
+const initializePersistence = async () => {
+  // Wait for realtime sync to initialize
+  let attempts = 0;
+  const maxAttempts = 10;
+  
+  while (attempts < maxAttempts) {
+    const db = realtimeSync.getDatabase();
+    if (db) {
+      auctionPersistence.initialize(db);
+      console.log('[Store] Auction persistence initialized');
+      return;
+    }
+    await new Promise(resolve => setTimeout(resolve, 500));
+    attempts++;
+  }
+  
+  console.warn('[Store] Could not initialize auction persistence - database not ready');
+};
+
+// Start initialization
+initializePersistence();
 
 // ============================================================================
 // STORE INTERFACE
@@ -54,6 +79,7 @@ interface AuctionStore {
   // Round tracking
   currentRound: number;
   isRound2Active: boolean;
+  maxUnsoldRounds: number;
   
   // Auction state
   auctionState: AuctionState;
@@ -64,6 +90,7 @@ interface AuctionStore {
   setTeams: (teams: Team[]) => void;
   setSoldPlayers: (players: SoldPlayer[]) => void;
   setUnsoldPlayers: (players: UnsoldPlayer[]) => void;
+  reconcilePlayerPools: () => void;
   
   // Player selection
   selectPlayer: (player: Player) => void;
@@ -102,6 +129,8 @@ interface AuctionStore {
   
   // Round management
   startRound2: () => void;
+  startNextRound: () => void;
+  setMaxUnsoldRounds: (value: number) => void;
   
   // State management
   setAuctionState: (state: Partial<AuctionState>) => void;
@@ -153,16 +182,67 @@ export const useAuctionStore = create<AuctionStore>()(
         selectionMode: 'sequential',
         currentRound: 1,
         isRound2Active: false,
+        maxUnsoldRounds: 1,
         auctionState: initialAuctionState,
 
         // === Data Loading Actions ===
-        setPlayers: (players) => set({ availablePlayers: players, originalPlayers: players }),
+        setPlayers: (players) => {
+          const { soldPlayers, unsoldPlayers, teams } = get();
+          const blockedIds = new Set([
+            ...soldPlayers.map(p => p.id),
+            ...unsoldPlayers.map(p => p.id),
+          ]);
+          const captainNames = new Set(
+            teams
+              .map(t => (t.captain || '').trim().toLowerCase())
+              .filter(Boolean)
+          );
+          const filtered = players.filter(
+            p => !blockedIds.has(p.id) && !captainNames.has(p.name.trim().toLowerCase())
+          );
+          set({ availablePlayers: filtered, originalPlayers: players });
+        },
         
         setTeams: (teams) => set({ teams }),
         
         setSoldPlayers: (players) => set({ soldPlayers: players }),
         
         setUnsoldPlayers: (players) => set({ unsoldPlayers: players }),
+
+        reconcilePlayerPools: () => {
+          const { availablePlayers, soldPlayers, unsoldPlayers, currentPlayer, teams } = get();
+          const blockedIds = new Set([
+            ...soldPlayers.map(p => p.id),
+            ...unsoldPlayers.map(p => p.id),
+          ]);
+          const captainNames = new Set(
+            teams
+              .map(t => (t.captain || '').trim().toLowerCase())
+              .filter(Boolean)
+          );
+
+          const updatedAvailable = availablePlayers.filter(
+            p => !blockedIds.has(p.id) && !captainNames.has(p.name.trim().toLowerCase())
+          );
+
+          const shouldClearCurrent = currentPlayer
+            ? blockedIds.has(currentPlayer.id) || captainNames.has(currentPlayer.name.trim().toLowerCase())
+            : false;
+
+          set({
+            availablePlayers: updatedAvailable,
+            ...(shouldClearCurrent
+              ? {
+                  currentPlayer: null,
+                  currentBid: activeConfig.auction.basePrice,
+                  previousBid: 0,
+                  selectedTeam: null,
+                  bidHistory: [],
+                  lastBidTeamId: null,
+                }
+              : {}),
+          });
+        },
 
         // === Player Selection Actions ===
         selectPlayer: (player) => {
@@ -497,7 +577,7 @@ export const useAuctionStore = create<AuctionStore>()(
 
         // === Auction Outcome Actions ===
         markAsSold: () => {
-          const { currentPlayer, currentBid, selectedTeam, availablePlayers, soldPlayers, teams } = get();
+          const { currentPlayer, currentBid, selectedTeam, availablePlayers, soldPlayers, unsoldPlayers, teams } = get();
 
           if (!currentPlayer || !selectedTeam) {
             set({ 
@@ -509,13 +589,36 @@ export const useAuctionStore = create<AuctionStore>()(
             return;
           }
 
+          if (soldPlayers.some(p => p.id === currentPlayer.id)) {
+            set({
+              notification: {
+                type: 'error',
+                message: `${currentPlayer.name} is already sold. Please select the next player.`,
+              },
+            });
+            return;
+          }
+
           // Create sold player record
           const soldPlayer: SoldPlayer = {
             ...currentPlayer,
             soldAmount: currentBid,
             teamName: selectedTeam.name,
+            teamId: selectedTeam.id,
             soldDate: new Date().toISOString(),
           };
+
+          // Save to Firebase (async, non-blocking)
+          auctionPersistence.saveSoldPlayer(soldPlayer, selectedTeam.name).catch(err => {
+            console.error('[Store] Failed to save sold player to Firebase:', err);
+          });
+
+          // If player was unsold earlier, remove unsold record
+          if (unsoldPlayers.some(p => p.id === currentPlayer.id)) {
+            auctionPersistence.removeUnsoldPlayer(currentPlayer.id).catch(err => {
+              console.error('[Store] Failed to remove unsold player from Firebase:', err);
+            });
+          }
 
           // Update team stats
           const updatedTeams = teams.map(team => {
@@ -539,12 +642,20 @@ export const useAuctionStore = create<AuctionStore>()(
             return team;
           });
 
+          // Save updated teams to Firebase (async, non-blocking)
+          auctionPersistence.saveTeams(updatedTeams).catch(err => {
+            console.error('[Store] Failed to save teams to Firebase:', err);
+          });
+
           // Remove from available players
           const updatedAvailable = availablePlayers.filter(p => p.id !== currentPlayer.id);
+
+          const updatedUnsold = unsoldPlayers.filter(p => p.id !== currentPlayer.id);
 
           set({
             availablePlayers: updatedAvailable,
             soldPlayers: [...soldPlayers, soldPlayer],
+            unsoldPlayers: updatedUnsold,
             teams: updatedTeams,
             activeOverlay: 'sold',
             notification: { 
@@ -555,7 +666,7 @@ export const useAuctionStore = create<AuctionStore>()(
         },
 
         markAsUnsold: () => {
-          const { currentPlayer, availablePlayers, unsoldPlayers, currentRound } = get();
+          const { currentPlayer, availablePlayers, unsoldPlayers, soldPlayers, currentRound } = get();
 
           if (!currentPlayer) {
             set({ 
@@ -567,12 +678,39 @@ export const useAuctionStore = create<AuctionStore>()(
             return;
           }
 
+          if (soldPlayers.some(p => p.id === currentPlayer.id)) {
+            set({
+              notification: {
+                type: 'error',
+                message: `${currentPlayer.name} is already sold. Cannot mark as unsold.`,
+              },
+            });
+            return;
+          }
+
+          if (unsoldPlayers.some(p => p.id === currentPlayer.id)) {
+            set({
+              notification: {
+                type: 'info',
+                message: `${currentPlayer.name} is already marked unsold.`,
+              },
+            });
+            return;
+          }
+
+          const roundLabel = `Round ${currentRound}`;
+
           // Create unsold player record
           const unsoldPlayer: UnsoldPlayer = {
             ...currentPlayer,
-            round: `Round ${currentRound}`,
+            round: roundLabel,
             unsoldDate: new Date().toISOString(),
           };
+
+          // Save to Firebase (async, non-blocking)
+          auctionPersistence.saveUnsoldPlayer(currentPlayer, roundLabel).catch(err => {
+            console.error('[Store] Failed to save unsold player to Firebase:', err);
+          });
 
           // Remove from available players
           const updatedAvailable = availablePlayers.filter(p => p.id !== currentPlayer.id);
@@ -589,15 +727,36 @@ export const useAuctionStore = create<AuctionStore>()(
         },
 
         moveUnsoldToSold: (player, team, amount) => {
-          const { unsoldPlayers, soldPlayers, teams } = get();
+          const { unsoldPlayers, soldPlayers, teams, availablePlayers } = get();
+
+          if (soldPlayers.some(p => p.id === player.id)) {
+            set({
+              notification: {
+                type: 'error',
+                message: `${player.name} is already sold.`,
+              },
+            });
+            return;
+          }
 
           // Create sold player record
           const soldPlayer: SoldPlayer = {
             ...player,
             soldAmount: amount,
             teamName: team.name,
+            teamId: team.id,
             soldDate: new Date().toISOString(),
           };
+
+          // Save to Firebase (async, non-blocking)
+          auctionPersistence.saveSoldPlayer(soldPlayer, team.name).catch(err => {
+            console.error('[Store] Failed to save sold player to Firebase:', err);
+          });
+
+          // Remove unsold record from Firebase
+          auctionPersistence.removeUnsoldPlayer(player.id).catch(err => {
+            console.error('[Store] Failed to remove unsold player from Firebase:', err);
+          });
 
           // Update team stats
           const updatedTeams = teams.map(t => {
@@ -616,9 +775,11 @@ export const useAuctionStore = create<AuctionStore>()(
 
           // Remove from unsold players
           const updatedUnsold = unsoldPlayers.filter(p => p.id !== player.id);
+          const updatedAvailable = availablePlayers.filter(p => p.id !== player.id);
 
           set({
             unsoldPlayers: updatedUnsold,
+            availablePlayers: updatedAvailable,
             soldPlayers: [...soldPlayers, soldPlayer],
             teams: updatedTeams,
             notification: { 
@@ -648,8 +809,34 @@ export const useAuctionStore = create<AuctionStore>()(
         },
 
         // === Round Management ===
-        startRound2: () => {
-          const { unsoldPlayers } = get();
+        setMaxUnsoldRounds: (value) => {
+          const sanitized = Number.isFinite(value) ? Math.max(0, Math.min(10, value)) : 1;
+          set({ maxUnsoldRounds: sanitized });
+        },
+
+        startNextRound: () => {
+          const { unsoldPlayers, currentRound, maxUnsoldRounds } = get();
+          const maxRound = 1 + maxUnsoldRounds;
+
+          if (currentRound >= maxRound) {
+            set({
+              notification: {
+                type: 'info',
+                message: `Max rounds reached (${maxRound}). Auction completed.`,
+              },
+            });
+            return;
+          }
+
+          if (unsoldPlayers.length === 0) {
+            set({
+              notification: {
+                type: 'info',
+                message: 'No unsold players available for the next round.',
+              },
+            });
+            return;
+          }
           
           // Convert unsold players back to available players for Round 2
           const round2Players: Player[] = unsoldPlayers.map(p => ({
@@ -667,17 +854,29 @@ export const useAuctionStore = create<AuctionStore>()(
             dateOfBirth: '',
           }));
 
+          // Clear unsold list in Firebase for clean Round 2 state
+          auctionPersistence.clearUnsoldPlayers().catch(err => {
+            console.error('[Store] Failed to clear unsold players in Firebase:', err);
+          });
+
+          const nextRound = currentRound + 1;
+
           set({
             availablePlayers: round2Players,
             unsoldPlayers: [],
-            currentRound: 2,
-            isRound2Active: true,
+            currentRound: nextRound,
+            isRound2Active: nextRound > 1,
             notification: { 
               type: 'info', 
-              message: `Round 2 started with ${round2Players.length} players` 
+              message: `Round ${nextRound} started with ${round2Players.length} players` 
             },
             lastBidTeamId: null,
           });
+        },
+
+        // Backward compatibility alias
+        startRound2: () => {
+          get().startNextRound();
         },
 
         // === State Management ===
@@ -857,6 +1056,7 @@ export const useAuctionStore = create<AuctionStore>()(
           unsoldPlayers: state.unsoldPlayers,
           currentRound: state.currentRound,
           isRound2Active: state.isRound2Active,
+          maxUnsoldRounds: state.maxUnsoldRounds,
         }),
       }
     ),
@@ -877,3 +1077,5 @@ export const useNotification = () => useAuctionStore((state) => state.notificati
 export const useActiveOverlay = () => useAuctionStore((state) => state.activeOverlay);
 export const useSelectionMode = () => useAuctionStore((state) => state.selectionMode);
 export const useIsLoading = () => useAuctionStore((state) => state.isLoading);
+export const useCurrentRound = () => useAuctionStore((state) => state.currentRound);
+export const useMaxUnsoldRounds = () => useAuctionStore((state) => state.maxUnsoldRounds);

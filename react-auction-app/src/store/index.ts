@@ -16,4 +16,6 @@ export {
   useActiveOverlay,
   useSelectionMode,
   useIsLoading,
+  useCurrentRound,
+  useMaxUnsoldRounds,
 } from './auctionStore';

@@ -100,6 +100,7 @@
   height: 100%;
   padding: 2rem 0;
   max-width: 600px;
+  order: 1;
 }
 
 /* Team Header */
@@ -277,6 +278,7 @@
   height: 100%;
   max-width: 700px;
   position: relative;
+  order: 2;
 }
 
 .tsv-captain-container {
@@ -445,7 +447,7 @@
 
 @media (max-width: 900px) {
   .tsv-content {
-    flex-direction: column-reverse;
+    flex-direction: column;
     padding: 2rem;
     gap: 2rem;
     justify-content: flex-start;

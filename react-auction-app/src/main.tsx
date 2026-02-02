@@ -1,12 +1,17 @@
 import { Component, StrictMode, type ReactNode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import { setupDebugConsole } from './utils/logger'
 
 // V1 - Original App (with Google Sheets integration)
 import App from './App.tsx'
 import { MobileBiddingPage } from './components/MobileBidding/MobileBidding.tsx'
 import FirebaseDiagnostics from './pages/Diagnostics.tsx'
+import AdminLogin from './components/AdminLogin/AdminLogin'
+import AdminPage from './pages/AdminPage'
 import './index.css'
+
+setupDebugConsole();
 
 // V2 features archived for future development in separate feature branches
 
@@ -50,6 +55,8 @@ createRoot(document.getElementById('root')!).render(
           <Route path="/" element={<App />} />
           <Route path="/mobile-bidding" element={<MobileBiddingPage />} />
           <Route path="/diagnostics" element={<FirebaseDiagnostics />} />
+          <Route path="/admin/login" element={<AdminLogin />} />
+          <Route path="/admin" element={<AdminPage />} />
         </Routes>
       </BrowserRouter>
     </ErrorBoundary>

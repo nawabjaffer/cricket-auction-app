@@ -134,6 +134,10 @@ export function useAuction() {
     store.startRound2();
   }, [store]);
 
+  const startNextRound = useCallback(() => {
+    store.startNextRound();
+  }, [store]);
+
   const jumpToPlayerIndex = useCallback((index: number) => {
     return store.jumpToPlayerIndex(index);
   }, [store]);
@@ -217,6 +221,7 @@ export function useAuction() {
 
     // Round Management
     startRound2,
+    startNextRound,
 
     // Overlay Management
     closeOverlay,

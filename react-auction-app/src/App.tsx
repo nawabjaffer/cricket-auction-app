@@ -28,6 +28,7 @@ import {
   TeamSquadView,
   ConnectToTeam,
   AnalyticsCarousel,
+  AdminPanel,
 } from './components';
 import { 
   useAuction, 
@@ -37,6 +38,10 @@ import {
   useTheme,
   useHotkeyHelp,
   useImagePreload,
+  useFeatureFlagsInit,
+  useAuctionDataLoader,
+  useSaveInitialSnapshot,
+  useAdminPlayersOverrides,
 } from './hooks';
 import { useRealtimeDesktopSync } from './hooks/useRealtimeSync';
 import { audioService, imageCacheService } from './services';
@@ -84,6 +89,9 @@ function AuctionApp() {
   // Analytics carousel state
   const [showCarousel, setShowCarousel] = useState(true);
   
+  // Admin panel state
+  const [showAdminPanel, setShowAdminPanel] = useState(false);
+  
   // Image polling state
   const [imageLoadingState, setImageLoadingState] = useState<'loading' | 'loaded' | 'error'>('loading');
   const [currentImageAttempt, setCurrentImageAttempt] = useState(0);
@@ -95,6 +103,18 @@ function AuctionApp() {
   
   // Initialize Firebase Realtime Database sync for desktop (broadcasts state to mobile devices)
   useRealtimeDesktopSync();
+  
+  // Load auction data from Firebase if available
+  useAuctionDataLoader();
+  
+  // Save initial snapshot to Firebase for reset functionality
+  useSaveInitialSnapshot();
+
+  // Apply admin-edited player overrides
+  useAdminPlayersOverrides();
+  
+  // Initialize feature flags
+  useFeatureFlagsInit();
   
   // Connection status indicator
   const [showConnectionStatus, setShowConnectionStatus] = useState(true);
@@ -132,7 +152,7 @@ function AuctionApp() {
 
   // Keyboard shortcuts with team overlay toggle
   useKeyboardShortcuts({ 
-    enabled: !showCoinJar && !showJumpModal,
+    enabled: !showCoinJar && !showJumpModal && !showAdminPanel,
     onViewToggle: () => setShowTeamOverlay(prev => !prev),
     onEscape: () => setShowTeamOverlay(false),
     onHeaderToggle: () => setShowHeader(prev => !prev),
@@ -168,6 +188,19 @@ function AuctionApp() {
       return () => cancelAnimationFrame(frame);
     }
   }, [showJumpModal]);
+
+  // Admin panel keyboard shortcut (Ctrl+Shift+A)
+  useEffect(() => {
+    const handleAdminKeyboard = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'A') {
+        e.preventDefault();
+        setShowAdminPanel(prev => !prev);
+      }
+    };
+
+    window.addEventListener('keydown', handleAdminKeyboard);
+    return () => window.removeEventListener('keydown', handleAdminKeyboard);
+  }, []);
 
   const handleJumpSubmit = () => {
     if (auction.selectionMode !== 'sequential') {
@@ -932,6 +965,8 @@ function AuctionApp() {
         isVisible={activeOverlay === 'end'} 
         onClose={auction.closeOverlay}
         onStartRound2={auction.startRound2}
+        onStartNextRound={auction.startNextRound}
+        onShowTeam={handleTeamSquadView}
       />
 
       {/* Coin Jar Animation */}
@@ -1041,6 +1076,12 @@ function AuctionApp() {
       <NotificationContainer 
         notification={notification} 
         onClear={auction.clearNotification} 
+      />
+
+      {/* Admin Panel */}
+      <AdminPanel 
+        isOpen={showAdminPanel} 
+        onClose={() => setShowAdminPanel(false)}
       />
 
       {/* Analytics Carousel - Bottom of screen (toggle with '-' key) */}

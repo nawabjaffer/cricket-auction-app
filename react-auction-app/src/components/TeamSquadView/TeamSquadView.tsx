@@ -40,6 +40,12 @@ export function TeamSquadView({
   // Find the selected team
   const team = useMemo(() => teams.find(t => t.id === teamId), [teams, teamId]);
 
+  // Reset image states when team changes
+  useEffect(() => {
+    setCaptainImageLoaded(false);
+    setCaptainImageError(false);
+  }, [teamId]);
+
   // Get team players (sold to this team)
   const teamPlayers = useMemo(() => {
     if (!team) return [];
@@ -168,7 +174,7 @@ export function TeamSquadView({
                 <div className="tsv-players-grid">
                   {teamPlayers.map((player, index) => (
                     <motion.div
-                      key={player.id}
+                      key={`${teamId}-${player.id}-${index}`}
                       className="tsv-player-item"
                       initial={{ x: -20, opacity: 0 }}
                       animate={{ x: 0, opacity: 1 }}

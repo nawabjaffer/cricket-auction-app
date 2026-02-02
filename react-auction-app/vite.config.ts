@@ -4,6 +4,17 @@ import react from '@vitejs/plugin-react'
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react()],
+  build: {
+    chunkSizeWarningLimit: 2000,
+    rollupOptions: {
+      onwarn(warning, warn) {
+        if (typeof warning?.message === 'string' && warning.message.includes('is dynamically imported by')) {
+          return;
+        }
+        warn(warning);
+      },
+    },
+  },
   server: {
     // Expose on network for mobile device testing
     host: true,

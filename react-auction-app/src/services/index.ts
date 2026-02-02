@@ -22,3 +22,7 @@ export { firebaseSyncService } from './firebaseSync';
 export type { FirestoreAuctionState as FirebaseSyncState, MobileBidEvent as FirebaseMobileBid } from './firebaseSync';
 export { realtimeSyncService } from './realtimeSync';
 export type { RealtimeAuctionState, RealtimeMobileBid } from './realtimeSync';
+export { authService as adminAuthService } from './authService';
+export type { AdminAccount, AdminSession } from './authService';
+export { featureFlagsService } from './featureFlagsService';
+export type { FeatureFlag, FeatureFlags } from './featureFlagsService';

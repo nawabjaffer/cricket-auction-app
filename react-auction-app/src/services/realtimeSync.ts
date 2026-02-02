@@ -148,6 +148,13 @@ class RealtimeSyncService {
   }
 
   /**
+   * Ensure Firebase is initialized (for admin/services use)
+   */
+  async ensureInitialized(): Promise<boolean> {
+    return this.initialize();
+  }
+
+  /**
    * Initialize as Desktop (broadcaster)
    * Desktop writes auction state to Firebase
    */
@@ -527,8 +534,13 @@ class RealtimeSyncService {
     return this.isInitialized && this.db !== null;
   }
 
-  /**
-   * Cleanup
+  /**   * Get database instance (for use by other services)
+   */
+  getDatabase(): Database | null {
+    return this.db;
+  }
+
+  /**   * Cleanup
    */
   dispose(): void {
     this.unsubscribers.forEach(unsubscribe => unsubscribe());
@@ -541,4 +553,7 @@ class RealtimeSyncService {
 }
 
 // Singleton instance
-export const realtimeSyncService = new RealtimeSyncService();
+export const realtimeSync = new RealtimeSyncService();
+
+// Legacy export for backwards compatibility
+export const realtimeSyncService = realtimeSync;

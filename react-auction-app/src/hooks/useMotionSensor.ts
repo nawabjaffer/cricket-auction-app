@@ -1,6 +1,6 @@
 // ============================================================================
 // MOTION SENSOR HOOK
-// Detects device motion (raise/lower) for gesture-based bidding
+// Detects vertical device lift (Z-axis) for gesture-based bidding
 // Uses Device Motion API with proper permissions handling
 // ============================================================================
 
@@ -17,7 +17,6 @@ interface MotionData {
 
 interface UseMotionSensorOptions {
   enabled: boolean;
-  threshold?: number; // Minimum acceleration to trigger (m/s²)
   cooldown?: number; // Milliseconds between detections
   onMotionDetected?: (motion: 'raise' | 'lower') => void;
 }
@@ -25,7 +24,6 @@ interface UseMotionSensorOptions {
 export function useMotionSensor(options: UseMotionSensorOptions) {
   const {
     enabled = false,
-    threshold = 2.5, // Moderate motion threshold
     cooldown = 500, // 500ms cooldown between detections
     onMotionDetected,
   } = options;
@@ -36,23 +34,25 @@ export function useMotionSensor(options: UseMotionSensorOptions) {
   const lastMotionTimeRef = useRef<number>(0);
   const motionDataRef = useRef<MotionData[]>([]);
   const previousAccelerationRef = useRef<number>(0);
+  const baselineAccelerationRef = useRef<number | null>(null);
 
   // Check if device motion is supported
   useEffect(() => {
-    const supported =
+    const motionSupported =
       typeof window !== 'undefined' &&
       ('DeviceMotionEvent' in window ||
         'ondevicemotion' in window);
 
-    setIsSupported(supported);
+    setIsSupported(motionSupported);
 
     // Check if permission is already granted
-    if (supported && typeof navigator !== 'undefined') {
+    if (motionSupported && typeof navigator !== 'undefined') {
       // iOS 13+ requires explicit permission
-      if (
+      const needsMotionPermission =
         typeof DeviceMotionEvent !== 'undefined' &&
-        typeof (DeviceMotionEvent as any).requestPermission === 'function'
-      ) {
+        typeof (DeviceMotionEvent as any).requestPermission === 'function';
+
+      if (needsMotionPermission) {
         // iOS - check cached permission
         setHasPermission(null); // Will need to request
       } else {
@@ -65,19 +65,19 @@ export function useMotionSensor(options: UseMotionSensorOptions) {
   // Request motion permission (iOS 13+)
   const requestPermission = useCallback(async () => {
     try {
-      if (
+      const motionPermissionAvailable =
         typeof DeviceMotionEvent !== 'undefined' &&
-        typeof (DeviceMotionEvent as any).requestPermission === 'function'
-      ) {
-        // iOS 13+
+        typeof (DeviceMotionEvent as any).requestPermission === 'function';
+
+      if (motionPermissionAvailable) {
         const permission = await (DeviceMotionEvent as any).requestPermission();
         setHasPermission(permission === 'granted');
         return permission === 'granted';
-      } else {
-        // Android/other - assume granted
-        setHasPermission(true);
-        return true;
       }
+
+      // Android/other - assume granted
+      setHasPermission(true);
+      return true;
     } catch (error) {
       console.error('[MotionSensor] Permission request failed:', error);
       setHasPermission(false);
@@ -85,12 +85,12 @@ export function useMotionSensor(options: UseMotionSensorOptions) {
     }
   }, []);
 
-  // Handle device motion event
+  // Handle device motion event - detect vertical lift (Z-axis)
   const handleDeviceMotion = useCallback(
     (event: DeviceMotionEvent) => {
       if (!enabled) return;
 
-      const acc = event.acceleration;
+      const acc = event.acceleration ?? event.accelerationIncludingGravity;
       if (!acc) return;
 
       // Store motion data for smoothing
@@ -109,38 +109,54 @@ export function useMotionSensor(options: UseMotionSensorOptions) {
         motionDataRef.current.shift();
       }
 
-      // Calculate average acceleration for smoothing
-      const avgY =
-        motionDataRef.current.reduce((sum, d) => sum + d.acceleration.y, 0) /
+      // Calculate average Z-axis acceleration (vertical lift) for smoothing
+      // Positive Z = lifting phone vertically upward
+      const avgZ =
+        motionDataRef.current.reduce((sum, d) => sum + d.acceleration.z, 0) /
         motionDataRef.current.length;
 
-      // Check cooldown
-      if (now - lastMotionTimeRef.current < cooldown) {
-        previousAccelerationRef.current = avgY;
+      // Establish a baseline to avoid immediate triggers on enable
+      if (baselineAccelerationRef.current === null && motionDataRef.current.length >= 3) {
+        baselineAccelerationRef.current = avgZ;
+        previousAccelerationRef.current = 0;
         return;
       }
 
-      // Detect upward motion (raising device from table)
-      // Y-axis: positive = tilting up (device raising), negative = tilting down
-      const isRaising = avgY > threshold && previousAccelerationRef.current <= threshold;
-      const isLowering = avgY < -threshold && previousAccelerationRef.current >= -threshold;
+      const baselineZ = baselineAccelerationRef.current ?? 0;
+      const deltaZ = avgZ - baselineZ;
 
-      if (isRaising) {
-        console.log('[MotionSensor] ✅ RAISE detected (Y:', avgY.toFixed(2), ')');
-        lastMotionTimeRef.current = now;
-        previousAccelerationRef.current = avgY;
-        onMotionDetected?.('raise');
-      } else if (isLowering) {
-        console.log('[MotionSensor] 📉 LOWER detected (Y:', avgY.toFixed(2), ')');
-        lastMotionTimeRef.current = now;
-        previousAccelerationRef.current = avgY;
-        onMotionDetected?.('lower');
+      // Check cooldown
+      if (now - lastMotionTimeRef.current < cooldown) {
+        previousAccelerationRef.current = deltaZ;
+        return;
       }
 
-      previousAccelerationRef.current = avgY;
+      // Detect vertical raise motion (Z-axis positive acceleration)
+      // Z-axis: positive = lifting phone up vertically, threshold 0.7 m/s²
+      const verticalThreshold = 1.7;
+      const isRaising = deltaZ > verticalThreshold && previousAccelerationRef.current <= verticalThreshold;
+
+      if (isRaising) {
+        console.log('[MotionSensor] ✅ RAISE detected (ΔZ:', deltaZ.toFixed(2), 'm/s²)');
+        lastMotionTimeRef.current = now;
+        previousAccelerationRef.current = deltaZ;
+        onMotionDetected?.('raise');
+      }
+
+      previousAccelerationRef.current = deltaZ;
     },
-    [enabled, threshold, cooldown, onMotionDetected]
+    [enabled, cooldown, onMotionDetected]
   );
+
+  // Reset buffers when activating the sensor
+  useEffect(() => {
+    if (isActive) {
+      motionDataRef.current = [];
+      baselineAccelerationRef.current = null;
+      previousAccelerationRef.current = 0;
+      lastMotionTimeRef.current = 0;
+    }
+  }, [isActive]);
 
   // Setup motion listener
   useEffect(() => {
@@ -148,14 +164,9 @@ export function useMotionSensor(options: UseMotionSensorOptions) {
       return;
     }
 
-    // Request permission if needed
+    // Permission must be requested from a user gesture (e.g., toggle button)
     if (hasPermission === null) {
-      requestPermission().then((granted) => {
-        if (granted) {
-          console.log('[MotionSensor] Permission granted, starting listener');
-          window.addEventListener('devicemotion', handleDeviceMotion);
-        }
-      });
+      console.warn('[MotionSensor] Permission not requested yet');
       return;
     }
 
@@ -164,14 +175,14 @@ export function useMotionSensor(options: UseMotionSensorOptions) {
       return;
     }
 
-    console.log('[MotionSensor] Starting motion detection listener');
+    console.log('[MotionSensor] Starting motion detection listener (Z-axis vertical lift)');
     window.addEventListener('devicemotion', handleDeviceMotion, true);
 
     return () => {
       console.log('[MotionSensor] Stopping motion detection listener');
       window.removeEventListener('devicemotion', handleDeviceMotion, true);
     };
-  }, [enabled, isActive, isSupported, hasPermission, handleDeviceMotion, requestPermission]);
+  }, [enabled, isActive, isSupported, hasPermission, handleDeviceMotion]);
 
   // Toggle motion sensor
   const toggleMotionSensor = useCallback(async () => {

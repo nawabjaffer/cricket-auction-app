@@ -4,19 +4,24 @@
 // ============================================================================
 
 import { motion, AnimatePresence } from 'framer-motion';
-import { useSoldPlayers, useUnsoldPlayers, useTeams } from '../../store';
+import { useSoldPlayers, useUnsoldPlayers, useTeams, useCurrentRound, useMaxUnsoldRounds } from '../../store';
 import { TeamLogo } from '../TeamLogo';
 
 interface EndOverlayProps {
   isVisible: boolean;
   onClose: () => void;
   onStartRound2?: () => void;
+  onStartNextRound?: () => void;
+  onShowTeam?: (teamId: string) => void;
 }
 
-export function EndOverlay({ isVisible, onClose, onStartRound2 }: EndOverlayProps) {
+export function EndOverlay({ isVisible, onClose, onStartRound2, onStartNextRound, onShowTeam }: EndOverlayProps) {
   const soldPlayers = useSoldPlayers();
   const unsoldPlayers = useUnsoldPlayers();
   const teams = useTeams();
+  const currentRound = useCurrentRound();
+  const maxUnsoldRounds = useMaxUnsoldRounds();
+  const maxRound = 1 + maxUnsoldRounds;
 
   // Calculate summary stats
   const totalSold = soldPlayers.length;
@@ -57,7 +62,7 @@ export function EndOverlay({ isVisible, onClose, onStartRound2 }: EndOverlayProp
                 🏏 AUCTION COMPLETE! 🏆
               </motion.h1>
               <p className="text-white/80 text-lg">
-                Round 1 Summary
+                Round {currentRound} Summary
               </p>
             </div>
 
@@ -144,6 +149,17 @@ export function EndOverlay({ isVisible, onClose, onStartRound2 }: EndOverlayProp
                         <div className="text-sm text-[var(--theme-text-secondary)]">
                           Spent: ₹{spent.toFixed(2)}L | Remaining: ₹{team.remainingPurse.toFixed(2)}L
                         </div>
+                        {onShowTeam && (
+                          <button
+                            onClick={() => {
+                              onShowTeam(team.id);
+                              onClose();
+                            }}
+                            className="mt-2 text-sm font-semibold text-[var(--theme-accent)] hover:underline"
+                          >
+                            Show full team →
+                          </button>
+                        )}
                       </div>
                     </motion.div>
                   );
@@ -152,14 +168,14 @@ export function EndOverlay({ isVisible, onClose, onStartRound2 }: EndOverlayProp
 
               {/* Action Buttons */}
               <div className="flex flex-col sm:flex-row gap-4 justify-center">
-                {unsoldPlayers.length > 0 && onStartRound2 && (
+                {unsoldPlayers.length > 0 && (onStartNextRound || onStartRound2) && currentRound < maxRound && (
                   <motion.button
                     whileHover={{ scale: 1.05 }}
                     whileTap={{ scale: 0.95 }}
-                    onClick={onStartRound2}
+                    onClick={onStartNextRound ?? onStartRound2}
                     className="px-8 py-3 bg-[var(--theme-accent)] text-white rounded-lg font-bold text-lg shadow-lg"
                   >
-                    🔄 Start Round 2 ({unsoldPlayers.length} players)
+                    🔄 Start Round {currentRound + 1} ({unsoldPlayers.length} players)
                   </motion.button>
                 )}
                 <motion.button
