@@ -12,5 +12,7 @@ export { imageCacheService } from './imageCache';
 export { imagePreloaderService } from './imagePreloader';
 export { biddingService } from './bidding';
 export type { BidEvent } from './bidding';
-export { authService } from './auth';
+export { authService, TEAM_CREDENTIALS } from './auth';
 export type { TeamCredentials, AuthSession } from './auth';
+export { firebaseService } from './firebase';
+export type { FirestoreBid, FirestoreAuctionState, FirestorePlayer, FirestoreTeam } from './firebase';

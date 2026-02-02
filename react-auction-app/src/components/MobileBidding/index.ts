@@ -1,1 +1,1 @@
-export { MobileBidding } from './MobileBidding';
+export { default as MobileBidding } from './MobileBidding';

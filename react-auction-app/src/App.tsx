@@ -24,6 +24,8 @@ import {
   CoinJar,
   NotificationContainer,
   TeamSquadView,
+  ConnectToTeam,
+  AnalyticsCarousel,
 } from './components';
 import { 
   useAuction, 
@@ -72,6 +74,9 @@ function AuctionApp() {
   const [jumpInput, setJumpInput] = useState('');
   const [jumpError, setJumpError] = useState('');
   const jumpInputRef = useRef<HTMLInputElement>(null);
+  
+  // Connect to Team modal state
+  const [showConnectToTeamModal, setShowConnectToTeamModal] = useState(false);
   
   // Image polling state
   const [imageLoadingState, setImageLoadingState] = useState<'loading' | 'loaded' | 'error'>('loading');
@@ -401,8 +406,7 @@ function AuctionApp() {
           onShowConnectToTeam={() => setShowConnectToTeamModal(true)}
         />
       )}
-  // Connect to Team modal state
-  const [showConnectToTeamModal, setShowConnectToTeamModal] = useState(false);
+
       {/* Connect to Team Modal */}
       {showConnectToTeamModal && createPortal(
         <ConnectToTeam open={showConnectToTeamModal} onClose={() => setShowConnectToTeamModal(false)} />,
@@ -1020,6 +1024,9 @@ function AuctionApp() {
         notification={notification} 
         onClear={auction.clearNotification} 
       />
+
+      {/* Analytics Carousel - Bottom of screen */}
+      <AnalyticsCarousel />
     </div>
   );
 }

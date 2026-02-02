@@ -10,7 +10,6 @@ interface QRCodeProps {
   value: string;
   size?: number;
   bgColor?: string;
-  fgColor?: string;
   className?: string;
 }
 
@@ -18,7 +17,6 @@ export const QRCode: React.FC<QRCodeProps> = ({
   value,
   size = 180,
   bgColor = '#fff',
-  fgColor = '#222',
   className = '',
 }) => {
   // Use a simple SVG fallback if no QR lib

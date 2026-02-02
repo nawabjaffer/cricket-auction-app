@@ -15,3 +15,4 @@ export { MobileBidding } from './MobileBidding';
 
 export { QRCode } from './QRCode';
 export { ConnectToTeam } from './ConnectToTeam';
+export { AnalyticsCarousel } from './AnalyticsCarousel';

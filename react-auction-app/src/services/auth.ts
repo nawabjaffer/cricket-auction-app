@@ -23,7 +23,7 @@ export interface AuthSession {
 }
 
 // Hardcoded team credentials - In production, these should be in env or secure storage
-const TEAM_CREDENTIALS: TeamCredentials[] = [
+export const TEAM_CREDENTIALS: TeamCredentials[] = [
   {
     teamId: 'team_1',
     teamName: 'Royal Challengers',

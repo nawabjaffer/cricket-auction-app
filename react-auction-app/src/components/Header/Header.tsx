@@ -4,7 +4,6 @@
 // ============================================================================
 
 import { useState, useRef, useEffect } from 'react';
-import { ConnectToTeam } from '../ConnectToTeam';
 import { motion, AnimatePresence } from 'framer-motion';
 import { getActiveTheme } from '../../config';
 import { useAuction } from '../../hooks';
