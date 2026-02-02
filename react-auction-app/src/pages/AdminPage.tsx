@@ -68,6 +68,12 @@ const AdminPageContent: React.FC = () => {
               ← Back to Auction
             </button>
             <button
+              onClick={() => navigate('/camera')}
+              className="admin-page-action-btn admin-page-action-secondary"
+            >
+              Open Camera
+            </button>
+            <button
               onClick={() => setIsPanelOpen(prev => !prev)}
               className="admin-page-action-btn admin-page-action-secondary"
             >

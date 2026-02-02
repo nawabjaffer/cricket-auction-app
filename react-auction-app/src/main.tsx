@@ -9,6 +9,7 @@ import { MobileBiddingPage } from './components/MobileBidding/MobileBidding.tsx'
 import FirebaseDiagnostics from './pages/Diagnostics.tsx'
 import AdminLogin from './components/AdminLogin/AdminLogin'
 import AdminPage from './pages/AdminPage'
+import CameraPage from './pages/CameraPage'
 import './index.css'
 
 setupDebugConsole();
@@ -57,6 +58,7 @@ createRoot(document.getElementById('root')!).render(
           <Route path="/diagnostics" element={<FirebaseDiagnostics />} />
           <Route path="/admin/login" element={<AdminLogin />} />
           <Route path="/admin" element={<AdminPage />} />
+          <Route path="/camera" element={<CameraPage />} />
         </Routes>
       </BrowserRouter>
     </ErrorBoundary>

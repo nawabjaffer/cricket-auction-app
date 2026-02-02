@@ -1,0 +1,117 @@
+.camera-page {
+  min-height: 100vh;
+  padding: 32px;
+  background: #0f172a;
+  color: #e2e8f0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen,
+    Ubuntu, Cantarell, sans-serif;
+}
+
+.camera-page__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.camera-page__header h1 {
+  margin: 0 0 6px 0;
+  font-size: 28px;
+  font-weight: 700;
+}
+
+.camera-page__header p {
+  margin: 0;
+  color: #94a3b8;
+}
+
+.camera-page__actions {
+  display: flex;
+  gap: 12px;
+}
+
+.camera-btn {
+  padding: 10px 18px;
+  border-radius: 10px;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.camera-btn--primary {
+  background: #22c55e;
+  color: #0f172a;
+}
+
+.camera-btn--primary:hover {
+  background: #16a34a;
+}
+
+.camera-btn--ghost {
+  background: rgba(255, 255, 255, 0.1);
+  color: #e2e8f0;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.camera-btn--ghost:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.camera-page__controls {
+  margin-top: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 320px;
+}
+
+.camera-label {
+  font-size: 13px;
+  color: #94a3b8;
+}
+
+.camera-select {
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: #1e293b;
+  color: #e2e8f0;
+}
+
+.camera-page__error {
+  margin-top: 16px;
+  padding: 12px 14px;
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  border-radius: 10px;
+  color: #fecaca;
+}
+
+.camera-page__preview {
+  margin-top: 24px;
+  background: #0b1220;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 16px;
+}
+
+.camera-video {
+  width: 100%;
+  max-height: 70vh;
+  border-radius: 12px;
+  background: #000;
+}
+
+.camera-page__notes {
+  margin-top: 16px;
+  color: #94a3b8;
+  font-size: 13px;
+}
+
+@media (max-width: 640px) {
+  .camera-page {
+    padding: 20px;
+  }
+}
