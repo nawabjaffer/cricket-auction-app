@@ -1,8 +1,24 @@
 // ============================================================================
 // SERVICES INDEX - Barrel Export
 // Central export point for all services
+// MVC: Services handle external communication and business operations
 // ============================================================================
 
+// Base classes and interfaces
+export { BaseService } from './base';
+export * from './interfaces';
+
+// Storage and caching
+export {
+  StorageService,
+  CacheService,
+  localStorageService,
+  sessionStorageService,
+  cacheService,
+  STORAGE_KEYS,
+} from './impl';
+
+// Core auction services
 export { AuctionRulesService } from './auctionRules';
 export { googleSheetsService } from './googleSheets';
 export { webhookService } from './webhook';

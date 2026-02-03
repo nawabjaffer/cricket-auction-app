@@ -1,0 +1,206 @@
+/* ============================================================================
+   SOLD ANIMATION STYLES - V3 Premium Broadcast
+   Full-screen overlay with player card and stamp animation
+   ============================================================================ */
+
+.live-sold-animation {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  pointer-events: none;
+}
+
+/* Backdrop */
+.live-sold-animation__backdrop {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(8px);
+}
+
+/* Main content container */
+.live-sold-animation__content {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.5rem;
+  z-index: 1;
+}
+
+/* Stamp text */
+.live-sold-animation__stamp {
+  font-size: clamp(4rem, 12vw, 10rem);
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  text-shadow: 
+    0 0 40px currentColor,
+    0 0 80px currentColor,
+    0 4px 20px rgba(0, 0, 0, 0.5);
+  line-height: 1;
+}
+
+.live-sold-animation__stamp--sold {
+  color: #22c55e;
+  animation: stampGlow 1.5s ease-in-out infinite alternate;
+}
+
+.live-sold-animation__stamp--unsold {
+  color: #ef4444;
+}
+
+@keyframes stampGlow {
+  0% {
+    text-shadow: 
+      0 0 20px rgba(34, 197, 94, 0.8),
+      0 0 40px rgba(34, 197, 94, 0.5),
+      0 4px 20px rgba(0, 0, 0, 0.5);
+  }
+  100% {
+    text-shadow: 
+      0 0 40px rgba(34, 197, 94, 1),
+      0 0 80px rgba(34, 197, 94, 0.7),
+      0 4px 30px rgba(0, 0, 0, 0.5);
+  }
+}
+
+/* Player card */
+.live-sold-animation__card {
+  background: linear-gradient(
+    135deg,
+    rgba(30, 30, 40, 0.95) 0%,
+    rgba(20, 20, 30, 0.98) 100%
+  );
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 1.25rem;
+  padding: 1.5rem 2rem;
+  min-width: 320px;
+  max-width: 480px;
+  box-shadow: 
+    0 25px 50px rgba(0, 0, 0, 0.5),
+    0 0 100px rgba(34, 197, 94, 0.1);
+}
+
+/* Player section */
+.live-sold-animation__player {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+  margin-bottom: 1rem;
+}
+
+/* Avatar */
+.live-sold-animation__avatar {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  overflow: hidden;
+  border: 3px solid rgba(255, 255, 255, 0.2);
+  background: linear-gradient(135deg, #1a1a2e, #0d0d15);
+  flex-shrink: 0;
+}
+
+.live-sold-animation__avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* Player info */
+.live-sold-animation__info {
+  flex: 1;
+  min-width: 0;
+}
+
+.live-sold-animation__name {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #fff;
+  margin: 0 0 0.25rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.live-sold-animation__role {
+  font-size: 0.9rem;
+  color: rgba(255, 255, 255, 0.6);
+  margin: 0;
+  text-transform: capitalize;
+}
+
+/* Deal section (team + amount) */
+.live-sold-animation__deal {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 1rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Team */
+.live-sold-animation__team {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.live-sold-animation__team-logo {
+  width: 40px;
+  height: 40px;
+  border-radius: 0.5rem;
+  object-fit: contain;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.live-sold-animation__team-name {
+  font-size: 1rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+/* Amount */
+.live-sold-animation__amount {
+  font-size: 1.5rem;
+  font-weight: 800;
+  background: linear-gradient(135deg, #ffd700, #ff9500);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Responsive */
+@media (max-width: 480px) {
+  .live-sold-animation__stamp {
+    font-size: 3.5rem;
+  }
+  
+  .live-sold-animation__card {
+    min-width: auto;
+    width: 90%;
+    padding: 1rem 1.25rem;
+  }
+  
+  .live-sold-animation__avatar {
+    width: 60px;
+    height: 60px;
+  }
+  
+  .live-sold-animation__name {
+    font-size: 1.25rem;
+  }
+  
+  .live-sold-animation__amount {
+    font-size: 1.25rem;
+  }
+}

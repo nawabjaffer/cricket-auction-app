@@ -13,6 +13,10 @@
   background: #000;
   overflow: hidden;
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  transform: scale(0.8);
+  transform-origin: top left;
+  width: calc(100vw / 0.8);
+  height: calc(100vh / 0.8);
 }
 
 /* === Premium Gate === */
@@ -207,160 +211,220 @@
 /* === Player Overlay === */
 .live-page__player-overlay {
   position: absolute;
-  bottom: 0;
-  left: 0;
+  bottom: 4.5%;
+  left: 50%;
+  transform: translateX(-50%);
   width: 60%;
   height: 20%;
-  min-height: 150px;
-  background: linear-gradient(135deg, rgba(0, 0, 0, 0.9) 0%, rgba(20, 20, 40, 0.9) 100%);
-  backdrop-filter: blur(16px);
-  border-top-right-radius: 1.5rem;
+  min-height: 190px;
+  background:
+    linear-gradient(180deg, rgba(12, 16, 28, 0.78) 0%, rgba(10, 14, 22, 0.92) 100%),
+    radial-gradient(90% 140% at 50% 0%, rgba(99, 102, 241, 0.12) 0%, rgba(0, 0, 0, 0) 70%);
+  backdrop-filter: blur(22px) saturate(140%);
+  border-top-left-radius: 1.75rem;
+  border-top-right-radius: 1.75rem;
   display: flex;
+  flex-direction: column;
   align-items: center;
-  padding: 1.5rem 2rem;
-  gap: 1.5rem;
+  justify-content: center;
+  padding: 1.25rem 2.5rem 1.5rem;
+  gap: 0.6rem;
+  text-align: center;
   z-index: 80;
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
-  border-right: 1px solid rgba(255, 255, 255, 0.1);
+  border-top: 1px solid rgba(255, 255, 255, 0.16);
+  border-left: 1px solid rgba(255, 255, 255, 0.08);
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow:
+    0 -14px 50px rgba(0, 0, 0, 0.55),
+    0 0 0 1px rgba(255, 255, 255, 0.04) inset;
 }
 
 /* === Player Image === */
-.live-page__player-image {
-  width: 120px;
-  height: 120px;
-  border-radius: 1rem;
-  overflow: hidden;
-  flex-shrink: 0;
-  border: 3px solid rgba(255, 255, 255, 0.2);
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+/* === Player Center Stack === */
+.live-page__player-center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  margin-top: -36px;
 }
 
-.live-page__player-image img {
+.live-page__player-image {
+  width: 110px;
+  height: 160px;
+  border-radius: 18px;
+  overflow: visible;
+  flex-shrink: 0;
+  /* Transparent background - no box, no border for PNG images */
+  background: transparent;
+  border: none;
+  box-shadow: none;
+}
+
+.live-page__player-image--center img {
   width: 100%;
   height: 100%;
-  object-fit: cover;
-}
-
-/* === Player Info === */
-.live-page__player-info {
-  flex: 1;
-  color: #fff;
+  object-fit: contain;
+  /* Transparent background to show PNG transparency */
+  background: transparent;
+  /* Drop shadow for visibility against any background */
+  filter: drop-shadow(0 8px 25px rgba(0, 0, 0, 0.7));
 }
 
 .live-page__player-name {
-  font-size: 2rem;
-  font-weight: 700;
-  margin-bottom: 0.25rem;
-  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+  font-size: 1.45rem;
+  font-weight: 800;
+  margin: 0.45rem 0 0.15rem;
+  text-shadow: 0 2px 14px rgba(0, 0, 0, 0.6);
+  color: #fff;
+  letter-spacing: 0.02em;
 }
 
 .live-page__player-role {
-  font-size: 1rem;
-  color: rgba(255, 255, 255, 0.7);
-  margin-bottom: 0.75rem;
+  font-size: 0.7rem;
+  color: rgba(255, 255, 255, 0.65);
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.16em;
+  margin: 0;
 }
 
-.live-page__player-stats {
-  display: flex;
-  gap: 1.5rem;
+/* === Player Stats Bar === */
+.live-page__player-stats-bar {
+  margin-top: 0.85rem;
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(120px, 1fr);
+  gap: 0.8rem;
+  width: 100%;
+  max-width: 760px;
 }
 
-.live-page__player-stat {
+.live-page__player-stat-card {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.04) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 0.75rem;
+  padding: 0.65rem 0.8rem;
   text-align: center;
+  backdrop-filter: blur(10px);
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.25);
+}
+
+.live-page__player-stat-card--price {
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.35) 0%, rgba(139, 92, 246, 0.35) 100%);
+  border-color: rgba(99, 102, 241, 0.4);
 }
 
 .live-page__player-stat-value {
-  font-size: 1.25rem;
-  font-weight: 600;
+  font-size: 1rem;
+  font-weight: 800;
   color: #fff;
 }
 
 .live-page__player-stat-label {
-  font-size: 0.75rem;
-  color: rgba(255, 255, 255, 0.5);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-
-/* === Player Base Price === */
-.live-page__player-base-price {
-  background: linear-gradient(135deg, rgba(59, 130, 246, 0.2) 0%, rgba(139, 92, 246, 0.2) 100%);
-  padding: 0.75rem 1.5rem;
-  border-radius: 0.75rem;
-  text-align: center;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-.live-page__player-base-price-label {
-  font-size: 0.75rem;
+  font-size: 0.62rem;
   color: rgba(255, 255, 255, 0.6);
   text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-
-.live-page__player-base-price-value {
-  font-size: 1.5rem;
-  font-weight: 700;
-  color: #fff;
+  letter-spacing: 0.1em;
 }
 
 /* === Bid Overlay === */
 .live-page__bid-overlay {
   position: absolute;
-  bottom: 0;
-  right: 0;
-  width: 350px;
-  min-height: 150px;
-  background: linear-gradient(135deg, rgba(0, 0, 0, 0.9) 0%, rgba(20, 30, 20, 0.9) 100%);
-  backdrop-filter: blur(16px);
-  border-top-left-radius: 1.5rem;
-  padding: 1.5rem;
+  bottom: 2.5%;
+  right: 2.5%;
+  width: 320px;
+  min-height: 130px;
+  /* Transparent overlay - no background */
+  background: transparent;
+  padding: 1.2rem;
   z-index: 80;
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
-  border-left: 1px solid rgba(255, 255, 255, 0.1);
+  /* Stack content vertically: price first, then team */
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.75rem;
+}
+
+/* === Live Header Overrides (distinct design) === */
+.live-page .header-minimal--live {
+  position: absolute;
+  top: 1.2rem;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(1100px, 92vw);
+  border-radius: 1.2rem;
+  background: linear-gradient(135deg, rgba(10, 14, 22, 0.82), rgba(18, 24, 34, 0.88));
+  backdrop-filter: blur(18px) saturate(140%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);
+  z-index: 120;
+}
+
+.live-page .header-minimal--live .header-content {
+  padding: 0.65rem 1.25rem;
+}
+
+.live-page .header-minimal--live .menu-trigger {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.live-page .header-minimal--live .dropdown-menu {
+  right: 0;
+  border-radius: 1rem;
+  background: linear-gradient(135deg, rgba(10, 16, 24, 0.96), rgba(12, 20, 30, 0.98));
+  backdrop-filter: blur(18px) saturate(160%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.live-page .header-minimal--live .menu-item {
+  border-radius: 0.8rem;
 }
 
 /* === Current Bid === */
 .live-page__current-bid {
-  margin-bottom: 1rem;
+  text-align: right;
+  /* Subtle text shadow for visibility on video */
 }
 
 .live-page__current-bid-label {
-  font-size: 0.75rem;
-  color: rgba(255, 255, 255, 0.6);
+  font-size: 0.8rem;
+  color: rgba(255, 255, 255, 0.85);
   text-transform: uppercase;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.12em;
   margin-bottom: 0.25rem;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.7);
 }
 
 .live-page__current-bid-amount {
-  font-size: 2.5rem;
-  font-weight: 800;
-  background: linear-gradient(135deg, #22c55e, #10b981);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  font-size: 3rem;
+  font-weight: 900;
+  color: #fff;
+  text-shadow: 
+    0 4px 20px rgba(0, 0, 0, 0.9),
+    0 2px 10px rgba(34, 197, 94, 0.5);
+  letter-spacing: 0.02em;
 }
 
-/* === Bidding Team === */
+/* === Bidding Team - Below Price === */
 .live-page__bidding-team {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 0.75rem;
-  padding: 0.75rem;
-  background: rgba(255, 255, 255, 0.05);
-  border-radius: 0.75rem;
-  margin-bottom: 1rem;
+  gap: 0.5rem;
+  /* Transparent - no background */
+  background: transparent;
+  padding: 0;
 }
 
 .live-page__team-logo {
-  width: 48px;
-  height: 48px;
-  border-radius: 0.5rem;
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
   overflow: hidden;
-  background: rgba(255, 255, 255, 0.1);
+  background: transparent;
+  /* Subtle glow effect */
+  filter: drop-shadow(0 4px 20px rgba(0, 0, 0, 0.6));
 }
 
 .live-page__team-logo img {
@@ -369,27 +433,45 @@
   object-fit: contain;
 }
 
-.live-page__team-name {
-  font-size: 1.125rem;
-  font-weight: 600;
+.team-logo-fallback {
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
   color: #fff;
+  font-size: 1.5rem;
+  border-radius: 50%;
+}
+
+.live-page__team-name {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #fff;
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.8);
+  text-align: center;
 }
 
 /* === Bid History === */
 .live-page__bid-history {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 0.4rem;
+  width: 100%;
 }
 
 .live-page__bid-history-item {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 0.5rem 0.75rem;
-  background: rgba(255, 255, 255, 0.03);
-  border-radius: 0.5rem;
-  font-size: 0.875rem;
+  padding: 0.4rem 0;
+  /* Transparent background */
+  background: transparent;
+  font-size: 0.9rem;
+  color: rgba(255, 255, 255, 0.8);
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
 }
 
 .live-page__bid-history-team {
@@ -619,17 +701,17 @@
 /* === Responsive === */
 @media (max-width: 1024px) {
   .live-page__player-overlay {
-    width: 70%;
-    height: 18%;
+    width: 80%;
+    height: 22%;
   }
 
   .live-page__player-name {
-    font-size: 1.5rem;
+    font-size: 1.4rem;
   }
 
   .live-page__player-image {
-    width: 80px;
-    height: 80px;
+    width: 90px;
+    height: 90px;
   }
 
   .live-page__bid-overlay {
@@ -647,6 +729,7 @@
     width: 100%;
     height: 25%;
     border-radius: 0;
+    transform: translateX(-50%);
   }
 
   .live-page__bid-overlay {
@@ -661,4 +744,159 @@
   .live-page__stamp {
     font-size: 4rem;
   }
+
+  .live-page__player-stats-bar {
+    grid-auto-flow: row;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* === Bid Multiplier Indicator === */
+.live-page__bid-multiplier {
+  position: absolute;
+  bottom: 1.5rem;
+  right: 1.5rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  background: linear-gradient(135deg, rgba(255, 215, 0, 0.2), rgba(255, 149, 0, 0.15));
+  border: 1px solid rgba(255, 215, 0, 0.4);
+  border-radius: 2rem;
+  z-index: 50;
+  animation: multiplierPulse 2s ease-in-out infinite;
+}
+
+.live-page__bid-multiplier-label {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #ffd700;
+  text-shadow: 0 0 10px rgba(255, 215, 0, 0.5);
+}
+
+.live-page__bid-multiplier-keys {
+  font-size: 0.7rem;
+  color: rgba(255, 255, 255, 0.5);
+  font-family: monospace;
+}
+
+@keyframes multiplierPulse {
+  0%, 100% {
+    box-shadow: 0 0 10px rgba(255, 215, 0, 0.3);
+  }
+  50% {
+    box-shadow: 0 0 20px rgba(255, 215, 0, 0.5);
+  }
+}
+
+/* === Team Quick Keys === */
+.live-page__team-keys {
+  position: absolute;
+  bottom: 1.5rem;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 0.375rem;
+  padding: 0.375rem;
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(10px);
+  border-radius: 0.75rem;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  z-index: 50;
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+
+.live-page:hover .live-page__team-keys {
+  opacity: 1;
+}
+
+.live-page__team-key {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.125rem;
+  padding: 0.375rem 0.625rem;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 0.5rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  min-width: 48px;
+}
+
+.live-page__team-key:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.15);
+  border-color: rgba(255, 215, 0, 0.4);
+  transform: translateY(-2px);
+}
+
+.live-page__team-key:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.live-page__team-key-num {
+  font-size: 0.625rem;
+  font-weight: 600;
+  color: rgba(255, 215, 0, 0.8);
+  font-family: monospace;
+  background: rgba(255, 215, 0, 0.15);
+  padding: 0.125rem 0.375rem;
+  border-radius: 0.25rem;
+}
+
+.live-page__team-key-name {
+  font-size: 0.65rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.8);
+  text-transform: uppercase;
+  letter-spacing: 0.025em;
+}
+/* ============================================================================
+   PLAYER TRANSITION OVERLAY - Smooth animation between players
+   ============================================================================ */
+
+.player-transition-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(135deg, rgba(0, 0, 0, 0.8), rgba(26, 26, 46, 0.8));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  backdrop-filter: blur(2px);
+}
+
+.transition-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.5rem;
+}
+
+.transition-spinner {
+  width: 60px;
+  height: 60px;
+  border: 3px solid rgba(255, 215, 0, 0.2);
+  border-top-color: rgba(255, 215, 0, 0.8);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.transition-text {
+  color: #ffd700;
+  font-size: 1.1rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  margin: 0;
+  text-shadow: 0 2px 8px rgba(255, 215, 0, 0.3);
 }

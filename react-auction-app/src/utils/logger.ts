@@ -53,11 +53,19 @@ const applyConsoleMode = (enabled: boolean) => {
   console.debug = noop;
 };
 
-export const setDebugEnabled = (enabled: boolean) => {
-  if (typeof window === 'undefined') return;
-  window.localStorage.setItem('debug', enabled ? '1' : '0');
-  applyConsoleMode(enabled);
-};
+// Logger wrapper for structured logging
+class LoggerWrapper {
+  scope(name: string) {
+    return {
+      debug: (message: string, data?: unknown) => console.debug(`[${name}] ${message}`, data),
+      info: (message: string, data?: unknown) => console.info(`[${name}] ${message}`, data),
+      warn: (message: string, data?: unknown) => console.warn(`[${name}] ${message}`, data),
+      error: (message: string, data?: unknown) => console.error(`[${name}] ${message}`, data),
+    };
+  }
+}
+
+export const logger = new LoggerWrapper();
 
 export const setupDebugConsole = () => {
   applyConsoleMode(resolveInitialDebugEnabled());

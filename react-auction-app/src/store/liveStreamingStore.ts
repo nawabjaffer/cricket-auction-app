@@ -71,6 +71,7 @@ interface LiveStreamingStore {
   setPlayerOverlayVisible: (visible: boolean) => void;
   setBidOverlayVisible: (visible: boolean) => void;
   setSuccessAnimationType: (type: SuccessAnimationType) => void;
+  setSuccessAnimationStamp: (text: string, color: string) => void;
   
   // === Auction Sync Actions ===
   syncPlayer: (player: Player | null) => void;
@@ -274,6 +275,17 @@ export const useLiveStreamingStore = create<LiveStreamingStore>()(
           }
         }
       }), false, 'setSuccessAnimationType'),
+
+      setSuccessAnimationStamp: (text, color) => set((state) => ({
+        overlay: {
+          ...state.overlay,
+          successAnimation: {
+            ...state.overlay.successAnimation,
+            stampText: text,
+            stampColor: color,
+          }
+        }
+      }), false, 'setSuccessAnimationStamp'),
 
       // === Auction Sync Actions ===
       syncPlayer: (player) => set({ currentPlayer: player }, false, 'syncPlayer'),

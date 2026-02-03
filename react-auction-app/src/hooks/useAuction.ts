@@ -227,6 +227,9 @@ export function useAuction() {
     closeOverlay,
     showEndScreen,
 
+    // Bid State Management
+    clearBidState: store.clearBidState,
+
     // Reset
     resetAuction,
 

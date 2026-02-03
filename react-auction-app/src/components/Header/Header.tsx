@@ -3,7 +3,7 @@
 // Minimal header with dropdown menu - Apple style
 // ============================================================================
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, type ReactNode } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { IoClose, IoMenu, IoLink, IoRefresh, IoShuffle, IoList, IoSearch } from 'react-icons/io5';
 import { getActiveTheme } from '../../config';
@@ -19,9 +19,16 @@ interface HeaderProps {
   onShowConnectToTeam?: () => void;
   showConnectionStatus?: boolean;
   onDismissConnectionStatus?: () => void;
+  variant?: 'default' | 'live';
+  menuExtras?: Array<{
+    label: string;
+    description?: string;
+    icon?: ReactNode;
+    onClick: () => void;
+  }>;
 }
 
-export function Header({ onRefresh, onResetAuction, onShowHelp, bidMultiplier = 1, onJumpToPlayer, onShowConnectToTeam, showConnectionStatus = false, onDismissConnectionStatus }: HeaderProps) {
+export function Header({ onRefresh, onResetAuction, onShowHelp, bidMultiplier = 1, onJumpToPlayer, onShowConnectToTeam, showConnectionStatus = false, onDismissConnectionStatus, variant = 'default', menuExtras = [] }: HeaderProps) {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   
@@ -47,7 +54,7 @@ export function Header({ onRefresh, onResetAuction, onShowHelp, bidMultiplier = 
   }, []);
 
   return (
-    <header className="header-minimal">
+    <header className={`header-minimal ${variant === 'live' ? 'header-minimal--live' : ''}`}>
       {/* Firebase Connection Status Banner */}
       <AnimatePresence>
         {showConnectionStatus && (
@@ -73,6 +80,31 @@ export function Header({ onRefresh, onResetAuction, onShowHelp, bidMultiplier = 
                 </button>
               )}
             </div>
+
+                {menuExtras.length > 0 && (
+                  <>
+                    <div className="menu-divider" />
+                    <div className="menu-section">
+                      <div className="menu-label">Live Controls</div>
+                      {menuExtras.map((item) => (
+                        <button
+                          key={item.label}
+                          className="menu-item"
+                          onClick={() => {
+                            item.onClick();
+                            setIsMenuOpen(false);
+                          }}
+                        >
+                          {item.icon && <span className="item-icon">{item.icon}</span>}
+                          <span className="item-text">{item.label}</span>
+                          {item.description && (
+                            <span className="item-badge">{item.description}</span>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
           </motion.div>
         )}
       </AnimatePresence>

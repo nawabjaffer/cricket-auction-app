@@ -253,6 +253,19 @@ function AuctionApp() {
     return () => audioService.dispose();
   }, []);
 
+  // Play sounds when overlay changes
+  useEffect(() => {
+    if (activeOverlay === 'sold') {
+      audioService.playSold().catch(err => {
+        console.warn('[App] Failed to play sold sound:', err);
+      });
+    } else if (activeOverlay === 'unsold') {
+      audioService.playUnsold().catch(err => {
+        console.warn('[App] Failed to play unsold sound:', err);
+      });
+    }
+  }, [activeOverlay]);
+
   // Handle coin jar animation complete
   const handleCoinJarComplete = () => {
     setShowCoinJar(false);

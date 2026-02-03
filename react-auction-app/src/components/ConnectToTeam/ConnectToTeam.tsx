@@ -19,23 +19,23 @@ export const ConnectToTeam: React.FC<ConnectToTeamProps> = ({ open, onClose }) =
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
   const teams = useTeams();
   
-  // Generate credentials based on runtime team data
+  // Generate credentials based on runtime team data - simplified format
   const teamCredentials = useMemo(() => {
     return teams.map((team, index) => {
       const normalized = team.name
         .toLowerCase()
         .replace(/[^a-z0-9]+/g, '');
       const username = normalized || `team${index + 1}`;
-      const idSuffix = team.id?.slice(-4) || String(index + 1).padStart(4, '0');
-      const password = `${username}@${idSuffix}`;
+      // Simplified password: username + "123"
+      const password = `${username}123`;
       return {
         teamId: team.id,
         teamName: team.name,
         username,
         password,
         logoUrl: team.logoUrl,
-        primaryColor: team.primaryColor || '#ffffff',
-        secondaryColor: team.secondaryColor || '#000000',
+        primaryColor: team.primaryColor || '#3b82f6',
+        secondaryColor: team.secondaryColor || '#1e40af',
       };
     });
   }, [teams]);
@@ -53,7 +53,7 @@ export const ConnectToTeam: React.FC<ConnectToTeamProps> = ({ open, onClose }) =
   };
 
   const selectedTeam = teamCredentials.find(t => t.teamId === selectedTeamId);
-  const mobileUrl = `${window.location.origin}/mobile-bidding`;
+  const mobileUrl = `${window.location.origin}/mobile-bidding-live`;
 
   return (
     <div className="connect-modal-overlay" onClick={onClose}>
@@ -90,33 +90,37 @@ export const ConnectToTeam: React.FC<ConnectToTeamProps> = ({ open, onClose }) =
         {selectedTeam && (
           <div className="connect-details">
             <div className="connect-qr-section">
-              <QRCode value={mobileUrl} size={180} />
-              <p className="qr-hint">Scan with mobile device</p>
+              <QRCode value={mobileUrl} size={200} />
+              <p className="qr-hint">📱 Scan to open mobile bidding</p>
+              <p className="qr-subhint">URL: {mobileUrl}</p>
             </div>
             <div className="connect-info">
+              <div className="info-section-title">Login Credentials</div>
               <div className="info-row">
-                <span className="info-label">Team:</span>
+                <span className="info-label">🏏 Team:</span>
                 <span className="info-value">{selectedTeam.teamName}</span>
               </div>
               <div className="info-row">
-                <span className="info-label">Username:</span>
+                <span className="info-label">👤 Username:</span>
                 <span className="info-value code">{selectedTeam.username}</span>
               </div>
               <div className="info-row">
-                <span className="info-label">Password:</span>
+                <span className="info-label">🔐 Password:</span>
                 <span className="info-value code">{selectedTeam.password}</span>
               </div>
-              <div className="info-row">
-                <span className="info-label">Mobile URL:</span>
-                <a 
-                  href={mobileUrl} 
-                  target="_blank" 
-                  rel="noopener noreferrer"
-                  className="info-value link"
-                >
-                  {mobileUrl}
-                </a>
-              </div>
+              
+              <div className="info-section-title" style={{ marginTop: '1rem' }}>How to Connect</div>
+              <ol className="connect-steps">
+                <li>Open <strong>/mobile-bidding-live</strong> on your phone</li>
+                <li>Or scan the QR code above</li>
+                <li>Enter credentials:
+                  <div style={{ marginTop: '0.5rem', background: 'rgba(0,0,0,0.2)', padding: '0.5rem', borderRadius: '4px' }}>
+                    <div><strong>Username:</strong> {selectedTeam.username}</div>
+                    <div><strong>Password:</strong> {selectedTeam.password}</div>
+                  </div>
+                </li>
+                <li>Start bidding!</li>
+              </ol>
             </div>
           </div>
         )}

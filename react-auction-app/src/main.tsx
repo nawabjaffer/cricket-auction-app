@@ -1,11 +1,13 @@
 import { Component, StrictMode, type ReactNode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { setupDebugConsole } from './utils/logger'
 
 // V1 - Original App (with Google Sheets integration)
 import App from './App.tsx'
 import { MobileBiddingPage } from './components/MobileBidding/MobileBidding.tsx'
+import MobileBiddingLivePage from './pages/MobileBiddingLivePage.tsx'
 import FirebaseDiagnostics from './pages/Diagnostics.tsx'
 import AdminLogin from './components/AdminLogin/AdminLogin'
 import AdminPage from './pages/AdminPage'
@@ -14,6 +16,8 @@ import LivePage from './pages/LivePage'
 import './index.css'
 
 setupDebugConsole();
+
+const queryClient = new QueryClient();
 
 // V2 features archived for future development in separate feature branches
 
@@ -52,17 +56,20 @@ class ErrorBoundary extends Component<
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <ErrorBoundary>
-      <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<App />} />
-          <Route path="/mobile-bidding" element={<MobileBiddingPage />} />
-          <Route path="/diagnostics" element={<FirebaseDiagnostics />} />
-          <Route path="/admin/login" element={<AdminLogin />} />
-          <Route path="/admin" element={<AdminPage />} />
-          <Route path="/camera" element={<CameraPage />} />
-          <Route path="/live" element={<LivePage />} />
-        </Routes>
-      </BrowserRouter>
+      <QueryClientProvider client={queryClient}>
+        <BrowserRouter>
+          <Routes>
+            <Route path="/" element={<App />} />
+            <Route path="/mobile-bidding" element={<MobileBiddingPage />} />
+            <Route path="/mobile-bidding-live" element={<MobileBiddingLivePage />} />
+            <Route path="/diagnostics" element={<FirebaseDiagnostics />} />
+            <Route path="/admin/login" element={<AdminLogin />} />
+            <Route path="/admin" element={<AdminPage />} />
+            <Route path="/camera" element={<CameraPage />} />
+            <Route path="/live" element={<LivePage />} />
+          </Routes>
+        </BrowserRouter>
+      </QueryClientProvider>
     </ErrorBoundary>
   </StrictMode>,
 )

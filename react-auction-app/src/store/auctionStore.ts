@@ -118,6 +118,7 @@ interface AuctionStore {
   markAsSold: () => void;
   markAsUnsold: () => void;
   moveUnsoldToSold: (player: UnsoldPlayer, team: Team, amount: number) => void;
+  clearBidState: () => void;
   
   // UI state
   setLoading: (loading: boolean) => void;
@@ -275,7 +276,7 @@ export const useAuctionStore = create<AuctionStore>()(
         },
 
         selectNextPlayer: () => {
-          const { availablePlayers, selectionMode, bidHistory, selectedTeam, currentBid, currentPlayer } = get();
+          const { availablePlayers, selectionMode, bidHistory, selectedTeam, currentBid, currentPlayer, unsoldPlayers, currentRound, maxUnsoldRounds } = get();
           
           // Prevent skipping if there's active bidding
           if (currentPlayer && (bidHistory.length > 0 || selectedTeam || currentBid > currentPlayer.basePrice)) {
@@ -289,10 +290,72 @@ export const useAuctionStore = create<AuctionStore>()(
             return;
           }
           
+          // If no available players, check if we can start next round
           if (availablePlayers.length === 0) {
+            const maxRound = 1 + maxUnsoldRounds;
+            
+            // If unsold players exist and we haven't reached max rounds, auto-start next round
+            if (unsoldPlayers.length > 0 && currentRound < maxRound) {
+              console.log('[Auction] Auto-starting next round with', unsoldPlayers.length, 'unsold players');
+              
+              // Convert unsold players back to available players for next round
+              const round2Players: Player[] = unsoldPlayers.map(p => ({
+                id: p.id,
+                imageUrl: p.imageUrl,
+                name: p.name,
+                role: p.role,
+                age: p.age,
+                matches: p.matches,
+                runs: p.runs || 'N/A',
+                wickets: p.wickets || 'N/A',
+                battingBestFigures: p.battingBestFigures,
+                bowlingBestFigures: p.bowlingBestFigures,
+                basePrice: p.basePrice,
+                dateOfBirth: '',
+              }));
+
+              const nextRound = currentRound + 1;
+              
+              // Clear unsold list in Firebase for clean next round state
+              auctionPersistence.clearUnsoldPlayers().catch(err => {
+                console.error('[Store] Failed to clear unsold players in Firebase:', err);
+              });
+
+              // Start next round and select first player in one state update
+              const nextPlayer = selectionMode === 'sequential'
+                ? round2Players[0]
+                : round2Players[Math.floor(Math.random() * round2Players.length)];
+
+              set({
+                availablePlayers: round2Players,
+                unsoldPlayers: [],
+                currentRound: nextRound,
+                isRound2Active: nextRound > 1,
+                currentPlayer: nextPlayer,
+                currentBid: nextPlayer.basePrice,
+                selectedTeam: null,
+                bidHistory: [],
+                previousBid: 0,
+                lastBidTeamId: null,
+                auctionState: {
+                  ...get().auctionState,
+                  currentPlayer: nextPlayer,
+                  currentBid: nextPlayer.basePrice,
+                  selectedTeam: null,
+                  bidHistory: [],
+                  isAuctionActive: true,
+                },
+                notification: { 
+                  type: 'info', 
+                  message: `Round ${nextRound} started with ${round2Players.length} players` 
+                },
+              });
+              return;
+            }
+            
             console.log('[Auction] No more players available');
             set({ 
-              notification: { type: 'info', message: 'No more players available' },
+              notification: { type: 'info', message: 'No more players available - auction complete' },
               activeOverlay: 'end',
             });
             return;
@@ -341,6 +404,19 @@ export const useAuctionStore = create<AuctionStore>()(
             bidHistory: [],
             lastBidTeamId: null,
             auctionState: initialAuctionState,
+          });
+        },
+
+        clearBidState: () => {
+          // Clear bid-related state but keep current player
+          // Used when moving to next player after sold/unsold
+          set({
+            currentBid: get().currentPlayer?.basePrice || activeConfig.auction.basePrice,
+            previousBid: 0,
+            selectedTeam: null,
+            bidHistory: [],
+            lastBidTeamId: null,
+            activeOverlay: null,
           });
         },
 
