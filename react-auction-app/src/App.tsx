@@ -150,6 +150,18 @@ function AuctionApp() {
     setShowTeamSquadView(true);
   };
 
+  const handleOpenTeamDisplay = useCallback(() => {
+    const initialTeamId = selectedTeam?.id || allTeams[0]?.id || '';
+
+    if (!initialTeamId) {
+      console.warn('[V1 App] No teams available for team display');
+      return;
+    }
+
+    setSelectedTeamForSquad(initialTeamId);
+    setShowTeamSquadView(true);
+  }, [allTeams, selectedTeam]);
+
   // Keyboard shortcuts with team overlay toggle
   useKeyboardShortcuts({ 
     enabled: !showCoinJar && !showJumpModal && !showAdminPanel,
@@ -480,6 +492,14 @@ function AuctionApp() {
             setShowJumpModal(true);
           }}
           onShowConnectToTeam={() => setShowConnectToTeamModal(true)}
+          menuExtras={[
+            {
+              label: 'Team Display',
+              description: 'Browse all squads',
+              icon: <IoPerson />,
+              onClick: handleOpenTeamDisplay,
+            },
+          ]}
           showConnectionStatus={showConnectionStatus}
           onDismissConnectionStatus={() => setShowConnectionStatus(false)}
         />
@@ -514,7 +534,7 @@ function AuctionApp() {
                 transition={{ duration: 0.5, ease: [0.32, 0.72, 0, 1] }}
               >
                 <img src="/assets/BCC Season 6.png" alt="BCC" className="club-logo" />
-                <span>Brother Cricket Club</span>
+                <span>Eruvai Premier League</span>
               </motion.div>
               <motion.div 
                 className="neon-bar-wrapper"

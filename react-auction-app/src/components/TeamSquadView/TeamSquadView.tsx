@@ -36,29 +36,38 @@ export function TeamSquadView({
 }: TeamSquadViewProps) {
   const [captainImageLoaded, setCaptainImageLoaded] = useState(false);
   const [captainImageError, setCaptainImageError] = useState(false);
+  const [activeTeamId, setActiveTeamId] = useState(teamId);
 
-  // Find the selected team
-  const team = useMemo(() => teams.find(t => t.id === teamId), [teams, teamId]);
+  // Keep the selected team in sync with the opener, but allow in-screen switching
+  useEffect(() => {
+    setActiveTeamId(teamId);
+  }, [teamId]);
+
+  // Find the active team
+  const activeTeam = useMemo(
+    () => teams.find(t => t.id === activeTeamId),
+    [teams, activeTeamId],
+  );
 
   // Reset image states when team changes
   useEffect(() => {
     setCaptainImageLoaded(false);
     setCaptainImageError(false);
-  }, [teamId]);
+  }, [activeTeamId]);
 
   // Get team players (sold to this team)
   const teamPlayers = useMemo(() => {
-    if (!team) return [];
-    return soldPlayers.filter(p => p.teamId === team.id || p.teamName === team.name);
-  }, [soldPlayers, team]);
+    if (!activeTeam) return [];
+    return soldPlayers.filter(p => p.teamId === activeTeam.id || p.teamName === activeTeam.name);
+  }, [soldPlayers, activeTeam]);
 
   // Find captain data
   const captainData = useMemo(() => {
-    if (!team?.captain) return null;
+    if (!activeTeam?.captain) return null;
     
     // Search in all players for captain
     const captain = allPlayers.find(
-      p => p.name?.toLowerCase() === team.captain?.toLowerCase()
+      p => p.name?.toLowerCase() === activeTeam.captain?.toLowerCase()
     );
     
     if (!captain) return null;
@@ -77,7 +86,7 @@ export function TeamSquadView({
       imageUrl,
       role: captain.role,
     };
-  }, [team, allPlayers]);
+  }, [activeTeam, allPlayers]);
 
   // Handle ESC key to close
   useEffect(() => {
@@ -97,14 +106,14 @@ export function TeamSquadView({
     return '/placeholder_player.png';
   }, []);
 
-  if (!team) {
+  if (!activeTeam) {
     console.warn('[TeamSquadView] Team not found:', teamId);
     return null;
   }
 
   // Team colors with fallback
-  const primaryColor = team.primaryColor || '#3b82f6';
-  const secondaryColor = team.secondaryColor || '#06b6d4';
+  const primaryColor = activeTeam.primaryColor || '#3b82f6';
+  const secondaryColor = activeTeam.secondaryColor || '#06b6d4';
 
   return (
     <AnimatePresence>
@@ -151,6 +160,36 @@ export function TeamSquadView({
         >
           {/* LEFT SECTION - Player Names */}
           <div className="tsv-left-section">
+            {/* Team Selector */}
+            <motion.div
+              className="tsv-team-selector"
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.35, delay: 0.1 }}
+            >
+              {teams.map((teamOption, index) => {
+                const isActive = teamOption.id === activeTeam.id;
+
+                return (
+                  <button
+                    key={teamOption.id}
+                    type="button"
+                    className={`tsv-team-chip ${isActive ? 'active' : ''}`}
+                    onClick={() => setActiveTeamId(teamOption.id)}
+                    style={{
+                      borderColor: isActive ? (teamOption.primaryColor || primaryColor) : 'rgba(255, 255, 255, 0.18)',
+                      background: isActive
+                        ? `linear-gradient(135deg, ${teamOption.primaryColor || primaryColor}, ${teamOption.secondaryColor || secondaryColor})`
+                        : 'rgba(255, 255, 255, 0.08)',
+                    }}
+                  >
+                    <span className="tsv-team-chip-index">{index + 1}</span>
+                    <span className="tsv-team-chip-name">{teamOption.name}</span>
+                  </button>
+                );
+              })}
+            </motion.div>
+
             {/* Team Header */}
             <motion.div 
               className="tsv-team-header"
@@ -158,7 +197,7 @@ export function TeamSquadView({
               animate={{ x: 0, opacity: 1 }}
               transition={{ duration: 0.5, delay: 0.2 }}
             >
-              <h1 className="tsv-team-name">{team.name}</h1>
+              <h1 className="tsv-team-name">{activeTeam.name}</h1>
               <div className="tsv-team-underline" />
               <h2 className="tsv-squad-label">SQUAD</h2>
             </motion.div>
@@ -200,12 +239,12 @@ export function TeamSquadView({
               transition={{ duration: 0.4, delay: 0.5 }}
             >
               <div className="tsv-stat-item">
-                <span className="tsv-stat-value">{team.playersBought}</span>
+                <span className="tsv-stat-value">{activeTeam.playersBought}</span>
                 <span className="tsv-stat-label">Players</span>
               </div>
               <div className="tsv-stat-divider" />
               <div className="tsv-stat-item">
-                <span className="tsv-stat-value">₹{team.remainingPurse?.toFixed(1)}L</span>
+                <span className="tsv-stat-value">₹{activeTeam.remainingPurse?.toFixed(1)}L</span>
                 <span className="tsv-stat-label">Remaining</span>
               </div>
             </motion.div>
