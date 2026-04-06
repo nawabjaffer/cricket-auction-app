@@ -26,6 +26,7 @@
   --theme-gradient-start: #2d3748;
   --theme-gradient-end: #1a202c;
   --theme-bg-image: none;
+  --asset-gold-filter: grayscale(1) sepia(1) saturate(230%) hue-rotate(356deg) brightness(1.01) contrast(0.93);
 
   /* Typography */
   font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -82,6 +83,13 @@ body {
   z-index: 1; /* sit below main content but above base background */
   overflow: hidden;
 }
+
+/* Force all bundled decorative assets to the EPL gold tone */
+.app-shell img[src*="/assets/"],
+.app-shell img[src*="/extras/"] {
+  filter: var(--asset-gold-filter);
+}
+
 .corner-gif {
   position: absolute;
   width: 50vw;
@@ -89,7 +97,7 @@ body {
   opacity: 0.85;
   transform-origin: center;
   mix-blend-mode: screen;
-  filter: drop-shadow(0 0 30px rgba(167, 240, 45, 0.4)) drop-shadow(0 10px 40px rgba(0,0,0,0.6));
+  filter: var(--asset-gold-filter) drop-shadow(0 0 30px rgba(228, 190, 117, 0.42)) drop-shadow(0 10px 40px rgba(0, 0, 0, 0.6));
   animation: cornerGlowPulse 3s ease-in-out infinite;
   object-fit: cover;
 }
@@ -120,9 +128,9 @@ body {
   height: 200px;
   background: radial-gradient(
     ellipse at 50% 50%,
-    rgba(167, 240, 45, 0.60) 0%,
-    rgba(167, 240, 45, 0.25) 30%,
-    rgba(167, 240, 45, 0.00) 72%
+    rgba(228, 190, 117, 0.60) 0%,
+    rgba(228, 190, 117, 0.25) 30%,
+    rgba(228, 190, 117, 0.00) 72%
   );
   filter: blur(22px);
   opacity: 0.45;
@@ -186,11 +194,11 @@ body {
 
 @keyframes cornerGlowPulse {
   0%, 100% {
-    filter: drop-shadow(0 0 20px rgba(167, 240, 45, 0.3)) drop-shadow(0 10px 40px rgba(0,0,0,0.6));
+    filter: var(--asset-gold-filter) drop-shadow(0 0 20px rgba(228, 190, 117, 0.32)) drop-shadow(0 10px 40px rgba(0, 0, 0, 0.6));
     opacity: 0.8;
   }
   50% {
-    filter: drop-shadow(0 0 40px rgba(167, 240, 45, 0.6)) drop-shadow(0 0 60px rgba(0, 212, 255, 0.3)) drop-shadow(0 10px 40px rgba(0,0,0,0.6));
+    filter: var(--asset-gold-filter) drop-shadow(0 0 40px rgba(228, 190, 117, 0.64)) drop-shadow(0 0 60px rgba(228, 190, 117, 0.34)) drop-shadow(0 10px 40px rgba(0, 0, 0, 0.6));
     opacity: 0.95;
   }
 }
@@ -226,8 +234,7 @@ body {
 /* Firebase Connection Status Banner */
 .connection-status-banner {
   overflow: hidden;
-  background: linear-gradient(90deg, rgba(34, 197, 94, 0.15) 0%, rgba(34, 197, 94, 0.08) 100%);
-  border-bottom: 1px solid rgba(34, 197, 94, 0.3);
+  display: none;
 }
 
 .banner-content {
@@ -249,10 +256,10 @@ body {
 .pulse-dot {
   width: 8px;
   height: 8px;
-  background: #22c55e;
+  background: #E4BE75;
   border-radius: 50%;
   animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-  box-shadow: 0 0 10px rgba(34, 197, 94, 0.5);
+  box-shadow: 0 0 10px rgba(228, 190, 117, 0.5);
 }
 
 @keyframes pulse {
@@ -310,6 +317,57 @@ body {
   margin: 0 auto;
 }
 
+.header-left-group {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.header-connection-icon {
+  position: relative;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.55);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.85rem;
+  padding: 0;
+  cursor: default;
+}
+
+.header-connection-icon:hover {
+  color: rgba(228, 190, 117, 0.9);
+  border-color: rgba(228, 190, 117, 0.4);
+  background: rgba(228, 190, 117, 0.08);
+}
+
+.header-connection-tooltip {
+  position: absolute;
+  left: calc(100% + 8px);
+  top: 50%;
+  transform: translateY(-50%);
+  white-space: nowrap;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.88);
+  background: rgba(20, 20, 24, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  padding: 0.35rem 0.55rem;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.18s ease;
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.35);
+}
+
+.header-connection-icon:hover .header-connection-tooltip {
+  opacity: 1;
+}
+
 /* Title */
 .header-title {
   display: flex;
@@ -328,8 +386,8 @@ body {
   font-size: 0.7rem;
   font-weight: 600;
   padding: 0.2rem 0.5rem;
-  background: rgba(167, 240, 45, 0.2);
-  color: #a7f02d;
+  background: rgba(228, 190, 117, 0.2);
+  color: #E4BE75;
   border-radius: 6px;
   letter-spacing: 0.05em;
 }
@@ -445,7 +503,7 @@ body {
 }
 
 .stat-dot.available { background: #3b82f6; }
-.stat-dot.sold { background: #22c55e; }
+.stat-dot.sold { background: #16a34a; }
 .stat-dot.unsold { background: #ef4444; }
 
 .stat-num {
@@ -486,18 +544,24 @@ body {
   position: absolute;
   top: calc(100% + 8px);
   right: 0;
-  width: 280px;
+  width: 320px;
   background: rgba(30, 30, 35, 0.95);
   backdrop-filter: blur(30px);
   -webkit-backdrop-filter: blur(30px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.14);
   border-radius: 16px;
-  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(228, 190, 117, 0.07) inset;
   overflow: hidden;
 }
 
 .menu-section {
-  padding: 0.75rem;
+  padding: 0.7rem;
+}
+
+.menu-section--actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
 }
 
 .menu-header {
@@ -527,33 +591,34 @@ body {
 
 .menu-divider {
   height: 1px;
-  background: rgba(255, 255, 255, 0.08);
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.02));
   margin: 0;
 }
 
 .menu-label {
   font-size: 0.65rem;
-  font-weight: 600;
+  font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.1em;
-  color: rgba(255, 255, 255, 0.4);
+  color: rgba(228, 190, 117, 0.75);
   padding: 0.25rem 0.5rem;
-  margin-bottom: 0.25rem;
+  margin-bottom: 0.35rem;
 }
 
 /* Menu Stats */
 .menu-stats {
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
+  gap: 0.35rem;
 }
 
 .menu-stat {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  padding: 0.5rem;
+  padding: 0.5rem 0.6rem;
   border-radius: 8px;
+  background: rgba(255, 255, 255, 0.03);
 }
 
 .stat-icon {
@@ -561,7 +626,7 @@ body {
 }
 
 .stat-icon.available { color: #3b82f6; }
-.stat-icon.sold { color: #22c55e; }
+.stat-icon.sold { color: #22c552; }
 .stat-icon.unsold { color: #ef4444; }
 
 .stat-name {
@@ -580,36 +645,57 @@ body {
 .menu-item {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
+  justify-content: flex-start;
   width: 100%;
-  padding: 0.65rem 0.75rem;
-  background: transparent;
-  border: none;
+  min-height: 40px;
+  padding: 0.55rem 0.65rem;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid transparent;
   border-radius: 10px;
   cursor: pointer;
-  transition: background 0.15s;
+  transition: background 0.2s ease, border-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
   text-align: left;
 }
 
 .menu-item:hover {
-  background: rgba(255, 255, 255, 0.08);
+  background: linear-gradient(90deg, rgba(228, 190, 117, 0.13), rgba(228, 190, 117, 0.05));
+  border-color: rgba(228, 190, 117, 0.36);
+  transform: translateX(2px);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.25);
 }
 
 .item-icon {
-  font-size: 1rem;
+  font-size: 1.05rem;
   width: 24px;
   text-align: center;
+  color: rgba(255, 255, 255, 0.88);
 }
 
 .item-text {
   flex: 1;
-  font-size: 0.9rem;
-  color: rgba(255, 255, 255, 0.85);
+  font-size: 0.86rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.9);
 }
 
 .item-badge {
   font-size: 0.65rem;
-  color: rgba(255, 255, 255, 0.4);
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.menu-item.danger {
+  background: rgba(239, 68, 68, 0.08);
+}
+
+.menu-item.danger:hover {
+  background: rgba(239, 68, 68, 0.18);
+  border-color: rgba(239, 68, 68, 0.45);
+}
+
+.menu-item.danger .item-icon,
+.menu-item.danger .item-text,
+.menu-item.danger .item-badge.warning {
+  color: rgba(252, 165, 165, 0.95);
 }
 
 /* Adjust main content for fixed header */
@@ -621,6 +707,143 @@ body {
 
 .hero-split.no-header {
   padding-top: clamp(2rem, 4vw, 4rem);
+}
+
+/* ==========================================================================
+   SPONSOR SHOWCASE
+   =========================================================================*/
+
+.sponsor-showcase {
+  position: relative;
+  z-index: 12;
+  margin: 0.75rem 0 0;
+  width: 100%;
+  max-width: 100%;
+  padding: 0.35rem;
+  overflow: hidden;
+}
+
+.sponsor-grid-window {
+  position: relative;
+  overflow: hidden;
+  border-radius: 18px;
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.01));
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  width: 100%;
+}
+
+.sponsor-grid-track {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 0.55rem;
+  padding: 0.65rem;
+  grid-auto-flow: dense;
+  overflow: hidden;
+}
+
+.sponsor-card {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 1 / 1;
+  padding: 0.55rem;
+  border-radius: 14px;
+  border: none;
+  background: rgba(9, 10, 13, 0.52);
+  overflow: hidden;
+  position: relative;
+}
+
+.sponsor-card.active {
+  background: rgba(13, 14, 18, 0.72);
+  grid-column: span 2;
+  grid-row: span 2;
+}
+
+.sponsor-card.logo-only {
+  justify-content: center;
+  padding: 0.42rem;
+}
+
+.sponsor-logo {
+  width: 74%;
+  height: 74%;
+  border-radius: 12px;
+  object-fit: contain;
+  flex-shrink: 0;
+  filter: grayscale(1);
+  padding: 0.2rem;
+}
+
+.sponsor-content {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.16rem;
+  padding: 0.55rem;
+  background: linear-gradient(180deg, rgba(5, 5, 8, 0), rgba(5, 5, 8, 0.72));
+  min-width: 0;
+}
+
+.sponsor-name {
+  font-size: 0.86rem;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.95);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sponsor-meta-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.sponsor-tier,
+.sponsor-site {
+  font-size: 0.68rem;
+  color: rgba(255, 255, 255, 0.72);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sponsor-card.logo-only .sponsor-content {
+  display: none;
+}
+
+@media (max-width: 900px) {
+  .sponsor-showcase {
+    margin-top: 0.7rem;
+  }
+
+  .sponsor-grid-track {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .sponsor-card.active {
+    grid-column: span 1;
+    grid-row: span 1;
+  }
+}
+
+@media (max-width: 640px) {
+  .sponsor-grid-track {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .sponsor-card {
+    min-height: 62px;
+  }
+
+  .sponsor-grid-window {
+    max-height: 320px;
+  }
 }
 
 /* ============================================================================
@@ -796,7 +1019,7 @@ button:focus-visible {
 
 .role-arrow {
   font-size: 0.9rem;
-  color: #a7f02d;
+  color: #E4BE75;
   animation: pulseArrow 1.2s ease-in-out infinite;
 }
 
@@ -864,6 +1087,50 @@ button:focus-visible {
   flex-direction: column;
   gap: 1rem;
   padding: 2rem 0;
+}
+
+.empty-home-logos {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 0.7rem;
+  margin-bottom: 0.2rem;
+}
+
+.empty-title-sponsor-logo-wrap,
+.empty-epl-logo-wrap {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.35rem;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(8px);
+}
+
+.empty-title-sponsor-logo {
+  width: 92px;
+  height: 92px;
+  object-fit: contain;
+  border-radius: 10px;
+}
+
+.empty-title-sponsor-logo--fallback {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.4rem;
+  font-weight: 800;
+  color: #111;
+  background: rgba(228, 190, 117, 0.78);
+}
+
+.empty-epl-logo {
+  width: 74px;
+  height: 74px;
+  object-fit: contain;
+  border-radius: 10px;
 }
 
 /* RIGHT COLUMN - Player Image & Animations */
@@ -971,7 +1238,6 @@ button:focus-visible {
 .placeholder-image {
   width: auto;
   height: auto;
-  max-width: 120%;
   max-height: 95vh;
   object-fit: contain;
   object-position: bottom center;
@@ -1187,7 +1453,7 @@ button:focus-visible {
 .glow-orb-1 {
   width: 200px;
   height: 200px;
-  background: #a7f02d;
+  background: #E4BE75;
   top: 10%;
   left: 10%;
   animation-delay: 0s;
@@ -1620,7 +1886,7 @@ button:focus-visible {
 .bid-team-card {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
+  gap: 1rem;
   padding: 0.75rem 1rem;
   background: linear-gradient(135deg, rgba(128, 90, 213, 0.2) 0%, rgba(128, 90, 213, 0.05) 100%);
   border: 1px solid rgba(128, 90, 213, 0.3);
@@ -1633,7 +1899,6 @@ button:focus-visible {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(128, 90, 213, 0.3);
   border-radius: 10px;
   font-size: 1.1rem;
 }
@@ -1926,13 +2191,20 @@ button:focus-visible {
   width: auto;
   height: 108px;
   border-radius: 22px;
-  background: rgba(167, 240, 45, 0.78);
-  border: 1px solid rgba(167, 240, 45, 0.95);
+  /* background: rgb(232, 3, 10);
+  background: rgb(253, 255, 248);
+  background: rgb(143, 6, 10);
+  background: rgb(202, 177, 117);
+  background: rgb(246, 240, 212); */
+
+  background: rgba(228, 190, 117, 1.0);
+  border: 1px solid rgba(228, 190, 117, 0.85);
+
   box-shadow:
     0 18px 55px rgba(0, 0, 0, 0.55),
-    0 0 14px rgba(167, 240, 45, 0.55),
-    0 0 32px rgba(167, 240, 45, 0.45),
-    0 0 60px rgba(167, 240, 45, 0.32);
+    0 0 14px rgba(228, 190, 117, 0.75),
+    0 0 32px rgba(228, 190, 117, 0.65),
+    0 0 60px rgba(228, 190, 117 , 0.42);
   backdrop-filter: blur(18px);
   -webkit-backdrop-filter: blur(18px);
   position: relative;

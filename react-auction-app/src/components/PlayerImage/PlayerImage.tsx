@@ -5,6 +5,7 @@
 
 import React, { useState, useMemo } from 'react';
 import { extractDriveFileId } from '../../utils/driveImage';
+import { localImageCacheService } from '../../services/localImageCache';
 
 interface PlayerImageProps {
   imageUrl: string | undefined;
@@ -31,6 +32,7 @@ export const PlayerImage: React.FC<PlayerImageProps> = ({
 }) => {
   const [currentUrlIndex, setCurrentUrlIndex] = useState(0);
   const [imageError, setImageError] = useState(false);
+  const [resolvedSrc, setResolvedSrc] = useState('');
 
   // Generate multiple URL formats to try
   const imageUrls = useMemo(() => {
@@ -71,17 +73,46 @@ export const PlayerImage: React.FC<PlayerImageProps> = ({
   React.useEffect(() => {
     setCurrentUrlIndex(0);
     setImageError(false);
+    setResolvedSrc('');
   }, [imageUrl]);
 
   const currentUrl = imageError || imageUrls.length === 0
     ? (showFallback ? fallbackUrl : '')
     : imageUrls[currentUrlIndex];
 
-  if (!currentUrl) return null;
+  React.useEffect(() => {
+    let isActive = true;
+    let revoke: (() => void) | undefined;
+
+    const resolveSource = async () => {
+      if (!currentUrl) {
+        setResolvedSrc('');
+        return;
+      }
+
+      const result = await localImageCacheService.resolveImageSrc(currentUrl);
+      if (!isActive) {
+        result.revoke?.();
+        return;
+      }
+
+      revoke = result.revoke;
+      setResolvedSrc(result.src || currentUrl);
+    };
+
+    resolveSource();
+
+    return () => {
+      isActive = false;
+      revoke?.();
+    };
+  }, [currentUrl]);
+
+  if (!currentUrl || !resolvedSrc) return null;
 
   return (
     <img
-      src={currentUrl}
+      src={resolvedSrc}
       alt={playerName}
       className={className}
       onError={handleError}

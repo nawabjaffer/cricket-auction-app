@@ -570,7 +570,7 @@ export default function LivePage() {
                       disabled={isAdded || cameras.length >= maxCameras}
                       style={{
                         padding: '0.5rem 1rem',
-                        background: isAdded ? '#22c55e' : '#3b82f6',
+                        background: isAdded ? '#E4BE75' : '#3b82f6',
                         border: 'none',
                         borderRadius: '0.25rem',
                         color: '#fff',
@@ -840,7 +840,7 @@ export default function LivePage() {
             player={soldAnimationData.player}
             team={soldAnimationData.team}
             amount={soldAnimationData.amount}
-            stampColor={soldAnimationData.type === 'sold' ? '#22c55e' : '#ef4444'}
+            stampColor={soldAnimationData.type === 'sold' ? '#E4BE75' : '#ef4444'}
             onComplete={() => setSoldAnimationData(null)}
             duration={3500}
           />

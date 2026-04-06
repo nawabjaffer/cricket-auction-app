@@ -145,6 +145,19 @@
   color: #1f2937;
 }
 
+.admin-teams-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.admin-teams-limit {
+  font-size: 0.85rem;
+  color: #6b7280;
+  font-weight: 600;
+}
+
 /* Players Editor */
 .admin-player-toolbar {
   display: flex;
@@ -316,6 +329,129 @@
   gap: 1rem;
 }
 
+.admin-team-header {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.75rem;
+}
+
+.admin-team-header .form-group {
+  flex: 1;
+  margin: 0;
+}
+
+.admin-btn-sm {
+  padding: 0.6rem 0.9rem;
+  font-size: 0.85rem;
+}
+
+.admin-media-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.admin-media-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.admin-media-header label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #6b7280;
+}
+
+.admin-media-header span {
+  font-size: 0.78rem;
+  color: #6b7280;
+}
+
+.admin-source-toggle {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.admin-source-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.55rem 0.85rem;
+  border: 1px solid #d1d5db;
+  border-radius: 999px;
+  background: #fff;
+  font-size: 0.88rem;
+  color: #374151;
+  cursor: pointer;
+}
+
+.admin-source-option input {
+  accent-color: #3b82f6;
+}
+
+.admin-media-source-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.admin-media-source-panel small {
+  color: #6b7280;
+  font-size: 0.8rem;
+  line-height: 1.4;
+}
+
+.admin-media-source-panel input[type="file"],
+.admin-media-source-panel input[type="text"] {
+  width: 100%;
+  padding: 0.7rem 0.85rem;
+  border: 1px solid #d1d5db;
+  border-radius: 0.6rem;
+  background: #fff;
+  font-size: 0.92rem;
+}
+
+.admin-logo-preview {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  padding: 0.75rem 0.85rem;
+  border: 1px dashed #cbd5e1;
+  border-radius: 0.75rem;
+  background: #fff;
+}
+
+.admin-logo-preview img {
+  width: 54px;
+  height: 54px;
+  object-fit: contain;
+  border-radius: 0.45rem;
+  background: #f8fafc;
+  padding: 0.3rem;
+}
+
+.admin-logo-preview span {
+  font-size: 0.82rem;
+  color: #475569;
+  font-weight: 600;
+}
+
+.admin-checkbox-group {
+  justify-content: center;
+}
+
+.admin-checkbox-group label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.9rem;
+  color: #374151;
+}
+
 /* Export Info */
 .export-info {
   padding: 1.5rem;
@@ -403,6 +539,16 @@
   box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
 }
 
+.admin-btn-secondary {
+  background: linear-gradient(135deg, #6b7280 0%, #4b5563 100%);
+  color: white;
+}
+
+.admin-btn-secondary:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(75, 85, 99, 0.25);
+}
+
 .admin-btn-danger {
   background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
   color: white;
@@ -411,6 +557,10 @@
 .admin-btn-danger:hover:not(:disabled) {
   transform: translateY(-2px);
   box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
+}
+
+.admin-btn-danger.admin-btn-sm {
+  background: linear-gradient(135deg, #e5483d 0%, #c91c1c 100%);
 }
 
 /* Status Messages */

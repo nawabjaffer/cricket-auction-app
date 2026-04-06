@@ -80,11 +80,13 @@ export const TeamLogo: React.FC<TeamLogoProps> = ({
     ? undefined
     : imageUrls[currentUrlIndex];
 
+  const containerClass = `${SIZE_CLASSES[size]} rounded-xl overflow-hidden bg-white/10 border border-white/20 flex items-center justify-center ${className}`;
+
   // If no image is available, show team initials
   if (!currentUrl) {
     return (
       <div
-        className={`${SIZE_CLASSES[size]} rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-bold text-xs ${className}`}
+        className={`${containerClass} bg-gradient-to-br from-blue-500 to-purple-600 text-white font-bold text-xs`}
         title={teamName}
       >
         {teamInitials}
@@ -93,13 +95,15 @@ export const TeamLogo: React.FC<TeamLogoProps> = ({
   }
 
   return (
-    <img
-      src={currentUrl}
-      alt={`${teamName} logo`}
-      className={`${SIZE_CLASSES[size]} rounded-full object-cover bg-white/10 ${className}`}
-      onError={handleError}
-      loading="lazy"
-    />
+    <div className={containerClass} title={teamName}>
+      <img
+        src={currentUrl}
+        alt={`${teamName} logo`}
+        className="w-full h-full object-contain p-1"
+        onError={handleError}
+        loading="lazy"
+      />
+    </div>
   );
 };
 

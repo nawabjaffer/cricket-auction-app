@@ -55,65 +55,26 @@ export function Header({ onRefresh, onResetAuction, onShowHelp, bidMultiplier = 
 
   return (
     <header className={`header-minimal ${variant === 'live' ? 'header-minimal--live' : ''}`}>
-      {/* Firebase Connection Status Banner */}
-      <AnimatePresence>
-        {showConnectionStatus && (
-          <motion.div
-            className="connection-status-banner"
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.2 }}
-          >
-            <div className="banner-content">
-              <div className="banner-indicator">
-                <div className="pulse-dot" />
-              </div>
-              <span className="banner-text">Firebase Connected - Mobile devices can sync</span>
-              {onDismissConnectionStatus && (
-                <button
-                  className="banner-close"
-                  onClick={onDismissConnectionStatus}
-                  aria-label="Dismiss"
-                >
-                  <IoClose />
-                </button>
-              )}
-            </div>
-
-                {menuExtras.length > 0 && (
-                  <>
-                    <div className="menu-divider" />
-                    <div className="menu-section">
-                      <div className="menu-label">Live Controls</div>
-                      {menuExtras.map((item) => (
-                        <button
-                          key={item.label}
-                          className="menu-item"
-                          onClick={() => {
-                            item.onClick();
-                            setIsMenuOpen(false);
-                          }}
-                        >
-                          {item.icon && <span className="item-icon">{item.icon}</span>}
-                          <span className="item-text">{item.label}</span>
-                          {item.description && (
-                            <span className="item-badge">{item.description}</span>
-                          )}
-                        </button>
-                      ))}
-                    </div>
-                  </>
-                )}
-          </motion.div>
-        )}
-      </AnimatePresence>
-
       <div className="header-content">
-        {/* Left - Title */}
-        <div className="header-title">
-          <span className="title-text">Cricket Auction</span>
+        {/* Left - Status + Title */}
+        <div className="header-left-group">
+          {showConnectionStatus && (
+            <button
+              type="button"
+              className="header-connection-icon"
+              onClick={() => onDismissConnectionStatus?.()}
+              aria-label="Connection status"
+              title="Firebase connected - Mobile devices can sync"
+            >
+              <IoLink />
+              <span className="header-connection-tooltip">Firebase connected</span>
+            </button>
+          )}
+
+          <div className="header-title">
+          <span className="title-text">EPL Auction</span>
           <span className="title-badge">R{currentRound}</span>
+          </div>
         </div>
 
         {/* Center - Team Keys Mapping (subtle) */}
@@ -189,7 +150,7 @@ export function Header({ onRefresh, onResetAuction, onShowHelp, bidMultiplier = 
                 <div className="menu-divider" />
 
                 {/* Stats Section */}
-                <div className="menu-section">
+                <div className="menu-section menu-section--stats">
                   <div className="menu-label">Player Stats</div>
                   <div className="menu-stats">
                     <div className="menu-stat">
@@ -212,10 +173,12 @@ export function Header({ onRefresh, onResetAuction, onShowHelp, bidMultiplier = 
 
                 <div className="menu-divider" />
 
-                {/* Actions */}
-                <div className="menu-section">
+                {/* Auction Controls */}
+                <div className="menu-section menu-section--actions">
+                  <div className="menu-label">Auction Controls</div>
                   <button 
                     className="menu-item"
+                    title={selectionMode === 'sequential' ? 'Sequential Mode' : 'Random Mode'}
                     onClick={() => { toggleSelectionMode(); }}
                   >
                     <span className="item-icon">{selectionMode === 'sequential' ? <IoList /> : <IoShuffle />}</span>
@@ -231,6 +194,7 @@ export function Header({ onRefresh, onResetAuction, onShowHelp, bidMultiplier = 
                   {onShowConnectToTeam && (
                     <button
                       className="menu-item"
+                      title="Connect to Team"
                       onClick={() => { onShowConnectToTeam(); setIsMenuOpen(false); }}
                     >
                       <span className="item-icon"><IoLink /></span>
@@ -242,6 +206,7 @@ export function Header({ onRefresh, onResetAuction, onShowHelp, bidMultiplier = 
                   {onJumpToPlayer && selectionMode === 'sequential' && (
                     <button 
                       className="menu-item"
+                      title="Jump to Player ID"
                       onClick={() => { onJumpToPlayer(); setIsMenuOpen(false); }}
                     >
                       <span className="item-icon"><IoSearch /></span>
@@ -250,9 +215,33 @@ export function Header({ onRefresh, onResetAuction, onShowHelp, bidMultiplier = 
                     </button>
                   )}
 
+                  {menuExtras.map((item) => (
+                    <button
+                      key={item.label}
+                      className="menu-item"
+                      title={item.description || item.label}
+                      onClick={() => {
+                        item.onClick();
+                        setIsMenuOpen(false);
+                      }}
+                    >
+                      <span className="item-icon">{item.icon || <IoList />}</span>
+                      <span className="item-text">{item.label}</span>
+                      {item.description && <span className="item-badge">{item.description}</span>}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="menu-divider" />
+
+                {/* Utility */}
+                <div className="menu-section menu-section--actions">
+                  <div className="menu-label">Utility</div>
+
                   {onRefresh && (
                     <button 
                       className="menu-item"
+                      title="Refresh Data"
                       onClick={() => { onRefresh(); setIsMenuOpen(false); }}
                     >
                       <span className="item-icon"><IoRefresh /></span>
@@ -261,25 +250,10 @@ export function Header({ onRefresh, onResetAuction, onShowHelp, bidMultiplier = 
                     </button>
                   )}
 
-                  {onResetAuction && (
-                    <button 
-                      className="menu-item danger"
-                      onClick={() => {
-                        if (confirm('Reset entire auction? This will clear all bids and reload from Google Sheets. This action cannot be undone!')) {
-                          onResetAuction();
-                          setIsMenuOpen(false);
-                        }
-                      }}
-                    >
-                      <span className="item-icon"><IoRefresh /></span>
-                      <span className="item-text">Reset Auction</span>
-                      <span className="item-badge warning">Clear all bids</span>
-                    </button>
-                  )}
-
                   {onShowHelp && (
                     <button 
                       className="menu-item"
+                      title="Keyboard Shortcuts"
                       onClick={() => { onShowHelp(); setIsMenuOpen(false); }}
                     >
                       <span className="item-icon">⌨</span>
@@ -289,6 +263,7 @@ export function Header({ onRefresh, onResetAuction, onShowHelp, bidMultiplier = 
 
                   <button 
                     className="menu-item"
+                    title="Toggle Fullscreen"
                     onClick={() => {
                       if (document.fullscreenElement) {
                         document.exitFullscreen();
@@ -302,6 +277,29 @@ export function Header({ onRefresh, onResetAuction, onShowHelp, bidMultiplier = 
                     <span className="item-text">Toggle Fullscreen</span>
                   </button>
                 </div>
+
+                {onResetAuction && (
+                  <>
+                    <div className="menu-divider" />
+                    <div className="menu-section menu-section--actions">
+                      <div className="menu-label">Danger Zone</div>
+                      <button 
+                        className="menu-item danger"
+                        title="Reset Auction"
+                        onClick={() => {
+                          if (confirm('Reset entire auction? This will clear all bids and reload from Google Sheets. This action cannot be undone!')) {
+                            onResetAuction();
+                            setIsMenuOpen(false);
+                          }
+                        }}
+                      >
+                        <span className="item-icon"><IoRefresh /></span>
+                        <span className="item-text">Reset Auction</span>
+                        <span className="item-badge warning">Clear all bids</span>
+                      </button>
+                    </div>
+                  </>
+                )}
               </motion.div>
             )}
           </AnimatePresence>

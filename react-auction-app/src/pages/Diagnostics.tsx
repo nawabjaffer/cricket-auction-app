@@ -220,7 +220,7 @@ export default function FirebaseDiagnostics() {
         <h2>Next Steps</h2>
         <ul>
           <li>Go to: <a href="/">Desktop App</a></li>
-          <li>Or: <a href="/mobile-bidding">Mobile Bidding</a></li>
+          <li>Or: <a href="/connect-bididng">Connect Bidding</a></li>
           <li>Console logs should show connection progress</li>
         </ul>
       </div>

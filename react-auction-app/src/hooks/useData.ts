@@ -6,6 +6,9 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
 import { googleSheetsService, imagePreloaderService } from '../services';
+import { auctionPersistence } from '../services/auctionPersistence';
+import { localImageCacheService } from '../services/localImageCache';
+import { realtimeSync } from '../services/realtimeSync';
 import { useAuctionStore } from '../store';
 import type { Player, Team, SoldPlayer, UnsoldPlayer } from '../types';
 
@@ -25,7 +28,24 @@ export function useTeamsQuery() {
 
   const query = useQuery<Team[]>({
     queryKey: QUERY_KEYS.teams,
-    queryFn: () => googleSheetsService.fetchTeams(),
+    queryFn: async () => {
+      // Prefer admin-saved teams from Firebase so renamed teams persist.
+      try {
+        await realtimeSync.ensureInitialized();
+        const db = realtimeSync.getDatabase();
+        if (db) {
+          auctionPersistence.initialize(db);
+          const persistedTeams = await auctionPersistence.getTeams();
+          if (persistedTeams && persistedTeams.length > 0) {
+            return persistedTeams;
+          }
+        }
+      } catch (error) {
+        console.warn('[useTeamsQuery] Could not load persisted teams, falling back to sheets:', error);
+      }
+
+      return googleSheetsService.fetchTeams();
+    },
     staleTime: 60000, // 1 minute
     refetchInterval: 60000, // Refetch every minute
   });
@@ -150,6 +170,11 @@ export function useInitialData() {
   useEffect(() => {
     if (allPlayerImages.length > 0 && !imagePreloaderService.isCurrentlyPreloading()) {
       setIsPreloadingComplete(false); // Mark preload as in-progress
+
+      // Warm local Cache Storage for supported URLs.
+      localImageCacheService.warmCache(allPlayerImages).catch((error) => {
+        console.warn('[useInitialData] Local image cache warm-up failed:', error);
+      });
       
       console.log('[useInitialData] Starting image preload for', allPlayerImages.length, 'images');
       imagePreloaderService.preloadImages(allPlayerImages, {

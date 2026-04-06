@@ -3,26 +3,31 @@
 // Manage auction configuration, teams, players, theme, and export data
 // ============================================================================
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { IoClose, IoSave, IoRefresh, IoDownload, IoVideocam } from 'react-icons/io5';
-import { auctionPersistence, type AdminSettings } from '../../services/auctionPersistence';
-import { googleSheetsService } from '../../services';
+import { useQueryClient } from '@tanstack/react-query';
+import { IoClose, IoSave, IoRefresh, IoDownload, IoVideocam, IoAdd, IoTrash } from 'react-icons/io5';
+import { auctionPersistence, type AdminSettings, type SponsorRecord } from '../../services/auctionPersistence';
+import { googleSheetsService, imagePreloaderService } from '../../services';
 import { useAuctionStore } from '../../store/auctionStore';
 import { exportSoldPlayers } from '../../utils/exportData';
 import FeatureFlagsTab from './FeatureFlagsTab';
 import StreamingTab from './StreamingTab';
 import './AdminPanel.css';
-import type { Team } from '../../types';
+import type { Team, Player } from '../../types';
+import { localImageCacheService } from '../../services/localImageCache';
+
+type LogoSourceMode = 'drive' | 'upload';
 
 interface AdminPanelProps {
-  isOpen: boolean;
-  onClose: () => void;
-  mode?: 'drawer' | 'page';
+  readonly isOpen: boolean;
+  readonly onClose: () => void;
+  readonly mode?: 'drawer' | 'page';
 }
 
 export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps) {
-  const [activeTab, setActiveTab] = useState<'theme' | 'teams' | 'players' | 'export' | 'features' | 'streaming' | 'reset'>('theme');
+  const queryClient = useQueryClient();
+  const [activeTab, setActiveTab] = useState<'theme' | 'teams' | 'sponsors' | 'players' | 'export' | 'features' | 'streaming' | 'reset'>('theme');
   const [isSaving, setIsSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'success' | 'error'>('idle');
 
@@ -38,11 +43,37 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
   // Store
   const { teams, setTeams, soldPlayers, originalPlayers, setPlayers, setSoldPlayers, setUnsoldPlayers, resetAuction, reconcilePlayerPools } = useAuctionStore();
   const [editingTeams, setEditingTeams] = useState<Team[]>([]);
+  const [editingSponsors, setEditingSponsors] = useState<SponsorRecord[]>([]);
+  const [teamLogoSources, setTeamLogoSources] = useState<Record<string, LogoSourceMode>>({});
+  const [sponsorLogoSources, setSponsorLogoSources] = useState<Record<string, LogoSourceMode>>({});
   const [editingPlayers, setEditingPlayers] = useState<typeof originalPlayers>([]);
   const [playerSearch, setPlayerSearch] = useState('');
+  const csvFileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const readFileAsDataUrl = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const result = reader.result;
+        if (typeof result === 'string') {
+          resolve(result);
+          return;
+        }
+        reject(new Error('Unable to read image file'));
+      };
+      reader.onerror = () => reject(new Error('Unable to read image file'));
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const getLogoSourceMode = (logoUrl: string | undefined): LogoSourceMode => (
+    logoUrl?.startsWith('data:') ? 'upload' : 'drive'
+  );
 
   // Load admin settings on mount
   useEffect(() => {
+    let isMounted = true;
+
     const loadSettings = async () => {
       try {
         const settings = await auctionPersistence.getAdminSettings();
@@ -61,11 +92,36 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
       }
     };
 
+    const loadSponsors = async () => {
+      try {
+        const sponsors = await auctionPersistence.getSponsors();
+        if (!isMounted) return;
+
+        setEditingSponsors(sponsors);
+        setSponsorLogoSources(Object.fromEntries(
+          sponsors.map((sponsor) => [sponsor.id, getLogoSourceMode(sponsor.logoUrl)])
+        ));
+      } catch (error) {
+        console.error('[AdminPanel] Failed to load sponsors:', error);
+        if (isMounted) {
+          setEditingSponsors([]);
+          setSponsorLogoSources({});
+        }
+      }
+    };
+
     if (isOpen) {
       loadSettings();
-      setEditingTeams(teams);
-      setEditingPlayers(originalPlayers);
+      loadSponsors();
+      setEditingTeams(teams.map((team) => ({ ...team })));
+      setTeamLogoSources(Object.fromEntries(
+        teams.map((team) => [team.id, getLogoSourceMode(team.logoUrl)])
+      ));
+      setEditingPlayers(originalPlayers.map((player) => ({ ...player })));
     }
+    return () => {
+      isMounted = false;
+    };
   }, [isOpen, teams, originalPlayers]);
 
   // Handle save theme settings
@@ -111,6 +167,8 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
     try {
       await auctionPersistence.saveTeams(editingTeams);
       setTeams(editingTeams);
+      // Invalidate the teams query cache so fresh data is fetched
+      queryClient.invalidateQueries({ queryKey: ['teams'] });
       setSaveStatus('success');
       setTimeout(() => setSaveStatus('idle'), 2000);
     } catch (error) {
@@ -120,6 +178,122 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
     } finally {
       setIsSaving(false);
     }
+  };
+
+  const handleDeleteTeam = (index: number) => {
+    const teamToDelete = editingTeams[index];
+    if (!teamToDelete) return;
+
+    const confirmed = globalThis.confirm(
+      `Are you sure you want to delete ${teamToDelete.name}? This action cannot be undone.`
+    );
+
+    if (!confirmed) return;
+
+    const updated = editingTeams.filter((_, i) => i !== index);
+    setEditingTeams(updated);
+  };
+
+  const handleSaveSponsors = async () => {
+    setIsSaving(true);
+    try {
+      await auctionPersistence.saveSponsors(editingSponsors);
+      setSaveStatus('success');
+      setTimeout(() => setSaveStatus('idle'), 2000);
+    } catch (error) {
+      console.error('[AdminPanel] Failed to save sponsors:', error);
+      setSaveStatus('error');
+      setTimeout(() => setSaveStatus('idle'), 2000);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleAddTeam = () => {
+    if (editingTeams.length >= 10) return;
+
+    const newIndex = editingTeams.length + 1;
+    const newTeamId = typeof crypto !== 'undefined' && 'randomUUID' in crypto
+      ? crypto.randomUUID()
+      : `team-${Date.now()}-${newIndex}`;
+
+    const newTeam: Team = {
+      id: newTeamId,
+      name: `Team ${newIndex}`,
+      logoUrl: '',
+      playersBought: 0,
+      totalPlayerThreshold: 11,
+      remainingPlayers: 11,
+      allocatedAmount: 0,
+      remainingPurse: 0,
+      highestBid: 0,
+      captain: '',
+      underAgePlayers: 0,
+      primaryColor: '#3b82f6',
+      secondaryColor: '#06b6d4',
+    };
+
+    setEditingTeams([...editingTeams, newTeam]);
+    setTeamLogoSources((prev) => ({ ...prev, [newTeamId]: 'drive' }));
+  };
+
+  const handleAddSponsor = () => {
+    const newIndex = editingSponsors.length + 1;
+    const newSponsorId = typeof crypto !== 'undefined' && 'randomUUID' in crypto
+      ? crypto.randomUUID()
+      : `sponsor-${Date.now()}-${newIndex}`;
+
+    const newSponsor: SponsorRecord = {
+      id: newSponsorId,
+      name: `Sponsor ${newIndex}`,
+      logoUrl: '',
+      website: '',
+      tier: '',
+      active: true,
+      order: newIndex,
+      isTitleSponsor: false,
+    };
+
+    setEditingSponsors([...editingSponsors, newSponsor]);
+    setSponsorLogoSources((prev) => ({ ...prev, [newSponsorId]: 'drive' }));
+  };
+
+  const updateTeamLogo = async (index: number, source: LogoSourceMode, value?: string) => {
+    const updated = [...editingTeams];
+    const team = updated[index];
+    if (!team) return;
+
+    if (typeof value === 'string') {
+      team.logoUrl = value;
+    }
+
+    setEditingTeams(updated);
+    setTeamLogoSources((prev) => ({ ...prev, [team.id]: source }));
+  };
+
+  const updateSponsorLogo = async (index: number, source: LogoSourceMode, value?: string) => {
+    const updated = [...editingSponsors];
+    const sponsor = updated[index];
+    if (!sponsor) return;
+
+    if (typeof value === 'string') {
+      sponsor.logoUrl = value;
+    }
+
+    setEditingSponsors(updated);
+    setSponsorLogoSources((prev) => ({ ...prev, [sponsor.id]: source }));
+  };
+
+  const handleTeamLogoFileChange = async (index: number, file?: File | null) => {
+    if (!file) return;
+    const dataUrl = await readFileAsDataUrl(file);
+    await updateTeamLogo(index, 'upload', dataUrl);
+  };
+
+  const handleSponsorLogoFileChange = async (index: number, file?: File | null) => {
+    if (!file) return;
+    const dataUrl = await readFileAsDataUrl(file);
+    await updateSponsorLogo(index, 'upload', dataUrl);
   };
 
   // Handle export sold players
@@ -168,8 +342,160 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
     }
   };
 
+  const parseCsvLine = (line: string): string[] => {
+    const values: string[] = [];
+    let current = '';
+    let inQuotes = false;
+
+    for (let i = 0; i < line.length; i += 1) {
+      const ch = line[i];
+      const next = line[i + 1];
+
+      if (ch === '"') {
+        if (inQuotes && next === '"') {
+          current += '"';
+          i += 1;
+        } else {
+          inQuotes = !inQuotes;
+        }
+      } else if (ch === ',' && !inQuotes) {
+        values.push(current.trim());
+        current = '';
+      } else {
+        current += ch;
+      }
+    }
+
+    values.push(current.trim());
+    return values;
+  };
+
+  const findHeaderIndex = (headers: string[], candidates: string[]): number => {
+    return headers.findIndex((header) => candidates.includes(header));
+  };
+
+  const parseCsvPlayers = (text: string): Player[] => {
+    const lines = text
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean);
+
+    if (lines.length < 2) return [];
+
+    const headers = parseCsvLine(lines[0]).map((header) => header.toLowerCase());
+
+    const idx = {
+      id: findHeaderIndex(headers, ['id', 'playerid', 'player_id']),
+      name: findHeaderIndex(headers, ['name', 'playername', 'player_name']),
+      role: findHeaderIndex(headers, ['role', 'playerrole', 'player_role']),
+      basePrice: findHeaderIndex(headers, ['baseprice', 'base_price', 'base price']),
+      imageUrl: findHeaderIndex(headers, ['imageurl', 'image_url', 'image', 'photo', 'photourl']),
+      age: findHeaderIndex(headers, ['age']),
+      matches: findHeaderIndex(headers, ['matches']),
+      runs: findHeaderIndex(headers, ['runs']),
+      wickets: findHeaderIndex(headers, ['wickets']),
+      battingBest: findHeaderIndex(headers, ['battingbestfigures', 'batting_best', 'batting best']),
+      bowlingBest: findHeaderIndex(headers, ['bowlingbestfigures', 'bowling_best', 'bowling best']),
+      dob: findHeaderIndex(headers, ['dateofbirth', 'dob', 'date_of_birth']),
+    };
+
+    if (idx.name < 0) {
+      throw new Error('CSV requires at least a Name column.');
+    }
+
+    const parsed: Player[] = [];
+
+    lines.slice(1).forEach((line, rowIndex) => {
+      const cells = parseCsvLine(line);
+      const get = (col: number) => (col >= 0 ? cells[col] ?? '' : '');
+      const rawName = get(idx.name).trim();
+      if (!rawName) return;
+
+      const basePrice = Number.parseFloat(get(idx.basePrice));
+      const age = Number.parseInt(get(idx.age), 10);
+      const idFromCsv = get(idx.id).trim();
+
+      parsed.push({
+        id: idFromCsv || `CSV-${rowIndex + 1}`,
+        name: rawName,
+        role: (get(idx.role).trim() || 'Player') as Player['role'],
+        imageUrl: get(idx.imageUrl).trim(),
+        basePrice: Number.isFinite(basePrice) ? basePrice : 0,
+        age: Number.isFinite(age) ? age : null,
+        matches: get(idx.matches).trim() || '0',
+        runs: get(idx.runs).trim() || 'N/A',
+        wickets: get(idx.wickets).trim() || 'N/A',
+        battingBestFigures: get(idx.battingBest).trim() || 'N/A',
+        bowlingBestFigures: get(idx.bowlingBest).trim() || 'N/A',
+        dateOfBirth: get(idx.dob).trim() || '',
+      });
+    });
+
+    return parsed;
+  };
+
+  const applyImportedPlayers = async (players: Player[]) => {
+    if (players.length === 0) {
+      throw new Error('No valid players found to import.');
+    }
+
+    setEditingPlayers(players);
+    setPlayers(players);
+    reconcilePlayerPools();
+    await auctionPersistence.saveAdminPlayers(players);
+  };
+
+  const handleImportPlayersFromSheets = async () => {
+    setIsSaving(true);
+    try {
+      googleSheetsService.clearCache('players');
+      const sheetPlayers = await googleSheetsService.fetchPlayers([]);
+      await applyImportedPlayers(sheetPlayers);
+      setSaveStatus('success');
+      setTimeout(() => setSaveStatus('idle'), 2000);
+    } catch (error) {
+      console.error('[AdminPanel] Failed importing players from sheets:', error);
+      setSaveStatus('error');
+      setTimeout(() => setSaveStatus('idle'), 2000);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleImportPlayersFromCsv = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+
+    setIsSaving(true);
+    try {
+      const text = await file.text();
+      const csvPlayers = parseCsvPlayers(text);
+      await applyImportedPlayers(csvPlayers);
+      setSaveStatus('success');
+      setTimeout(() => setSaveStatus('idle'), 2000);
+    } catch (error) {
+      console.error('[AdminPanel] Failed importing CSV players:', error);
+      setSaveStatus('error');
+      setTimeout(() => setSaveStatus('idle'), 2000);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleResetImageCache = async () => {
+    try {
+      await localImageCacheService.clearCache();
+      imagePreloaderService.clearCache();
+      alert('Local player image cache has been reset successfully.');
+    } catch (error) {
+      console.error('[AdminPanel] Failed to reset image cache:', error);
+      alert('Failed to reset image cache. Please check console logs.');
+    }
+  };
+
   const handlePullFromSheets = async () => {
-    const confirmed = window.confirm(
+    const confirmed = globalThis.confirm(
       'This will wipe ALL Firebase auction data and reload fresh data from Google Sheets. Continue?'
     );
 
@@ -216,7 +542,7 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
 
   // Handle reset auction
   const handleResetAuction = async () => {
-    const confirmed = window.confirm(
+    const confirmed = globalThis.confirm(
       'Are you sure you want to reset the auction? This will clear all sold and unsold players and restore the initial snapshot.'
     );
 
@@ -242,7 +568,7 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
         setTimeout(() => {
           setSaveStatus('idle');
           onClose();
-          window.location.reload();
+          globalThis.location.reload();
         }, 2000);
       } else {
         console.error('[AdminPanel] No initial snapshot found');
@@ -281,6 +607,12 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
           onClick={() => setActiveTab('teams')}
         >
           Teams
+        </button>
+        <button
+          className={`admin-tab ${activeTab === 'sponsors' ? 'active' : ''}`}
+          onClick={() => setActiveTab('sponsors')}
+        >
+          Sponsors
         </button>
         <button
           className={`admin-tab ${activeTab === 'players' ? 'active' : ''}`}
@@ -349,7 +681,7 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
                       min={0}
                       max={10}
                       value={maxUnsoldRounds}
-                      onChange={(e) => setMaxUnsoldRounds(Math.max(0, parseInt(e.target.value || '0', 10)))}
+                      onChange={(e) => setMaxUnsoldRounds(Math.max(0, Number.parseInt(e.target.value || '0', 10)))}
                       placeholder="e.g., 2"
                     />
                     <small style={{ color: '#6b7280' }}>
@@ -437,20 +769,43 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
                 <div className="admin-section">
                   <h3>Manage Teams</h3>
 
+                  <div className="admin-teams-toolbar">
+                    <button
+                      className="admin-btn admin-btn-primary"
+                      onClick={handleAddTeam}
+                      disabled={isSaving || editingTeams.length >= 10}
+                    >
+                      <IoAdd size={18} /> Add Team
+                    </button>
+                    <span className="admin-teams-limit">
+                      {editingTeams.length}/10 teams configured
+                    </span>
+                  </div>
+
                   <div className="teams-list">
                     {editingTeams.map((team, index) => (
                       <div key={team.id} className="team-edit-item">
-                        <div className="form-group">
-                          <label>Team {index + 1} Name</label>
-                          <input
-                            type="text"
-                            value={team.name}
-                            onChange={(e) => {
-                              const updated = [...editingTeams];
-                              updated[index].name = e.target.value;
-                              setEditingTeams(updated);
-                            }}
-                          />
+                        <div className="admin-team-header">
+                          <div className="form-group">
+                            <label>Team {index + 1} Name</label>
+                            <input
+                              type="text"
+                              value={team.name}
+                              onChange={(e) => {
+                                const updated = [...editingTeams];
+                                updated[index].name = e.target.value;
+                                setEditingTeams(updated);
+                              }}
+                            />
+                          </div>
+                          <button
+                            type="button"
+                            className="admin-btn admin-btn-danger admin-btn-sm"
+                            onClick={() => handleDeleteTeam(index)}
+                            title="Delete this team"
+                          >
+                            <IoTrash size={16} />
+                          </button>
                         </div>
 
                         <div className="form-group">
@@ -468,17 +823,67 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
                           />
                         </div>
 
-                        <div className="form-group">
-                          <label>Logo URL</label>
-                          <input
-                            type="text"
-                            value={team.logoUrl}
-                            onChange={(e) => {
-                              const updated = [...editingTeams];
-                              updated[index].logoUrl = e.target.value;
-                              setEditingTeams(updated);
-                            }}
-                          />
+                        <div className="admin-media-field">
+                          <div className="admin-media-header">
+                            <label>Team Logo</label>
+                            <span>Choose Drive link or direct upload</span>
+                          </div>
+
+                          <div className="admin-source-toggle" role="radiogroup" aria-label={`Team ${index + 1} logo source`}>
+                            <label className="admin-source-option">
+                              <input
+                                type="radio"
+                                name={`team-logo-source-${team.id}`}
+                                checked={(teamLogoSources[team.id] || getLogoSourceMode(team.logoUrl)) === 'drive'}
+                                onChange={() => setTeamLogoSources((prev) => ({ ...prev, [team.id]: 'drive' }))}
+                              />
+                              Drive Link
+                            </label>
+                            <label className="admin-source-option">
+                              <input
+                                type="radio"
+                                name={`team-logo-source-${team.id}`}
+                                checked={(teamLogoSources[team.id] || getLogoSourceMode(team.logoUrl)) === 'upload'}
+                                onChange={() => setTeamLogoSources((prev) => ({ ...prev, [team.id]: 'upload' }))}
+                              />
+                              Direct Upload
+                            </label>
+                          </div>
+
+                          {(teamLogoSources[team.id] || getLogoSourceMode(team.logoUrl)) === 'upload' ? (
+                            <div className="admin-media-source-panel">
+                              <input
+                                type="file"
+                                accept="image/*"
+                                onChange={(e) => {
+                                  void handleTeamLogoFileChange(index, e.target.files?.[0]);
+                                  e.target.value = '';
+                                }}
+                              />
+                              <small>Uploaded images are stored as embedded data URLs so they remain available in the auction app.</small>
+                            </div>
+                          ) : (
+                            <div className="admin-media-source-panel">
+                              <input
+                                type="text"
+                                value={team.logoUrl}
+                                onChange={(e) => {
+                                  const updated = [...editingTeams];
+                                  updated[index].logoUrl = e.target.value;
+                                  setEditingTeams(updated);
+                                }}
+                                placeholder="https://drive.google.com/..."
+                              />
+                              <small>Paste a public Drive link or any direct image URL.</small>
+                            </div>
+                          )}
+
+                          {team.logoUrl && (
+                            <div className="admin-logo-preview">
+                              <img src={team.logoUrl} alt={`${team.name} logo preview`} />
+                              <span>{teamLogoSources[team.id] === 'upload' ? 'Direct upload preview' : 'Drive link preview'}</span>
+                            </div>
+                          )}
                         </div>
 
                         <div className="form-row">
@@ -489,7 +894,7 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
                               value={team.totalPlayerThreshold}
                               onChange={(e) => {
                                 const updated = [...editingTeams];
-                                updated[index].totalPlayerThreshold = parseInt(e.target.value);
+                                updated[index].totalPlayerThreshold = Number.parseInt(e.target.value, 10);
                                 setEditingTeams(updated);
                               }}
                             />
@@ -502,7 +907,7 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
                             value={team.remainingPurse}
                             onChange={(e) => {
                               const updated = [...editingTeams];
-                              updated[index].remainingPurse = parseInt(e.target.value);
+                              updated[index].remainingPurse = Number.parseInt(e.target.value, 10);
                               setEditingTeams(updated);
                             }}
                           />
@@ -528,6 +933,189 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
                 </div>
               )}
 
+              {/* Sponsors Tab */}
+              {activeTab === 'sponsors' && (
+                <div className="admin-section">
+                  <h3>Manage Sponsorships</h3>
+
+                  <div className="admin-teams-toolbar">
+                    <button
+                      className="admin-btn admin-btn-primary"
+                      onClick={handleAddSponsor}
+                      disabled={isSaving}
+                    >
+                      <IoAdd size={18} /> Add Sponsor
+                    </button>
+                    <span className="admin-teams-limit">
+                      {editingSponsors.length} sponsors configured
+                    </span>
+                  </div>
+
+                  <div className="teams-list">
+                    {editingSponsors.map((sponsor, index) => (
+                      <div key={sponsor.id} className="team-edit-item">
+                        <div className="form-group">
+                          <label>Sponsor Name</label>
+                          <input
+                            type="text"
+                            value={sponsor.name}
+                            onChange={(e) => {
+                              const updated = [...editingSponsors];
+                              updated[index] = { ...updated[index], name: e.target.value };
+                              setEditingSponsors(updated);
+                            }}
+                            placeholder="e.g., Official Partner"
+                          />
+                        </div>
+
+                        <div className="admin-media-field">
+                          <div className="admin-media-header">
+                            <label>Sponsorship Image</label>
+                            <span>Choose Drive link or direct upload</span>
+                          </div>
+
+                          <div className="admin-source-toggle" role="radiogroup" aria-label={`Sponsor ${index + 1} image source`}>
+                            <label className="admin-source-option">
+                              <input
+                                type="radio"
+                                name={`sponsor-logo-source-${sponsor.id}`}
+                                checked={(sponsorLogoSources[sponsor.id] || getLogoSourceMode(sponsor.logoUrl)) === 'drive'}
+                                onChange={() => setSponsorLogoSources((prev) => ({ ...prev, [sponsor.id]: 'drive' }))}
+                              />
+                              Drive Link
+                            </label>
+                            <label className="admin-source-option">
+                              <input
+                                type="radio"
+                                name={`sponsor-logo-source-${sponsor.id}`}
+                                checked={(sponsorLogoSources[sponsor.id] || getLogoSourceMode(sponsor.logoUrl)) === 'upload'}
+                                onChange={() => setSponsorLogoSources((prev) => ({ ...prev, [sponsor.id]: 'upload' }))}
+                              />
+                              Direct Upload
+                            </label>
+                          </div>
+
+                          {(sponsorLogoSources[sponsor.id] || getLogoSourceMode(sponsor.logoUrl)) === 'upload' ? (
+                            <div className="admin-media-source-panel">
+                              <input
+                                type="file"
+                                accept="image/*"
+                                onChange={(e) => {
+                                  void handleSponsorLogoFileChange(index, e.target.files?.[0]);
+                                  e.target.value = '';
+                                }}
+                              />
+                              <small>Upload the sponsor artwork directly. It will be embedded into Firebase and shown in the auction app.</small>
+                            </div>
+                          ) : (
+                            <div className="admin-media-source-panel">
+                              <input
+                                type="text"
+                                value={sponsor.logoUrl || ''}
+                                onChange={(e) => {
+                                  const updated = [...editingSponsors];
+                                  updated[index] = { ...updated[index], logoUrl: e.target.value };
+                                  setEditingSponsors(updated);
+                                }}
+                                placeholder="https://drive.google.com/..."
+                              />
+                              <small>Paste a public Drive link or a direct image URL for the sponsor artwork.</small>
+                            </div>
+                          )}
+
+                          {sponsor.logoUrl && (
+                            <div className="admin-logo-preview">
+                              <img src={sponsor.logoUrl} alt={`${sponsor.name} preview`} />
+                              <span>{sponsorLogoSources[sponsor.id] === 'upload' ? 'Uploaded sponsor image' : 'Linked sponsor image'}</span>
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="form-row">
+                          <div className="form-group">
+                            <label>Tier</label>
+                            <input
+                              type="text"
+                              value={sponsor.tier || ''}
+                              onChange={(e) => {
+                                const updated = [...editingSponsors];
+                                updated[index] = { ...updated[index], tier: e.target.value };
+                                setEditingSponsors(updated);
+                              }}
+                              placeholder="e.g., title, platinum, gold"
+                            />
+                          </div>
+
+                          <div className="form-group">
+                            <label>Website</label>
+                            <input
+                              type="text"
+                              value={sponsor.website || ''}
+                              onChange={(e) => {
+                                const updated = [...editingSponsors];
+                                updated[index] = { ...updated[index], website: e.target.value };
+                                setEditingSponsors(updated);
+                              }}
+                              placeholder="https://example.com"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="form-row">
+                          <div className="form-group">
+                            <label>Display Order</label>
+                            <input
+                              type="number"
+                              value={sponsor.order ?? index + 1}
+                              onChange={(e) => {
+                                const updated = [...editingSponsors];
+                                updated[index] = { ...updated[index], order: Number(e.target.value) || 0 };
+                                setEditingSponsors(updated);
+                              }}
+                            />
+                          </div>
+
+                          <div className="form-group admin-checkbox-group">
+                            <label>
+                              <input
+                                type="checkbox"
+                                checked={sponsor.active !== false}
+                                onChange={(e) => {
+                                  const updated = [...editingSponsors];
+                                  updated[index] = { ...updated[index], active: e.target.checked };
+                                  setEditingSponsors(updated);
+                                }}
+                              />
+                              Active
+                            </label>
+                            <label>
+                              <input
+                                type="checkbox"
+                                checked={Boolean(sponsor.isTitleSponsor)}
+                                onChange={(e) => {
+                                  const updated = [...editingSponsors];
+                                  updated[index] = { ...updated[index], isTitleSponsor: e.target.checked };
+                                  setEditingSponsors(updated);
+                                }}
+                              />
+                              Title Sponsor
+                            </label>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <button
+                    className="admin-btn admin-btn-primary"
+                    onClick={handleSaveSponsors}
+                    disabled={isSaving}
+                  >
+                    <IoSave size={18} /> Save Sponsors
+                  </button>
+                </div>
+              )}
+
               {/* Players Tab */}
               {activeTab === 'players' && (
                 <div className="admin-section">
@@ -547,6 +1135,27 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
                     >
                       <IoSave size={18} /> Save Player Changes
                     </button>
+                    <button
+                      className="admin-btn admin-btn-warning"
+                      onClick={handleImportPlayersFromSheets}
+                      disabled={isSaving}
+                    >
+                      <IoRefresh size={18} /> Import from Sheets
+                    </button>
+                    <button
+                      className="admin-btn admin-btn-secondary"
+                      onClick={() => csvFileInputRef.current?.click()}
+                      disabled={isSaving}
+                    >
+                      <IoDownload size={18} /> Import CSV
+                    </button>
+                    <input
+                      ref={csvFileInputRef}
+                      type="file"
+                      accept=".csv,text/csv"
+                      onChange={handleImportPlayersFromCsv}
+                      style={{ display: 'none' }}
+                    />
                   </div>
 
                   <div className="admin-player-list">
@@ -669,6 +1278,14 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
                     disabled={isSaving}
                   >
                     <IoRefresh size={18} /> Pull from Sheets (Wipe & Reload)
+                  </button>
+
+                  <button
+                    className="admin-btn admin-btn-secondary"
+                    onClick={handleResetImageCache}
+                    disabled={isSaving}
+                  >
+                    <IoRefresh size={18} /> Reset Local Image Cache
                   </button>
                 </div>
               )}

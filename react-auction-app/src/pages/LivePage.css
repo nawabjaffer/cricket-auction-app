@@ -402,7 +402,7 @@
   color: #fff;
   text-shadow: 
     0 4px 20px rgba(0, 0, 0, 0.9),
-    0 2px 10px rgba(34, 197, 94, 0.5);
+    0 2px 10px rgba(228, 190, 117, 0.5);
   letter-spacing: 0.02em;
 }
 
@@ -508,12 +508,12 @@
 .live-page__stamp {
   font-size: 8rem;
   font-weight: 900;
-  color: #22c55e;
+  color: #E4BE75;
   text-transform: uppercase;
   letter-spacing: 0.1em;
   text-shadow: 
-    0 0 40px rgba(34, 197, 94, 0.8),
-    0 0 80px rgba(34, 197, 94, 0.5),
+    0 0 40px rgba(228, 190, 117, 0.8),
+    0 0 80px rgba(228, 190, 117, 0.5),
     0 4px 20px rgba(0, 0, 0, 0.5);
   transform: rotate(-15deg) scale(0);
   animation: stampIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
@@ -570,7 +570,7 @@
   left: 0;
   width: 100%;
   height: 100%;
-  background: radial-gradient(circle at center, rgba(34, 197, 94, 0.3) 0%, transparent 70%);
+  background: radial-gradient(circle at center, rgba(228, 190, 117, 0.3) 0%, transparent 70%);
   animation: glowPulse 1s ease-in-out;
 }
 

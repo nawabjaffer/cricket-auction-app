@@ -19,7 +19,19 @@ const DB_PATHS = {
   ADMIN_SETTINGS: 'auction/adminSettings',
   TEAMS: 'auction/teams',
   ADMIN_PLAYERS: 'auction/adminPlayers',
+  SPONSORS: 'auction/sponsors',
 } as const;
+
+export interface SponsorRecord {
+  id: string;
+  name: string;
+  logoUrl?: string;
+  website?: string;
+  tier?: string;
+  isTitleSponsor?: boolean;
+  active?: boolean;
+  order?: number;
+}
 
 // Sold player record format for Firebase
 export interface SoldPlayerRecord {
@@ -303,6 +315,51 @@ class AuctionPersistenceService {
     if (!this.db) throw new Error('Database not initialized');
 
     await set(ref(this.db, DB_PATHS.ADMIN_PLAYERS), null);
+  }
+
+  // ==================== SPONSORS ====================
+
+  /**
+   * Get event sponsors list from Firebase
+   */
+  async getSponsors(): Promise<SponsorRecord[]> {
+    if (!this.db) throw new Error('Database not initialized');
+
+    const sponsorsRef = ref(this.db, DB_PATHS.SPONSORS);
+    const snapshot = await get(sponsorsRef);
+
+    if (!snapshot.exists()) return [];
+
+    const data = snapshot.val();
+    const list = Array.isArray(data)
+      ? data
+      : Object.entries(data).map(([id, value]) => ({ id, ...(value as Omit<SponsorRecord, 'id'>) }));
+
+    return (list as SponsorRecord[])
+      .filter((sponsor) => sponsor && sponsor.active !== false && sponsor.name)
+      .sort((a, b) => (a.order ?? Number.MAX_SAFE_INTEGER) - (b.order ?? Number.MAX_SAFE_INTEGER));
+  }
+
+  /**
+   * Save event sponsors list to Firebase
+   */
+  async saveSponsors(sponsors: SponsorRecord[]): Promise<void> {
+    if (!this.db) throw new Error('Database not initialized');
+
+    const normalizedSponsors = sponsors
+      .filter((sponsor) => sponsor?.name?.trim())
+      .map((sponsor, index) => ({
+        ...sponsor,
+        id: sponsor.id || `sponsor-${index + 1}`,
+        name: sponsor.name.trim(),
+        logoUrl: sponsor.logoUrl?.trim() || '',
+        website: sponsor.website?.trim() || '',
+        tier: sponsor.tier?.trim() || '',
+        order: Number.isFinite(sponsor.order as number) ? sponsor.order : index,
+      }));
+
+    const sponsorsRef = ref(this.db, DB_PATHS.SPONSORS);
+    await set(sponsorsRef, normalizedSponsors);
   }
 
   // ==================== RESET/CLEAR ====================

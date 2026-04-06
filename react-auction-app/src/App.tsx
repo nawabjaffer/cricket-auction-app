@@ -29,6 +29,7 @@ import {
   ConnectToTeam,
   AnalyticsCarousel,
   AdminPanel,
+  SponsorShowcase,
 } from './components';
 import { 
   useAuction, 
@@ -45,6 +46,7 @@ import {
 } from './hooks';
 import { useRealtimeDesktopSync } from './hooks/useRealtimeSync';
 import { audioService, imageCacheService } from './services';
+import { auctionPersistence, type SponsorRecord } from './services/auctionPersistence';
 import { useActiveOverlay, useNotification, useCurrentPlayer, useSoldPlayers, useUnsoldPlayers, useAvailablePlayers, useOriginalPlayers, useTeams } from './store';
 import { extractDriveFileId } from './utils/driveImage';
 import './index.css';
@@ -70,6 +72,21 @@ export default function App() {
 
 // Auction App Content
 function AuctionApp() {
+  const FALLBACK_SPONSORS: SponsorRecord[] = useMemo(() => ([
+    { id: 'sp-1', name: 'Classic Homez ', isTitleSponsor: true, tier: 'title' },
+    { id: 'sp-2', name: 'A1 Vessels' },
+    { id: 'sp-3', name: 'Vantage Hospitals' },
+    { id: 'sp-4', name: 'TrueGrid Power' },
+    { id: 'sp-5', name: 'Nexa Motors' },
+    { id: 'sp-6', name: 'Elite Cables' },
+    { id: 'sp-7', name: 'Urban Mall' },
+    { id: 'sp-8', name: 'Harvest Foods' },
+    { id: 'sp-9', name: 'Zenith Bank' },
+    { id: 'sp-10', name: 'Bright Labs' },
+    { id: 'sp-11', name: 'CloudNet' },
+    { id: 'sp-12', name: 'Nova Realty' },
+  ]), []);
+
   const [showCoinJar, setShowCoinJar] = useState(false);
   const [selectedPlayerName, setSelectedPlayerName] = useState<string>('');
   const [showHelpModal, setShowHelpModal] = useState(false);
@@ -91,6 +108,7 @@ function AuctionApp() {
   
   // Admin panel state
   const [showAdminPanel, setShowAdminPanel] = useState(false);
+  const [sponsors, setSponsors] = useState<SponsorRecord[]>([]);
   
   // Image polling state
   const [imageLoadingState, setImageLoadingState] = useState<'loading' | 'loaded' | 'error'>('loading');
@@ -264,6 +282,45 @@ function AuctionApp() {
     audioService.initialize();
     return () => audioService.dispose();
   }, []);
+
+  // Load sponsors from Firebase (fallback to local list for empty DB)
+  useEffect(() => {
+    let mounted = true;
+
+    const loadSponsors = async () => {
+      try {
+        const dbSponsors = await auctionPersistence.getSponsors();
+        if (!mounted) return;
+
+        if (dbSponsors.length > 0) {
+          setSponsors(dbSponsors.slice(0, 20));
+        } else {
+          setSponsors(FALLBACK_SPONSORS.slice(0, 20));
+        }
+      } catch (error) {
+        console.warn('[App] Failed to load sponsors from database, using fallback list', error);
+        if (mounted) {
+          setSponsors(FALLBACK_SPONSORS.slice(0, 20));
+        }
+      }
+    };
+
+    loadSponsors();
+
+    return () => {
+      mounted = false;
+    };
+  }, [FALLBACK_SPONSORS]);
+
+  const titleSponsor = useMemo(
+    () => sponsors.find((sponsor) => sponsor.isTitleSponsor || sponsor.tier?.toLowerCase() === 'title') || sponsors[0] || null,
+    [sponsors],
+  );
+
+  const carouselSponsors = useMemo(
+    () => sponsors.filter((sponsor) => sponsor.id !== titleSponsor?.id),
+    [sponsors, titleSponsor],
+  );
 
   // Play sounds when overlay changes
   useEffect(() => {
@@ -617,8 +674,38 @@ function AuctionApp() {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
             >
-              <div className="empty-title">Welcome to BCC Auctions</div>
+              <div className="empty-home-logos">
+                {titleSponsor && (
+                  <div className="empty-title-sponsor-logo-wrap" title={`Title Sponsor: ${titleSponsor.name}`}>
+                    {titleSponsor.logoUrl ? (
+                      <img
+                        src={titleSponsor.logoUrl}
+                        alt={`${titleSponsor.name} logo`}
+                        className="empty-title-sponsor-logo"
+                      />
+                    ) : (
+                      <div className="empty-title-sponsor-logo empty-title-sponsor-logo--fallback">
+                        {titleSponsor.name.slice(0, 2).toUpperCase()}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                <div className="empty-epl-logo-wrap" title="Eruvai Premier League">
+                  <img
+                    src="/assets/BCC Season 6.png"
+                    alt="EPL event logo"
+                    className="empty-epl-logo"
+                    onError={(e) => {
+                      (e.currentTarget as HTMLImageElement).style.display = 'none';
+                    }}
+                  />
+                </div>
+              </div>
+
+              <div className="empty-title">Welcome to Eruvai Premier League Auctions</div>
               <div className="empty-hint">Press <kbd>N</kbd> for next player</div>
+              <SponsorShowcase sponsors={carouselSponsors} titleSponsor={titleSponsor} />
             </motion.div>
           )}
           </AnimatePresence>

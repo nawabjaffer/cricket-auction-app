@@ -53,7 +53,7 @@ export const ConnectToTeam: React.FC<ConnectToTeamProps> = ({ open, onClose }) =
   };
 
   const selectedTeam = teamCredentials.find(t => t.teamId === selectedTeamId);
-  const mobileUrl = `${window.location.origin}/mobile-bidding-live`;
+  const mobileUrl = `${window.location.origin}/connect-bididng`;
 
   return (
     <div className="connect-modal-overlay" onClick={onClose}>
@@ -111,7 +111,7 @@ export const ConnectToTeam: React.FC<ConnectToTeamProps> = ({ open, onClose }) =
               
               <div className="info-section-title" style={{ marginTop: '1rem' }}>How to Connect</div>
               <ol className="connect-steps">
-                <li>Open <strong>/mobile-bidding-live</strong> on your phone</li>
+                <li>Open <strong>/connect-bididng</strong> on your phone</li>
                 <li>Or scan the QR code above</li>
                 <li>Enter credentials:
                   <div style={{ marginTop: '0.5rem', background: 'rgba(0,0,0,0.2)', padding: '0.5rem', borderRadius: '4px' }}>

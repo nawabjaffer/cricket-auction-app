@@ -6,7 +6,6 @@ import { setupDebugConsole } from './utils/logger'
 
 // V1 - Original App (with Google Sheets integration)
 import App from './App.tsx'
-import { MobileBiddingPage } from './components/MobileBidding/MobileBidding.tsx'
 import MobileBiddingLivePage from './pages/MobileBiddingLivePage.tsx'
 import FirebaseDiagnostics from './pages/Diagnostics.tsx'
 import AdminLogin from './components/AdminLogin/AdminLogin'
@@ -60,8 +59,7 @@ createRoot(document.getElementById('root')!).render(
         <BrowserRouter>
           <Routes>
             <Route path="/" element={<App />} />
-            <Route path="/mobile-bidding" element={<MobileBiddingPage />} />
-            <Route path="/mobile-bidding-live" element={<MobileBiddingLivePage />} />
+            <Route path="/connect-bididng" element={<MobileBiddingLivePage />} />
             <Route path="/diagnostics" element={<FirebaseDiagnostics />} />
             <Route path="/admin/login" element={<AdminLogin />} />
             <Route path="/admin" element={<AdminPage />} />
