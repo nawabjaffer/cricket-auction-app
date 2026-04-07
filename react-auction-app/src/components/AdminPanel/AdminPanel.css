@@ -59,9 +59,10 @@
 
 .admin-header h2 {
   margin: 0;
-  font-size: 1.5rem;
-  font-weight: 700;
-  color: #1f2937;
+  font-size: 1.75rem;
+  font-weight: 800;
+  color: #0f172a;
+  letter-spacing: -0.5px;
 }
 
 .admin-close-btn {
@@ -140,9 +141,13 @@
 
 .admin-section h3 {
   margin: 0;
-  font-size: 1.125rem;
-  font-weight: 600;
-  color: #1f2937;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #0f172a;
+  padding: 0.75rem 1rem;
+  background: #f3f4f6;
+  border-radius: 0.5rem;
+  border-left: 4px solid #3b82f6;
 }
 
 .admin-teams-toolbar {
@@ -184,9 +189,9 @@
 
 .admin-player-row {
   display: grid;
-  grid-template-columns: 1.4fr 0.8fr 0.8fr 1.6fr;
-  gap: 1rem;
-  padding: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 0.75rem;
+  padding: 1.25rem;
   border-radius: 0.9rem;
   background: #f9fafb;
   border: 1px solid #e5e7eb;
@@ -196,12 +201,24 @@
   display: flex;
   flex-direction: column;
   gap: 0.4rem;
+  min-width: 0;
 }
 
 .admin-player-cell label {
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: #6b7280;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: #3b82f6;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.admin-player-name {
+  grid-column: span 2;
+  min-width: auto;
+}
+
+.admin-player-image {
+  grid-column: span 3;
 }
 
 .admin-player-cell input {
@@ -241,8 +258,10 @@
 
 .form-group label {
   font-size: 0.875rem;
-  font-weight: 600;
-  color: #374151;
+  font-weight: 700;
+  color: #1f2937;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
 }
 
 .admin-panel .form-group input {
@@ -333,6 +352,10 @@
   display: flex;
   align-items: flex-end;
   gap: 0.75rem;
+  padding: 0.75rem;
+  background: #eff6ff;
+  border-radius: 0.5rem;
+  border: 1px solid #bfdbfe;
 }
 
 .admin-team-header .form-group {
@@ -360,9 +383,11 @@
 }
 
 .admin-media-header label {
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: #6b7280;
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: #1f2937;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
 .admin-media-header span {

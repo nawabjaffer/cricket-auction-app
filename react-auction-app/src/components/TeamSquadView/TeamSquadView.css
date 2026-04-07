@@ -1,7 +1,7 @@
 /* ============================================================================
    TEAM SQUAD VIEW - STYLES
-   Full-screen team display with captain image and player roster
-   Layout: Left (players list) | Right (captain image + name)
+   Full-screen team display with logo on left and squad on right
+   Layout: Left (team logo) | Right (team name + squad + brand)
    ============================================================================ */
 
 /* Main Container - Full Screen Overlay */
@@ -75,121 +75,183 @@
 .tsv-content {
   display: flex;
   flex-direction: row;
-  align-items: center;
-  justify-content: center;
+  align-items: stretch;
+  justify-content: space-between;
   width: 100%;
-  max-width: 1600px;
+  max-width: 1800px;
   height: 100%;
-  padding: 4rem 6rem;
-  gap: 4rem;
+  padding: 2.5rem 3rem;
+  gap: 2rem;
   cursor: default;
   position: relative;
   z-index: 10;
 }
 
+.tsv-left-section {
+  flex: 1 1 64%;
+  min-width: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+}
+
+.tsv-team-logo-bg {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.tsv-team-logo-bg-image {
+  width: min(72vw, 900px);
+  height: min(72vh, 900px);
+  object-fit: contain;
+  opacity: 0.14;
+  filter: blur(1px) saturate(1.08) drop-shadow(0 0 80px rgba(255, 255, 255, 0.15));
+}
+
+/* Logo Placeholder */
+.tsv-logo-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 84px;
+  height: 84px;
+  background: rgba(0, 0, 0, 0.25);
+  border-radius: 18px;
+  backdrop-filter: blur(15px);
+  border: 2px solid rgba(255, 255, 255, 0.15);
+}
+
+.tsv-logo-text {
+  font-size: 2rem;
+  font-weight: 900;
+  color: rgba(255, 255, 255, 0.9);
+  text-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+}
+
 /* ============================================================================
-   LEFT SECTION - Player Names List
+   RIGHT SECTION - Team Info & Squad
    ============================================================================ */
 
-.tsv-left-section {
-  flex: 1;
+.tsv-right-section {
+  flex: 0 0 min(36%, 520px);
   display: flex;
   flex-direction: column;
   justify-content: center;
-  align-items: flex-start;
+  align-items: stretch;
   height: 100%;
-  padding: 2rem 0;
-  max-width: 600px;
-  order: 1;
+  padding: 0;
+  max-width: 520px;
+  width: min(36%, 520px);
+}
+
+.tsv-header-bar {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  width: 100%;
+  padding: 0.85rem 1rem;
+  border-radius: 16px;
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(14px);
+}
+
+.tsv-header-logo-shell {
+  width: 200px;
+  height: auto;
+  border-radius: 16px;
+  overflow: hidden;
+  flex-shrink: 0;
+  background: rgba(255, 255, 255, 0.08);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.tsv-header-team-logo {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: center;
+  filter: drop-shadow(0 10px 22px rgba(0, 0, 0, 0.4));
 }
 
 /* Team Header */
 .tsv-team-header {
-  margin-bottom: 3rem;
-}
-
-.tsv-team-selector {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.75rem;
-  margin-bottom: 2rem;
+  margin-bottom: 0;
   width: 100%;
 }
 
-.tsv-team-chip {
-  display: inline-flex;
-  align-items: center;
+.tsv-team-details {
+  margin-top: 0.9rem;
+  display: flex;
+  flex-direction: column;
   gap: 0.6rem;
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  border-radius: 999px;
-  padding: 0.7rem 1rem;
-  color: white;
-  cursor: pointer;
-  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
-  backdrop-filter: blur(10px);
-  min-width: 0;
 }
 
-.tsv-team-chip:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.18);
+.tsv-team-owner {
+  margin: 0;
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.94);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
 }
 
-.tsv-team-chip.active {
-  box-shadow: 0 16px 30px rgba(0, 0, 0, 0.22);
+.tsv-team-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
 }
 
-.tsv-team-chip-index {
+.tsv-team-stat-chip {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  width: 1.6rem;
-  height: 1.6rem;
+  padding: 0.25rem 0.6rem;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.2);
-  font-size: 0.8rem;
-  font-weight: 800;
-  flex-shrink: 0;
-}
-
-.tsv-team-chip-name {
-  font-size: 0.85rem;
+  font-size: 0.72rem;
   font-weight: 700;
-  letter-spacing: 0.02em;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  letter-spacing: 0.05em;
+  color: rgba(255, 255, 255, 0.95);
+  background: rgba(0, 0, 0, 0.36);
+  border: 1px solid rgba(255, 255, 255, 0.12);
 }
 
 .tsv-team-name {
-  font-size: clamp(3rem, 6vw, 5rem);
+  font-size: clamp(2.5rem, 5vw, 4rem);
   font-weight: 900;
   color: white;
   text-transform: uppercase;
-  line-height: 0.9;
+  line-height: 0.95;
   letter-spacing: -0.02em;
   margin: 0;
-  text-shadow: 
+  text-shadow:
     0 0 40px rgba(255, 255, 255, 0.3),
     0 4px 20px rgba(0, 0, 0, 0.4);
 }
 
 .tsv-team-underline {
-  width: 120px;
-  height: 4px;
+  width: 100px;
+  height: 3px;
   background: white;
-  margin: 1rem 0;
+  margin: 0.75rem 0;
   box-shadow: 0 2px 10px rgba(255, 255, 255, 0.3);
 }
 
 .tsv-squad-label {
-  font-size: clamp(1.5rem, 3vw, 2.5rem);
+  font-size: clamp(1.25rem, 2.5vw, 1.75rem);
   font-weight: 700;
   color: white;
   text-transform: uppercase;
   letter-spacing: 0.25em;
   margin: 0;
-  text-shadow: 
+  text-shadow:
     0 0 30px rgba(255, 255, 255, 0.25),
     0 2px 15px rgba(0, 0, 0, 0.3);
 }
@@ -201,70 +263,146 @@
   flex-direction: column;
   justify-content: flex-start;
   width: 100%;
-  overflow-y: auto;
-  max-height: 50vh;
-  padding-right: 1rem;
-
-  /* Custom Scrollbar */
-  scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.3) transparent;
+  margin: 1rem 0 1.5rem;
 }
 
-.tsv-players-list::-webkit-scrollbar {
-  width: 6px;
-}
-
-.tsv-players-list::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.tsv-players-list::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.3);
-  border-radius: 3px;
-}
-
-.tsv-players-list::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.5);
-}
-
-/* Players Grid - Two Columns for Many Players */
+/* Players Grid - 5 Column Layout */
 .tsv-players-grid {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 1rem 3rem;
+  grid-template-columns: repeat(9, minmax(0, 1fr));
+  gap: 1.2rem;
   width: 100%;
 }
 
 @media (max-width: 1200px) {
   .tsv-players-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 1rem;
+  }
+}
+
+@media (max-width: 980px) {
+  .tsv-players-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.9rem;
   }
 }
 
 /* Individual Player Item */
 .tsv-player-item {
   position: relative;
-  padding-bottom: 0.5rem;
+  min-height: 14rem;
+  animation: tsv-slideIn 0.5s ease-out forwards;
+  opacity: 0;
+}
+
+.tsv-player-card {
+  position: relative;
+  min-height: 14rem;
+  border-radius: 18px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.02);
+  border: 0;
+  outline: 0;
+  backdrop-filter: blur(20px);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.16);
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.tsv-player-team-watermark {
+  position: absolute;
+  inset: 10% 10% auto auto;
+  width: 56%;
+  height: 56%;
+  object-fit: contain;
+  opacity: 0.18;
+  filter: drop-shadow(0 8px 20px rgba(0, 0, 0, 0.25));
+  pointer-events: none;
+  z-index: 0;
+}
+
+.tsv-player-card:hover {
+  transform: translateY(-6px);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.25);
+}
+
+.tsv-player-image {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: center top;
+  transform: scale(1);
+  filter: saturate(1.08) contrast(1.02);
+  position: relative;
+  z-index: 1;
+  background: transparent;
+}
+
+.tsv-player-overlay {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(180deg, rgba(6, 10, 18, 0.02) 0%, rgba(6, 10, 18, 0.12) 48%, rgba(6, 10, 18, 0.82) 100%),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.08), transparent 52%);
+  z-index: 2;
+}
+
+.tsv-player-role {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.3rem 0.6rem;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.38);
+  backdrop-filter: blur(10px);
+  color: white;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.tsv-player-footer {
+  position: absolute;
+  left: 0.7rem;
+  right: 0.7rem;
+  bottom: 0.7rem;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
 }
 
 .tsv-player-name {
   display: block;
-  font-size: clamp(1.1rem, 2vw, 1.5rem);
-  font-weight: 700;
-  color: rgba(0, 0, 0, 0.85);
+  font-size: 0.95rem;
+  font-weight: 800;
+  color: white;
   text-transform: uppercase;
   letter-spacing: 0.03em;
-  line-height: 1.4;
+  line-height: 1.02;
+  text-shadow: 0 10px 24px rgba(0, 0, 0, 0.38);
 }
 
-.tsv-player-underline {
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  height: 2px;
-  background: rgba(255, 255, 255, 0.7);
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+.tsv-player-meta {
+  width: fit-content;
+  display: inline-flex;
+  gap: 0.3rem;
+  align-self: flex-start;
+  padding: 0.25rem 0.5rem;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.52);
+  backdrop-filter: blur(10px);
+  color: rgba(255, 255, 255, 0.95);
+  font-size: 0.35rem;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.tsv-player-meta-divider {
+  width: 1px;
+  height: 0.7rem;
+  background: rgba(255, 255, 255, 0.3);
 }
 
 /* Empty State */
@@ -272,185 +410,243 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 3rem;
+  padding: 2rem;
+  width: 100%;
+  min-height: 300px;
 }
 
 .tsv-empty-text {
-  font-size: 1.25rem;
+  font-size: 1.1rem;
   font-weight: 500;
   color: rgba(255, 255, 255, 0.6);
   font-style: italic;
 }
 
-/* Team Stats Summary */
-.tsv-team-stats {
-  display: flex;
-  align-items: center;
-  gap: 2rem;
-  margin-top: 2rem;
-  padding-top: 2rem;
-  border-top: 1px solid rgba(255, 255, 255, 0.2);
-}
-
-.tsv-stat-item {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-}
-
-.tsv-stat-value {
-  font-size: 1.75rem;
-  font-weight: 800;
-  color: white;
-  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
-}
-
-.tsv-stat-label {
-  font-size: 0.875rem;
-  font-weight: 600;
-  color: rgba(255, 255, 255, 0.7);
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-}
-
-.tsv-stat-divider {
-  width: 1px;
-  height: 40px;
-  background: rgba(255, 255, 255, 0.3);
-}
-
 /* ============================================================================
-   RIGHT SECTION - Captain Image & Name
+   CAPTAIN PANEL - Right Section
    ============================================================================ */
 
-.tsv-right-section {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 100%;
-  max-width: 700px;
-  position: relative;
-  order: 2;
-}
-
-.tsv-captain-container {
+.tsv-captain-panel {
+  width: 100%;
+  min-height: min(86vh, 760px);
+  border-radius: 28px;
+  padding: 1.25rem;
+  background: rgba(0, 0, 0, 0.24);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  backdrop-filter: blur(16px);
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: flex-end;
-  height: 100%;
-  position: relative;
+  justify-content: space-between;
+  gap: 1rem;
 }
 
-/* Captain Image Wrapper */
 .tsv-captain-image-wrapper {
-  position: relative;
-  height: 80%;
   width: 100%;
+  min-height: 460px;
+  border-radius: 22px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02));
+  border: 1px solid rgba(255, 255, 255, 0.1);
   display: flex;
   align-items: flex-end;
   justify-content: center;
+  overflow: hidden;
 }
 
 .tsv-captain-image {
-  max-height: 100%;
-  max-width: 100%;
-  width: auto;
-  height: auto;
+  width: 100%;
+  height: 100%;
   object-fit: contain;
-  object-position: bottom center;
-  filter: drop-shadow(0 20px 60px rgba(0, 0, 0, 0.4));
-  transition: opacity 0.4s ease, transform 0.4s ease;
+  object-position: center bottom;
+  filter: drop-shadow(0 16px 34px rgba(0, 0, 0, 0.35));
+  background: transparent;
 }
 
-.tsv-captain-image.loading {
-  opacity: 0;
-  transform: scale(0.95);
-}
-
-.tsv-captain-image.loaded {
-  opacity: 1;
-  transform: scale(1);
-}
-
-.tsv-captain-fallback {
-  opacity: 0.8;
-}
-
-/* Captain Placeholder */
-.tsv-captain-placeholder {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 300px;
-  height: 400px;
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 20px;
-  backdrop-filter: blur(10px);
-}
-
-.tsv-placeholder-icon {
-  font-size: 6rem;
-  opacity: 0.3;
-}
-
-/* Image Loading State */
-.tsv-image-loading {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(0, 0, 0, 0.2);
-  border-radius: 20px;
-}
-
-.tsv-loading-spinner {
-  width: 60px;
-  height: 60px;
-  border: 4px solid rgba(255, 255, 255, 0.2);
-  border-top-color: white;
-  border-radius: 50%;
-  animation: tsv-spin 1s linear infinite;
-}
-
-@keyframes tsv-spin {
-  to { transform: rotate(360deg); }
-}
-
-/* Captain Info */
 .tsv-captain-info {
   display: flex;
   flex-direction: column;
+  gap: 0.35rem;
   align-items: center;
-  gap: 0.5rem;
-  margin-top: 1.5rem;
   text-align: center;
+  padding: 0.25rem 0.5rem;
 }
 
 .tsv-captain-badge {
-  display: inline-block;
-  padding: 0.35rem 1rem;
-  background: rgba(255, 255, 255, 0.2);
-  backdrop-filter: blur(10px);
-  border-radius: 20px;
-  font-size: 0.75rem;
-  font-weight: 700;
-  color: white;
-  letter-spacing: 0.15em;
-  text-transform: uppercase;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: fit-content;
+  padding: 0.22rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+  color: rgba(255, 255, 255, 0.95);
+  background: rgba(0, 0, 0, 0.42);
+  border: 1px solid rgba(255, 255, 255, 0.14);
 }
 
 .tsv-captain-name {
-  font-size: clamp(1.5rem, 3vw, 2.5rem);
-  font-weight: 800;
+  margin: 0;
+  font-size: clamp(1.4rem, 2.3vw, 2.2rem);
+  color: white;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.tsv-captain-placeholder {
+  width: 100%;
+  height: 100%;
+  min-height: 280px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.tsv-placeholder-icon {
+  font-size: 4rem;
+  opacity: 0.55;
+}
+
+/* ============================================================================
+   BRAND SECTION - Bottom of Right Panel
+   ============================================================================ */
+
+.tsv-brand-section {
+  display: flex;
+  align-items: center;
+  gap: 1.2rem;
+  padding: 1.5rem;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(15px);
+  width: 100%;
+  margin-top: auto;
+}
+
+.tsv-brand-logo {
+  width: 60px;
+  height: 60px;
+  object-fit: contain;
+  object-position: center;
+  flex-shrink: 0;
+}
+
+.tsv-brand-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  flex: 1;
+}
+
+.tsv-brand-company {
+  font-size: 0.95rem;
+  font-weight: 700;
   color: white;
   text-transform: uppercase;
+  letter-spacing: 0.08em;
   margin: 0;
-  text-shadow: 
-    0 0 30px rgba(255, 255, 255, 0.3),
-    0 4px 15px rgba(0, 0, 0, 0.4);
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+}
+
+.tsv-brand-tagline {
+  font-size: 0.8rem;
+  color: rgba(255, 255, 255, 0.85);
+  font-weight: 500;
+  margin: 0;
+  line-height: 1.3;
+  text-shadow: 0 1px 5px rgba(0, 0, 0, 0.3);
+}
+
+/* ============================================================================
+   FLOATING TEAM SELECTOR FAB
+   ============================================================================ */
+
+
+.tsv-team-fab {
+  position: fixed;
+  right: 1.5rem;
+  bottom: 1.5rem;
+  z-index: 40;
+  display: flex;
+  flex-direction: column-reverse;
+  align-items: flex-end;
+  gap: 0.5rem;
+  pointer-events: auto;
+}
+
+.tsv-team-fab-button {
+  width: 2.6rem;
+  height: 2.6rem;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(0, 0, 0, 0.34);
+  backdrop-filter: blur(18px);
+  color: white;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.15rem;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.24);
+  cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+.tsv-team-fab-button:hover {
+  background: rgba(0, 0, 0, 0.42);
+  border-color: rgba(255, 255, 255, 0.24);
+}
+
+.tsv-team-fab-icon {
+  font-size: 1rem;
+}
+
+.tsv-team-fab-caret {
+  font-size: 0.72rem;
+  opacity: 0.8;
+  transition: transform 0.18s ease;
+}
+
+.tsv-team-fab-caret.open {
+  transform: rotate(180deg);
+}
+
+.tsv-team-fab-menu {
+  width: 12rem;
+  max-height: 14rem;
+  overflow: auto;
+  padding: 0.5rem;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(8, 12, 20, 0.56);
+  backdrop-filter: blur(18px);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.28);
+}
+
+.tsv-team-fab-option {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.86);
+  padding: 0.6rem 0.7rem;
+  border-radius: 12px;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.tsv-team-fab-option:hover,
+.tsv-team-fab-option.active {
+  background: rgba(0, 0, 0, 0.44);
+  color: white;
+}
+
+.tsv-team-fab-option-name {
+  display: block;
+  font-size: 0.85rem;
+  font-weight: 700;
+  line-height: 1.2;
 }
 
 /* ============================================================================
@@ -470,7 +666,7 @@
   display: inline-block;
   padding: 0.25rem 0.75rem;
   margin: 0 0.25rem;
-  background: rgba(255, 255, 255, 0.15);
+  background: rgba(0, 0, 0, 0.4);
   backdrop-filter: blur(10px);
   border-radius: 6px;
   font-size: 0.8rem;
@@ -480,176 +676,20 @@
 }
 
 /* ============================================================================
-   RESPONSIVE ADJUSTMENTS
-   ============================================================================ */
-
-@media (max-width: 1200px) {
-  .tsv-content {
-    padding: 3rem 4rem;
-    gap: 2rem;
-  }
-
-  .tsv-left-section {
-    max-width: 450px;
-  }
-
-  .tsv-right-section {
-    max-width: 500px;
-  }
-
-  .tsv-team-selector {
-    justify-content: center;
-  }
-}
-
-@media (max-width: 900px) {
-  .tsv-content {
-    flex-direction: column;
-    padding: 2rem;
-    gap: 2rem;
-    justify-content: flex-start;
-    padding-top: 4rem;
-  }
-
-  .tsv-left-section,
-  .tsv-right-section {
-    max-width: 100%;
-    width: 100%;
-    height: auto;
-  }
-
-  .tsv-left-section {
-    align-items: center;
-    text-align: center;
-  }
-
-  .tsv-team-header {
-    align-items: center;
-    text-align: center;
-  }
-
-  .tsv-team-selector {
-    justify-content: center;
-  }
-
-  .tsv-team-underline {
-    margin-left: auto;
-    margin-right: auto;
-  }
-
-  .tsv-players-list {
-    max-height: 30vh;
-    padding-right: 0;
-  }
-
-  .tsv-players-grid {
-    justify-items: center;
-  }
-
-  .tsv-player-item {
-    text-align: center;
-  }
-
-  .tsv-team-stats {
-    justify-content: center;
-  }
-
-  .tsv-captain-image-wrapper {
-    height: auto;
-    max-height: 40vh;
-  }
-
-  .tsv-captain-container {
-    height: auto;
-  }
-
-  .tsv-geo-top-right {
-    width: 150px;
-    height: 150px;
-    top: 1rem;
-    right: 1rem;
-  }
-
-  .tsv-geo-bottom-left {
-    width: 120px;
-    height: 120px;
-    bottom: 1rem;
-    left: 1rem;
-  }
-}
-
-@media (max-width: 600px) {
-  .tsv-content {
-    padding: 1.5rem;
-  }
-
-  .tsv-team-selector {
-    gap: 0.5rem;
-  }
-
-  .tsv-team-chip {
-    padding: 0.55rem 0.8rem;
-  }
-
-  .tsv-team-name {
-    font-size: 2.5rem;
-  }
-
-  .tsv-squad-label {
-    font-size: 1.25rem;
-  }
-
-  .tsv-player-name {
-    font-size: 1rem;
-  }
-
-  .tsv-captain-name {
-    font-size: 1.25rem;
-  }
-
-  .tsv-close-hint {
-    bottom: 1rem;
-    left: 1rem;
-    font-size: 0.75rem;
-  }
-}
-
-/* ============================================================================
    ANIMATIONS
    ============================================================================ */
-
-/* Entry Animation for Player Items */
-.tsv-player-item {
-  animation: tsv-slideIn 0.4s ease-out forwards;
-  opacity: 0;
-}
 
 @keyframes tsv-slideIn {
   from {
     opacity: 0;
-    transform: translateX(-15px);
+    transform: scale(0.9);
   }
   to {
     opacity: 1;
-    transform: translateX(0);
+    transform: scale(1);
   }
 }
 
-/* Staggered animation delays - applied via inline styles or JS */
-.tsv-player-item:nth-child(1) { animation-delay: 0.05s; }
-.tsv-player-item:nth-child(2) { animation-delay: 0.1s; }
-.tsv-player-item:nth-child(3) { animation-delay: 0.15s; }
-.tsv-player-item:nth-child(4) { animation-delay: 0.2s; }
-.tsv-player-item:nth-child(5) { animation-delay: 0.25s; }
-.tsv-player-item:nth-child(6) { animation-delay: 0.3s; }
-.tsv-player-item:nth-child(7) { animation-delay: 0.35s; }
-.tsv-player-item:nth-child(8) { animation-delay: 0.4s; }
-.tsv-player-item:nth-child(9) { animation-delay: 0.45s; }
-.tsv-player-item:nth-child(10) { animation-delay: 0.5s; }
-.tsv-player-item:nth-child(11) { animation-delay: 0.55s; }
-.tsv-player-item:nth-child(12) { animation-delay: 0.6s; }
-
-/* Subtle float animation for captain image */
 @keyframes tsv-float {
   0%, 100% {
     transform: translateY(0);
@@ -659,11 +699,6 @@
   }
 }
 
-.tsv-captain-image.loaded {
-  animation: tsv-float 4s ease-in-out infinite;
-}
-
-/* Ambient light pulse */
 @keyframes tsv-pulse {
   0%, 100% {
     opacity: 0.1;
@@ -675,11 +710,244 @@
   }
 }
 
-.tsv-ambient-1 {
-  animation: tsv-pulse 6s ease-in-out infinite;
+/* ============================================================================
+   RESPONSIVE ADJUSTMENTS
+   ============================================================================ */
+
+@media (max-width: 1200px) {
+  .tsv-content {
+    padding: 2rem 2rem;
+    gap: 1rem;
+  }
+
+  .tsv-players-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
 }
 
-.tsv-ambient-2 {
-  animation: tsv-pulse 8s ease-in-out infinite;
-  animation-delay: -3s;
+@media (max-width: 1024px) {
+  .tsv-content {
+    padding: 1.6rem;
+    flex-direction: column;
+    justify-content: flex-start;
+  }
+
+  .tsv-left-section {
+    flex: 1 1 auto;
+  }
+
+  .tsv-right-section {
+    max-width: 100%;
+    width: 100%;
+    height: auto;
+    padding: 0;
+  }
+
+  .tsv-captain-panel {
+    min-height: 360px;
+    padding: 1rem;
+  }
+
+  .tsv-captain-image-wrapper {
+    min-height: 280px;
+  }
+
+  .tsv-team-name {
+    font-size: 2.5rem;
+  }
+
+  .tsv-squad-label {
+    font-size: 1.3rem;
+  }
+
+  .tsv-players-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.9rem;
+  }
+
+  .tsv-header-logo-shell {
+    width: 72px;
+    height: 72px;
+  }
+
+  .tsv-player-card {
+    min-height: 12rem;
+  }
 }
+
+@media (max-width: 768px) {
+  .tsv-content {
+    padding: 1.5rem;
+    gap: 1rem;
+  }
+
+  .tsv-team-details {
+    margin-top: 0.65rem;
+    gap: 0.5rem;
+  }
+
+  .tsv-team-owner {
+    font-size: 0.78rem;
+  }
+
+  .tsv-team-stat-chip {
+    font-size: 0.65rem;
+  }
+
+  .tsv-team-name {
+    font-size: 2rem;
+  }
+
+  .tsv-squad-label {
+    font-size: 1.1rem;
+  }
+
+  .tsv-players-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.8rem;
+  }
+
+  .tsv-player-card {
+    min-height: 11rem;
+  }
+
+  .tsv-brand-section {
+    gap: 1rem;
+    padding: 1rem;
+  }
+
+  .tsv-brand-logo {
+    width: 50px;
+    height: 50px;
+  }
+
+  .tsv-brand-company {
+    font-size: 0.85rem;
+  }
+
+  .tsv-brand-tagline {
+    font-size: 0.75rem;
+  }
+
+  .tsv-team-fab {
+    right: 1rem;
+    bottom: 1rem;
+  }
+
+  .tsv-header-bar {
+    padding: 0.7rem 0.8rem;
+  }
+
+  .tsv-captain-panel {
+    min-height: 300px;
+  }
+
+  .tsv-captain-image-wrapper {
+    min-height: 220px;
+  }
+
+  .tsv-captain-name {
+    font-size: 1.25rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .tsv-content {
+    padding: 1rem;
+  }
+
+  .tsv-team-name {
+    font-size: 1.5rem;
+  }
+
+  .tsv-squad-label {
+    font-size: 0.95rem;
+  }
+
+  .tsv-players-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.7rem;
+  }
+
+  .tsv-player-card {
+    min-height: 10rem;
+  }
+
+  .tsv-player-name {
+    font-size: 0.85rem;
+  }
+
+  .tsv-player-role {
+    font-size: 0.55rem;
+    padding: 0.25rem 0.5rem;
+  }
+
+  .tsv-player-meta {
+    font-size: 0.6rem;
+    padding: 0.2rem 0.45rem;
+  }
+
+  .tsv-brand-section {
+    gap: 0.75rem;
+    padding: 0.75rem;
+    flex-direction: column;
+    text-align: center;
+    align-items: center;
+  }
+
+  .tsv-header-logo-shell {
+    width: 58px;
+    height: 58px;
+    border-radius: 12px;
+  }
+
+  .tsv-logo-placeholder {
+    width: 58px;
+    height: 58px;
+    border-radius: 12px;
+  }
+
+  .tsv-logo-text {
+    font-size: 1.4rem;
+  }
+
+  .tsv-brand-logo {
+    width: 40px;
+    height: 40px;
+  }
+
+  .tsv-brand-company {
+    font-size: 0.75rem;
+  }
+
+  .tsv-brand-tagline {
+    font-size: 0.7rem;
+  }
+
+  .tsv-team-fab-button {
+    width: 2.2rem;
+    height: 2.2rem;
+  }
+
+  .tsv-team-fab-menu {
+    width: 10rem;
+  }
+
+  .tsv-close-hint {
+    font-size: 0.7rem;
+    bottom: 1rem;
+    left: 1rem;
+  }
+
+  .tsv-captain-panel {
+    border-radius: 18px;
+    min-height: 260px;
+    padding: 0.75rem;
+  }
+
+  .tsv-captain-image-wrapper {
+    border-radius: 14px;
+    min-height: 180px;
+  }
+}
+

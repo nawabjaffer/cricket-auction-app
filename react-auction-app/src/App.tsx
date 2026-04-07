@@ -47,7 +47,8 @@ import {
 import { useRealtimeDesktopSync } from './hooks/useRealtimeSync';
 import { audioService, imageCacheService } from './services';
 import { auctionPersistence, type SponsorRecord } from './services/auctionPersistence';
-import { useActiveOverlay, useNotification, useCurrentPlayer, useSoldPlayers, useUnsoldPlayers, useAvailablePlayers, useOriginalPlayers, useTeams } from './store';
+import { auctionRules } from './services/auctionRules';
+import { useActiveOverlay, useNotification, useCurrentPlayer, useSoldPlayers, useAvailablePlayers, useOriginalPlayers, useTeams } from './store';
 import { extractDriveFileId } from './utils/driveImage';
 import './index.css';
 
@@ -72,21 +73,6 @@ export default function App() {
 
 // Auction App Content
 function AuctionApp() {
-  const FALLBACK_SPONSORS: SponsorRecord[] = useMemo(() => ([
-    { id: 'sp-1', name: 'Classic Homez ', isTitleSponsor: true, tier: 'title' },
-    { id: 'sp-2', name: 'A1 Vessels' },
-    { id: 'sp-3', name: 'Vantage Hospitals' },
-    { id: 'sp-4', name: 'TrueGrid Power' },
-    { id: 'sp-5', name: 'Nexa Motors' },
-    { id: 'sp-6', name: 'Elite Cables' },
-    { id: 'sp-7', name: 'Urban Mall' },
-    { id: 'sp-8', name: 'Harvest Foods' },
-    { id: 'sp-9', name: 'Zenith Bank' },
-    { id: 'sp-10', name: 'Bright Labs' },
-    { id: 'sp-11', name: 'CloudNet' },
-    { id: 'sp-12', name: 'Nova Realty' },
-  ]), []);
-
   const [showCoinJar, setShowCoinJar] = useState(false);
   const [selectedPlayerName, setSelectedPlayerName] = useState<string>('');
   const [showHelpModal, setShowHelpModal] = useState(false);
@@ -154,7 +140,6 @@ function AuctionApp() {
   const notification = useNotification();
   const currentPlayer = useCurrentPlayer();
   const soldPlayers = useSoldPlayers();
-  const unsoldPlayers = useUnsoldPlayers();
   const availablePlayers = useAvailablePlayers();
   const allPlayers = useOriginalPlayers();
   const allTeams = useTeams();
@@ -283,34 +268,14 @@ function AuctionApp() {
     return () => audioService.dispose();
   }, []);
 
-  // Load sponsors from Firebase (fallback to local list for empty DB)
+  // Load sponsors from Firebase (no local fallback)
   useEffect(() => {
-    let mounted = true;
+    const unsubscribe = auctionPersistence.subscribeSponsors((dbSponsors) => {
+      setSponsors(dbSponsors.slice(0, 20));
+    });
 
-    const loadSponsors = async () => {
-      try {
-        const dbSponsors = await auctionPersistence.getSponsors();
-        if (!mounted) return;
-
-        if (dbSponsors.length > 0) {
-          setSponsors(dbSponsors.slice(0, 20));
-        } else {
-          setSponsors(FALLBACK_SPONSORS.slice(0, 20));
-        }
-      } catch (error) {
-        console.warn('[App] Failed to load sponsors from database, using fallback list', error);
-        if (mounted) {
-          setSponsors(FALLBACK_SPONSORS.slice(0, 20));
-        }
-      }
-    };
-
-    loadSponsors();
-
-    return () => {
-      mounted = false;
-    };
-  }, [FALLBACK_SPONSORS]);
+    return () => unsubscribe();
+  }, []);
 
   const titleSponsor = useMemo(
     () => sponsors.find((sponsor) => sponsor.isTitleSponsor || sponsor.tier?.toLowerCase() === 'title') || sponsors[0] || null,
@@ -321,6 +286,69 @@ function AuctionApp() {
     () => sponsors.filter((sponsor) => sponsor.id !== titleSponsor?.id),
     [sponsors, titleSponsor],
   );
+
+  const selectedTeamPlayers = useMemo(
+    () => soldPlayers.filter((player) => player.teamName === selectedTeam?.name),
+    [soldPlayers, selectedTeam?.name],
+  );
+
+  const teamTopBids = useMemo(
+    () => [...selectedTeamPlayers].sort((a, b) => b.soldAmount - a.soldAmount).slice(0, 3),
+    [selectedTeamPlayers],
+  );
+
+  const teamTotalSpend = useMemo(
+    () => selectedTeamPlayers.reduce((sum, player) => sum + player.soldAmount, 0),
+    [selectedTeamPlayers],
+  );
+
+  const teamRoleBalance = useMemo(() => {
+    const roleCount = {
+      batting: 0,
+      bowling: 0,
+      fielding: 0,
+    };
+
+    selectedTeamPlayers.forEach((player) => {
+      const normalizedRole = player.role.toLowerCase().trim();
+
+      if (normalizedRole.includes('bat')) roleCount.batting += 1;
+      if (normalizedRole.includes('bowl')) roleCount.bowling += 1;
+      if (normalizedRole.includes('all')) {
+        roleCount.batting += 1;
+        roleCount.bowling += 1;
+      }
+      if (normalizedRole.includes('wicket')) roleCount.fielding += 2;
+      else roleCount.fielding += 1;
+    });
+
+    const total = Math.max(roleCount.batting + roleCount.bowling + roleCount.fielding, 1);
+
+    return {
+      batting: Math.round((roleCount.batting / total) * 100),
+      bowling: Math.round((roleCount.bowling / total) * 100),
+      fielding: Math.round((roleCount.fielding / total) * 100),
+    };
+  }, [selectedTeamPlayers]);
+
+  const selectedTeamStatus = useMemo(() => {
+    if (!selectedTeam) {
+      return {
+        maxBid: 0,
+        status: 'safe' as const,
+        warning: '',
+      };
+    }
+
+    const nextBid = auction.currentBid + 0.5;
+    const validation = auctionRules.validateBid(selectedTeam, nextBid, auctionRules.minimumPlayerBasePrice, null);
+
+    return {
+      maxBid: auctionRules.calculateMaxBid(selectedTeam),
+      status: auctionRules.getTeamStatus(selectedTeam, auction.currentBid, 0.5),
+      warning: validation.valid && validation.isWarning ? validation.message : '',
+    };
+  }, [selectedTeam, auction.currentBid]);
 
   // Play sounds when overlay changes
   useEffect(() => {
@@ -1004,11 +1032,68 @@ function AuctionApp() {
               )}
 
               {/* Sold Players Grid */}
+              {selectedTeam && (
+                <div className="team-analytics-section">
+                  <div className="section-title">Team Analytics</div>
+                  <div className="team-analytics-grid">
+                    <div className="analytics-card">
+                      <div className="analytics-card-title">Balance</div>
+                      <div className="analytics-meter-row">
+                        <span>Batting</span>
+                        <div className="analytics-meter"><span style={{ width: `${teamRoleBalance.batting}%` }} /></div>
+                        <strong>{teamRoleBalance.batting}%</strong>
+                      </div>
+                      <div className="analytics-meter-row">
+                        <span>Bowling</span>
+                        <div className="analytics-meter"><span style={{ width: `${teamRoleBalance.bowling}%` }} /></div>
+                        <strong>{teamRoleBalance.bowling}%</strong>
+                      </div>
+                      <div className="analytics-meter-row">
+                        <span>Fielding</span>
+                        <div className="analytics-meter"><span style={{ width: `${teamRoleBalance.fielding}%` }} /></div>
+                        <strong>{teamRoleBalance.fielding}%</strong>
+                      </div>
+                    </div>
+
+                    <div className="analytics-card">
+                      <div className="analytics-card-title">Top Picks</div>
+                      {teamTopBids.length > 0 ? teamTopBids.map((player, index) => (
+                        <div key={player.id} className="analytics-list-item">
+                          <span>#{index + 1} {player.name}</span>
+                          <strong>₹{player.soldAmount.toFixed(1)}L</strong>
+                        </div>
+                      )) : <div className="analytics-empty">No picks yet</div>}
+                    </div>
+
+                    <div className="analytics-card">
+                      <div className="analytics-card-title">Budget & Rules</div>
+                      <div className="analytics-list-item">
+                        <span>Total Spend</span>
+                        <strong>₹{teamTotalSpend.toFixed(1)}L</strong>
+                      </div>
+                      <div className="analytics-list-item">
+                        <span>Remaining</span>
+                        <strong>₹{selectedTeam.remainingPurse.toFixed(1)}L</strong>
+                      </div>
+                      <div className="analytics-list-item">
+                        <span>Max Allowed Bid</span>
+                        <strong>₹{selectedTeamStatus.maxBid.toFixed(1)}L</strong>
+                      </div>
+                      <div className={`analytics-status-badge ${selectedTeamStatus.status}`}>
+                        {selectedTeamStatus.status === 'danger' ? 'Budget Risk: High' : selectedTeamStatus.status === 'warning' ? 'Budget Risk: Warning' : 'Budget Risk: Safe'}
+                      </div>
+                      {selectedTeamStatus.warning && (
+                        <div className="analytics-warning-text">{selectedTeamStatus.warning}</div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
               <div className="sold-players-section">
                 <div className="section-title">Squad</div>
                 <div className="players-grid-apple">
-                  {soldPlayers
-                    .filter(p => p.teamName === selectedTeam?.name)
+                  {selectedTeamPlayers
                     .map((player, idx) => (
                       <motion.div 
                         key={player.id}
@@ -1058,7 +1143,7 @@ function AuctionApp() {
                         <div className="player-price-apple">₹{player.soldAmount}L</div>
                       </motion.div>
                     ))}
-                  {soldPlayers.filter(p => p.teamName === selectedTeam?.name).length === 0 && (
+                  {selectedTeamPlayers.length === 0 && (
                     <div className="empty-squad">No players bought yet</div>
                   )}
                 </div>
@@ -1183,7 +1268,7 @@ function AuctionApp() {
           teamId={selectedTeamForSquad}
           teams={allTeams}
           soldPlayers={soldPlayers}
-          allPlayers={[...soldPlayers, ...unsoldPlayers, ...availablePlayers]}
+          allPlayers={allPlayers}
           onClose={() => {
             setShowTeamSquadView(false);
             setSelectedTeamForSquad('');

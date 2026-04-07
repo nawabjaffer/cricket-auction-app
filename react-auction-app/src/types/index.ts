@@ -55,6 +55,9 @@ export interface Team {
   underAgePlayers: number;
   primaryColor?: string;
   secondaryColor?: string;
+  brandLogoUrl?: string;
+  ownerCompany?: string;
+  brandTagline?: string;
 }
 
 export interface TeamStats {

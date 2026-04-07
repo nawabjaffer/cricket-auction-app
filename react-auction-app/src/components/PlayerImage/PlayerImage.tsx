@@ -13,6 +13,7 @@ interface PlayerImageProps {
   size?: 'sm' | 'md' | 'lg' | 'xl' | 'full';
   className?: string;
   showFallback?: boolean;
+  fallbackSrc?: string;
 }
 
 const SIZE_MAP = {
@@ -29,6 +30,7 @@ export const PlayerImage: React.FC<PlayerImageProps> = ({
   size = 'md',
   className = '',
   showFallback = true,
+  fallbackSrc = '/placeholder_player.png',
 }) => {
   const [currentUrlIndex, setCurrentUrlIndex] = useState(0);
   const [imageError, setImageError] = useState(false);
@@ -37,29 +39,24 @@ export const PlayerImage: React.FC<PlayerImageProps> = ({
   // Generate multiple URL formats to try
   const imageUrls = useMemo(() => {
     if (!imageUrl) return [];
-    
-    const urls: string[] = [];
+
     const fileId = extractDriveFileId(imageUrl);
-    
+
     if (fileId) {
-      // Try lh3 first (best CORS support for Google Drive)
-      urls.push(`https://lh3.googleusercontent.com/d/${fileId}=s${SIZE_MAP[size] * 2}`);
-      // Try thumbnail endpoint
-      urls.push(`https://drive.google.com/thumbnail?id=${fileId}&sz=w${SIZE_MAP[size] * 2}`);
-      // Try direct export view
-      urls.push(`https://drive.google.com/uc?export=view&id=${fileId}`);
-    } else {
-      // Non-Drive URL, use as-is
-      urls.push(imageUrl);
+      return [
+        `https://lh3.googleusercontent.com/d/${fileId}=s${SIZE_MAP[size] * 2}`,
+        `https://drive.google.com/thumbnail?id=${fileId}&sz=w${SIZE_MAP[size] * 2}`,
+        `https://drive.google.com/uc?export=view&id=${fileId}`,
+      ];
     }
-    
-    return urls;
+
+    return [imageUrl];
   }, [imageUrl, size]);
 
   // Generate fallback - use placeholder instead of avatar letters
   const fallbackUrl = useMemo(() => {
-    return '/placeholder_player.png';
-  }, []);
+    return fallbackSrc;
+  }, [fallbackSrc]);
 
   const handleError = () => {
     if (currentUrlIndex < imageUrls.length - 1) {
@@ -76,9 +73,10 @@ export const PlayerImage: React.FC<PlayerImageProps> = ({
     setResolvedSrc('');
   }, [imageUrl]);
 
-  const currentUrl = imageError || imageUrls.length === 0
-    ? (showFallback ? fallbackUrl : '')
-    : imageUrls[currentUrlIndex];
+  let currentUrl = imageUrls[currentUrlIndex] || '';
+  if (imageError || imageUrls.length === 0) {
+    currentUrl = showFallback ? fallbackUrl : '';
+  }
 
   React.useEffect(() => {
     let isActive = true;

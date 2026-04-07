@@ -4,17 +4,24 @@
 // Layout: Left section (player names) | Right section (captain image + name)
 // ============================================================================
 
-import { useEffect, useMemo, useState, useCallback } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import type { Team, SoldPlayer, Player } from '../../types';
-import { extractDriveFileId } from '../../utils/driveImage';
+import { IoGridOutline, IoChevronDownOutline } from 'react-icons/io5';
+import type { Team, SoldPlayer } from '../../types';
+import { PlayerImage } from '../PlayerImage/PlayerImage';
 import './TeamSquadView.css';
+
+type CaptainSourcePlayer = {
+  readonly name: string;
+  readonly imageUrl?: string;
+  readonly role: string;
+};
 
 interface TeamSquadViewProps {
   readonly teamId: string;
   readonly teams: Team[];
   readonly soldPlayers: SoldPlayer[];
-  readonly allPlayers: Player[];
+  readonly allPlayers: CaptainSourcePlayer[];
   readonly onClose: () => void;
 }
 
@@ -30,13 +37,14 @@ interface TeamSquadViewProps {
 export function TeamSquadView({ 
   teamId, 
   teams, 
-  soldPlayers, 
-  allPlayers, 
+  soldPlayers,
+  allPlayers,
   onClose 
 }: TeamSquadViewProps) {
-  const [captainImageLoaded, setCaptainImageLoaded] = useState(false);
-  const [captainImageError, setCaptainImageError] = useState(false);
   const [activeTeamId, setActiveTeamId] = useState(teamId);
+  const [isTeamMenuOpen, setIsTeamMenuOpen] = useState(false);
+  const [teamLogoFailed, setTeamLogoFailed] = useState(false);
+  const [brandLogoFailed, setBrandLogoFailed] = useState(false);
 
   // Keep the selected team in sync with the opener, but allow in-screen switching
   useEffect(() => {
@@ -49,44 +57,85 @@ export function TeamSquadView({
     [teams, activeTeamId],
   );
 
-  // Reset image states when team changes
+  // Reset menu state when team changes
   useEffect(() => {
-    setCaptainImageLoaded(false);
-    setCaptainImageError(false);
+    setIsTeamMenuOpen(false);
+    setTeamLogoFailed(false);
+    setBrandLogoFailed(false);
   }, [activeTeamId]);
 
   // Get team players (sold to this team)
   const teamPlayers = useMemo(() => {
     if (!activeTeam) return [];
-    return soldPlayers.filter(p => p.teamId === activeTeam.id || p.teamName === activeTeam.name);
+    const roleRank: Record<string, number> = {
+      batsman: 0,
+      'wicket-keeper': 1,
+      'wicket keeper': 1,
+      'wicket keeper batsman': 1,
+      'all-rounder': 2,
+      bowler: 3,
+    };
+
+    const normalizeRole = (role: string) => role.toLowerCase().trim();
+
+    return soldPlayers
+      .filter(p => p.teamId === activeTeam.id || p.teamName === activeTeam.name)
+      .slice()
+      .sort((left, right) => {
+        const leftRank = roleRank[normalizeRole(left.role)] ?? 99;
+        const rightRank = roleRank[normalizeRole(right.role)] ?? 99;
+
+        if (leftRank !== rightRank) return leftRank - rightRank;
+
+        return left.name.localeCompare(right.name);
+      });
   }, [soldPlayers, activeTeam]);
 
-  // Find captain data
+  const playerPlaceholderImage = '/assets/squadPlaceholder.png';
+
+  const teamLogoForDisplay = !teamLogoFailed && activeTeam?.logoUrl ? activeTeam.logoUrl : '';
+  const brandLogoForDisplay = !brandLogoFailed && activeTeam?.brandLogoUrl ? activeTeam.brandLogoUrl : '';
+
+  const displaySlots = useMemo(() => {
+    if (!activeTeam) {
+      return [] as Array<{ kind: 'player'; player: SoldPlayer } | { kind: 'empty'; key: string }>;
+    }
+
+    const targetSlots = Math.min(
+      Math.max(teamPlayers.length, activeTeam.totalPlayerThreshold || teamPlayers.length),
+      24,
+    );
+
+    const slots: Array<{ kind: 'player'; player: SoldPlayer } | { kind: 'empty'; key: string }> = teamPlayers.map(player => ({
+      kind: 'player',
+      player,
+    }));
+
+    for (let index = teamPlayers.length; index < targetSlots; index += 1) {
+      slots.push({ kind: 'empty', key: `empty-${activeTeam.id}-${index}` });
+    }
+
+    return slots;
+  }, [activeTeam, teamPlayers]);
+
   const captainData = useMemo(() => {
     if (!activeTeam?.captain) return null;
-    
-    // Search in all players for captain
-    const captain = allPlayers.find(
-      p => p.name?.toLowerCase() === activeTeam.captain?.toLowerCase()
-    );
-    
-    if (!captain) return null;
 
-    // Transform Drive URL if needed
-    let imageUrl = captain.imageUrl;
-    if (imageUrl) {
-      const fileId = extractDriveFileId(imageUrl);
-      if (fileId) {
-        imageUrl = `https://drive.google.com/uc?export=view&id=${fileId}`;
-      }
-    }
+    const captain = allPlayers.find(
+      (player) => player.name?.toLowerCase() === activeTeam.captain?.toLowerCase()
+    );
+
+    if (!captain) return null;
 
     return {
       name: captain.name,
-      imageUrl,
+      imageUrl: captain.imageUrl,
       role: captain.role,
     };
   }, [activeTeam, allPlayers]);
+
+  const squadTargetCount = activeTeam?.totalPlayerThreshold || teamPlayers.length;
+  const remainingSlots = Math.max(squadTargetCount - teamPlayers.length, 0);
 
   // Handle ESC key to close
   useEffect(() => {
@@ -100,11 +149,6 @@ export function TeamSquadView({
     globalThis.addEventListener('keydown', handleKeyDown);
     return () => globalThis.removeEventListener('keydown', handleKeyDown);
   }, [onClose]);
-
-  // Generate fallback image URL - use placeholder
-  const getFallbackImage = useCallback(() => {
-    return '/placeholder_player.png';
-  }, []);
 
   if (!activeTeam) {
     console.warn('[TeamSquadView] Team not found:', teamId);
@@ -150,6 +194,16 @@ export function TeamSquadView({
           <div className="tsv-ambient-light tsv-ambient-2" />
         </div>
 
+        {teamLogoForDisplay && (
+          <div className="tsv-team-logo-bg" aria-hidden="true">
+            <img
+              src={teamLogoForDisplay}
+              alt=""
+              className="tsv-team-logo-bg-image"
+            />
+          </div>
+        )}
+
         {/* Main Content Container - Centered */}
         <motion.div
           className="tsv-content"
@@ -158,71 +212,99 @@ export function TeamSquadView({
           transition={{ duration: 0.4, delay: 0.1 }}
           onClick={(e) => e.stopPropagation()}
         >
-          {/* LEFT SECTION - Player Names */}
           <div className="tsv-left-section">
-            {/* Team Selector */}
             <motion.div
-              className="tsv-team-selector"
-              initial={{ opacity: 0, y: -10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.35, delay: 0.1 }}
-            >
-              {teams.map((teamOption, index) => {
-                const isActive = teamOption.id === activeTeam.id;
-
-                return (
-                  <button
-                    key={teamOption.id}
-                    type="button"
-                    className={`tsv-team-chip ${isActive ? 'active' : ''}`}
-                    onClick={() => setActiveTeamId(teamOption.id)}
-                    style={{
-                      borderColor: isActive ? (teamOption.primaryColor || primaryColor) : 'rgba(255, 255, 255, 0.18)',
-                      background: isActive
-                        ? `linear-gradient(135deg, ${teamOption.primaryColor || primaryColor}, ${teamOption.secondaryColor || secondaryColor})`
-                        : 'rgba(255, 255, 255, 0.08)',
-                    }}
-                  >
-                    <span className="tsv-team-chip-index">{index + 1}</span>
-                    <span className="tsv-team-chip-name">{teamOption.name}</span>
-                  </button>
-                );
-              })}
-            </motion.div>
-
-            {/* Team Header */}
-            <motion.div 
-              className="tsv-team-header"
-              initial={{ x: -30, opacity: 0 }}
-              animate={{ x: 0, opacity: 1 }}
+              className="tsv-header-bar"
+              initial={{ y: -20, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
               transition={{ duration: 0.5, delay: 0.2 }}
             >
-              <h1 className="tsv-team-name">{activeTeam.name}</h1>
-              <div className="tsv-team-underline" />
-              <h2 className="tsv-squad-label">SQUAD</h2>
+              <div className="tsv-header-logo-shell">
+                {teamLogoForDisplay ? (
+                  <img
+                    src={teamLogoForDisplay}
+                    alt={`${activeTeam.name} logo`}
+                    className="tsv-header-team-logo"
+                    loading="lazy"
+                    onError={() => {
+                      console.warn(`[TeamSquadView] Team logo failed to load for ${activeTeam.name}`);
+                      setTeamLogoFailed(true);
+                    }}
+                  />
+                ) : (
+                  <div className="tsv-logo-placeholder">
+                    <span className="tsv-logo-text">{activeTeam.name.charAt(0)}</span>
+                  </div>
+                )}
+              </div>
+
+              <div className="tsv-team-header">
+                <h1 className="tsv-team-name">{activeTeam.name}</h1>
+                <div className="tsv-team-underline" />
+                <h2 className="tsv-squad-label">SQUAD</h2>
+                <div className="tsv-team-details">
+                  <p className="tsv-team-owner">Brand Owner: {activeTeam.ownerCompany || 'Not Available'}</p>
+                  <div className="tsv-team-stats">
+                    <span className="tsv-team-stat-chip">Total Slots: {squadTargetCount}</span>
+                    <span className="tsv-team-stat-chip">Filled: {teamPlayers.length}</span>
+                    <span className="tsv-team-stat-chip">Remaining: {remainingSlots}</span>
+                  </div>
+                </div>
+              </div>
             </motion.div>
 
-            {/* Player Names List */}
-            <motion.div 
+            {/* Players Grid */}
+            <motion.div
               className="tsv-players-list"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ duration: 0.4, delay: 0.3 }}
             >
-              {teamPlayers.length > 0 ? (
+              {displaySlots.length > 0 ? (
                 <div className="tsv-players-grid">
-                  {teamPlayers.map((player, index) => (
+                  {displaySlots.map((slot, index) => {
+                    let playerMetaText = 'Team Strength';
+                    if (slot.kind === 'player') {
+                      playerMetaText = slot.player.age ? `Age ${slot.player.age}` : 'Age N/A';
+                    }
+
+                    return (
                     <motion.div
-                      key={`${teamId}-${player.id}-${index}`}
+                      key={slot.kind === 'player' ? `${teamId}-${slot.player.id}-${index}` : slot.key}
                       className="tsv-player-item"
-                      initial={{ x: -20, opacity: 0 }}
-                      animate={{ x: 0, opacity: 1 }}
-                      transition={{ duration: 0.3, delay: 0.35 + index * 0.05 }}
+                      initial={{ scale: 0.9, opacity: 0 }}
+                      animate={{ scale: 1, opacity: 1 }}
+                      transition={{ duration: 0.3, delay: 0.35 + index * 0.03 }}
                     >
-                      <span className="tsv-player-name">{player.name}</span>
-                      <div className="tsv-player-underline" />
+                      <div className="tsv-player-card">
+                        {teamLogoForDisplay && (
+                          <img
+                            src={teamLogoForDisplay}
+                            alt=""
+                            className="tsv-player-team-watermark"
+                          />
+                        )}
+                        <PlayerImage
+                          imageUrl={slot.kind === 'player' ? slot.player.imageUrl : playerPlaceholderImage}
+                          playerName={slot.kind === 'player' ? slot.player.name : 'Placeholder player'}
+                          size="full"
+                          className="tsv-player-image"
+                          fallbackSrc={playerPlaceholderImage}
+                        />
+                        <div className="tsv-player-overlay" />
+                        <div className="tsv-player-footer">
+                          <span className="tsv-player-role">{slot.kind === 'player' ? slot.player.role : 'Open Slot'}</span>
+                          <span className="tsv-player-name">{slot.kind === 'player' ? slot.player.name : `Slot ${index + 1}`}</span>
+                          <span className="tsv-player-meta">
+                            {playerMetaText}
+                            <span className="tsv-player-meta-divider" />
+                            {slot.kind === 'player' ? `₹${slot.player.soldAmount.toFixed(2)}L` : 'Pending'}
+                          </span>
+                        </div>
+                      </div>
                     </motion.div>
-                  ))}
+                    );
+                  })}
                 </div>
               ) : (
                 <div className="tsv-empty-state">
@@ -231,72 +313,100 @@ export function TeamSquadView({
               )}
             </motion.div>
 
-            {/* Team Stats Summary */}
-            <motion.div 
-              className="tsv-team-stats"
+            <motion.div
+              className="tsv-brand-section"
               initial={{ y: 20, opacity: 0 }}
               animate={{ y: 0, opacity: 1 }}
               transition={{ duration: 0.4, delay: 0.5 }}
             >
-              <div className="tsv-stat-item">
-                <span className="tsv-stat-value">{activeTeam.playersBought}</span>
-                <span className="tsv-stat-label">Players</span>
-              </div>
-              <div className="tsv-stat-divider" />
-              <div className="tsv-stat-item">
-                <span className="tsv-stat-value">₹{activeTeam.remainingPurse?.toFixed(1)}L</span>
-                <span className="tsv-stat-label">Remaining</span>
+              {brandLogoForDisplay && (
+                <img
+                  src={brandLogoForDisplay}
+                  alt="Brand logo"
+                  className="tsv-brand-logo"
+                  loading="lazy"
+                  onError={() => {
+                    setBrandLogoFailed(true);
+                  }}
+                />
+              )}
+              <div className="tsv-brand-info">
+                <p className="tsv-brand-company">{activeTeam.ownerCompany || 'Owner Company'}</p>
+                <p className="tsv-brand-tagline">{activeTeam.brandTagline || 'Brand tagline goes here'}</p>
               </div>
             </motion.div>
+
           </div>
 
-          {/* RIGHT SECTION - Captain Image */}
           <div className="tsv-right-section">
             <motion.div
-              className="tsv-captain-container"
-              initial={{ scale: 0.9, opacity: 0 }}
+              className="tsv-captain-panel"
+              initial={{ scale: 0.92, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               transition={{ duration: 0.5, delay: 0.2, type: 'spring', stiffness: 100 }}
             >
-              {/* Captain Image */}
               <div className="tsv-captain-image-wrapper">
                 <CaptainImage
                   captainData={captainData}
-                  captainImageError={captainImageError}
-                  captainImageLoaded={captainImageLoaded}
                   teamPlayers={teamPlayers}
-                  onLoad={() => setCaptainImageLoaded(true)}
-                  onError={() => {
-                    console.warn('[TeamSquadView] Captain image failed to load');
-                    setCaptainImageError(true);
-                  }}
-                  getFallbackImage={getFallbackImage}
                 />
-
-                {/* Loading Overlay */}
-                {captainData?.imageUrl && !captainImageLoaded && !captainImageError && (
-                  <div className="tsv-image-loading">
-                    <div className="tsv-loading-spinner" />
-                  </div>
-                )}
               </div>
 
-              {/* Captain Name */}
-              {(captainData?.name || teamPlayers[0]?.name) && (
-                <motion.div
-                  className="tsv-captain-info"
-                  initial={{ y: 20, opacity: 0 }}
-                  animate={{ y: 0, opacity: 1 }}
-                  transition={{ duration: 0.4, delay: 0.4 }}
-                >
+              {captainData?.name && (
+                <div className="tsv-captain-info">
                   <span className="tsv-captain-badge">CAPTAIN</span>
-                  <h3 className="tsv-captain-name">
-                    {captainData?.name || teamPlayers[0]?.name}
-                  </h3>
-                </motion.div>
+                  <h3 className="tsv-captain-name">{captainData.name}</h3>
+                </div>
               )}
+
             </motion.div>
           </div>
+        </motion.div>
+
+        <motion.div
+          className="tsv-team-fab"
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.25, delay: 0.15 }}
+          onClick={(event) => event.stopPropagation()}
+        >
+          <button
+            type="button"
+            className="tsv-team-fab-button"
+            aria-label="Switch team"
+            aria-expanded={isTeamMenuOpen}
+            onClick={() => setIsTeamMenuOpen(prev => !prev)}
+          >
+            <IoGridOutline className="tsv-team-fab-icon" />
+            <IoChevronDownOutline className={`tsv-team-fab-caret ${isTeamMenuOpen ? 'open' : ''}`} />
+          </button>
+
+          <AnimatePresence>
+            {isTeamMenuOpen && (
+              <motion.div
+                className="tsv-team-fab-menu"
+                initial={{ opacity: 0, y: 8, scale: 0.96 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: 8, scale: 0.96 }}
+                transition={{ duration: 0.16 }}
+              >
+                {teams.map((teamOption) => {
+                  const isActive = teamOption.id === activeTeam.id;
+
+                  return (
+                    <button
+                      key={teamOption.id}
+                      type="button"
+                      className={`tsv-team-fab-option ${isActive ? 'active' : ''}`}
+                      onClick={() => setActiveTeamId(teamOption.id)}
+                    >
+                      <span className="tsv-team-fab-option-name">{teamOption.name}</span>
+                    </button>
+                  );
+                })}
+              </motion.div>
+            )}
+          </AnimatePresence>
         </motion.div>
 
         {/* Close Hint */}
@@ -313,70 +423,45 @@ export function TeamSquadView({
   );
 }
 
-// Helper component to render captain image without nested ternaries
+
+export default TeamSquadView;
+
 interface CaptainImageProps {
   readonly captainData: { name: string; imageUrl: string | undefined; role: string } | null;
-  readonly captainImageError: boolean;
-  readonly captainImageLoaded: boolean;
   readonly teamPlayers: SoldPlayer[];
-  readonly onLoad: () => void;
-  readonly onError: () => void;
-  readonly getFallbackImage: () => string;
 }
 
 function CaptainImage({
   captainData,
-  captainImageError,
-  captainImageLoaded,
   teamPlayers,
-  onLoad,
-  onError,
-  getFallbackImage,
 }: CaptainImageProps) {
-  // Case 1: Captain has image URL and no error
-  if (captainData?.imageUrl && !captainImageError) {
-    return (
-      <img
-        src={captainData.imageUrl}
-        alt={captainData.name || 'Captain'}
-        className={`tsv-captain-image ${captainImageLoaded ? 'loaded' : 'loading'}`}
-        onLoad={onLoad}
-        onError={onError}
-      />
-    );
-  }
-
-  // Case 2: Captain exists but image failed - show placeholder
   if (captainData?.name) {
     return (
-      <img
-        src={getFallbackImage()}
-        alt={captainData.name}
-        className="tsv-captain-image tsv-captain-fallback loaded"
+      <PlayerImage
+        imageUrl={captainData.imageUrl}
+        playerName={captainData.name}
+        size="full"
+        className="tsv-captain-image loaded"
+        fallbackSrc="/placeholder_player.png"
       />
     );
   }
 
-  // Case 3: No captain but have team players - show first player
   if (teamPlayers[0]) {
     return (
-      <img
-        src={teamPlayers[0].imageUrl || getFallbackImage()}
-        alt={teamPlayers[0].name}
+      <PlayerImage
+        imageUrl={teamPlayers[0].imageUrl}
+        playerName={teamPlayers[0].name}
+        size="full"
         className="tsv-captain-image loaded"
-        onError={(e) => {
-          (e.target as HTMLImageElement).src = getFallbackImage();
-        }}
+        fallbackSrc="/placeholder_player.png"
       />
     );
   }
 
-  // Case 4: No captain, no players - show placeholder
   return (
     <div className="tsv-captain-placeholder">
       <span className="tsv-placeholder-icon">👤</span>
     </div>
   );
 }
-
-export default TeamSquadView;

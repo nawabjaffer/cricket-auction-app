@@ -3,185 +3,74 @@
 // Grid of teams for bid selection
 // ============================================================================
 
-import { motion } from 'framer-motion';
-import { IoRibbon } from 'react-icons/io5';
 import type { Team } from '../../types';
 import { useAuction } from '../../hooks';
 import { AuctionRulesService } from '../../services';
 import { useTeams } from '../../store';
-import { TeamLogo } from '../TeamLogo';
 
 interface TeamSelectorProps {
-  onTeamSelect?: (team: Team) => void;
-  showStats?: boolean;
+  readonly onTeamSelect?: (team: Team) => void;
+  readonly showStats?: boolean;
 }
 
 export function TeamSelector({ onTeamSelect, showStats = true }: TeamSelectorProps) {
   const teams = useTeams();
-  const { selectTeam, selectedTeam, currentPlayer, currentBid } = useAuction();
+  const { selectTeam, selectedTeam } = useAuction();
+  const rulesService = new AuctionRulesService();
+  const selectedTeamId = selectedTeam?.id ?? '';
 
   const handleTeamClick = (team: Team) => {
     selectTeam(team);
     onTeamSelect?.(team);
   };
 
+  const handleTeamChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
+    const team = teams.find(entry => entry.id === event.target.value);
+    if (team) {
+      handleTeamClick(team);
+    }
+  };
+
   return (
-    <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-      {teams.map((team, index) => (
-        <TeamCard
-          key={team.name}
-          team={team}
-          index={index}
-          isSelected={selectedTeam?.name === team.name}
-          showStats={showStats}
-          currentPlayer={currentPlayer}
-          currentBid={currentBid}
-          onClick={() => handleTeamClick(team)}
-        />
-      ))}
+    <div className="w-full max-w-sm">
+      <div className="rounded-2xl border border-white/10 bg-black/20 px-3 py-3 shadow-lg shadow-black/20 backdrop-blur-xl">
+        <label htmlFor="team-selector-dropdown" className="mb-2 block text-[10px] font-semibold uppercase tracking-[0.3em] text-white/45">
+          Team
+        </label>
+        <select
+          id="team-selector-dropdown"
+          value={selectedTeamId}
+          onChange={handleTeamChange}
+          className="w-full rounded-xl border border-white/10 bg-white/8 px-3 py-2 text-sm font-semibold text-white outline-none transition focus:border-[var(--theme-accent)] focus:ring-2 focus:ring-[var(--theme-accent)]/25"
+        >
+          <option value="" disabled className="text-black">
+            Select a team
+          </option>
+          {teams.map(team => (
+            <option key={team.id} value={team.id} className="text-black">
+              {team.name}
+            </option>
+          ))}
+        </select>
+
+        {selectedTeam && showStats && (
+          <div className="mt-3 grid grid-cols-2 gap-2 text-[11px] text-white/70">
+            <CompactStat label="Purse" value={`₹${selectedTeam.remainingPurse.toFixed(2)}L`} />
+            <CompactStat label="Players" value={`${selectedTeam.playersBought}/${selectedTeam.totalPlayerThreshold}`} />
+            <CompactStat label="Max Bid" value={`₹${rulesService.calculateMaxBid(selectedTeam).toFixed(2)}L`} />
+            <CompactStat label="Captain" value={selectedTeam.captain || '—'} />
+          </div>
+        )}
+      </div>
     </div>
   );
 }
 
-// Individual Team Card
-interface TeamCardProps {
-  team: Team;
-  index: number;
-  isSelected: boolean;
-  showStats: boolean;
-  currentPlayer: ReturnType<typeof useAuction>['currentPlayer'];
-  currentBid: number;
-  onClick: () => void;
-}
-
-function TeamCard({ 
-  team, 
-  index, 
-  isSelected, 
-  showStats, 
-  currentPlayer, 
-  currentBid,
-  onClick 
-}: TeamCardProps) {
-  // Check if team can bid
-  const rulesService = new AuctionRulesService();
-  const playerBasePrice = currentPlayer?.basePrice || rulesService.minimumPlayerBasePrice;
-  const playerAge = currentPlayer?.age || null;
-  
-  const validation = currentPlayer 
-    ? rulesService.validateBid(team, currentBid, playerBasePrice, playerAge) 
-    : { valid: true, severity: 'info' as const, message: '', ruleId: null };
-  
-  const maxBid = rulesService.calculateMaxBid(team);
-  const canBid = validation.valid;
-  const teamStatusValue = rulesService.getTeamStatus(team, currentBid, rulesService.minimumPlayerBasePrice);
-
-  // Status indicators
-  const isFull = team.remainingPlayers <= 0;
-  const isLowBudget = team.remainingPurse < currentBid;
-
+function CompactStat({ label, value }: Readonly<{ label: string; value: string }>) {
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: index * 0.05 }}
-      whileHover={canBid ? { scale: 1.02, y: -2 } : undefined}
-      whileTap={canBid ? { scale: 0.98 } : undefined}
-      onClick={canBid ? onClick : undefined}
-      className={`
-        relative p-4 rounded-xl transition-all duration-200
-        ${isSelected 
-          ? 'bg-[var(--theme-accent)] ring-2 ring-[var(--theme-accent)] shadow-lg' 
-          : 'bg-[var(--theme-surface)]'}
-        ${canBid 
-          ? 'cursor-pointer hover:shadow-md' 
-          : 'opacity-50 cursor-not-allowed'}
-        ${isFull ? 'border-2 border-red-400' : ''}
-      `}
-    >
-      {/* Keyboard shortcut badge */}
-      <div className={`
-        absolute top-2 right-2 w-6 h-6 rounded-full 
-        flex items-center justify-center text-xs font-bold
-        ${isSelected 
-          ? 'bg-white text-[var(--theme-accent)]' 
-          : 'bg-[var(--theme-secondary)] text-white'}
-      `}>
-        {index + 1}
-      </div>
-
-      {/* Team Logo & Name */}
-      <div className="flex items-center gap-3 mb-3">
-        <TeamLogo logoUrl={team.logoUrl} teamName={team.name} size="lg" />
-        <div>
-          <h4 className={`font-bold truncate ${isSelected ? 'text-white' : 'text-[var(--theme-text-primary)]'}`}>
-            {team.name}
-          </h4>
-          {team.captain && (
-            <div className={`text-xs flex items-center gap-1 ${isSelected ? 'text-white/80' : 'text-[var(--theme-text-secondary)]'}`}>
-              <IoRibbon className="text-yellow-500" /> {team.captain}
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Team Stats */}
-      {showStats && (
-        <div className="space-y-2 text-sm">
-          {/* Purse */}
-          <div className={`flex justify-between ${isSelected ? 'text-white/90' : 'text-[var(--theme-text-secondary)]'}`}>
-            <span>Purse:</span>
-            <span className={`font-semibold ${isLowBudget && !isSelected ? 'text-red-500' : ''}`}>
-              ₹{team.remainingPurse.toFixed(2)}L
-            </span>
-          </div>
-
-          {/* Players */}
-          <div className={`flex justify-between ${isSelected ? 'text-white/90' : 'text-[var(--theme-text-secondary)]'}`}>
-            <span>Players:</span>
-            <span className={`font-semibold ${isFull && !isSelected ? 'text-red-500' : ''}`}>
-              {team.playersBought}/{team.totalPlayerThreshold}
-            </span>
-          </div>
-
-          {/* Max Bid */}
-          <div className={`flex justify-between ${isSelected ? 'text-white/90' : 'text-[var(--theme-text-secondary)]'}`}>
-            <span>Max Bid:</span>
-            <span className="font-semibold">₹{maxBid.toFixed(2)}L</span>
-          </div>
-
-          {/* Status Badges */}
-          <div className="flex flex-wrap gap-1 mt-2">
-            {isFull && (
-              <span className="px-2 py-0.5 bg-red-500 text-white text-xs rounded-full">
-                Full
-              </span>
-            )}
-            {teamStatusValue === 'danger' && (
-              <span className="px-2 py-0.5 bg-red-500 text-white text-xs rounded-full">
-                Danger
-              </span>
-            )}
-            {teamStatusValue === 'warning' && (
-              <span className="px-2 py-0.5 bg-yellow-500 text-black text-xs rounded-full">
-                Warning
-              </span>
-            )}
-            {team.underAgePlayers > 0 && (
-              <span className="px-2 py-0.5 bg-blue-500 text-white text-xs rounded-full">
-                U-Age: {team.underAgePlayers}
-              </span>
-            )}
-          </div>
-
-          {/* Validation Errors */}
-          {!canBid && validation.message && (
-            <div className="mt-2 text-xs text-red-400">
-              {validation.message}
-            </div>
-          )}
-        </div>
-      )}
-    </motion.div>
+    <div className="rounded-lg border border-white/8 bg-white/5 px-2 py-2 backdrop-blur-sm">
+      <div className="text-[9px] uppercase tracking-[0.25em] text-white/45">{label}</div>
+      <div className="mt-1 truncate font-semibold text-white">{value}</div>
+    </div>
   );
 }

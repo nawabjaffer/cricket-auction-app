@@ -7,6 +7,7 @@ import {
   ref, 
   set, 
   get,
+  onValue,
   type Database 
 } from 'firebase/database';
 import type { Player, Team, SoldPlayer } from '../types';
@@ -338,6 +339,34 @@ class AuctionPersistenceService {
     return (list as SponsorRecord[])
       .filter((sponsor) => sponsor && sponsor.active !== false && sponsor.name)
       .sort((a, b) => (a.order ?? Number.MAX_SAFE_INTEGER) - (b.order ?? Number.MAX_SAFE_INTEGER));
+  }
+
+  subscribeSponsors(onUpdate: (sponsors: SponsorRecord[]) => void): () => void {
+    if (!this.db) {
+      onUpdate([]);
+      return () => {};
+    }
+
+    const sponsorsRef = ref(this.db, DB_PATHS.SPONSORS);
+    const unsubscribe = onValue(sponsorsRef, (snapshot) => {
+      if (!snapshot.exists()) {
+        onUpdate([]);
+        return;
+      }
+
+      const data = snapshot.val();
+      const list = Array.isArray(data)
+        ? data
+        : Object.entries(data).map(([id, value]) => ({ id, ...(value as Omit<SponsorRecord, 'id'>) }));
+
+      const normalized = (list as SponsorRecord[])
+        .filter((sponsor) => sponsor && sponsor.active !== false && sponsor.name)
+        .sort((a, b) => (a.order ?? Number.MAX_SAFE_INTEGER) - (b.order ?? Number.MAX_SAFE_INTEGER));
+
+      onUpdate(normalized);
+    });
+
+    return unsubscribe;
   }
 
   /**
