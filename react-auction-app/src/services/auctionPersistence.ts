@@ -31,8 +31,65 @@ export interface SponsorRecord {
   tier?: string;
   isTitleSponsor?: boolean;
   active?: boolean;
+  isActive?: boolean;
   order?: number;
 }
+
+const normalizeSponsorLogoUrl = (rawValue: string | undefined): string => {
+  const raw = (rawValue ?? '').trim();
+  if (!raw) return '';
+
+  const value = /^https?:\/\//i.test(raw)
+    ? raw
+    : raw.startsWith('drive.google.com') || raw.startsWith('docs.google.com')
+      ? `https://${raw}`
+      : raw;
+
+  const buildDriveImageUrl = (fileId: string) => `https://drive.google.com/uc?export=view&id=${fileId}`;
+
+  if (/^[A-Za-z0-9_-]{20,}$/.test(value)) {
+    return buildDriveImageUrl(value);
+  }
+
+  if (!/^https?:\/\//i.test(value)) return raw;
+
+  try {
+    const url = new URL(value);
+    const host = url.hostname.toLowerCase();
+    if (!host.includes('drive.google.com')) return value;
+
+    const fileMatch = /\/file\/d\/([^/]+)/.exec(url.pathname);
+    if (fileMatch?.[1]) return buildDriveImageUrl(fileMatch[1]);
+
+    const id = url.searchParams.get('id');
+    if (id) return buildDriveImageUrl(id);
+
+    const looseMatch = /\/d\/([^/]+)/.exec(url.pathname);
+    if (looseMatch?.[1]) return buildDriveImageUrl(looseMatch[1]);
+  } catch {
+    return raw;
+  }
+
+  return value;
+};
+
+const normalizeSponsorRecord = (sponsor: SponsorRecord, index = 0): SponsorRecord | null => {
+  if (!sponsor || !sponsor.name?.trim()) return null;
+
+  const resolvedActive = sponsor.active ?? sponsor.isActive ?? true;
+  if (!resolvedActive) return null;
+
+  return {
+    ...sponsor,
+    id: sponsor.id || `sponsor-${index + 1}`,
+    name: sponsor.name.trim(),
+    active: true,
+    logoUrl: normalizeSponsorLogoUrl(sponsor.logoUrl),
+    website: sponsor.website?.trim() || '',
+    tier: sponsor.tier?.trim() || '',
+    order: Number.isFinite(sponsor.order as number) ? sponsor.order : index,
+  };
+};
 
 // Sold player record format for Firebase
 export interface SoldPlayerRecord {
@@ -337,7 +394,8 @@ class AuctionPersistenceService {
       : Object.entries(data).map(([id, value]) => ({ id, ...(value as Omit<SponsorRecord, 'id'>) }));
 
     return (list as SponsorRecord[])
-      .filter((sponsor) => sponsor && sponsor.active !== false && sponsor.name)
+      .map((sponsor, index) => normalizeSponsorRecord(sponsor, index))
+      .filter((sponsor): sponsor is SponsorRecord => sponsor !== null)
       .sort((a, b) => (a.order ?? Number.MAX_SAFE_INTEGER) - (b.order ?? Number.MAX_SAFE_INTEGER));
   }
 
@@ -360,9 +418,9 @@ class AuctionPersistenceService {
         : Object.entries(data).map(([id, value]) => ({ id, ...(value as Omit<SponsorRecord, 'id'>) }));
 
       const normalized = (list as SponsorRecord[])
-        .filter((sponsor) => sponsor && sponsor.active !== false && sponsor.name)
+        .map((sponsor, index) => normalizeSponsorRecord(sponsor, index))
+        .filter((sponsor): sponsor is SponsorRecord => sponsor !== null)
         .sort((a, b) => (a.order ?? Number.MAX_SAFE_INTEGER) - (b.order ?? Number.MAX_SAFE_INTEGER));
-
       onUpdate(normalized);
     });
 
@@ -376,16 +434,8 @@ class AuctionPersistenceService {
     if (!this.db) throw new Error('Database not initialized');
 
     const normalizedSponsors = sponsors
-      .filter((sponsor) => sponsor?.name?.trim())
-      .map((sponsor, index) => ({
-        ...sponsor,
-        id: sponsor.id || `sponsor-${index + 1}`,
-        name: sponsor.name.trim(),
-        logoUrl: sponsor.logoUrl?.trim() || '',
-        website: sponsor.website?.trim() || '',
-        tier: sponsor.tier?.trim() || '',
-        order: Number.isFinite(sponsor.order as number) ? sponsor.order : index,
-      }));
+      .map((sponsor, index) => normalizeSponsorRecord(sponsor, index))
+      .filter((sponsor): sponsor is SponsorRecord => sponsor !== null);
 
     const sponsorsRef = ref(this.db, DB_PATHS.SPONSORS);
     await set(sponsorsRef, normalizedSponsors);

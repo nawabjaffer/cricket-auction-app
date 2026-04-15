@@ -48,6 +48,7 @@ import { useRealtimeDesktopSync } from './hooks/useRealtimeSync';
 import { audioService, imageCacheService } from './services';
 import { auctionPersistence, type SponsorRecord } from './services/auctionPersistence';
 import { auctionRules } from './services/auctionRules';
+import { realtimeSync } from './services/realtimeSync';
 import { useActiveOverlay, useNotification, useCurrentPlayer, useSoldPlayers, useAvailablePlayers, useOriginalPlayers, useTeams } from './store';
 import { extractDriveFileId } from './utils/driveImage';
 import './index.css';
@@ -61,6 +62,15 @@ const queryClient = new QueryClient({
     },
   },
 });
+
+const FALLBACK_SPONSORS: SponsorRecord[] = [
+  { id: 'fallback-title', name: 'EPL Title Partner', tier: 'title', isTitleSponsor: true, active: true, order: 1 },
+  { id: 'fallback-gold-1', name: 'Power Play Energy', tier: 'gold', active: true, order: 2, website: 'powerplay.example' },
+  { id: 'fallback-gold-2', name: 'Boundary Foods', tier: 'gold', active: true, order: 3, website: 'boundary.example' },
+  { id: 'fallback-silver-1', name: 'Wicket Finance', tier: 'silver', active: true, order: 4, website: 'wicket.example' },
+  { id: 'fallback-silver-2', name: 'Super Over Mobility', tier: 'silver', active: true, order: 5, website: 'superover.example' },
+  { id: 'fallback-partner-1', name: 'Stadium Brew', tier: 'partner', active: true, order: 6, website: 'stadiumbrew.example' },
+];
 
 // Main App with Providers
 export default function App() {
@@ -95,6 +105,7 @@ function AuctionApp() {
   // Admin panel state
   const [showAdminPanel, setShowAdminPanel] = useState(false);
   const [sponsors, setSponsors] = useState<SponsorRecord[]>([]);
+  const [sponsorLoadState, setSponsorLoadState] = useState<'loading' | 'ready' | 'error'>('loading');
   
   // Image polling state
   const [imageLoadingState, setImageLoadingState] = useState<'loading' | 'loaded' | 'error'>('loading');
@@ -228,16 +239,40 @@ function AuctionApp() {
       return;
     }
 
-    const playerId = jumpInput.trim();
-    if (!playerId) {
+    const rawPlayerId = jumpInput.trim();
+    if (!rawPlayerId) {
       setJumpError('Enter player ID');
+      return;
+    }
+
+    const findMatchingPlayerId = (input: string): string | null => {
+      const exactMatch = allPlayers.find((player) => player.id === input);
+      if (exactMatch) return exactMatch.id;
+
+      if (!/^\d+$/.test(input)) return null;
+
+      const numericInput = Number.parseInt(input, 10);
+      if (!Number.isFinite(numericInput)) return null;
+
+      const numericMatch = allPlayers.find((player) => {
+        const suffixDigits = player.id.match(/(\d+)$/)?.[1];
+        if (!suffixDigits) return false;
+        return Number.parseInt(suffixDigits, 10) === numericInput;
+      });
+
+      return numericMatch?.id ?? null;
+    };
+
+    const playerId = findMatchingPlayerId(rawPlayerId);
+    if (!playerId) {
+      setJumpError(`ID "${rawPlayerId}" not found`);
       return;
     }
 
     // Find player by ID
     const targetPlayer = allPlayers.find(p => p.id === playerId);
     if (!targetPlayer) {
-      setJumpError(`ID "${playerId}" not found`);
+      setJumpError(`ID "${rawPlayerId}" not found`);
       return;
     }
 
@@ -268,23 +303,67 @@ function AuctionApp() {
     return () => audioService.dispose();
   }, []);
 
-  // Load sponsors from Firebase (no local fallback)
+  // Load sponsors from Firebase (no local fallback until load completes)
   useEffect(() => {
-    const unsubscribe = auctionPersistence.subscribeSponsors((dbSponsors) => {
-      setSponsors(dbSponsors.slice(0, 20));
-    });
+    let isMounted = true;
+    let unsubscribeSponsors: (() => void) | null = null;
 
-    return () => unsubscribe();
+    const loadSponsors = async () => {
+      try {
+        await realtimeSync.ensureInitialized();
+        const db = realtimeSync.getDatabase();
+        if (!db) throw new Error('Database not ready');
+
+        auctionPersistence.initialize(db);
+        unsubscribeSponsors = auctionPersistence.subscribeSponsors((dbSponsors) => {
+          if (!isMounted) return;
+          setSponsors(dbSponsors.slice(0, 20));
+          setSponsorLoadState('ready');
+        });
+      } catch {
+        if (isMounted) {
+          setSponsors([]);
+          setSponsorLoadState('error');
+        }
+      }
+    };
+
+    void loadSponsors();
+
+    return () => {
+      isMounted = false;
+      unsubscribeSponsors?.();
+    };
   }, []);
 
+  const effectiveSponsors = useMemo(() => {
+    if (sponsorLoadState !== 'ready') return [];
+
+    const validFirebaseSponsors = sponsors
+      .filter((sponsor) => sponsor?.name?.trim())
+      .filter((sponsor) => sponsor.active !== false && sponsor.isActive !== false);
+
+    return validFirebaseSponsors.length > 0 ? validFirebaseSponsors : FALLBACK_SPONSORS;
+  }, [sponsors, sponsorLoadState]);
+
+  const usingFallbackSponsors = useMemo(
+    () => sponsorLoadState === 'ready' && effectiveSponsors.length > 0 && effectiveSponsors[0]?.id?.startsWith('fallback-'),
+    [effectiveSponsors, sponsorLoadState],
+  );
+
   const titleSponsor = useMemo(
-    () => sponsors.find((sponsor) => sponsor.isTitleSponsor || sponsor.tier?.toLowerCase() === 'title') || sponsors[0] || null,
-    [sponsors],
+    () => effectiveSponsors.find((sponsor) => sponsor.isTitleSponsor || sponsor.tier?.toLowerCase() === 'title') || effectiveSponsors[0] || null,
+    [effectiveSponsors],
   );
 
   const carouselSponsors = useMemo(
-    () => sponsors.filter((sponsor) => sponsor.id !== titleSponsor?.id),
-    [sponsors, titleSponsor],
+    () => effectiveSponsors.filter((sponsor) => sponsor.id !== titleSponsor?.id),
+    [effectiveSponsors, titleSponsor],
+  );
+
+  const showcaseSponsors = useMemo(
+    () => (carouselSponsors.length > 0 ? carouselSponsors : effectiveSponsors),
+    [carouselSponsors, effectiveSponsors],
   );
 
   const selectedTeamPlayers = useMemo(
@@ -733,7 +812,16 @@ function AuctionApp() {
 
               <div className="empty-title">Welcome to Eruvai Premier League Auctions</div>
               <div className="empty-hint">Press <kbd>N</kbd> for next player</div>
-              <SponsorShowcase sponsors={carouselSponsors} titleSponsor={titleSponsor} />
+              {sponsorLoadState === 'ready' && (
+                <>
+                  <SponsorShowcase sponsors={showcaseSponsors} titleSponsor={titleSponsor} />
+                  <div className="sponsor-data-source-note" role="status">
+                    {usingFallbackSponsors
+                      ? `Showing fallback sponsor data (${effectiveSponsors.length}) because Firebase sponsor data is missing or incomplete.`
+                      : `Showing Firebase sponsor data (${effectiveSponsors.length}).`}
+                  </div>
+                </>
+              )}
             </motion.div>
           )}
           </AnimatePresence>

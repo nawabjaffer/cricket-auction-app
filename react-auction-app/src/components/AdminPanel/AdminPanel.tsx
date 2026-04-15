@@ -3,7 +3,7 @@
 // Manage auction configuration, teams, players, theme, and export data
 // ============================================================================
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useQueryClient } from '@tanstack/react-query';
 import { IoClose, IoSave, IoRefresh, IoDownload, IoVideocam, IoAdd, IoTrash } from 'react-icons/io5';
@@ -26,6 +26,7 @@ interface AdminPanelProps {
 }
 
 export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps) {
+  const PAGE_SIZE_OPTIONS = [10, 20, 50, 100] as const;
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<'theme' | 'teams' | 'sponsors' | 'players' | 'export' | 'features' | 'streaming' | 'reset'>('theme');
   const [isSaving, setIsSaving] = useState(false);
@@ -50,7 +51,42 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
   const [playerImageSources, setPlayerImageSources] = useState<Record<string, LogoSourceMode>>({});
   const [editingPlayers, setEditingPlayers] = useState<typeof originalPlayers>([]);
   const [playerSearch, setPlayerSearch] = useState('');
+  const [teamPage, setTeamPage] = useState(1);
+  const [playerPage, setPlayerPage] = useState(1);
+  const [sponsorPage, setSponsorPage] = useState(1);
+  const [teamPageSize, setTeamPageSize] = useState<number>(10);
+  const [playerPageSize, setPlayerPageSize] = useState<number>(10);
+  const [sponsorPageSize, setSponsorPageSize] = useState<number>(10);
+  const [editingTeamId, setEditingTeamId] = useState<string | null>(null);
+  const [teamDraft, setTeamDraft] = useState<Team | null>(null);
+  const [editingPlayerId, setEditingPlayerId] = useState<string | null>(null);
+  const [playerDraft, setPlayerDraft] = useState<Player | null>(null);
+  const [isSavingSponsors, setIsSavingSponsors] = useState(false);
   const csvFileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const filteredPlayers = useMemo(
+    () => editingPlayers.filter((player) => player.name.toLowerCase().includes(playerSearch.toLowerCase())),
+    [editingPlayers, playerSearch],
+  );
+
+  const totalTeamPages = Math.max(1, Math.ceil(editingTeams.length / teamPageSize));
+  const totalPlayerPages = Math.max(1, Math.ceil(filteredPlayers.length / playerPageSize));
+  const totalSponsorPages = Math.max(1, Math.ceil(editingSponsors.length / sponsorPageSize));
+
+  const paginatedTeams = useMemo(
+    () => editingTeams.slice((teamPage - 1) * teamPageSize, teamPage * teamPageSize),
+    [editingTeams, teamPage, teamPageSize],
+  );
+
+  const paginatedPlayers = useMemo(
+    () => filteredPlayers.slice((playerPage - 1) * playerPageSize, playerPage * playerPageSize),
+    [filteredPlayers, playerPage, playerPageSize],
+  );
+
+  const paginatedSponsors = useMemo(
+    () => editingSponsors.slice((sponsorPage - 1) * sponsorPageSize, sponsorPage * sponsorPageSize),
+    [editingSponsors, sponsorPage, sponsorPageSize],
+  );
 
   const readFileAsDataUrl = (file: File): Promise<string> => {
     return new Promise((resolve, reject) => {
@@ -75,6 +111,18 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
   const getPlayerImageSourceMode = (imageUrl: string | undefined): LogoSourceMode => (
     imageUrl?.startsWith('data:') ? 'upload' : 'drive'
   );
+
+  const teamDraftLogoSource: LogoSourceMode = editingTeamId && teamDraft
+    ? (teamLogoSources[editingTeamId] || getLogoSourceMode(teamDraft.logoUrl))
+    : 'drive';
+
+  const teamDraftOwnerLogoSource: LogoSourceMode = editingTeamId && teamDraft
+    ? (teamOwnerLogoSources[editingTeamId] || getLogoSourceMode(teamDraft.brandLogoUrl))
+    : 'drive';
+
+  const playerDraftImageSource: LogoSourceMode = editingPlayerId && playerDraft
+    ? (playerImageSources[editingPlayerId] || getPlayerImageSourceMode(playerDraft.imageUrl))
+    : 'drive';
 
   // Load admin settings on mount
   useEffect(() => {
@@ -135,6 +183,18 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
       isMounted = false;
     };
   }, [isOpen, teams, originalPlayers]);
+
+  useEffect(() => {
+    setTeamPage((current) => Math.min(current, totalTeamPages));
+  }, [totalTeamPages]);
+
+  useEffect(() => {
+    setPlayerPage((current) => Math.min(current, totalPlayerPages));
+  }, [totalPlayerPages]);
+
+  useEffect(() => {
+    setSponsorPage((current) => Math.min(current, totalSponsorPages));
+  }, [totalSponsorPages]);
 
   // Handle save theme settings
   const handleSaveTheme = async () => {
@@ -207,7 +267,7 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
   };
 
   const handleSaveSponsors = async () => {
-    setIsSaving(true);
+    setIsSavingSponsors(true);
     try {
       await auctionPersistence.saveSponsors(editingSponsors);
       setSaveStatus('success');
@@ -217,38 +277,11 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
       setSaveStatus('error');
       setTimeout(() => setSaveStatus('idle'), 2000);
     } finally {
-      setIsSaving(false);
+      setIsSavingSponsors(false);
     }
-  };
-
-  const updatePlayerImage = (playerId: string, source: LogoSourceMode, value?: string) => {
-    setEditingPlayers((currentPlayers) => {
-      const updated = currentPlayers.map((player) => (
-        player.id === playerId && typeof value === 'string'
-          ? { ...player, imageUrl: value }
-          : player
-      ));
-      return updated;
-    });
-    setPlayerImageSources((prev) => ({ ...prev, [playerId]: source }));
-  };
-
-  const handlePlayerImageFileChange = async (playerId: string, file?: File | null) => {
-    if (!file) return;
-
-    const isPng = file.type === 'image/png' || file.name.toLowerCase().endsWith('.png');
-    if (!isPng) {
-      alert('Only PNG images are supported for player images.');
-      return;
-    }
-
-    const dataUrl = await readFileAsDataUrl(file);
-    updatePlayerImage(playerId, 'upload', dataUrl);
   };
 
   const handleAddTeam = () => {
-    if (editingTeams.length >= 10) return;
-
     const newIndex = editingTeams.length + 1;
     const newTeamId = typeof crypto !== 'undefined' && 'randomUUID' in crypto
       ? crypto.randomUUID()
@@ -276,6 +309,86 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
     setEditingTeams([...editingTeams, newTeam]);
     setTeamLogoSources((prev) => ({ ...prev, [newTeamId]: 'drive' }));
     setTeamOwnerLogoSources((prev) => ({ ...prev, [newTeamId]: 'drive' }));
+  };
+
+  const handleDeletePlayer = (playerId: string) => {
+    const target = editingPlayers.find((player) => player.id === playerId);
+    if (!target) return;
+
+    const confirmed = globalThis.confirm(`Delete ${target.name} from admin players list?`);
+    if (!confirmed) return;
+
+    setEditingPlayers((current) => current.filter((player) => player.id !== playerId));
+  };
+
+  const openTeamEditor = (teamId: string) => {
+    const targetTeam = editingTeams.find((team) => team.id === teamId);
+    if (!targetTeam) return;
+
+    setEditingTeamId(teamId);
+    setTeamDraft({ ...targetTeam });
+  };
+
+  const closeTeamEditor = () => {
+    setEditingTeamId(null);
+    setTeamDraft(null);
+  };
+
+  const saveTeamDraft = () => {
+    if (!editingTeamId || !teamDraft) return;
+
+    setEditingTeams((current) => current.map((team) => (
+      team.id === editingTeamId
+        ? { ...teamDraft }
+        : team
+    )));
+    closeTeamEditor();
+  };
+
+  const openPlayerEditor = (playerId: string) => {
+    const targetPlayer = editingPlayers.find((player) => player.id === playerId);
+    if (!targetPlayer) return;
+
+    setEditingPlayerId(playerId);
+    setPlayerDraft({ ...targetPlayer });
+  };
+
+  const closePlayerEditor = () => {
+    setEditingPlayerId(null);
+    setPlayerDraft(null);
+  };
+
+  const savePlayerDraft = () => {
+    if (!editingPlayerId || !playerDraft) return;
+
+    setEditingPlayers((current) => current.map((player) => (
+      player.id === editingPlayerId
+        ? { ...playerDraft }
+        : player
+    )));
+    closePlayerEditor();
+  };
+
+  const handleTeamDraftLogoFileChange = async (file?: File | null) => {
+    if (!file || !teamDraft || !editingTeamId) return;
+    const dataUrl = await readFileAsDataUrl(file);
+    setTeamDraft({ ...teamDraft, logoUrl: dataUrl });
+    setTeamLogoSources((prev) => ({ ...prev, [editingTeamId]: 'upload' }));
+  };
+
+  const handleTeamDraftOwnerLogoFileChange = async (file?: File | null) => {
+    if (!file || !teamDraft || !editingTeamId) return;
+    const dataUrl = await readFileAsDataUrl(file);
+    setTeamDraft({ ...teamDraft, brandLogoUrl: dataUrl });
+    setTeamOwnerLogoSources((prev) => ({ ...prev, [editingTeamId]: 'upload' }));
+  };
+
+  const handlePlayerDraftImageFileChange = async (file?: File | null) => {
+    if (!file || !playerDraft || !editingPlayerId) return;
+
+    const dataUrl = await readFileAsDataUrl(file);
+    setPlayerDraft({ ...playerDraft, imageUrl: dataUrl });
+    setPlayerImageSources((prev) => ({ ...prev, [editingPlayerId]: 'upload' }));
   };
 
   const handleAddSponsor = () => {
@@ -324,19 +437,6 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
     setPlayerImageSources((prev) => ({ ...prev, [newPlayerId]: 'drive' }));
   };
 
-  const updateTeamLogo = async (index: number, source: LogoSourceMode, value?: string) => {
-    const updated = [...editingTeams];
-    const team = updated[index];
-    if (!team) return;
-
-    if (typeof value === 'string') {
-      team.logoUrl = value;
-    }
-
-    setEditingTeams(updated);
-    setTeamLogoSources((prev) => ({ ...prev, [team.id]: source }));
-  };
-
   const updateSponsorLogo = async (index: number, source: LogoSourceMode, value?: string) => {
     const updated = [...editingSponsors];
     const sponsor = updated[index];
@@ -348,31 +448,6 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
 
     setEditingSponsors(updated);
     setSponsorLogoSources((prev) => ({ ...prev, [sponsor.id]: source }));
-  };
-
-  const handleTeamLogoFileChange = async (index: number, file?: File | null) => {
-    if (!file) return;
-    const dataUrl = await readFileAsDataUrl(file);
-    await updateTeamLogo(index, 'upload', dataUrl);
-  };
-
-  const updateTeamOwnerLogo = async (index: number, source: LogoSourceMode, value?: string) => {
-    const updated = [...editingTeams];
-    const team = updated[index];
-    if (!team) return;
-
-    if (typeof value === 'string') {
-      team.brandLogoUrl = value;
-    }
-
-    setEditingTeams(updated);
-    setTeamOwnerLogoSources((prev) => ({ ...prev, [team.id]: source }));
-  };
-
-  const handleTeamOwnerLogoFileChange = async (index: number, file?: File | null) => {
-    if (!file) return;
-    const dataUrl = await readFileAsDataUrl(file);
-    await updateTeamOwnerLogo(index, 'upload', dataUrl);
   };
 
   const handleSponsorLogoFileChange = async (index: number, file?: File | null) => {
@@ -811,238 +886,93 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
                     <button
                       className="admin-btn admin-btn-primary"
                       onClick={handleAddTeam}
-                      disabled={isSaving || editingTeams.length >= 10}
+                      disabled={isSaving}
                     >
                       <IoAdd size={18} /> Add Team
                     </button>
                     <span className="admin-teams-limit">
-                      {editingTeams.length}/10 teams configured
+                      {editingTeams.length} teams configured
                     </span>
+                    <label className="admin-page-size">
+                      <span>Rows per page</span>
+                      <select
+                        value={teamPageSize}
+                        onChange={(e) => {
+                          setTeamPageSize(Number(e.target.value));
+                          setTeamPage(1);
+                        }}
+                      >
+                        {PAGE_SIZE_OPTIONS.map((option) => (
+                          <option key={option} value={option}>{option}</option>
+                        ))}
+                      </select>
+                    </label>
                   </div>
 
-                  <div className="teams-list">
-                    {editingTeams.map((team, index) => (
-                      <div key={team.id} className="team-edit-item">
-                        <div className="admin-team-header">
-                          <div className="form-group">
-                            <label>Team {index + 1} Name</label>
-                            <input
-                              type="text"
-                              value={team.name}
-                              onChange={(e) => {
-                                const updated = [...editingTeams];
-                                updated[index].name = e.target.value;
-                                setEditingTeams(updated);
-                              }}
-                            />
+                  <div className="admin-compact-list">
+                    {paginatedTeams.map((team, pageIndex) => {
+                      const absoluteIndex = (teamPage - 1) * teamPageSize + pageIndex;
+
+                      return (
+                        <div key={team.id} className="admin-compact-item">
+                          <div className="admin-compact-main">
+                            <strong>{team.name || `Team ${absoluteIndex + 1}`}</strong>
+                            <small>Captain: {team.captain || 'Not set'} | Purse: ₹{team.remainingPurse ?? 0}L | Threshold: {team.totalPlayerThreshold ?? 11}</small>
                           </div>
-                          <button
-                            type="button"
-                            className="admin-btn admin-btn-danger admin-btn-sm"
-                            onClick={() => handleDeleteTeam(index)}
-                            title="Delete this team"
-                          >
-                            <IoTrash size={16} />
-                          </button>
-                        </div>
-
-                        <div className="form-group">
-                          <label>Captain</label>
-                          <input
-                            type="text"
-                            list="admin-captain-list"
-                            value={team.captain || ''}
-                            placeholder="Select captain"
-                            onChange={(e) => {
-                              const updated = [...editingTeams];
-                              updated[index].captain = e.target.value;
-                              setEditingTeams(updated);
-                            }}
-                          />
-                        </div>
-
-                        <div className="form-group">
-                          <label>Team Owner Name</label>
-                          <input
-                            type="text"
-                            value={team.ownerCompany || ''}
-                            placeholder="Enter owner name"
-                            onChange={(e) => {
-                              const updated = [...editingTeams];
-                              updated[index].ownerCompany = e.target.value;
-                              setEditingTeams(updated);
-                            }}
-                          />
-                        </div>
-
-                        <div className="form-group">
-                          <label>Brand Tagline</label>
-                          <input
-                            type="text"
-                            value={team.brandTagline || ''}
-                            placeholder="Enter brand tagline or slogan"
-                            onChange={(e) => {
-                              const updated = [...editingTeams];
-                              updated[index].brandTagline = e.target.value;
-                              setEditingTeams(updated);
-                            }}
-                          />
-                        </div>
-
-                        <div className="admin-media-field">
-                          <div className="admin-media-header">
-                            <label>Team Logo</label>
-                            <span>Choose Drive link or direct upload</span>
+                          <div className="admin-compact-actions">
+                            <button
+                              type="button"
+                              className="admin-btn admin-btn-secondary admin-btn-sm"
+                              onClick={() => openTeamEditor(team.id)}
+                            >
+                              Edit
+                            </button>
+                            <button
+                              type="button"
+                              className="admin-btn admin-btn-danger admin-btn-sm"
+                              onClick={() => handleDeleteTeam(absoluteIndex)}
+                              title="Delete this team"
+                            >
+                              <IoTrash size={16} />
+                            </button>
                           </div>
-
-                          <div className="admin-source-toggle" role="radiogroup" aria-label={`Team ${index + 1} logo source`}>
-                            <label className="admin-source-option">
-                              <input
-                                type="radio"
-                                name={`team-logo-source-${team.id}`}
-                                checked={(teamLogoSources[team.id] || getLogoSourceMode(team.logoUrl)) === 'drive'}
-                                onChange={() => setTeamLogoSources((prev) => ({ ...prev, [team.id]: 'drive' }))}
-                              />
-                              Drive Link
-                            </label>
-                            <label className="admin-source-option">
-                              <input
-                                type="radio"
-                                name={`team-logo-source-${team.id}`}
-                                checked={(teamLogoSources[team.id] || getLogoSourceMode(team.logoUrl)) === 'upload'}
-                                onChange={() => setTeamLogoSources((prev) => ({ ...prev, [team.id]: 'upload' }))}
-                              />
-                              Direct Upload
-                            </label>
-                          </div>
-
-                          {(teamLogoSources[team.id] || getLogoSourceMode(team.logoUrl)) === 'upload' ? (
-                            <div className="admin-media-source-panel">
-                              <input
-                                type="file"
-                                accept="image/*"
-                                onChange={(e) => {
-                                  void handleTeamLogoFileChange(index, e.target.files?.[0]);
-                                  e.target.value = '';
-                                }}
-                              />
-                              <small>Uploaded images are stored as embedded data URLs so they remain available in the auction app.</small>
-                            </div>
-                          ) : (
-                            <div className="admin-media-source-panel">
-                              <input
-                                type="text"
-                                value={team.logoUrl}
-                                onChange={(e) => {
-                                  const updated = [...editingTeams];
-                                  updated[index].logoUrl = e.target.value;
-                                  setEditingTeams(updated);
-                                }}
-                                placeholder="https://drive.google.com/..."
-                              />
-                              <small>Paste a public Drive link or any direct image URL.</small>
-                            </div>
-                          )}
-
-                          {team.logoUrl && (
-                            <div className="admin-logo-preview">
-                              <img src={team.logoUrl} alt={`${team.name} logo preview`} />
-                              <span>{teamLogoSources[team.id] === 'upload' ? 'Direct upload preview' : 'Drive link preview'}</span>
-                            </div>
-                          )}
                         </div>
+                      );
+                    })}
 
-                        <div className="admin-media-field">
-                          <div className="admin-media-header">
-                            <label>Owner Logo</label>
-                            <span>Choose Drive link or direct upload</span>
-                          </div>
+                    {editingTeams.length === 0 && (
+                      <div className="admin-empty-state">No teams yet. Add a team to begin.</div>
+                    )}
+                  </div>
 
-                          <div className="admin-source-toggle" role="radiogroup" aria-label={`Team ${index + 1} owner logo source`}>
-                            <label className="admin-source-option">
-                              <input
-                                type="radio"
-                                name={`team-owner-logo-source-${team.id}`}
-                                checked={(teamOwnerLogoSources[team.id] || getLogoSourceMode(team.brandLogoUrl)) === 'drive'}
-                                onChange={() => setTeamOwnerLogoSources((prev) => ({ ...prev, [team.id]: 'drive' }))}
-                              />
-                              Drive Link
-                            </label>
-                            <label className="admin-source-option">
-                              <input
-                                type="radio"
-                                name={`team-owner-logo-source-${team.id}`}
-                                checked={(teamOwnerLogoSources[team.id] || getLogoSourceMode(team.brandLogoUrl)) === 'upload'}
-                                onChange={() => setTeamOwnerLogoSources((prev) => ({ ...prev, [team.id]: 'upload' }))}
-                              />
-                              Direct Upload
-                            </label>
-                          </div>
+                  <div className="admin-pagination">
+                    <button
+                      className="admin-btn admin-btn-secondary admin-btn-sm"
+                      onClick={() => setTeamPage((current) => Math.max(1, current - 1))}
+                      disabled={teamPage === 1}
+                    >
+                      Previous
+                    </button>
+                    <span>Page {teamPage} of {totalTeamPages}</span>
+                    <button
+                      className="admin-btn admin-btn-secondary admin-btn-sm"
+                      onClick={() => setTeamPage((current) => Math.min(totalTeamPages, current + 1))}
+                      disabled={teamPage >= totalTeamPages}
+                    >
+                      Next
+                    </button>
+                  </div>
 
-                          {(teamOwnerLogoSources[team.id] || getLogoSourceMode(team.brandLogoUrl)) === 'upload' ? (
-                            <div className="admin-media-source-panel">
-                              <input
-                                type="file"
-                                accept="image/*"
-                                onChange={(e) => {
-                                  void handleTeamOwnerLogoFileChange(index, e.target.files?.[0]);
-                                  e.target.value = '';
-                                }}
-                              />
-                              <small>Uploaded images are stored as embedded data URLs so they remain available in the auction app.</small>
-                            </div>
-                          ) : (
-                            <div className="admin-media-source-panel">
-                              <input
-                                type="text"
-                                value={team.brandLogoUrl || ''}
-                                onChange={(e) => {
-                                  const updated = [...editingTeams];
-                                  updated[index].brandLogoUrl = e.target.value;
-                                  setEditingTeams(updated);
-                                }}
-                                placeholder="https://drive.google.com/..."
-                              />
-                              <small>Paste a public Drive link or any direct image URL.</small>
-                            </div>
-                          )}
-
-                          {team.brandLogoUrl && (
-                            <div className="admin-logo-preview">
-                              <img src={team.brandLogoUrl} alt={`${team.name} owner logo preview`} />
-                              <span>{teamOwnerLogoSources[team.id] === 'upload' ? 'Direct upload preview' : 'Drive link preview'}</span>
-                            </div>
-                          )}
-                        </div>
-
-                        <div className="form-row">
-                          <div className="form-group">
-                            <label>Players Threshold</label>
-                            <input
-                              type="number"
-                              value={team.totalPlayerThreshold}
-                              onChange={(e) => {
-                                const updated = [...editingTeams];
-                                updated[index].totalPlayerThreshold = Number.parseInt(e.target.value, 10);
-                                setEditingTeams(updated);
-                              }}
-                            />
-                          </div>
-
-                        <div className="form-group">
-                          <label>Initial Purse (₹L)</label>
-                          <input
-                            type="number"
-                            value={team.remainingPurse}
-                            onChange={(e) => {
-                              const updated = [...editingTeams];
-                              updated[index].remainingPurse = Number.parseInt(e.target.value, 10);
-                              setEditingTeams(updated);
-                            }}
-                          />
-                        </div>
-                        </div>
-                      </div>
+                  <div className="admin-page-number-strip">
+                    {Array.from({ length: totalTeamPages }, (_, index) => index + 1).map((pageNumber) => (
+                      <button
+                        key={pageNumber}
+                        type="button"
+                        className={`admin-page-number ${teamPage === pageNumber ? 'active' : ''}`}
+                        onClick={() => setTeamPage(pageNumber)}
+                      >
+                        {pageNumber}
+                      </button>
                     ))}
                   </div>
 
@@ -1051,7 +981,7 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
                     onClick={handleSaveTeams}
                     disabled={isSaving}
                   >
-                    <IoSave size={18} /> Save Teams
+                    <IoSave size={18} /> Bulk Save All Teams
                   </button>
 
                   <datalist id="admin-captain-list">
@@ -1071,174 +1001,223 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
                     <button
                       className="admin-btn admin-btn-primary"
                       onClick={handleAddSponsor}
-                      disabled={isSaving}
+                      disabled={isSavingSponsors}
                     >
                       <IoAdd size={18} /> Add Sponsor
                     </button>
                     <span className="admin-teams-limit">
                       {editingSponsors.length} sponsors configured
                     </span>
+                    <label className="admin-page-size">
+                      <span>Rows per page</span>
+                      <select
+                        value={sponsorPageSize}
+                        onChange={(e) => {
+                          setSponsorPageSize(Number(e.target.value));
+                          setSponsorPage(1);
+                        }}
+                      >
+                        {PAGE_SIZE_OPTIONS.map((option) => (
+                          <option key={option} value={option}>{option}</option>
+                        ))}
+                      </select>
+                    </label>
                   </div>
 
                   <div className="teams-list">
-                    {editingSponsors.map((sponsor, index) => (
-                      <div key={sponsor.id} className="team-edit-item">
-                        <div className="form-group">
-                          <label>Sponsor Name</label>
-                          <input
-                            type="text"
-                            value={sponsor.name}
-                            onChange={(e) => {
-                              const updated = [...editingSponsors];
-                              updated[index] = { ...updated[index], name: e.target.value };
-                              setEditingSponsors(updated);
-                            }}
-                            placeholder="e.g., Official Partner"
-                          />
-                        </div>
+                    {paginatedSponsors.map((sponsor, pageIndex) => {
+                      const absoluteIndex = (sponsorPage - 1) * sponsorPageSize + pageIndex;
 
-                        <div className="admin-media-field">
-                          <div className="admin-media-header">
-                            <label>Sponsorship Image</label>
-                            <span>Choose Drive link or direct upload</span>
+                      return (
+                        <div key={sponsor.id} className="team-edit-item">
+                          <div className="form-group">
+                            <label>Sponsor Name</label>
+                            <input
+                              type="text"
+                              value={sponsor.name}
+                              onChange={(e) => {
+                                const updated = [...editingSponsors];
+                                updated[absoluteIndex] = { ...updated[absoluteIndex], name: e.target.value };
+                                setEditingSponsors(updated);
+                              }}
+                              placeholder="e.g., Official Partner"
+                            />
                           </div>
 
-                          <div className="admin-source-toggle" role="radiogroup" aria-label={`Sponsor ${index + 1} image source`}>
-                            <label className="admin-source-option">
-                              <input
-                                type="radio"
-                                name={`sponsor-logo-source-${sponsor.id}`}
-                                checked={(sponsorLogoSources[sponsor.id] || getLogoSourceMode(sponsor.logoUrl)) === 'drive'}
-                                onChange={() => setSponsorLogoSources((prev) => ({ ...prev, [sponsor.id]: 'drive' }))}
-                              />
-                              Drive Link
-                            </label>
-                            <label className="admin-source-option">
-                              <input
-                                type="radio"
-                                name={`sponsor-logo-source-${sponsor.id}`}
-                                checked={(sponsorLogoSources[sponsor.id] || getLogoSourceMode(sponsor.logoUrl)) === 'upload'}
-                                onChange={() => setSponsorLogoSources((prev) => ({ ...prev, [sponsor.id]: 'upload' }))}
-                              />
-                              Direct Upload
-                            </label>
-                          </div>
-
-                          {(sponsorLogoSources[sponsor.id] || getLogoSourceMode(sponsor.logoUrl)) === 'upload' ? (
-                            <div className="admin-media-source-panel">
-                              <input
-                                type="file"
-                                accept="image/*"
-                                onChange={(e) => {
-                                  void handleSponsorLogoFileChange(index, e.target.files?.[0]);
-                                  e.target.value = '';
-                                }}
-                              />
-                              <small>Upload the sponsor artwork directly. It will be embedded into Firebase and shown in the auction app.</small>
+                          <div className="admin-media-field">
+                            <div className="admin-media-header">
+                              <label>Sponsorship Image</label>
+                              <span>Choose Drive link or direct upload</span>
                             </div>
-                          ) : (
-                            <div className="admin-media-source-panel">
+
+                            <div className="admin-source-toggle" role="radiogroup" aria-label={`Sponsor ${absoluteIndex + 1} image source`}>
+                              <label className="admin-source-option">
+                                <input
+                                  type="radio"
+                                  name={`sponsor-logo-source-${sponsor.id}`}
+                                  checked={(sponsorLogoSources[sponsor.id] || getLogoSourceMode(sponsor.logoUrl)) === 'drive'}
+                                  onChange={() => setSponsorLogoSources((prev) => ({ ...prev, [sponsor.id]: 'drive' }))}
+                                />
+                                Drive Link
+                              </label>
+                              <label className="admin-source-option">
+                                <input
+                                  type="radio"
+                                  name={`sponsor-logo-source-${sponsor.id}`}
+                                  checked={(sponsorLogoSources[sponsor.id] || getLogoSourceMode(sponsor.logoUrl)) === 'upload'}
+                                  onChange={() => setSponsorLogoSources((prev) => ({ ...prev, [sponsor.id]: 'upload' }))}
+                                />
+                                Direct Upload
+                              </label>
+                            </div>
+
+                            {(sponsorLogoSources[sponsor.id] || getLogoSourceMode(sponsor.logoUrl)) === 'upload' ? (
+                              <div className="admin-media-source-panel">
+                                <input
+                                  type="file"
+                                  accept="image/*"
+                                  onChange={(e) => {
+                                    void handleSponsorLogoFileChange(absoluteIndex, e.target.files?.[0]);
+                                    e.target.value = '';
+                                  }}
+                                />
+                                <small>Upload the sponsor artwork directly. It will be embedded into Firebase and shown in the auction app.</small>
+                              </div>
+                            ) : (
+                              <div className="admin-media-source-panel">
+                                <input
+                                  type="text"
+                                  value={sponsor.logoUrl || ''}
+                                  onChange={(e) => {
+                                    const updated = [...editingSponsors];
+                                    updated[absoluteIndex] = { ...updated[absoluteIndex], logoUrl: e.target.value };
+                                    setEditingSponsors(updated);
+                                  }}
+                                  placeholder="https://drive.google.com/..."
+                                />
+                                <small>Paste a public Drive link or a direct image URL for the sponsor artwork.</small>
+                              </div>
+                            )}
+
+                            {sponsor.logoUrl && (
+                              <div className="admin-logo-preview">
+                                <img src={sponsor.logoUrl} alt={`${sponsor.name} preview`} />
+                                <span>{sponsorLogoSources[sponsor.id] === 'upload' ? 'Uploaded sponsor image' : 'Linked sponsor image'}</span>
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="form-row">
+                            <div className="form-group">
+                              <label>Tier</label>
                               <input
                                 type="text"
-                                value={sponsor.logoUrl || ''}
+                                value={sponsor.tier || ''}
                                 onChange={(e) => {
                                   const updated = [...editingSponsors];
-                                  updated[index] = { ...updated[index], logoUrl: e.target.value };
+                                  updated[absoluteIndex] = { ...updated[absoluteIndex], tier: e.target.value };
                                   setEditingSponsors(updated);
                                 }}
-                                placeholder="https://drive.google.com/..."
+                                placeholder="e.g., title, platinum, gold"
                               />
-                              <small>Paste a public Drive link or a direct image URL for the sponsor artwork.</small>
                             </div>
-                          )}
 
-                          {sponsor.logoUrl && (
-                            <div className="admin-logo-preview">
-                              <img src={sponsor.logoUrl} alt={`${sponsor.name} preview`} />
-                              <span>{sponsorLogoSources[sponsor.id] === 'upload' ? 'Uploaded sponsor image' : 'Linked sponsor image'}</span>
+                            <div className="form-group">
+                              <label>Website</label>
+                              <input
+                                type="text"
+                                value={sponsor.website || ''}
+                                onChange={(e) => {
+                                  const updated = [...editingSponsors];
+                                  updated[absoluteIndex] = { ...updated[absoluteIndex], website: e.target.value };
+                                  setEditingSponsors(updated);
+                                }}
+                                placeholder="https://example.com"
+                              />
                             </div>
-                          )}
-                        </div>
-
-                        <div className="form-row">
-                          <div className="form-group">
-                            <label>Tier</label>
-                            <input
-                              type="text"
-                              value={sponsor.tier || ''}
-                              onChange={(e) => {
-                                const updated = [...editingSponsors];
-                                updated[index] = { ...updated[index], tier: e.target.value };
-                                setEditingSponsors(updated);
-                              }}
-                              placeholder="e.g., title, platinum, gold"
-                            />
                           </div>
 
-                          <div className="form-group">
-                            <label>Website</label>
-                            <input
-                              type="text"
-                              value={sponsor.website || ''}
-                              onChange={(e) => {
-                                const updated = [...editingSponsors];
-                                updated[index] = { ...updated[index], website: e.target.value };
-                                setEditingSponsors(updated);
-                              }}
-                              placeholder="https://example.com"
-                            />
-                          </div>
-                        </div>
-
-                        <div className="form-row">
-                          <div className="form-group">
-                            <label>Display Order</label>
-                            <input
-                              type="number"
-                              value={sponsor.order ?? index + 1}
-                              onChange={(e) => {
-                                const updated = [...editingSponsors];
-                                updated[index] = { ...updated[index], order: Number(e.target.value) || 0 };
-                                setEditingSponsors(updated);
-                              }}
-                            />
-                          </div>
-
-                          <div className="form-group admin-checkbox-group">
-                            <label>
+                          <div className="form-row">
+                            <div className="form-group">
+                              <label>Display Order</label>
                               <input
-                                type="checkbox"
-                                checked={sponsor.active !== false}
+                                type="number"
+                                value={sponsor.order ?? absoluteIndex + 1}
                                 onChange={(e) => {
                                   const updated = [...editingSponsors];
-                                  updated[index] = { ...updated[index], active: e.target.checked };
+                                  updated[absoluteIndex] = { ...updated[absoluteIndex], order: Number(e.target.value) || 0 };
                                   setEditingSponsors(updated);
                                 }}
                               />
-                              Active
-                            </label>
-                            <label>
-                              <input
-                                type="checkbox"
-                                checked={Boolean(sponsor.isTitleSponsor)}
-                                onChange={(e) => {
-                                  const updated = [...editingSponsors];
-                                  updated[index] = { ...updated[index], isTitleSponsor: e.target.checked };
-                                  setEditingSponsors(updated);
-                                }}
-                              />
-                              Title Sponsor
-                            </label>
+                            </div>
+
+                            <div className="form-group admin-checkbox-group">
+                              <label>
+                                <input
+                                  type="checkbox"
+                                  checked={sponsor.active !== false}
+                                  onChange={(e) => {
+                                    const updated = [...editingSponsors];
+                                    updated[absoluteIndex] = { ...updated[absoluteIndex], active: e.target.checked };
+                                    setEditingSponsors(updated);
+                                  }}
+                                />
+                                Active
+                              </label>
+                              <label>
+                                <input
+                                  type="checkbox"
+                                  checked={Boolean(sponsor.isTitleSponsor)}
+                                  onChange={(e) => {
+                                    const updated = [...editingSponsors];
+                                    updated[absoluteIndex] = { ...updated[absoluteIndex], isTitleSponsor: e.target.checked };
+                                    setEditingSponsors(updated);
+                                  }}
+                                />
+                                Title Sponsor
+                              </label>
+                            </div>
                           </div>
                         </div>
-                      </div>
+                      );
+                    })}
+                  </div>
+
+                  <div className="admin-pagination">
+                    <button
+                      className="admin-btn admin-btn-secondary admin-btn-sm"
+                      onClick={() => setSponsorPage((current) => Math.max(1, current - 1))}
+                      disabled={sponsorPage === 1}
+                    >
+                      Previous
+                    </button>
+                    <span>Page {sponsorPage} of {totalSponsorPages}</span>
+                    <button
+                      className="admin-btn admin-btn-secondary admin-btn-sm"
+                      onClick={() => setSponsorPage((current) => Math.min(totalSponsorPages, current + 1))}
+                      disabled={sponsorPage >= totalSponsorPages}
+                    >
+                      Next
+                    </button>
+                  </div>
+
+                  <div className="admin-page-number-strip">
+                    {Array.from({ length: totalSponsorPages }, (_, index) => index + 1).map((pageNumber) => (
+                      <button
+                        key={pageNumber}
+                        type="button"
+                        className={`admin-page-number ${sponsorPage === pageNumber ? 'active' : ''}`}
+                        onClick={() => setSponsorPage(pageNumber)}
+                      >
+                        {pageNumber}
+                      </button>
                     ))}
                   </div>
 
                   <button
                     className="admin-btn admin-btn-primary"
                     onClick={handleSaveSponsors}
-                    disabled={isSaving}
+                    disabled={isSavingSponsors}
                   >
                     <IoSave size={18} /> Save Sponsors
                   </button>
@@ -1269,7 +1248,7 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
                       onClick={handleSavePlayers}
                       disabled={isSaving || editingPlayers.length === 0}
                     >
-                      <IoSave size={18} /> Save Player Changes
+                      <IoSave size={18} /> Bulk Save All Players
                     </button>
                     <button
                       className="admin-btn admin-btn-warning"
@@ -1285,6 +1264,20 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
                     >
                       <IoDownload size={18} /> Import CSV
                     </button>
+                    <label className="admin-page-size">
+                      <span>Rows per page</span>
+                      <select
+                        value={playerPageSize}
+                        onChange={(e) => {
+                          setPlayerPageSize(Number(e.target.value));
+                          setPlayerPage(1);
+                        }}
+                      >
+                        {PAGE_SIZE_OPTIONS.map((option) => (
+                          <option key={option} value={option}>{option}</option>
+                        ))}
+                      </select>
+                    </label>
                     <input
                       ref={csvFileInputRef}
                       type="file"
@@ -1294,176 +1287,66 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
                     />
                   </div>
 
-                  <div className="admin-player-list">
-                    {editingPlayers
-                      .filter((player) =>
-                        player.name.toLowerCase().includes(playerSearch.toLowerCase())
-                      )
-                      .map((player) => {
-                        const actualIndex = editingPlayers.findIndex((candidate) => candidate.id === player.id);
-                        const imageSourceMode = playerImageSources[player.id] || getPlayerImageSourceMode(player.imageUrl);
+                  <div className="admin-compact-list">
+                    {paginatedPlayers.map((player) => (
+                      <div key={player.id} className="admin-compact-item">
+                        <div className="admin-compact-main">
+                          <strong>{player.name}</strong>
+                          <small>ID: {player.id} | {player.role} | Base: ₹{player.basePrice}L</small>
+                        </div>
+                        <div className="admin-compact-actions">
+                          <button
+                            type="button"
+                            className="admin-btn admin-btn-secondary admin-btn-sm"
+                            onClick={() => openPlayerEditor(player.id)}
+                          >
+                            Edit
+                          </button>
+                          <button
+                            type="button"
+                            className="admin-btn admin-btn-danger admin-btn-sm"
+                            onClick={() => handleDeletePlayer(player.id)}
+                          >
+                            <IoTrash size={16} />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
 
-                        return (
-                          <div key={player.id} className="admin-player-row">
-                            <div className="admin-player-cell admin-player-name">
-                              <span className="admin-field-title">Name</span>
-                              <input
-                                type="text"
-                                value={player.name}
-                                onChange={(e) => {
-                                  const updated = [...editingPlayers];
-                                  updated[actualIndex] = { ...updated[actualIndex], name: e.target.value };
-                                  setEditingPlayers(updated);
-                                }}
-                              />
-                            </div>
-                            <div className="admin-player-cell">
-                              <span className="admin-field-title">Role</span>
-                              <input
-                                type="text"
-                                value={player.role}
-                                onChange={(e) => {
-                                  const updated = [...editingPlayers];
-                                  updated[actualIndex] = { ...updated[actualIndex], role: e.target.value as typeof player.role };
-                                  setEditingPlayers(updated);
-                                }}
-                              />
-                            </div>
-                            <div className="admin-player-cell">
-                              <span className="admin-field-title">Base Price (₹L)</span>
-                              <input
-                                type="number"
-                                value={player.basePrice}
-                                onChange={(e) => {
-                                  const updated = [...editingPlayers];
-                                  updated[actualIndex] = { ...updated[actualIndex], basePrice: Number(e.target.value) || 0 };
-                                  setEditingPlayers(updated);
-                                }}
-                              />
-                            </div>
-                            <div className="admin-player-cell">
-                              <span className="admin-field-title">Age</span>
-                              <input
-                                type="number"
-                                value={player.age ?? ''}
-                                onChange={(e) => {
-                                  const updated = [...editingPlayers];
-                                  updated[actualIndex] = { ...updated[actualIndex], age: e.target.value ? Number(e.target.value) : null };
-                                  setEditingPlayers(updated);
-                                }}
-                              />
-                            </div>
-                            <div className="admin-player-cell">
-                              <span className="admin-field-title">Matches</span>
-                              <input
-                                type="text"
-                                value={player.matches}
-                                onChange={(e) => {
-                                  const updated = [...editingPlayers];
-                                  updated[actualIndex] = { ...updated[actualIndex], matches: e.target.value };
-                                  setEditingPlayers(updated);
-                                }}
-                              />
-                            </div>
-                            <div className="admin-player-cell">
-                              <span className="admin-field-title">Overall Scored</span>
-                              <input
-                                type="text"
-                                value={player.runs}
-                                onChange={(e) => {
-                                  const updated = [...editingPlayers];
-                                  updated[actualIndex] = { ...updated[actualIndex], runs: e.target.value };
-                                  setEditingPlayers(updated);
-                                }}
-                              />
-                            </div>
-                            <div className="admin-player-cell">
-                              <span className="admin-field-title">Wickets</span>
-                              <input
-                                type="text"
-                                value={player.wickets}
-                                onChange={(e) => {
-                                  const updated = [...editingPlayers];
-                                  updated[actualIndex] = { ...updated[actualIndex], wickets: e.target.value };
-                                  setEditingPlayers(updated);
-                                }}
-                              />
-                            </div>
-                            <div className="admin-player-cell">
-                              <span className="admin-field-title">Highest Scored</span>
-                              <input
-                                type="text"
-                                value={player.battingBestFigures}
-                                onChange={(e) => {
-                                  const updated = [...editingPlayers];
-                                  updated[actualIndex] = { ...updated[actualIndex], battingBestFigures: e.target.value };
-                                  setEditingPlayers(updated);
-                                }}
-                              />
-                            </div>
-                            <div className="admin-player-cell">
-                              <span className="admin-field-title">Bowling Best</span>
-                              <input
-                                type="text"
-                                value={player.bowlingBestFigures}
-                                onChange={(e) => {
-                                  const updated = [...editingPlayers];
-                                  updated[actualIndex] = { ...updated[actualIndex], bowlingBestFigures: e.target.value };
-                                  setEditingPlayers(updated);
-                                }}
-                              />
-                            </div>
-                            <div className="admin-player-cell admin-player-image">
-                              <span className="admin-field-title">Player Image</span>
-                              <div className="admin-source-toggle">
-                                <label>
-                                  <input
-                                    type="radio"
-                                    checked={imageSourceMode === 'drive'}
-                                    onChange={() => setPlayerImageSources((prev) => ({ ...prev, [player.id]: 'drive' }))}
-                                  />
-                                  Drive Link
-                                </label>
-                                <label>
-                                  <input
-                                    type="radio"
-                                    checked={imageSourceMode === 'upload'}
-                                    onChange={() => setPlayerImageSources((prev) => ({ ...prev, [player.id]: 'upload' }))}
-                                  />
-                                  Direct Upload PNG
-                                </label>
-                              </div>
-                              {imageSourceMode === 'upload' ? (
-                                <>
-                                  <input
-                                    type="file"
-                                    accept="image/png,.png"
-                                    onChange={(e) => {
-                                      void handlePlayerImageFileChange(player.id, e.target.files?.[0]);
-                                    }}
-                                  />
-                                  <small>PNG only. Uploaded images are embedded into the auction data.</small>
-                                </>
-                              ) : (
-                                <>
-                                  <input
-                                    type="text"
-                                    value={player.imageUrl}
-                                    onChange={(e) => {
-                                      const updated = [...editingPlayers];
-                                      updated[actualIndex] = { ...updated[actualIndex], imageUrl: e.target.value };
-                                      setEditingPlayers(updated);
-                                      setPlayerImageSources((prev) => ({ ...prev, [player.id]: 'drive' }));
-                                    }}
-                                    placeholder="https://drive.google.com/..."
-                                  />
-                                  <small>Paste a Google Drive link or direct PNG image URL.</small>
-                                </>
-                              )}
-                            </div>
-                          </div>
-                        );
-                      })}
+                    {filteredPlayers.length === 0 && (
+                      <div className="admin-empty-state">No players found for your search.</div>
+                    )}
+                  </div>
+
+                  <div className="admin-pagination">
+                    <button
+                      className="admin-btn admin-btn-secondary admin-btn-sm"
+                      onClick={() => setPlayerPage((current) => Math.max(1, current - 1))}
+                      disabled={playerPage === 1}
+                    >
+                      Previous
+                    </button>
+                    <span>Page {playerPage} of {totalPlayerPages}</span>
+                    <button
+                      className="admin-btn admin-btn-secondary admin-btn-sm"
+                      onClick={() => setPlayerPage((current) => Math.min(totalPlayerPages, current + 1))}
+                      disabled={playerPage >= totalPlayerPages}
+                    >
+                      Next
+                    </button>
+                  </div>
+
+                  <div className="admin-page-number-strip">
+                    {Array.from({ length: totalPlayerPages }, (_, index) => index + 1).map((pageNumber) => (
+                      <button
+                        key={pageNumber}
+                        type="button"
+                        className={`admin-page-number ${playerPage === pageNumber ? 'active' : ''}`}
+                        onClick={() => setPlayerPage(pageNumber)}
+                      >
+                        {pageNumber}
+                      </button>
+                    ))}
                   </div>
                 </div>
               )}
@@ -1528,6 +1411,309 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
                   >
                     <IoRefresh size={18} /> Reset Local Image Cache
                   </button>
+                </div>
+              )}
+
+              {teamDraft && editingTeamId && (
+                <div className="admin-edit-modal-backdrop" onClick={closeTeamEditor}>
+                  <div className="admin-edit-modal" onClick={(e) => e.stopPropagation()}>
+                    <h3>Edit Team</h3>
+
+                    <div className="form-group">
+                      <label>Team Name</label>
+                      <input
+                        type="text"
+                        value={teamDraft.name}
+                        onChange={(e) => setTeamDraft({ ...teamDraft, name: e.target.value })}
+                      />
+                    </div>
+
+                    <div className="form-row">
+                      <div className="form-group">
+                        <label>Captain</label>
+                        <input
+                          type="text"
+                          list="admin-captain-list"
+                          value={teamDraft.captain || ''}
+                          onChange={(e) => setTeamDraft({ ...teamDraft, captain: e.target.value })}
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label>Owner Name</label>
+                        <input
+                          type="text"
+                          value={teamDraft.ownerCompany || ''}
+                          onChange={(e) => setTeamDraft({ ...teamDraft, ownerCompany: e.target.value })}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="form-group">
+                      <label>Brand Tagline</label>
+                      <input
+                        type="text"
+                        value={teamDraft.brandTagline || ''}
+                        onChange={(e) => setTeamDraft({ ...teamDraft, brandTagline: e.target.value })}
+                      />
+                    </div>
+
+                    <div className="form-row">
+                      <div className="form-group">
+                        <label>Players Threshold</label>
+                        <input
+                          type="number"
+                          value={teamDraft.totalPlayerThreshold}
+                          onChange={(e) => setTeamDraft({ ...teamDraft, totalPlayerThreshold: Number.parseInt(e.target.value || '0', 10) || 0 })}
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label>Initial Purse (₹L)</label>
+                        <input
+                          type="number"
+                          value={teamDraft.remainingPurse}
+                          onChange={(e) => setTeamDraft({ ...teamDraft, remainingPurse: Number.parseInt(e.target.value || '0', 10) || 0 })}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="admin-media-field">
+                      <div className="admin-media-header">
+                        <label>Team Logo</label>
+                        <span>Drive link or direct upload</span>
+                      </div>
+                      <div className="admin-source-toggle">
+                        <label className="admin-source-option">
+                          <input
+                            type="radio"
+                            checked={teamDraftLogoSource === 'drive'}
+                            onChange={() => setTeamLogoSources((prev) => ({ ...prev, [editingTeamId]: 'drive' }))}
+                          />
+                          Drive Link
+                        </label>
+                        <label className="admin-source-option">
+                          <input
+                            type="radio"
+                            checked={teamDraftLogoSource === 'upload'}
+                            onChange={() => setTeamLogoSources((prev) => ({ ...prev, [editingTeamId]: 'upload' }))}
+                          />
+                          Direct Upload
+                        </label>
+                      </div>
+
+                      {teamDraftLogoSource === 'upload' ? (
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={(e) => {
+                            void handleTeamDraftLogoFileChange(e.target.files?.[0]);
+                            e.target.value = '';
+                          }}
+                        />
+                      ) : (
+                        <input
+                          type="text"
+                          value={teamDraft.logoUrl}
+                          onChange={(e) => setTeamDraft({ ...teamDraft, logoUrl: e.target.value })}
+                          placeholder="https://drive.google.com/..."
+                        />
+                      )}
+                    </div>
+
+                    <div className="admin-media-field">
+                      <div className="admin-media-header">
+                        <label>Owner Logo</label>
+                        <span>Drive link or direct upload</span>
+                      </div>
+                      <div className="admin-source-toggle">
+                        <label className="admin-source-option">
+                          <input
+                            type="radio"
+                            checked={teamDraftOwnerLogoSource === 'drive'}
+                            onChange={() => setTeamOwnerLogoSources((prev) => ({ ...prev, [editingTeamId]: 'drive' }))}
+                          />
+                          Drive Link
+                        </label>
+                        <label className="admin-source-option">
+                          <input
+                            type="radio"
+                            checked={teamDraftOwnerLogoSource === 'upload'}
+                            onChange={() => setTeamOwnerLogoSources((prev) => ({ ...prev, [editingTeamId]: 'upload' }))}
+                          />
+                          Direct Upload
+                        </label>
+                      </div>
+
+                      {teamDraftOwnerLogoSource === 'upload' ? (
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={(e) => {
+                            void handleTeamDraftOwnerLogoFileChange(e.target.files?.[0]);
+                            e.target.value = '';
+                          }}
+                        />
+                      ) : (
+                        <input
+                          type="text"
+                          value={teamDraft.brandLogoUrl || ''}
+                          onChange={(e) => setTeamDraft({ ...teamDraft, brandLogoUrl: e.target.value })}
+                          placeholder="https://drive.google.com/..."
+                        />
+                      )}
+                    </div>
+
+                    <div className="admin-modal-actions">
+                      <button className="admin-btn admin-btn-secondary" type="button" onClick={closeTeamEditor}>Cancel</button>
+                      <button className="admin-btn admin-btn-primary" type="button" onClick={saveTeamDraft}>Save Team</button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {playerDraft && editingPlayerId && (
+                <div className="admin-edit-modal-backdrop" onClick={closePlayerEditor}>
+                  <div className="admin-edit-modal" onClick={(e) => e.stopPropagation()}>
+                    <h3>Edit Player</h3>
+
+                    <div className="form-row">
+                      <div className="form-group">
+                        <label>Player ID</label>
+                        <input type="text" value={playerDraft.id} disabled />
+                      </div>
+                      <div className="form-group">
+                        <label>Name</label>
+                        <input
+                          type="text"
+                          value={playerDraft.name}
+                          onChange={(e) => setPlayerDraft({ ...playerDraft, name: e.target.value })}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="form-row">
+                      <div className="form-group">
+                        <label>Role</label>
+                        <input
+                          type="text"
+                          value={playerDraft.role}
+                          onChange={(e) => setPlayerDraft({ ...playerDraft, role: e.target.value as Player['role'] })}
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label>Base Price (₹L)</label>
+                        <input
+                          type="number"
+                          value={playerDraft.basePrice}
+                          onChange={(e) => setPlayerDraft({ ...playerDraft, basePrice: Number(e.target.value) || 0 })}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="form-row">
+                      <div className="form-group">
+                        <label>Age</label>
+                        <input
+                          type="number"
+                          value={playerDraft.age ?? ''}
+                          onChange={(e) => setPlayerDraft({ ...playerDraft, age: e.target.value ? Number(e.target.value) : null })}
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label>Matches</label>
+                        <input
+                          type="text"
+                          value={playerDraft.matches}
+                          onChange={(e) => setPlayerDraft({ ...playerDraft, matches: e.target.value })}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="form-row">
+                      <div className="form-group">
+                        <label>Overall Scored</label>
+                        <input
+                          type="text"
+                          value={playerDraft.runs}
+                          onChange={(e) => setPlayerDraft({ ...playerDraft, runs: e.target.value })}
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label>Wickets</label>
+                        <input
+                          type="text"
+                          value={playerDraft.wickets}
+                          onChange={(e) => setPlayerDraft({ ...playerDraft, wickets: e.target.value })}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="form-row">
+                      <div className="form-group">
+                        <label>Highest Scored</label>
+                        <input
+                          type="text"
+                          value={playerDraft.battingBestFigures}
+                          onChange={(e) => setPlayerDraft({ ...playerDraft, battingBestFigures: e.target.value })}
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label>Bowling Best</label>
+                        <input
+                          type="text"
+                          value={playerDraft.bowlingBestFigures}
+                          onChange={(e) => setPlayerDraft({ ...playerDraft, bowlingBestFigures: e.target.value })}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="admin-media-field">
+                      <div className="admin-media-header">
+                        <label>Player Image</label>
+                        <span>Drive link or direct upload PNG</span>
+                      </div>
+                      <div className="admin-source-toggle">
+                        <label className="admin-source-option">
+                          <input
+                            type="radio"
+                            checked={playerDraftImageSource === 'drive'}
+                            onChange={() => setPlayerImageSources((prev) => ({ ...prev, [editingPlayerId]: 'drive' }))}
+                          />
+                          Drive Link
+                        </label>
+                        <label className="admin-source-option">
+                          <input
+                            type="radio"
+                            checked={playerDraftImageSource === 'upload'}
+                            onChange={() => setPlayerImageSources((prev) => ({ ...prev, [editingPlayerId]: 'upload' }))}
+                          />
+                          Direct Upload PNG
+                        </label>
+                      </div>
+
+                      {playerDraftImageSource === 'upload' ? (
+                        <input
+                          type="file"
+                                  accept="image/*"
+                          onChange={(e) => {
+                            void handlePlayerDraftImageFileChange(e.target.files?.[0]);
+                            e.target.value = '';
+                          }}
+                        />
+                      ) : (
+                        <input
+                          type="text"
+                          value={playerDraft.imageUrl}
+                          onChange={(e) => setPlayerDraft({ ...playerDraft, imageUrl: e.target.value })}
+                          placeholder="https://drive.google.com/..."
+                        />
+                      )}
+                    </div>
+
+                    <div className="admin-modal-actions">
+                      <button className="admin-btn admin-btn-secondary" type="button" onClick={closePlayerEditor}>Cancel</button>
+                      <button className="admin-btn admin-btn-primary" type="button" onClick={savePlayerDraft}>Save Player</button>
+                    </div>
+                  </div>
                 </div>
               )}
 

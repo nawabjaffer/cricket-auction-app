@@ -4,7 +4,6 @@
 // ============================================================================
 
 import React, { useState, useMemo } from 'react';
-import { extractDriveFileId } from '../../utils/driveImage';
 
 interface TeamLogoProps {
   logoUrl: string | undefined;
@@ -12,13 +11,6 @@ interface TeamLogoProps {
   size?: 'sm' | 'md' | 'lg' | 'xl';
   className?: string;
 }
-
-const SIZE_MAP = {
-  sm: 24,
-  md: 32,
-  lg: 48,
-  xl: 64,
-};
 
 const SIZE_CLASSES = {
   sm: 'w-6 h-6',
@@ -36,27 +28,24 @@ export const TeamLogo: React.FC<TeamLogoProps> = ({
   const [imageError, setImageError] = useState(false);
   const [currentUrlIndex, setCurrentUrlIndex] = useState(0);
 
-  // Generate multiple URL formats to try
+  // Team logos are now direct-upload first. Drive-hosted URLs are deprecated.
   const imageUrls = useMemo(() => {
     if (!logoUrl || logoUrl.includes('placeholder_player.png')) return [];
-    
-    const urls: string[] = [];
-    const fileId = extractDriveFileId(logoUrl);
-    
-    if (fileId) {
-      // Try lh3 first (best CORS support)
-      urls.push(`https://lh3.googleusercontent.com/d/${fileId}=s${SIZE_MAP[size] * 2}`);
-      // Try thumbnail endpoint
-      urls.push(`https://drive.google.com/thumbnail?id=${fileId}&sz=w${SIZE_MAP[size] * 2}`);
-      // Try direct export
-      urls.push(`https://drive.google.com/uc?export=view&id=${fileId}`);
-    } else {
-      // Non-Drive URL, use as-is
-      urls.push(logoUrl);
+
+    const trimmed = logoUrl.trim();
+    if (!trimmed) return [];
+
+    const lower = trimmed.toLowerCase();
+    if (
+      lower.includes('drive.google.com')
+      || lower.includes('docs.google.com')
+      || lower.includes('googleusercontent.com')
+    ) {
+      return [];
     }
-    
-    return urls;
-  }, [logoUrl, size]);
+
+    return [trimmed];
+  }, [logoUrl]);
 
   // Generate team initials for fallback
   const teamInitials = useMemo(() => {
@@ -101,7 +90,7 @@ export const TeamLogo: React.FC<TeamLogoProps> = ({
         alt={`${teamName} logo`}
         className="w-full h-full object-contain p-1"
         onError={handleError}
-        loading="lazy"
+        loading={currentUrl?.startsWith('data:') ? 'eager' : 'lazy'}
       />
     </div>
   );

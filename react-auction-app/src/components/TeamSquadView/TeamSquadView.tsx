@@ -9,6 +9,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { IoGridOutline, IoChevronDownOutline } from 'react-icons/io5';
 import type { Team, SoldPlayer } from '../../types';
 import { PlayerImage } from '../PlayerImage/PlayerImage';
+import { TeamLogo } from '../TeamLogo/TeamLogo';
+import { extractDriveFileId } from '../../utils/driveImage';
 import './TeamSquadView.css';
 
 type CaptainSourcePlayer = {
@@ -45,6 +47,8 @@ export function TeamSquadView({
   const [isTeamMenuOpen, setIsTeamMenuOpen] = useState(false);
   const [teamLogoFailed, setTeamLogoFailed] = useState(false);
   const [brandLogoFailed, setBrandLogoFailed] = useState(false);
+  const [teamLogoUrlIndex, setTeamLogoUrlIndex] = useState(0);
+  const [brandLogoUrlIndex, setBrandLogoUrlIndex] = useState(0);
 
   // Keep the selected team in sync with the opener, but allow in-screen switching
   useEffect(() => {
@@ -62,7 +66,50 @@ export function TeamSquadView({
     setIsTeamMenuOpen(false);
     setTeamLogoFailed(false);
     setBrandLogoFailed(false);
+    setTeamLogoUrlIndex(0);
+    setBrandLogoUrlIndex(0);
   }, [activeTeamId]);
+
+  const buildImageCandidates = (rawUrl?: string, allowDrive: boolean = true): string[] => {
+    if (!rawUrl) return [];
+
+    const trimmed = rawUrl.trim();
+    if (!trimmed) return [];
+
+    if (!allowDrive) {
+      const lower = trimmed.toLowerCase();
+      if (
+        lower.includes('drive.google.com')
+        || lower.includes('docs.google.com')
+        || lower.includes('googleusercontent.com')
+      ) {
+        return [];
+      }
+
+      return [trimmed];
+    }
+
+    const fileId = extractDriveFileId(trimmed);
+    if (!fileId) return [trimmed];
+
+    return [
+      `https://lh3.googleusercontent.com/d/${fileId}=w900`,
+      `https://drive.google.com/thumbnail?id=${fileId}&sz=w900`,
+      `https://drive.google.com/uc?export=view&id=${fileId}`,
+      `https://drive.google.com/uc?export=download&id=${fileId}`,
+      trimmed,
+    ];
+  };
+
+  const teamLogoCandidates = useMemo(
+    () => buildImageCandidates(activeTeam?.logoUrl, false),
+    [activeTeam?.logoUrl],
+  );
+
+  const brandLogoCandidates = useMemo(
+    () => buildImageCandidates(activeTeam?.brandLogoUrl),
+    [activeTeam?.brandLogoUrl],
+  );
 
   // Get team players (sold to this team)
   const teamPlayers = useMemo(() => {
@@ -93,8 +140,13 @@ export function TeamSquadView({
 
   const playerPlaceholderImage = '/assets/squadPlaceholder.png';
 
-  const teamLogoForDisplay = !teamLogoFailed && activeTeam?.logoUrl ? activeTeam.logoUrl : '';
-  const brandLogoForDisplay = !brandLogoFailed && activeTeam?.brandLogoUrl ? activeTeam.brandLogoUrl : '';
+  const teamLogoForDisplay = teamLogoFailed
+    ? ''
+    : (teamLogoCandidates[teamLogoUrlIndex] || '');
+
+  const brandLogoForDisplay = brandLogoFailed
+    ? ''
+    : (brandLogoCandidates[brandLogoUrlIndex] || '');
 
   const displaySlots = useMemo(() => {
     if (!activeTeam) {
@@ -168,7 +220,11 @@ export function TeamSquadView({
         exit={{ opacity: 0 }}
         transition={{ duration: 0.3 }}
         style={{
-          background: `linear-gradient(135deg, ${primaryColor} 0%, ${secondaryColor} 100%)`,
+          background: `
+            radial-gradient(circle at 18% 22%, ${primaryColor}2b 0%, transparent 42%),
+            radial-gradient(circle at 82% 78%, ${secondaryColor}30 0%, transparent 44%),
+            linear-gradient(140deg, #060912 0%, #0b1120 45%, #111827 100%)
+          `,
         }}
         onClick={onClose}
       >
@@ -220,22 +276,12 @@ export function TeamSquadView({
               transition={{ duration: 0.5, delay: 0.2 }}
             >
               <div className="tsv-header-logo-shell">
-                {teamLogoForDisplay ? (
-                  <img
-                    src={teamLogoForDisplay}
-                    alt={`${activeTeam.name} logo`}
-                    className="tsv-header-team-logo"
-                    loading="lazy"
-                    onError={() => {
-                      console.warn(`[TeamSquadView] Team logo failed to load for ${activeTeam.name}`);
-                      setTeamLogoFailed(true);
-                    }}
-                  />
-                ) : (
-                  <div className="tsv-logo-placeholder">
-                    <span className="tsv-logo-text">{activeTeam.name.charAt(0)}</span>
-                  </div>
-                )}
+                <TeamLogo
+                  logoUrl={activeTeam.logoUrl}
+                  teamName={activeTeam.name}
+                  size="xl"
+                  className="tsv-header-team-logo"
+                />
               </div>
 
               <div className="tsv-team-header">
@@ -326,7 +372,11 @@ export function TeamSquadView({
                   className="tsv-brand-logo"
                   loading="lazy"
                   onError={() => {
-                    setBrandLogoFailed(true);
+                    if (brandLogoUrlIndex < brandLogoCandidates.length - 1) {
+                      setBrandLogoUrlIndex((prev) => prev + 1);
+                    } else {
+                      setBrandLogoFailed(true);
+                    }
                   }}
                 />
               )}
@@ -341,24 +391,47 @@ export function TeamSquadView({
           <div className="tsv-right-section">
             <motion.div
               className="tsv-captain-panel"
-              initial={{ scale: 0.92, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              transition={{ duration: 0.5, delay: 0.2, type: 'spring', stiffness: 100 }}
+              initial={{ x: 20, opacity: 0 }}
+              animate={{ x: 0, opacity: 1 }}
+              transition={{ duration: 0.4, delay: 0.35 }}
             >
               <div className="tsv-captain-image-wrapper">
-                <CaptainImage
-                  captainData={captainData}
-                  teamPlayers={teamPlayers}
-                />
+                <CaptainImage captainData={captainData} teamPlayers={teamPlayers} />
               </div>
 
-              {captainData?.name && (
-                <div className="tsv-captain-info">
-                  <span className="tsv-captain-badge">CAPTAIN</span>
-                  <h3 className="tsv-captain-name">{captainData.name}</h3>
-                </div>
-              )}
+              <div className="tsv-captain-info">
+                <span className="tsv-captain-badge">CAPTAIN</span>
+                <h3 className="tsv-captain-name">
+                  {captainData?.name || activeTeam.captain || 'Captain not assigned'}
+                </h3>
+              </div>
+            </motion.div>
 
+            <motion.div
+              className="tsv-brand-section"
+              initial={{ y: 20, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              transition={{ duration: 0.4, delay: 0.5 }}
+            >
+              {brandLogoForDisplay && (
+                <img
+                  src={brandLogoForDisplay}
+                  alt="Brand logo"
+                  className="tsv-brand-logo"
+                  loading="lazy"
+                  onError={() => {
+                    if (brandLogoUrlIndex < brandLogoCandidates.length - 1) {
+                      setBrandLogoUrlIndex((prev) => prev + 1);
+                    } else {
+                      setBrandLogoFailed(true);
+                    }
+                  }}
+                />
+              )}
+              <div className="tsv-brand-info">
+                <p className="tsv-brand-company">{activeTeam.ownerCompany || 'Owner Company'}</p>
+                <p className="tsv-brand-tagline">{activeTeam.brandTagline || 'Brand tagline goes here'}</p>
+              </div>
             </motion.div>
           </div>
         </motion.div>

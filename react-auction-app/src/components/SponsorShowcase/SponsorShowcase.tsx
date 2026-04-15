@@ -29,6 +29,7 @@ export function SponsorShowcase({ sponsors }: SponsorShowcaseProps) {
   const displaySponsors = useMemo(() => sponsors.slice(0, 20), [sponsors]);
 
   const gridSponsors = useMemo(() => displaySponsors.slice(0, 8), [displaySponsors]);
+  const activeSponsor = gridSponsors[activeIndex] || gridSponsors[0] || null;
 
   useEffect(() => {
     if (gridSponsors.length === 0) return;
@@ -109,6 +110,16 @@ export function SponsorShowcase({ sponsors }: SponsorShowcaseProps) {
           })}
         </div>
       </div>
+
+      {activeSponsor && (
+        <div className="sponsor-active-detail" aria-live="polite">
+          <div className="sponsor-active-name">{activeSponsor.name}</div>
+          <div className="sponsor-active-meta">
+            <span>{activeSponsor.tier ? `${activeSponsor.tier} Sponsor` : 'Official Sponsor'}</span>
+            {activeSponsor.website && <span>{activeSponsor.website}</span>}
+          </div>
+        </div>
+      )}
     </section>
   );
 }

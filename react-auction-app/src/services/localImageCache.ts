@@ -12,10 +12,31 @@ interface CachedImageResult {
 const CACHE_NAME = 'auction-player-images-v1';
 
 class LocalImageCacheService {
-  private objectUrls = new Set<string>();
+  private readonly objectUrls = new Set<string>();
 
   private canUseCacheStorage(): boolean {
-    return typeof window !== 'undefined' && 'caches' in window;
+    return typeof globalThis.window !== 'undefined' && 'caches' in globalThis;
+  }
+
+  private isDirectFetchBlocked(url: string): boolean {
+    try {
+      const parsed = new URL(url, globalThis.window.location.origin);
+      const protocol = parsed.protocol.toLowerCase();
+      if (protocol === 'data:' || protocol === 'blob:' || protocol === 'file:') {
+        return true;
+      }
+
+      // Avoid CORS and provider throttling issues when trying to fetch remote images
+      // into Cache Storage. The image can still be rendered directly by the browser.
+      if (parsed.origin !== globalThis.window.location.origin) {
+        return true;
+      }
+
+      const host = parsed.hostname.toLowerCase();
+      return host.includes('drive.google.com') || host.includes('docs.google.com');
+    } catch {
+      return false;
+    }
   }
 
   /**
@@ -26,6 +47,10 @@ class LocalImageCacheService {
    */
   async resolveImageSrc(originalUrl: string): Promise<CachedImageResult> {
     if (!originalUrl) return { src: '', fromCache: false };
+
+    if (this.isDirectFetchBlocked(originalUrl)) {
+      return { src: originalUrl, fromCache: false };
+    }
 
     if (!this.canUseCacheStorage()) {
       return { src: originalUrl, fromCache: false };
@@ -41,12 +66,12 @@ class LocalImageCacheService {
       if (!response) {
         fromCache = false;
         response = await fetch(request, { mode: 'cors', cache: 'force-cache' });
-        if (response.ok) {
+        if (response?.ok) {
           await cache.put(request, response.clone());
         }
       }
 
-      if (!response || !response.ok) {
+      if (!response?.ok) {
         return { src: originalUrl, fromCache: false };
       }
 
@@ -78,7 +103,12 @@ class LocalImageCacheService {
   async warmCache(imageUrls: string[]): Promise<void> {
     if (!this.canUseCacheStorage()) return;
 
-    const unique = [...new Set(imageUrls)].filter(Boolean);
+    const unique = [...new Set(imageUrls)]
+      .filter(Boolean)
+      .filter((url) => !this.isDirectFetchBlocked(url));
+
+    if (unique.length === 0) return;
+
     await Promise.all(
       unique.map(async (url) => {
         try {
