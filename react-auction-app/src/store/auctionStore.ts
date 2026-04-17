@@ -14,13 +14,16 @@ import type {
   UnsoldPlayer,
   SelectionMode,
   OverlayType,
-  NotificationType 
+  NotificationType,
+  AuctionRoleCategory
 } from '../types';
+import { DEFAULT_AUCTION_ROLE_ORDER } from '../types';
 import { activeConfig } from '../config';
 import { AuctionRulesService } from '../services/auctionRules';
 import { auctionPersistence } from '../services/auctionPersistence';
 import { realtimeSync } from '../services/realtimeSync';
 import { premiumService } from '../services/premiumService';
+import { getRoleCategory } from '../utils/roleFormatter';
 
 // Initialize persistence with database when available
 const initializePersistence = async () => {
@@ -84,6 +87,9 @@ interface AuctionStore {
   isRound2Active: boolean;
   maxUnsoldRounds: number;
   
+  // Auction role ordering
+  auctionRoleOrder: AuctionRoleCategory[];
+  
   // Auction state
   auctionState: AuctionState;
   
@@ -135,6 +141,7 @@ interface AuctionStore {
   startRound2: () => void;
   startNextRound: () => void;
   setMaxUnsoldRounds: (value: number) => void;
+  setAuctionRoleOrder: (order: AuctionRoleCategory[]) => void;
   
   // State management
   setAuctionState: (state: Partial<AuctionState>) => void;
@@ -187,11 +194,12 @@ export const useAuctionStore = create<AuctionStore>()(
         currentRound: 1,
         isRound2Active: false,
         maxUnsoldRounds: 1,
+        auctionRoleOrder: [...DEFAULT_AUCTION_ROLE_ORDER],
         auctionState: initialAuctionState,
 
         // === Data Loading Actions ===
         setPlayers: (players) => {
-          const { soldPlayers, unsoldPlayers, teams } = get();
+          const { soldPlayers, unsoldPlayers, teams, auctionRoleOrder } = get();
           const blockedIds = new Set([
             ...soldPlayers.map(p => p.id),
             ...unsoldPlayers.map(p => p.id),
@@ -204,7 +212,17 @@ export const useAuctionStore = create<AuctionStore>()(
           const filtered = players.filter(
             p => !blockedIds.has(p.id) && !captainNames.has(p.name.trim().toLowerCase())
           );
-          set({ availablePlayers: filtered, originalPlayers: players });
+
+          // Sort by configured auction role order
+          const orderMap = new Map(auctionRoleOrder.map((role, idx) => [role, idx]));
+          const fallbackIndex = auctionRoleOrder.length;
+          const sorted = [...filtered].sort((a, b) => {
+            const aIdx = orderMap.get(getRoleCategory(a.role)) ?? fallbackIndex;
+            const bIdx = orderMap.get(getRoleCategory(b.role)) ?? fallbackIndex;
+            return aIdx - bIdx;
+          });
+
+          set({ availablePlayers: sorted, originalPlayers: players });
         },
         
         setTeams: (teams) => set({ teams }),
@@ -893,6 +911,10 @@ export const useAuctionStore = create<AuctionStore>()(
           set({ maxUnsoldRounds: sanitized });
         },
 
+        setAuctionRoleOrder: (order) => {
+          set({ auctionRoleOrder: order });
+        },
+
         startNextRound: () => {
           const { unsoldPlayers, currentRound, maxUnsoldRounds } = get();
           const maxRound = 1 + maxUnsoldRounds;
@@ -1136,6 +1158,7 @@ export const useAuctionStore = create<AuctionStore>()(
           currentRound: state.currentRound,
           isRound2Active: state.isRound2Active,
           maxUnsoldRounds: state.maxUnsoldRounds,
+          auctionRoleOrder: state.auctionRoleOrder,
         }),
       }
     ),

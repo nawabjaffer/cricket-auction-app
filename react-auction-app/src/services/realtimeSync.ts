@@ -33,6 +33,40 @@ const firebaseConfig = {
 const AUCTION_STATE_PATH = 'auction/currentState';
 const MOBILE_BIDS_PATH = 'auction/mobileBids';
 const SESSION_RESET_PATH = 'auction/sessionReset';
+const BROADCAST_CONTROL_PATH = 'auction/broadcastControl';
+const CAMERA_CONFIG_PATH = 'auction/cameraConfig';
+const MOBILE_BIDDING_CONFIG_PATH = 'auction/mobileBiddingConfig';
+
+// Broadcast control state (synced from /live-admin to /live)
+export type BroadcastMode = 'auction' | 'break' | 'ad' | 'standings';
+export type BroadcastTransition = 'cut' | 'fade' | 'slide' | 'zoom';
+export type CameraLayoutMode = 'single' | 'pip' | 'split' | 'quad';
+
+export interface BroadcastControlState {
+  mode: BroadcastMode;
+  breakDuration?: number;
+  breakStartedAt?: number;
+  activeSponsorId?: string;
+  sponsorDisplayDuration?: number; // seconds per sponsor in center (10-60)
+  transition?: BroadcastTransition;
+  cameraLayout?: CameraLayoutMode;
+  lastUpdate: number;
+}
+
+// Persisted camera configuration (saved from /live-admin, consumed by /live)
+export interface PersistedCameraConfig {
+  deviceIds: string[];
+  layout: CameraLayoutMode;
+  primaryDeviceId?: string;
+  lastUpdate: number;
+}
+
+// Mobile bidding configuration (saved from /live-admin, consumed by /connect-bidding)
+export interface MobileBiddingConfig {
+  maxStatsToShow: number;
+  enableRaiseBid: boolean;
+  enableStopBidding: boolean;
+}
 
 // Simplified auction state for real-time sync
 export interface RealtimeAuctionState {
@@ -42,6 +76,23 @@ export interface RealtimeAuctionState {
     role: string;
     imageUrl: string;
     basePrice: number;
+    age?: number | null;
+    matches?: string;
+    runs?: string;
+    wickets?: string;
+    battingBestFigures?: string;
+    bowlingBestFigures?: string;
+    battingStats?: {
+      matches: string; innings: string; notOut: string; runs: string;
+      highestScore: string; average: string; strikeRate: string;
+      thirties: string; fifties: string; hundreds: string; fours: string; sixes: string;
+    };
+    bowlingStats?: {
+      matches: string; innings: string; overs: string; maidens: string;
+      runs: string; wickets: string; bestBowling: string;
+      threeWickets: string; fiveWickets: string;
+      economy: string; strikeRate: string; average: string;
+    };
   } | null;
   currentBid: number;
   selectedTeam: {
@@ -60,10 +111,20 @@ export interface RealtimeAuctionState {
     totalPlayerThreshold: number;
     primaryColor?: string;
     secondaryColor?: string;
+    allocatedAmount?: number;
+    highestBid?: number;
+    captain?: string;
+    underAgePlayers?: number;
   }>;
   auctionActive: boolean;
   lastUpdate: number;
   sessionId: string;
+  // Mobile bidding configuration
+  mobileBiddingConfig?: {
+    maxStatsToShow: number;
+    enableRaiseBid: boolean;
+    enableStopBidding: boolean;
+  };
 }
 
 // Mobile bid event
@@ -221,6 +282,14 @@ class RealtimeSyncService {
         role: currentPlayer.role,
         imageUrl: currentPlayer.imageUrl,
         basePrice: currentPlayer.basePrice,
+        age: currentPlayer.age ?? null,
+        matches: currentPlayer.matches,
+        runs: currentPlayer.runs,
+        wickets: currentPlayer.wickets,
+        battingBestFigures: currentPlayer.battingBestFigures,
+        bowlingBestFigures: currentPlayer.bowlingBestFigures,
+        ...(currentPlayer.battingStats ? { battingStats: currentPlayer.battingStats } : {}),
+        ...(currentPlayer.bowlingStats ? { bowlingStats: currentPlayer.bowlingStats } : {}),
       } : null,
       currentBid,
       selectedTeam: selectedTeam ? {
@@ -239,6 +308,10 @@ class RealtimeSyncService {
         totalPlayerThreshold: t.totalPlayerThreshold,
         primaryColor: t.primaryColor,
         secondaryColor: t.secondaryColor,
+        allocatedAmount: t.allocatedAmount,
+        highestBid: t.highestBid,
+        captain: t.captain,
+        underAgePlayers: t.underAgePlayers,
       })),
       auctionActive,
       lastUpdate: now,
@@ -549,6 +622,138 @@ class RealtimeSyncService {
     this.bidListeners.clear();
     this.sessionResetListeners.clear();
     this.processedBidIds.clear();
+  }
+
+  /**
+   * Set broadcast control state (from /live-admin)
+   */
+  async setBroadcastControl(control: BroadcastControlState): Promise<void> {
+    if (!this.db) {
+      await this.ensureInitialized();
+    }
+    if (!this.db) return;
+
+    try {
+      await set(ref(this.db, BROADCAST_CONTROL_PATH), control);
+    } catch (error) {
+      console.error('[RealtimeSync] Failed to set broadcast control:', error);
+    }
+  }
+
+  /**
+   * Subscribe to broadcast control changes (on /live page)
+   */
+  subscribeBroadcastControl(callback: (control: BroadcastControlState | null) => void): () => void {
+    let unsubRef: (() => void) | null = null;
+    let cancelled = false;
+
+    const setup = async () => {
+      if (!this.db) {
+        await this.ensureInitialized();
+      }
+      if (!this.db || cancelled) return;
+
+      const controlRef = ref(this.db, BROADCAST_CONTROL_PATH);
+      unsubRef = onValue(controlRef, (snapshot) => {
+        callback(snapshot.exists() ? snapshot.val() as BroadcastControlState : null);
+      });
+      this.unsubscribers.push(unsubRef);
+    };
+
+    setup();
+
+    return () => {
+      cancelled = true;
+      unsubRef?.();
+    };
+  }
+
+  /**
+   * Save camera configuration to Firebase (from /live-admin)
+   */
+  async saveCameraConfig(config: PersistedCameraConfig): Promise<void> {
+    if (!this.db) {
+      await this.ensureInitialized();
+    }
+    if (!this.db) return;
+
+    try {
+      await set(ref(this.db, CAMERA_CONFIG_PATH), config);
+    } catch (error) {
+      console.error('[RealtimeSync] Failed to save camera config:', error);
+    }
+  }
+
+  /**
+   * Subscribe to camera config changes (on /live page)
+   */
+  subscribeCameraConfig(callback: (config: PersistedCameraConfig | null) => void): () => void {
+    let unsubRef: (() => void) | null = null;
+    let cancelled = false;
+
+    const setup = async () => {
+      if (!this.db) {
+        await this.ensureInitialized();
+      }
+      if (!this.db || cancelled) return;
+
+      const configRef = ref(this.db, CAMERA_CONFIG_PATH);
+      unsubRef = onValue(configRef, (snapshot) => {
+        callback(snapshot.exists() ? snapshot.val() as PersistedCameraConfig : null);
+      });
+      this.unsubscribers.push(unsubRef);
+    };
+
+    setup();
+
+    return () => {
+      cancelled = true;
+      unsubRef?.();
+    };
+  }
+
+  /**
+   * Save mobile bidding config (from /live-admin)
+   */
+  async saveMobileBiddingConfig(config: MobileBiddingConfig): Promise<void> {
+    if (!this.db) {
+      await this.ensureInitialized();
+    }
+    if (!this.db) return;
+
+    try {
+      await set(ref(this.db, MOBILE_BIDDING_CONFIG_PATH), config);
+    } catch (error) {
+      console.error('[RealtimeSync] Failed to save mobile bidding config:', error);
+    }
+  }
+
+  /**
+   * Subscribe to mobile bidding config changes
+   */
+  subscribeMobileBiddingConfig(callback: (config: MobileBiddingConfig | null) => void): () => void {
+    let unsubRef: (() => void) | null = null;
+    let cancelled = false;
+
+    const setup = async () => {
+      if (!this.db) {
+        await this.ensureInitialized();
+      }
+      if (!this.db || cancelled) return;
+
+      const configRef = ref(this.db, MOBILE_BIDDING_CONFIG_PATH);
+      unsubRef = onValue(configRef, (snapshot) => {
+        callback(snapshot.exists() ? snapshot.val() as MobileBiddingConfig : null);
+      });
+      this.unsubscribers.push(unsubRef);
+    };
+
+    setup();
+
+    return () => {
+      cancelled = true;
+      unsubRef?.();
+    };
   }
 }
 

@@ -1,14 +1,14 @@
 // ============================================================================
-// MOBILE BIDDING LIVE PAGE
+// MOBILE BIDDING LIVE PAGE - Redesigned
 // Real-time mobile interface for teams to raise bids
 // Uses Firebase Realtime Database for cross-device synchronization
-// Optimized for /live page connectivity with enhanced sync features
+// Responsive: mobile / tablet / desktop
 // ============================================================================
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { GiCricketBat } from 'react-icons/gi';
-import { IoWifi, IoWifiOutline, IoSwapVertical, IoRefresh, IoPeople } from 'react-icons/io5';
+import { IoWifi, IoWifiOutline, IoSwapVertical, IoRefresh, IoPeople, IoChevronDown } from 'react-icons/io5';
 import { authService } from '../services';
 import type { AuthSession } from '../services';
 import { auctionPersistence, type SponsorRecord } from '../services/auctionPersistence';
@@ -17,6 +17,7 @@ import { useRealtimeMobileSync } from '../hooks/useRealtimeSync';
 import { useMotionSensor } from '../hooks/useMotionSensor';
 import { TeamLogo } from '../components/TeamLogo/TeamLogo';
 import { PlayerImage } from '../components/PlayerImage/PlayerImage';
+import { getRoleBasedStats, getRoleLabel, getRoleBadgeClass } from '../utils/playerStats';
 import '../components/MobileBidding/MobileBidding.css';
 
 interface BidFeedback {
@@ -26,7 +27,6 @@ interface BidFeedback {
 }
 
 type LoginScreen = 'access' | 'scout';
-type LiveOverlayTab = 'budget' | 'player' | 'epl';
 
 export function MobileBiddingLivePage() {
   const [session, setSession] = useState<AuthSession | null>(authService.getSession());
@@ -41,52 +41,42 @@ export function MobileBiddingLivePage() {
   const [reconnectAttempts, setReconnectAttempts] = useState(0);
   const lastPlayerIdRef = useRef<string | null>(null);
   const reconnectTimeoutRef = useRef<number | null>(null);
-  
-  // Use Firebase Realtime Database for cross-device sync
+
   const {
     currentPlayer,
     currentBid,
     selectedTeam,
     teams,
-    auctionActive: _auctionActive, // Used for future features
+    auctionActive: _auctionActive,
     isConnected,
     lastUpdate,
     lastSessionReset,
     submitBid,
+    mobileBiddingConfig,
   } = useRealtimeMobileSync();
 
-  // Build simple credentials from live team data
-  // Username: team name lowercase (e.g., "royalchallengers")
-  // Password: simple pattern "team123" (teamname + 123)
+  // Build credentials from live team data
   const runtimeCredentials = useMemo(() => {
     return teams.map((team, index) => {
-      const normalized = team.name
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, '');
-      const username = normalized || `team${index + 1}`;
-      // Simple memorable password: username + 123
-      const password = `${username}123`;
+      const normalized = team.name.toLowerCase().replace(/[^a-z0-9]+/g, '');
+      const uname = normalized || `team${index + 1}`;
       return {
         teamId: team.id,
         teamName: team.name,
-        username,
-        password,
+        username: uname,
+        password: `${uname}123`,
         primaryColor: team.primaryColor || '#3b82f6',
         secondaryColor: team.secondaryColor || '#1e40af',
       };
     });
   }, [teams]);
 
-  // State to show credentials hint
   const [showCredentialsHint, setShowCredentialsHint] = useState(false);
   const [loginScreen, setLoginScreen] = useState<LoginScreen>('access');
   const [previewTeamId, setPreviewTeamId] = useState<string | null>(null);
-  
-  // State to show team credentials modal during bidding
   const [showTeamMenu, setShowTeamMenu] = useState(false);
   const [selectedMenuTeam, setSelectedMenuTeam] = useState<string | null>(null);
-  const [liveOverlayTab, setLiveOverlayTab] = useState<LiveOverlayTab>('budget');
-  const [sponsors, setSponsors] = useState<SponsorRecord[]>([]);
+  const [_sponsors, setSponsors] = useState<SponsorRecord[]>([]);
   const [showWinCelebration, setShowWinCelebration] = useState(false);
   const [winCelebrationData, setWinCelebrationData] = useState<{ player: string; amount: number } | null>(null);
   const lastCelebrationKeyRef = useRef<string | null>(null);
@@ -105,276 +95,155 @@ export function MobileBiddingLivePage() {
 
   useEffect(() => {
     let isMounted = true;
-
     const loadSponsors = async () => {
       try {
         await realtimeSync.ensureInitialized();
         const db = realtimeSync.getDatabase();
         if (!db) return;
-
         auctionPersistence.initialize(db);
         const records = await auctionPersistence.getSponsors();
-        if (isMounted) {
-          setSponsors(records.slice(0, 6));
-        }
+        if (isMounted) setSponsors(records.slice(0, 6));
       } catch {
-        if (isMounted) {
-          setSponsors([]);
-        }
+        if (isMounted) setSponsors([]);
       }
     };
-
     loadSponsors();
-
-    return () => {
-      isMounted = false;
-    };
+    return () => { isMounted = false; };
   }, []);
 
-  // Auto-reconnect logic for live connectivity
+  // Auto-reconnect with exponential backoff
   useEffect(() => {
-    if (!isConnected && session) {
-      // Clear any existing timeout
-      if (reconnectTimeoutRef.current) {
-        clearTimeout(reconnectTimeoutRef.current);
-      }
-      
-      // Schedule reconnect attempt
-      reconnectTimeoutRef.current = window.setTimeout(() => {
-        setReconnectAttempts(prev => prev + 1);
-        setFeedback({
-          type: 'info',
-          message: `Reconnecting to auction... (attempt ${reconnectAttempts + 1})`,
-          timestamp: Date.now(),
-        });
-      }, 3000);
-    } else if (isConnected && reconnectAttempts > 0) {
+    if (isConnected) {
       setReconnectAttempts(0);
-      setFeedback({
-        type: 'success',
-        message: 'Reconnected to auction!',
-        timestamp: Date.now(),
-      });
-    }
-    
-    return () => {
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current);
+        reconnectTimeoutRef.current = null;
       }
+      return;
+    }
+
+    if (!session) return;
+
+    const attempt = reconnectAttempts;
+    const delay = Math.min(1000 * Math.pow(1.5, attempt), 15000);
+
+    reconnectTimeoutRef.current = window.setTimeout(() => {
+      setReconnectAttempts(prev => prev + 1);
+      setFeedback({ type: 'info', message: `Reconnecting... (attempt ${attempt + 1})`, timestamp: Date.now() });
+    }, delay);
+
+    return () => {
+      if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
     };
-  }, [isConnected, session, reconnectAttempts]);
+  }, [isConnected, reconnectAttempts, session]);
 
   // Handle session reset from desktop
   useEffect(() => {
-    if (lastSessionReset <= 0) return;
-
-    authService.logout();
-    setSession(null);
-    setUsername('');
-    setPassword('');
-    setBidCount(0);
-    setLoginError('Session reset by admin. Please login again.');
-  }, [lastSessionReset]);
-
-  // Find the team object for the logged-in user
-  const myTeam = useMemo(() => teams.find(t => 
-    t.name.toLowerCase().includes(session?.teamName?.toLowerCase() || '') ||
-    t.id === session?.teamId
-  ), [teams, session?.teamName, session?.teamId]);
-
-  // Check if it's my team's turn
-  const isMyBid = selectedTeam?.id === myTeam?.id || selectedTeam?.name === session?.teamName;
-
-  // Detect when player is sold (player changes from existing to null)
-  useEffect(() => {
-    if (lastPlayerIdRef.current && !currentPlayer && selectedTeam) {
-      const playerName = lastPlayerIdRef.current;
-      setLastSoldPlayer({
-        name: playerName,
-        amount: currentBid,
-        winnerTeam: selectedTeam.name,
-      });
-    } else if (currentPlayer) {
-      setLastSoldPlayer(null);
-      lastPlayerIdRef.current = currentPlayer.name;
+    if (lastSessionReset > 0 && session) {
+      const sessionStartTime = (session as { timestamp?: number }).timestamp || session.loginTime || 0;
+      if (lastSessionReset > sessionStartTime) {
+        authService.logout();
+        setSession(null);
+        setFeedback({ type: 'warning', message: 'Session reset by admin. Please login again.', timestamp: Date.now() });
+      }
     }
-  }, [currentPlayer, currentBid, selectedTeam]);
+  }, [lastSessionReset, session]);
 
-  // Clear the celebration as soon as a new lot starts so the next player view is visible.
+  // Detect my team from session
+  const myTeam = useMemo(() => {
+    if (!session) return null;
+    return teams.find(t => t.id === session.teamId) || null;
+  }, [session, teams]);
+
+  const isMyBid = selectedTeam?.id === myTeam?.id;
+
+  // Track sold player
   useEffect(() => {
     if (currentPlayer) {
-      setShowWinCelebration(false);
-      setWinCelebrationData(null);
-    }
-  }, [currentPlayer]);
-
-  useEffect(() => {
-    if (!session || !myTeam || !selectedTeam || currentPlayer) return;
-    if (selectedTeam.id !== myTeam.id && selectedTeam.name !== session.teamName) return;
-
-    const celebrationKey = `${selectedTeam.id}-${currentBid}-${lastUpdate}`;
-    if (lastCelebrationKeyRef.current === celebrationKey) return;
-
-    const playerName = lastSoldPlayer?.name || lastPlayerIdRef.current || 'Winning Player';
-
-    setWinCelebrationData({
-      player: playerName,
-      amount: currentBid,
-    });
-    setShowWinCelebration(true);
-    lastCelebrationKeyRef.current = celebrationKey;
-
-    const timer = window.setTimeout(() => {
-      setShowWinCelebration(false);
-    }, 3000);
-
-    return () => window.clearTimeout(timer);
-  }, [session, myTeam, selectedTeam, currentBid, lastUpdate, lastSoldPlayer]);
-
-  // Handle login
-  const handleLogin = useCallback(async () => {
-    setIsLoading(true);
-    setLoginError('');
-
-    await new Promise(resolve => setTimeout(resolve, 500));
-
-    const result = authService.login(username, password);
-
-    if (result.success && result.session) {
-      setSession(result.session);
-      setLoginError('');
-      console.log('[MobileBiddingLive] Login successful:', result.session.teamName);
-    } else {
-      setLoginError(result.error || 'Invalid credentials');
-    }
-
-    setIsLoading(false);
-  }, [username, password]);
-
-  // Motion sensor hook
-  const { isSupported: motionSupported, isActive: motionActive, toggleMotionSensor } = useMotionSensor({
-    enabled: motionEnabled && session !== null,
-    cooldown: 600,
-    onMotionDetected: (motion) => {
-      if (motion === 'raise') {
-        console.log('[MobileBiddingLive] 🎯 Motion detected - raising bid');
-        setTimeout(() => {
-          if (currentPlayer && isConnected) {
-            handleRaiseBid();
-          }
-        }, 100);
+      lastPlayerIdRef.current = currentPlayer.id;
+      setLastSoldPlayer(null);
+    } else if (lastPlayerIdRef.current && selectedTeam && currentBid > 0) {
+      const celebKey = `${lastPlayerIdRef.current}-${currentBid}`;
+      if (celebKey !== lastCelebrationKeyRef.current) {
+        lastCelebrationKeyRef.current = celebKey;
+        setLastSoldPlayer({ name: lastPlayerIdRef.current, amount: currentBid, winnerTeam: selectedTeam.name });
+        if (selectedTeam.id === myTeam?.id) {
+          setShowWinCelebration(true);
+          setWinCelebrationData({ player: lastPlayerIdRef.current, amount: currentBid });
+          setTimeout(() => setShowWinCelebration(false), 5000);
+        }
       }
-    },
+    }
+  }, [currentPlayer, selectedTeam, currentBid, myTeam]);
+
+  // Motion sensor bidding
+  const handleMotionBid = useCallback(() => {
+    if (!myTeam || !currentPlayer || !isConnected) return;
+    const newBid = currentBid + 100;
+    submitBid(myTeam.id, newBid, 'raise');
+    setBidCount(prev => prev + 1);
+    setFeedback({ type: 'success', message: `Gesture bid: ₹${newBid}L`, timestamp: Date.now() });
+  }, [myTeam, currentPlayer, currentBid, isConnected, submitBid]);
+
+  const { isActive: motionActive, isSupported: motionSupported } = useMotionSensor({
+    enabled: motionEnabled && !!session,
+    onMotionDetected: handleMotionBid,
+    cooldown: 2000,
   });
 
-  // Toggle motion sensor with permission handling
-  const handleToggleMotionSensor = useCallback(async () => {
-    if (!motionSupported) {
-      setFeedback({
-        type: 'error',
-        message: 'Motion sensor not supported on this device',
-        timestamp: Date.now(),
-      });
-      return;
-    }
+  const handleToggleMotionSensor = useCallback(() => {
+    setMotionEnabled(prev => !prev);
+    setFeedback({ type: 'info', message: motionEnabled ? 'Gesture bidding disabled' : 'Gesture bidding enabled', timestamp: Date.now() });
+  }, [motionEnabled]);
 
-    const success = await toggleMotionSensor();
-    if (success) {
-      setMotionEnabled(!motionEnabled);
-      setFeedback({
-        type: 'success',
-        message: motionEnabled ? 'Gesture bidding disabled' : 'Gesture bidding enabled - raise your phone to bid!',
-        timestamp: Date.now(),
-      });
-    } else {
-      setFeedback({
-        type: 'error',
-        message: 'Motion sensor permission denied. Please enable in settings.',
-        timestamp: Date.now(),
-      });
+  // Login
+  const handleLogin = useCallback(async () => {
+    if (!username || !password) { setLoginError('Enter username and password'); return; }
+    setIsLoading(true);
+    setLoginError('');
+    try {
+      const result = await authService.login(username, password);
+      if (result.success && result.session) {
+        setSession(result.session);
+        setFeedback({ type: 'success', message: `Welcome, ${result.session.teamName}!`, timestamp: Date.now() });
+      } else {
+        setLoginError(result.error || 'Login failed');
+      }
+    } catch {
+      setLoginError('Connection error. Please try again.');
+    } finally {
+      setIsLoading(false);
     }
-  }, [motionSupported, toggleMotionSensor, motionEnabled]);
+  }, [username, password]);
 
-  // Handle logout
   const handleLogout = useCallback(() => {
     authService.logout();
     setSession(null);
-    setUsername('');
-    setPassword('');
     setBidCount(0);
+    setLastSoldPlayer(null);
   }, []);
 
-  // Handle raise bid
+  // Bid handlers
   const handleRaiseBid = useCallback(async () => {
-    if (!myTeam) {
-      setFeedback({
-        type: 'error',
-        message: 'Team not found - please re-login',
-        timestamp: Date.now(),
-      });
-      return;
-    }
-    
-    if (!currentPlayer) {
-      setFeedback({
-        type: 'warning',
-        message: 'No active player',
-        timestamp: Date.now(),
-      });
-      return;
-    }
-
-    if (!isConnected) {
-      setFeedback({
-        type: 'error',
-        message: 'Not connected to auction',
-        timestamp: Date.now(),
-      });
-      return;
-    }
-
+    if (!myTeam || !currentPlayer || !isConnected) return;
     const newBid = currentBid + 100;
     const success = await submitBid(myTeam.id, newBid, 'raise');
-
     if (success) {
       setBidCount(prev => prev + 1);
-      setFeedback({
-        type: 'success',
-        message: `Bid raised to ₹${newBid}L`,
-        timestamp: Date.now(),
-      });
-    } else {
-      setFeedback({
-        type: 'error',
-        message: 'Failed to submit bid. Try again.',
-        timestamp: Date.now(),
-      });
+      setFeedback({ type: 'success', message: `Bid placed: ₹${newBid}L`, timestamp: Date.now() });
     }
   }, [myTeam, currentPlayer, currentBid, isConnected, submitBid]);
 
-  // Handle stop bidding
   const handleStopBidding = useCallback(async () => {
     if (!myTeam || !isMyBid) return;
-
     const success = await submitBid(myTeam.id, currentBid, 'stop');
-
     if (success) {
-      setFeedback({
-        type: 'info',
-        message: 'Stopped bidding',
-        timestamp: Date.now(),
-      });
+      setFeedback({ type: 'info', message: 'Stopped bidding', timestamp: Date.now() });
     }
   }, [myTeam, isMyBid, currentBid, submitBid]);
 
-  // Manual refresh handler
   const handleManualRefresh = useCallback(() => {
-    setFeedback({
-      type: 'info',
-      message: 'Refreshing connection...',
-      timestamp: Date.now(),
-    });
-    // Trigger a state update that will cause reconnect
+    setFeedback({ type: 'info', message: 'Refreshing connection...', timestamp: Date.now() });
     setReconnectAttempts(prev => prev + 1);
   }, []);
 
@@ -385,7 +254,6 @@ export function MobileBiddingLivePage() {
     return () => clearTimeout(timer);
   }, [feedback]);
 
-  // Format time for display
   const formattedTime = useMemo(() => {
     if (!lastUpdate) return 'Never';
     const date = new Date(lastUpdate);
@@ -397,126 +265,57 @@ export function MobileBiddingLivePage() {
     return Math.floor((myTeam.remainingPurse || 0) / 100) * 100;
   }, [myTeam]);
 
-  const liveTopPurseTeams = useMemo(() => {
-    return [...teams]
-      .filter((team) => Number.isFinite(team.remainingPurse))
-      .sort((a, b) => b.remainingPurse - a.remainingPurse)
-      .slice(0, 4);
-  }, [teams]);
+  const formatLakhs = (value: number) => `₹${Number.isFinite(value) ? value.toFixed(1) : '0.0'}L`;
 
-  const averagePurse = useMemo(() => {
-    if (teams.length === 0) return 0;
-    const total = teams.reduce((sum, team) => sum + (team.remainingPurse || 0), 0);
-    return total / teams.length;
-  }, [teams]);
+  // Role-based stats for current player
+  const playerStats = useMemo(() => {
+    if (!currentPlayer) return [];
+    return getRoleBasedStats(currentPlayer, mobileBiddingConfig.maxStatsToShow);
+  }, [currentPlayer, mobileBiddingConfig.maxStatsToShow]);
 
-  const filledSlots = useMemo(() => {
-    return teams.reduce((sum, team) => sum + (team.playersBought || 0), 0);
-  }, [teams]);
-
-  const totalSlots = useMemo(() => {
-    return teams.reduce((sum, team) => sum + (team.totalPlayerThreshold || 0), 0);
-  }, [teams]);
-
-  const auctionProgress = totalSlots > 0 ? Math.round((filledSlots / totalSlots) * 100) : 0;
-  const bidVsBase = currentPlayer?.basePrice ? (currentBid / currentPlayer.basePrice).toFixed(2) : '--';
-  const motivationQuotes = [
-    'Better bid for getting the best player.',
-    'The next player can still change your auction.',
-    'Stay patient, bid smart, and win the right lot.',
-    'Great squads are built by timing, not only by price.',
-  ];
-
-  // Show login form if not authenticated
+  // ═══════════════ LOGIN SCREEN ═══════════════
   if (!session) {
     const previewTeam = runtimeCredentials.find((team) => team.teamId === previewTeamId) || runtimeCredentials[0];
     const themePrimary = previewTeam?.primaryColor || '#e4be75';
     const themeSecondary = previewTeam?.secondaryColor || '#24467c';
 
-    const scoutPlayerName = currentPlayer?.name || 'No Listing for Auction';
-    const scoutPlayerRole = currentPlayer?.role || 'Awaiting auction lot activation';
-    const scoutCurrentBid = currentBid > 0 ? currentBid : 0;
-    const scoutBasePrice = currentPlayer?.basePrice || 0;
-
-    const scoutMatches = (currentPlayer?.matches || '').trim() || '--';
-    const scoutRuns = (currentPlayer?.runs || '').trim() || '--';
-    const scoutWickets = (currentPlayer?.wickets || '').trim() || '--';
-
-    const totalTeams = teams.length;
-    const validThresholdTeams = teams.filter((team) => (team.totalPlayerThreshold || 0) > 0);
-    const totalSlots = validThresholdTeams.reduce((sum, team) => sum + (team.totalPlayerThreshold || 0), 0);
-    const filledSlots = teams.reduce((sum, team) => sum + (team.playersBought || 0), 0);
-    const progressPct = totalSlots > 0 ? Math.round((filledSlots / totalSlots) * 100) : 0;
-
-    const purseTeams = teams.filter((team) => Number.isFinite(team.remainingPurse));
-    const richestTeam = purseTeams.length > 0
-      ? [...purseTeams].sort((a, b) => b.remainingPurse - a.remainingPurse)[0]
-      : null;
-    const avgPurse = purseTeams.length > 0
-      ? purseTeams.reduce((sum, team) => sum + team.remainingPurse, 0) / purseTeams.length
-      : 0;
-
-    const historyRows = [...teams]
-      .sort((a, b) => (b.playersBought || 0) - (a.playersBought || 0))
-      .slice(0, 3);
-
-    const formatLakhs = (value: number) => `₹${Number.isFinite(value) ? value.toFixed(1) : '0.0'}L`;
-
     return (
       <div
-        className="mobile-bidding-login-page"
-        style={{
-          '--theme-primary': themePrimary,
-          '--theme-secondary': themeSecondary,
-          '--theme-primary-soft': `${themePrimary}22`,
-        } as React.CSSProperties}
+        className="cb-login-page"
+        style={{ '--cb-primary': themePrimary, '--cb-secondary': themeSecondary } as React.CSSProperties}
       >
-        {/* Background gradient overlay */}
-        <div className="login-bg-overlay" />
-        
-        {/* Main login container */}
-        <motion.div 
-          className={`login-container-modern ${loginScreen === 'scout' ? 'scout-layout' : ''}`}
+        <div className="cb-login-bg" />
+
+        <motion.div
+          className={`cb-login-card ${loginScreen === 'scout' ? 'scout-mode' : ''}`}
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5 }}
+          transition={{ duration: 0.4 }}
         >
-          <div className="login-screen-nav" role="tablist" aria-label="Team login screens">
+          {/* Tab Nav */}
+          <div className="cb-login-tabs" role="tablist">
             <button
-              type="button"
-              className={`login-screen-tab ${loginScreen === 'access' ? 'active' : ''}`}
+              className={`cb-login-tab ${loginScreen === 'access' ? 'active' : ''}`}
               onClick={() => setLoginScreen('access')}
-              role="tab"
-              aria-selected={loginScreen === 'access'}
-            >
-              Team Access
-            </button>
+              role="tab" aria-selected={loginScreen === 'access'}
+            >Team Access</button>
             <button
-              type="button"
-              className={`login-screen-tab ${loginScreen === 'scout' ? 'active' : ''}`}
+              className={`cb-login-tab ${loginScreen === 'scout' ? 'active' : ''}`}
               onClick={() => setLoginScreen('scout')}
-              role="tab"
-              aria-selected={loginScreen === 'scout'}
-            >
-              Player Scout
-            </button>
+              role="tab" aria-selected={loginScreen === 'scout'}
+            >Player Scout</button>
           </div>
 
+          {/* Team theme chips */}
           {runtimeCredentials.length > 0 && (
-            <div className="team-theme-strip" aria-label="Team theme selector">
+            <div className="cb-team-chips">
               {runtimeCredentials.slice(0, 8).map((cred) => (
                 <button
                   key={cred.teamId}
                   type="button"
-                  className={`team-theme-chip ${previewTeam?.teamId === cred.teamId ? 'active' : ''}`}
-                  onClick={() => {
-                    setPreviewTeamId(cred.teamId);
-                    setUsername(cred.username);
-                    setPassword(cred.password);
-                  }}
-                  style={{
-                    '--chip-color': cred.primaryColor,
-                  } as React.CSSProperties}
+                  className={`cb-team-chip ${previewTeam?.teamId === cred.teamId ? 'active' : ''}`}
+                  onClick={() => { setPreviewTeamId(cred.teamId); setUsername(cred.username); setPassword(cred.password); }}
+                  style={{ '--chip-bg': cred.primaryColor } as React.CSSProperties}
                   title={cred.teamName}
                 >
                   {cred.teamName.slice(0, 2).toUpperCase()}
@@ -527,178 +326,77 @@ export function MobileBiddingLivePage() {
 
           {loginScreen === 'access' ? (
             <>
-              {/* Logo/Brand Section */}
-              <div className="login-brand">
-                <motion.div 
-                  className="login-logo-container"
-                  initial={{ scale: 0.8 }}
-                  animate={{ scale: 1 }}
-                  transition={{ delay: 0.2, type: 'spring', stiffness: 200 }}
-                >
-                  <GiCricketBat size={56} color="#fff" />
+              <div className="cb-login-brand">
+                <motion.div className="cb-login-icon" initial={{ scale: 0.8 }} animate={{ scale: 1 }} transition={{ delay: 0.2, type: 'spring' }}>
+                  <GiCricketBat size={48} color="#fff" />
                 </motion.div>
-                <h1 className="login-title-modern">Team Bidding</h1>
-                <p className="login-subtitle-modern">Live Auction Access</p>
+                <h1>Team Bidding</h1>
+                <p>Live Auction Access</p>
               </div>
 
-              {/* Connection Status Banner */}
-              <motion.div 
-                className={`login-status-banner ${isConnected ? 'connected' : 'waiting'}`}
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: 0.3 }}
-              >
-                <span className="status-dot" />
+              <div className={`cb-status-pill ${isConnected ? 'live' : ''}`}>
+                <span className="cb-status-dot" />
                 <span>{isConnected ? 'Auction Live' : 'Waiting for auction...'}</span>
-                {teams.length > 0 && <span className="team-count">{teams.length} teams</span>}
-              </motion.div>
+                {teams.length > 0 && <span className="cb-team-count">{teams.length} teams</span>}
+              </div>
 
-              {/* Login Form */}
-              <form 
-                className="login-form-modern" 
-                onSubmit={(e) => { e.preventDefault(); handleLogin(); }}
-              >
-                <div className="form-field">
-                  <label htmlFor="username">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
-                      <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
-                    </svg>
-                    Team Username
-                  </label>
+              <form className="cb-login-form" onSubmit={(e) => { e.preventDefault(); handleLogin(); }}>
+                <div className="cb-field">
+                  <label htmlFor="cb-username">Team Username</label>
                   <input
-                    type="text"
-                    id="username"
-                    value={username}
+                    type="text" id="cb-username" value={username}
                     onChange={(e) => setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9]/g, ''))}
                     placeholder="e.g., royalchallengers"
-                    disabled={isLoading}
-                    autoComplete="username"
-                    autoCapitalize="none"
-                    autoCorrect="off"
+                    disabled={isLoading} autoComplete="username" autoCapitalize="none"
                   />
                 </div>
-
-                <div className="form-field">
-                  <label htmlFor="password">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
-                      <path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/>
-                    </svg>
-                    Password
-                  </label>
+                <div className="cb-field">
+                  <label htmlFor="cb-password">Password</label>
                   <input
-                    type="password"
-                    id="password"
-                    value={password}
+                    type="password" id="cb-password" value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="Enter your team password"
-                    disabled={isLoading}
-                    autoComplete="current-password"
+                    disabled={isLoading} autoComplete="current-password"
                   />
                 </div>
 
                 {loginError && (
-                  <motion.div 
-                    className="login-error-modern"
-                    initial={{ opacity: 0, x: -10 }}
-                    animate={{ opacity: 1, x: 0 }}
-                  >
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-                      <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/>
-                    </svg>
+                  <motion.div className="cb-error" initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }}>
                     {loginError}
                   </motion.div>
                 )}
 
                 <motion.button
-                  type="submit"
-                  className="login-button-modern"
+                  type="submit" className="cb-login-btn"
                   disabled={isLoading || !username || !password}
                   whileTap={{ scale: 0.98 }}
-                  whileHover={{ scale: 1.02 }}
                 >
-                  {isLoading ? (
-                    <span className="loading-spinner" />
-                  ) : (
-                    <>
-                      <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M11 7L9.6 8.4l2.6 2.6H2v2h10.2l-2.6 2.6L11 17l5-5-5-5zm9 12h-8v2h8c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2h-8v2h8v14z"/>
-                      </svg>
-                      Login to Bid
-                    </>
-                  )}
+                  {isLoading ? <span className="cb-spinner" /> : 'Login to Bid'}
                 </motion.button>
               </form>
 
-              {/* Credentials Help Section */}
-              <div className="login-help-section">
-                <motion.button
-                  type="button"
-                  className="credentials-hint-toggle"
-                  onClick={() => setShowCredentialsHint(!showCredentialsHint)}
-                  whileTap={{ scale: 0.98 }}
-                >
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M11 18h2v-2h-2v2zm1-16C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm0-14c-2.21 0-4 1.79-4 4h2c0-1.1.9-2 2-2s2 .9 2 2c0 2-3 1.75-3 5h2c0-2.25 3-2.5 3-5 0-2.21-1.79-4-4-4z"/>
-                  </svg>
-                  {showCredentialsHint ? 'Hide Login Help' : 'Need Help Logging In?'}
-                </motion.button>
-
+              {/* Credentials help */}
+              <div className="cb-help-section">
+                <button type="button" className="cb-help-toggle" onClick={() => setShowCredentialsHint(!showCredentialsHint)}>
+                  {showCredentialsHint ? 'Hide Help' : 'Need Help?'}
+                </button>
                 <AnimatePresence>
                   {showCredentialsHint && (
-                    <motion.div
-                      className="credentials-hint-panel"
-                      initial={{ opacity: 0, height: 0 }}
-                      animate={{ opacity: 1, height: 'auto' }}
-                      exit={{ opacity: 0, height: 0 }}
-                      transition={{ duration: 0.3 }}
-                    >
-                      <div className="hint-header">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-                          <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/>
-                        </svg>
-                        How to Login
-                      </div>
-                      <div className="hint-content">
-                        <p><strong>Username:</strong> Your team name (lowercase, no spaces)</p>
-                        <p><strong>Password:</strong> Your username + "123"</p>
-                        <div className="hint-example">
-                          <span className="example-label">Example:</span>
-                          <div className="example-row">
-                            <span className="example-field">Username:</span>
-                            <code>royalchallengers</code>
-                          </div>
-                          <div className="example-row">
-                            <span className="example-field">Password:</span>
-                            <code>royalchallengers123</code>
-                          </div>
-                        </div>
-                      </div>
-                      
-                      {/* Show available teams if connected */}
+                    <motion.div className="cb-help-panel" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}>
+                      <p><strong>Username:</strong> team name (lowercase, no spaces)</p>
+                      <p><strong>Password:</strong> username + "123"</p>
                       {teams.length > 0 && (
-                        <div className="available-teams">
-                          <div className="teams-header">Available Teams:</div>
-                          <div className="teams-list">
-                            {runtimeCredentials.slice(0, 6).map((cred, idx) => (
-                              <button
-                                key={cred.teamId || idx}
-                                type="button"
-                                className="team-quick-fill"
-                                onClick={() => {
-                                  setUsername(cred.username);
-                                  setPassword(cred.password);
-                                  setPreviewTeamId(cred.teamId);
-                                }}
-                                style={{ 
-                                  borderColor: cred.primaryColor,
-                                  '--team-color': cred.primaryColor 
-                                } as React.CSSProperties}
-                              >
-                                <span className="team-name">{cred.teamName}</span>
-                                <span className="tap-hint">Tap to fill</span>
-                              </button>
-                            ))}
-                          </div>
+                        <div className="cb-teams-grid">
+                          {runtimeCredentials.slice(0, 6).map((cred, idx) => (
+                            <button
+                              key={cred.teamId || idx} type="button" className="cb-team-fill"
+                              onClick={() => { setUsername(cred.username); setPassword(cred.password); setPreviewTeamId(cred.teamId); }}
+                              style={{ borderColor: cred.primaryColor } as React.CSSProperties}
+                            >
+                              <span>{cred.teamName}</span>
+                              <small>Tap to fill</small>
+                            </button>
+                          ))}
                         </div>
                       )}
                     </motion.div>
@@ -707,584 +405,286 @@ export function MobileBiddingLivePage() {
               </div>
             </>
           ) : (
-            <motion.div
-              className="scout-screen"
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.35 }}
-            >
-              <div className="scout-topbar">
-                <div className="scout-brand">CRICKET ARENA</div>
-                <button
-                  type="button"
-                  className="scout-login-cta"
-                  onClick={() => setLoginScreen('access')}
-                >
-                  Go to Login
-                </button>
+            /* ── Scout Screen ── */
+            <div className="cb-scout">
+              <div className="cb-scout-header">
+                <span className="cb-scout-brand">CRICKET ARENA</span>
+                <button type="button" className="cb-scout-login-cta" onClick={() => setLoginScreen('access')}>Go to Login</button>
               </div>
 
-              <div className="scout-nav-links" role="navigation" aria-label="Scout navigation">
-                <button type="button" className="scout-link">Lobby</button>
-                <button type="button" className="scout-link active">Stats</button>
-                <button type="button" className="scout-link">Squads</button>
-                <button type="button" className="scout-link">Board</button>
-              </div>
-
-              <div className="scout-main-grid">
-                <div className="scout-hero-card">
-                  <p className="scout-tag">{currentPlayer ? 'Live Prospect' : 'No Active Listing'}</p>
-                  <h2>{scoutPlayerName}</h2>
-                  <p className="scout-role">{scoutPlayerRole}</p>
-                  {currentPlayer ? (
-                    <div className="scout-price-row">
-                      <div>
-                        <span>Base Price</span>
-                        <strong>{formatLakhs(scoutBasePrice)}</strong>
-                      </div>
-                      <div>
-                        <span>Current Bid</span>
-                        <strong>{formatLakhs(scoutCurrentBid)}</strong>
-                      </div>
-                    </div>
-                  ) : (
-                    <p className="scout-empty-note">No listing for auction right now. Once the auctioneer pushes a player lot, stats will appear here automatically.</p>
-                  )}
-                </div>
-
-                <div className="scout-side-panel">
-                  <article className="scout-summary-card">
-                    <span>Teams in Auction</span>
-                    <strong>{totalTeams}</strong>
-                  </article>
-                  <article className="scout-summary-card">
-                    <span>Slots Filled</span>
-                    <strong>{filledSlots}{totalSlots > 0 ? ` / ${totalSlots}` : ''}</strong>
-                  </article>
-                  <article className="scout-summary-card featured">
-                    <span>Progress</span>
-                    <strong>{progressPct}%</strong>
-                  </article>
-                </div>
-              </div>
-
-              <div className="scout-stats-grid">
-                <article className="scout-stat-tile">
-                  <span>Total Matches</span>
-                  <strong>{scoutMatches}</strong>
-                </article>
-                <article className="scout-stat-tile featured">
-                  <span>Total Runs</span>
-                  <strong>{scoutRuns}</strong>
-                </article>
-                <article className="scout-stat-tile">
-                  <span>Wickets</span>
-                  <strong>{scoutWickets}</strong>
-                </article>
-                <article className="scout-stat-tile">
-                  <span>Avg Purse</span>
-                  <strong>{formatLakhs(avgPurse)}</strong>
-                </article>
-              </div>
-
-              {!currentPlayer && sponsors.length > 0 && (
-                <div className="scout-sponsors-card">
-                  <div className="scout-history-head">
-                    <h3>Digital Sponsors</h3>
-                    <span>Live Showcase</span>
+              {currentPlayer ? (
+                <div className="cb-scout-player">
+                  <div className="cb-scout-player-header">
+                    <h2>{currentPlayer.name}</h2>
+                    <span className={`cb-role-badge ${getRoleBadgeClass(currentPlayer.role)}`}>{getRoleLabel(currentPlayer.role)}</span>
                   </div>
-                  <div className="scout-sponsor-list">
-                    {sponsors.map((sponsor) => (
-                      <div key={sponsor.id} className="scout-sponsor-item">
-                        <span>{sponsor.name}</span>
-                        {sponsor.tier && <small>{sponsor.tier}</small>}
+                  <div className="cb-scout-price-row">
+                    <div><span>Base Price</span><strong>{formatLakhs(currentPlayer.basePrice || 0)}</strong></div>
+                    <div><span>Current Bid</span><strong>{formatLakhs(currentBid)}</strong></div>
+                  </div>
+                  <div className="cb-scout-stats-grid">
+                    {getRoleBasedStats(currentPlayer, 6).map((stat) => (
+                      <div key={stat.label} className={`cb-scout-stat ${stat.category}`}>
+                        <span className="cb-stat-label">{stat.label}</span>
+                        <strong className="cb-stat-value">{stat.value || '--'}</strong>
                       </div>
                     ))}
                   </div>
                 </div>
+              ) : (
+                <div className="cb-scout-empty">
+                  <GiCricketBat size={40} color="rgba(255,255,255,0.3)" />
+                  <p>No active listing. Player stats will appear here once a lot is activated.</p>
+                </div>
               )}
 
-              <div className="scout-history-card">
-                <div className="scout-history-head">
-                  <h3>Top Teams Snapshot</h3>
-                  <span>{richestTeam ? `${richestTeam.name} leads purse` : 'Awaiting team updates'}</span>
-                </div>
-                <ul className="scout-history-list">
-                  {historyRows.length > 0 ? historyRows.map((team) => (
-                    <li key={team.id}>
-                      <span>{team.playersBought || 0} picks</span>
-                      <span>{team.name}</span>
-                      <strong>{formatLakhs(team.remainingPurse || 0)}</strong>
-                    </li>
-                  )) : (
-                    <li>
-                      <span>0 picks</span>
-                      <span>No teams synced yet</span>
-                      <strong>{formatLakhs(0)}</strong>
-                    </li>
-                  )}
-                </ul>
+              {/* Auction snapshot */}
+              <div className="cb-scout-snapshot">
+                <div className="cb-snap-item"><span>Teams</span><strong>{teams.length}</strong></div>
+                <div className="cb-snap-item"><span>Slots Filled</span><strong>{teams.reduce((s, t) => s + (t.playersBought || 0), 0)}</strong></div>
+                <div className="cb-snap-item"><span>Avg Purse</span><strong>{formatLakhs(teams.length > 0 ? teams.reduce((s, t) => s + t.remainingPurse, 0) / teams.length : 0)}</strong></div>
               </div>
-
-              <div className="scout-bottom-nav">
-                <button type="button">Auction</button>
-                <button type="button" className="active">Stats</button>
-                <button type="button">Squad</button>
-                <button type="button">Rank</button>
-              </div>
-            </motion.div>
+            </div>
           )}
-        </motion.div>
 
-        {/* Footer */}
-        <div className="login-footer">
-          <p>powered by <b>NJS Creative Labs</b></p>
-        </div>
+          <div className="cb-login-footer">
+            <p>powered by <b>NJS Creative Labs</b></p>
+          </div>
+        </motion.div>
       </div>
     );
   }
 
-  // Main bidding interface
+  // ═══════════════ MAIN BIDDING INTERFACE ═══════════════
+  const teamPrimary = session.primaryColor || myTeam?.primaryColor || '#3b82f6';
+  const teamSecondary = session.secondaryColor || myTeam?.secondaryColor || '#1e40af';
+
   return (
     <div
-      className="mobile-bidding-container"
-      style={{
-        background: `linear-gradient(135deg, ${session.primaryColor} 0%, ${session.secondaryColor} 100%)`,
-      }}
+      className="cb-main"
+      style={{ '--cb-primary': teamPrimary, '--cb-secondary': teamSecondary } as React.CSSProperties}
     >
+      {/* Win Celebration Overlay */}
       <AnimatePresence>
         {showWinCelebration && winCelebrationData && (
-          <motion.div
-            className="win-celebration-overlay"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-          >
-            <div className="win-celebration-backdrop" aria-hidden="true" />
-            <div className="fireworks-layer" aria-hidden="true">
-              {Array.from({ length: 18 }).map((_, index) => (
-                <motion.span
-                  key={`fw-${index}`}
-                  className="firework-dot"
-                  style={{
-                    '--x': `${Math.cos((index / 18) * Math.PI * 2) * (80 + (index % 3) * 25)}px`,
-                    '--y': `${Math.sin((index / 18) * Math.PI * 2) * (80 + (index % 4) * 20)}px`,
-                  } as React.CSSProperties}
-                  initial={{ opacity: 0, scale: 0.2 }}
-                  animate={{ opacity: [0, 1, 0], x: 'var(--x)', y: 'var(--y)', scale: [0.2, 1, 0.5] }}
-                  transition={{ duration: 1.1, delay: (index % 6) * 0.06, repeat: 2 }}
-                />
-              ))}
-            </div>
-            <motion.div
-              className="win-celebration-card"
-              initial={{ y: 24, scale: 0.9 }}
-              animate={{ y: 0, scale: 1 }}
-              exit={{ y: 14, scale: 0.95 }}
-            >
+          <motion.div className="cb-celebration" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+            <div className="cb-celebration-bg" />
+            <motion.div className="cb-celebration-card" initial={{ y: 30, scale: 0.9 }} animate={{ y: 0, scale: 1 }} exit={{ y: 20, scale: 0.95 }}>
+              <div className="cb-celebration-emoji">🎉</div>
               <h2>Congratulations!</h2>
               <p>You won <strong>{winCelebrationData.player}</strong></p>
-              <div className="win-celebration-amount">₹{winCelebrationData.amount}L</div>
+              <div className="cb-celebration-amount">{formatLakhs(winCelebrationData.amount)}</div>
             </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* Header */}
-      <header className="bidding-header">
-        <div className="team-info">
-          <div className="team-badge-container">
-            {myTeam?.logoUrl && (
-              <TeamLogo 
-                logoUrl={myTeam.logoUrl} 
-                teamName={session.teamName}
-                size="sm"
-              />
-            )}
-            <span className="team-badge">{session.teamName}</span>
+      {/* ── Header ── */}
+      <header className="cb-header">
+        <div className="cb-header-left">
+          {myTeam?.logoUrl && <TeamLogo logoUrl={myTeam.logoUrl} teamName={session.teamName} size="sm" />}
+          <div className="cb-header-team">
+            <span className="cb-team-name">{session.teamName}</span>
+            <span className="cb-bid-count">{bidCount} bids</span>
           </div>
-          <span className="bid-count">{bidCount} bids placed</span>
         </div>
-        <div className="header-actions">
-          {/* Manual Refresh Button */}
-          <motion.button
-            className="refresh-button"
-            onClick={handleManualRefresh}
-            whileTap={{ scale: 0.95 }}
-            title="Refresh connection"
-          >
-            <IoRefresh size={20} />
+        <div className="cb-header-right">
+          <motion.button className="cb-icon-btn" onClick={handleManualRefresh} whileTap={{ scale: 0.9 }} title="Refresh">
+            <IoRefresh size={18} />
           </motion.button>
-          {/* Motion Sensor Toggle Button */}
           {motionSupported && (
             <motion.button
-              className={`motion-sensor-button ${motionActive ? 'active' : ''}`}
-              onClick={handleToggleMotionSensor}
-              whileTap={{ scale: 0.95 }}
-              title={motionActive ? 'Gesture bidding active' : 'Enable gesture bidding'}
+              className={`cb-icon-btn ${motionActive ? 'active' : ''}`}
+              onClick={handleToggleMotionSensor} whileTap={{ scale: 0.9 }}
+              title={motionActive ? 'Gesture active' : 'Enable gesture'}
             >
-              <IoSwapVertical size={20} />
+              <IoSwapVertical size={18} />
             </motion.button>
           )}
-          {/* Team Menu Button */}
-          <motion.button
-            className="team-menu-button"
-            onClick={() => setShowTeamMenu(true)}
-            whileTap={{ scale: 0.95 }}
-            title="View team credentials"
-          >
-            <IoPeople size={20} />
+          <motion.button className="cb-icon-btn" onClick={() => setShowTeamMenu(true)} whileTap={{ scale: 0.9 }} title="Teams">
+            <IoPeople size={18} />
           </motion.button>
-          <button className="logout-button" onClick={handleLogout}>
-            Logout
-          </button>
+          <button className="cb-logout-btn" onClick={handleLogout}>Logout</button>
         </div>
       </header>
 
-      {/* Motion Sensor Indicator */}
+      {/* ── Connection bar ── */}
+      <div className={`cb-conn-bar ${isConnected ? 'live' : 'off'}`}>
+        {isConnected ? <IoWifi size={14} /> : <IoWifiOutline size={14} />}
+        <span>{isConnected ? 'Connected' : 'Reconnecting...'}</span>
+        <span className="cb-conn-time">{formattedTime}</span>
+      </div>
+
+      {/* ── Motion indicator ── */}
       <AnimatePresence>
         {motionActive && (
-          <motion.div
-            className="motion-sensor-indicator"
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-          >
-            <div className="indicator-content">
-              <motion.div
-                className="motion-pulse"
-                animate={{ scale: [1, 1.1, 1] }}
-                transition={{ duration: 1, repeat: Infinity }}
-              >
-                <IoSwapVertical size={16} />
-              </motion.div>
-              <span className="indicator-text">Gesture bidding enabled - Raise your phone to bid</span>
-            </div>
+          <motion.div className="cb-motion-bar" initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }}>
+            <IoSwapVertical size={14} />
+            <span>Gesture bidding active — Raise phone to bid</span>
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* Connection Status - Enhanced for live view */}
-      <div className={`connection-status ${isConnected ? 'connected' : 'disconnected'}`}>
-        {isConnected ? (
-          <>
-            <IoWifi size={16} />
-            <span>Connected to Live</span>
-          </>
-        ) : (
-          <>
-            <IoWifiOutline size={16} />
-            <span>Connecting to Live...</span>
-          </>
+      {/* ── Content area ── */}
+      <div className="cb-content">
+        {/* Team budget bar */}
+        {myTeam && (
+          <div className="cb-budget-strip">
+            <div className="cb-budget-item">
+              <span>Budget</span>
+              <strong>{formatLakhs(myTeam.remainingPurse)}</strong>
+            </div>
+            <div className="cb-budget-divider" />
+            <div className="cb-budget-item">
+              <span>Players</span>
+              <strong>{myTeam.playersBought || 0}/{myTeam.totalPlayerThreshold || 25}</strong>
+            </div>
+            <div className="cb-budget-divider" />
+            <div className="cb-budget-item">
+              <span>Max Bid</span>
+              <strong>{formatLakhs(maxAffordableBid)}</strong>
+            </div>
+          </div>
         )}
-        <span className="last-update">Updated: {formattedTime}</span>
-      </div>
 
-      <section className="auction-overlay-dock" aria-label="Live auction overlays">
-        <div className="auction-overlay-tabs" role="tablist" aria-label="Auction insights tabs">
-          <button
-            type="button"
-            role="tab"
-            aria-selected={liveOverlayTab === 'budget'}
-            className={`overlay-tab-button ${liveOverlayTab === 'budget' ? 'active' : ''}`}
-            onClick={() => setLiveOverlayTab('budget')}
+        {/* Player card */}
+        {currentPlayer ? (
+          <motion.div
+            className="cb-player-card"
+            key={currentPlayer.id}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3 }}
           >
-            Team Budget
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={liveOverlayTab === 'player'}
-            className={`overlay-tab-button ${liveOverlayTab === 'player' ? 'active' : ''}`}
-            onClick={() => setLiveOverlayTab('player')}
-          >
-            Player Stats
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={liveOverlayTab === 'epl'}
-            className={`overlay-tab-button ${liveOverlayTab === 'epl' ? 'active' : ''}`}
-            onClick={() => setLiveOverlayTab('epl')}
-          >
-            EPL Insights
-          </button>
-        </div>
-
-        <AnimatePresence mode="wait">
-          {liveOverlayTab === 'budget' && (
-            <motion.div
-              key="overlay-budget"
-              className="auction-overlay-panel"
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -8 }}
-              transition={{ duration: 0.2 }}
-            >
-              <div className="overlay-panel-grid">
-                <article className="overlay-metric-card">
-                  <span>My Purse</span>
-                  <strong>₹{myTeam?.remainingPurse?.toFixed(1) || '0.0'}L</strong>
-                </article>
-                <article className="overlay-metric-card">
-                  <span>Max Raise Potential</span>
-                  <strong>₹{maxAffordableBid}L</strong>
-                </article>
-                <article className="overlay-metric-card">
-                  <span>Roster Progress</span>
-                  <strong>{myTeam?.playersBought || 0}/{myTeam?.totalPlayerThreshold || 25}</strong>
-                </article>
+            {/* Player image + basic info */}
+            <div className="cb-player-top">
+              <div className="cb-player-image-wrap">
+                <PlayerImage
+                  imageUrl={currentPlayer.imageUrl || ''}
+                  playerName={currentPlayer.name}
+                  size="lg"
+                  className="cb-player-img"
+                />
               </div>
-            </motion.div>
-          )}
-
-          {liveOverlayTab === 'player' && (
-            <motion.div
-              key="overlay-player"
-              className="auction-overlay-panel"
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -8 }}
-              transition={{ duration: 0.2 }}
-            >
-              {currentPlayer ? (
-                <div className="overlay-panel-grid">
-                  <article className="overlay-metric-card">
-                    <span>Base Price</span>
-                    <strong>₹{currentPlayer.basePrice || 0}L</strong>
-                  </article>
-                  <article className="overlay-metric-card">
-                    <span>Current / Base</span>
-                    <strong>{bidVsBase}x</strong>
-                  </article>
-                  <article className="overlay-metric-card">
-                    <span>Matches</span>
-                    <strong>{currentPlayer.matches || '--'}</strong>
-                  </article>
-                  <article className="overlay-metric-card">
-                    <span>Runs</span>
-                    <strong>{currentPlayer.runs || '--'}</strong>
-                  </article>
-                  <article className="overlay-metric-card">
-                    <span>Wickets</span>
-                    <strong>{currentPlayer.wickets || '--'}</strong>
-                  </article>
-                  <article className="overlay-metric-card">
-                    <span>Role</span>
-                    <strong>{currentPlayer.role || '--'}</strong>
-                  </article>
-                </div>
-              ) : (
-                <div className="overlay-empty-state">
-                  <p className="overlay-note">No listing for auction. Start the next lot to see player analytics.</p>
-                  {sponsors.length > 0 && (
-                    <div className="overlay-sponsor-strip">
-                      {sponsors.slice(0, 3).map((sponsor) => (
-                        <span key={sponsor.id}>{sponsor.name}</span>
-                      ))}
+              <div className="cb-player-info">
+                <h2 className="cb-player-name">{currentPlayer.name}</h2>
+                <span className={`cb-role-badge ${getRoleBadgeClass(currentPlayer.role)}`}>
+                  {getRoleLabel(currentPlayer.role)}
+                </span>
+                <div className="cb-price-row">
+                  <div className="cb-price-item">
+                    <span>Base</span>
+                    <strong>{formatLakhs(currentPlayer.basePrice)}</strong>
+                  </div>
+                  {currentPlayer.age && (
+                    <div className="cb-price-item">
+                      <span>Age</span>
+                      <strong>{currentPlayer.age}</strong>
                     </div>
                   )}
                 </div>
-              )}
-            </motion.div>
-          )}
-
-          {liveOverlayTab === 'epl' && (
-            <motion.div
-              key="overlay-epl"
-              className="auction-overlay-panel"
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -8 }}
-              transition={{ duration: 0.2 }}
-            >
-              <div className="overlay-panel-grid">
-                <article className="overlay-metric-card">
-                  <span>Auction Progress</span>
-                  <strong>{auctionProgress}%</strong>
-                </article>
-                <article className="overlay-metric-card">
-                  <span>Avg Team Purse</span>
-                  <strong>₹{averagePurse.toFixed(1)}L</strong>
-                </article>
-                <article className="overlay-metric-card">
-                  <span>Current Highest Live Bid</span>
-                  <strong>₹{currentBid || 0}L</strong>
-                </article>
               </div>
-              <div className="overlay-history-list">
-                {liveTopPurseTeams.length > 0 ? liveTopPurseTeams.map((team) => (
-                  <div key={team.id} className="overlay-history-row">
-                    <span>{team.name}</span>
-                    <span>{team.playersBought || 0} picks</span>
-                    <strong>₹{team.remainingPurse?.toFixed(1) || '0.0'}L</strong>
-                  </div>
-                )) : (
-                  <p className="overlay-note">Team analytics not synced yet.</p>
-                )}
-              </div>
-              <p className="overlay-note">Historical last-year EPL dataset is not yet synced in this mobile feed; this tab shows current-season live insights.</p>
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </section>
+            </div>
 
-      {/* Current Player Info */}
-      <div className="player-info-card">
-        {currentPlayer ? (
-          <>
-            <div className="player-image-container">
-              <PlayerImage 
-                imageUrl={currentPlayer.imageUrl || ''} 
-                playerName={currentPlayer.name}
-                size="lg"
-                className={currentPlayer.imageUrl ? 'mobile-player-image' : 'player-placeholder'}
-              />
-            </div>
-            <h2 className="player-name">{currentPlayer.name}</h2>
-            <p className="player-role">{currentPlayer.role}</p>
-            <div className="current-bid-display">
-              <span className="bid-label">Current Bid</span>
-              <span className="bid-amount">₹{currentBid}L</span>
-            </div>
-            {selectedTeam && (
-              <div className={`leading-team ${isMyBid ? 'is-my-bid' : ''}`}>
-                <div className="leading-team-info">
-                  {selectedTeam.logoUrl && (
-                    <TeamLogo 
-                      logoUrl={selectedTeam.logoUrl} 
-                      teamName={selectedTeam.name}
-                      size="sm"
-                    />
-                  )}
-                  <span>Leading: {selectedTeam.name}</span>
+            {/* Role-based stats grid */}
+            <div className="cb-stats-grid">
+              {playerStats.map((stat) => (
+                <div key={stat.label} className={`cb-stat-tile ${stat.category}`}>
+                  <span className="cb-stat-label">{stat.label}</span>
+                  <strong className="cb-stat-value">{stat.value || '--'}</strong>
                 </div>
-                {isMyBid && <span className="my-bid-badge">YOUR BID</span>}
-              </div>
-            )}
-          </>
-        ) : lastSoldPlayer ? (
-          <div className={`sold-message ${lastSoldPlayer.winnerTeam === session?.teamName ? 'won' : 'lost'}`}>
-            {lastSoldPlayer.winnerTeam === session?.teamName ? (
-              <>
-                <motion.div
-                  className="celebration-icon"
-                  initial={{ scale: 0, rotate: -180 }}
-                  animate={{ scale: 1, rotate: 0 }}
-                  transition={{ type: 'spring', duration: 0.6 }}
-                >
-                  🎉
-                </motion.div>
-                <motion.h2
-                  className="sold-title congrats"
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.2 }}
-                >
-                  Congratulations!
-                </motion.h2>
-                <motion.p
-                  className="sold-subtitle"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ delay: 0.4 }}
-                >
-                  You won the bid for <strong>{lastSoldPlayer.name}</strong>
-                </motion.p>
-                <motion.div
-                  className="sold-amount"
-                  initial={{ scale: 0 }}
+              ))}
+            </div>
+
+            {/* Current bid section */}
+            <div className="cb-bid-section">
+              <div className="cb-current-bid">
+                <span className="cb-bid-label">Current Bid</span>
+                <motion.span
+                  className="cb-bid-amount"
+                  key={currentBid}
+                  initial={{ scale: 1.15 }}
                   animate={{ scale: 1 }}
-                  transition={{ delay: 0.5, type: 'spring' }}
+                  transition={{ type: 'spring', stiffness: 300 }}
                 >
-                  ₹{lastSoldPlayer.amount}L
-                </motion.div>
+                  {formatLakhs(currentBid)}
+                </motion.span>
+              </div>
+              {selectedTeam && (
+                <div className={`cb-leading-team ${isMyBid ? 'mine' : ''}`}>
+                  {selectedTeam.logoUrl && <TeamLogo logoUrl={selectedTeam.logoUrl} teamName={selectedTeam.name} size="sm" />}
+                  <span>{selectedTeam.name}</span>
+                  {isMyBid && <span className="cb-my-bid-badge">YOUR BID</span>}
+                </div>
+              )}
+            </div>
+          </motion.div>
+        ) : lastSoldPlayer ? (
+          /* ── Sold / Waiting state ── */
+          <motion.div
+            className={`cb-sold-card ${lastSoldPlayer.winnerTeam === session.teamName ? 'won' : 'lost'}`}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+          >
+            {lastSoldPlayer.winnerTeam === session.teamName ? (
+              <>
+                <div className="cb-sold-emoji">🎉</div>
+                <h2>Congratulations!</h2>
+                <p>You won <strong>{lastSoldPlayer.name}</strong></p>
+                <div className="cb-sold-amount">{formatLakhs(lastSoldPlayer.amount)}</div>
               </>
             ) : (
               <>
-                <motion.div
-                  className="motivation-icon"
-                  initial={{ opacity: 0, scale: 0.8 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  transition={{ duration: 0.5 }}
-                >
-                  🎯
-                </motion.div>
-                <motion.h2
-                  className="sold-title motivation"
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.2 }}
-                >
-                  Better Player Ahead
-                </motion.h2>
-                <motion.p
-                  className="sold-subtitle"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ delay: 0.3 }}
-                >
-                  <strong>{lastSoldPlayer.winnerTeam}</strong> won the bid for {lastSoldPlayer.name}
-                </motion.p>
-                <motion.p
-                  className="motivation-text"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ delay: 0.5 }}
-                >
-                  {motivationQuotes[Math.abs(Math.floor(lastSoldPlayer.amount + currentBid)) % motivationQuotes.length]}
-                </motion.p>
+                <div className="cb-sold-emoji">🎯</div>
+                <h2>Better Player Ahead</h2>
+                <p><strong>{lastSoldPlayer.winnerTeam}</strong> won {lastSoldPlayer.name}</p>
+                <p className="cb-motivation">Stay patient, bid smart, and win the right lot.</p>
               </>
             )}
-            <motion.p
-              className="waiting-hint"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.7 }}
-            >
-              Waiting for next player...
-            </motion.p>
-          </div>
+            <p className="cb-waiting-hint">Waiting for next player...</p>
+          </motion.div>
         ) : (
-          <div className="no-player">
-            <GiCricketBat size={64} color="rgba(255,255,255,0.3)" />
+          /* ── No player ── */
+          <div className="cb-empty-state">
+            <GiCricketBat size={56} color="rgba(255,255,255,0.25)" />
             <p>Waiting for next player...</p>
-            <p className="hint">The auction master will start the bidding</p>
+            <p className="cb-empty-hint">The auction master will start the bidding</p>
           </div>
         )}
       </div>
 
-      {/* Action Buttons */}
-      <div className="action-buttons">
-        <motion.button
-          className="bid-button raise-bid"
-          onClick={handleRaiseBid}
-          disabled={!currentPlayer || !isConnected}
-          whileTap={{ scale: 0.95 }}
-          whileHover={{ scale: 1.02 }}
-        >
-          <span className="button-icon">⬆️</span>
-          <span className="button-text">RAISE BID</span>
-          <span className="button-amount">+₹100L</span>
-        </motion.button>
-
-        <motion.button
-          className="bid-button stop-bid"
-          onClick={handleStopBidding}
-          disabled={!currentPlayer || !isMyBid}
-          whileTap={{ scale: 0.95 }}
-          whileHover={{ scale: 1.02 }}
-        >
-          <span className="button-icon">✋</span>
-          <span className="button-text">STOP BIDDING</span>
-        </motion.button>
+      {/* ── Action Buttons ── */}
+      <div className="cb-actions">
+        {mobileBiddingConfig.enableRaiseBid && (
+          <motion.button
+            className="cb-action-btn raise"
+            onClick={handleRaiseBid}
+            disabled={!currentPlayer || !isConnected}
+            whileTap={{ scale: 0.95 }}
+          >
+            <span className="cb-action-icon">⬆️</span>
+            <span className="cb-action-label">RAISE BID</span>
+            <span className="cb-action-sub">+₹100L</span>
+          </motion.button>
+        )}
+        {mobileBiddingConfig.enableStopBidding && (
+          <motion.button
+            className="cb-action-btn stop"
+            onClick={handleStopBidding}
+            disabled={!currentPlayer || !isMyBid}
+            whileTap={{ scale: 0.95 }}
+          >
+            <span className="cb-action-icon">✋</span>
+            <span className="cb-action-label">STOP</span>
+          </motion.button>
+        )}
       </div>
 
-      {/* Feedback Toast */}
+      {/* ── Feedback toast ── */}
       <AnimatePresence>
         {feedback && (
           <motion.div
-            className={`feedback-toast feedback-${feedback.type}`}
+            className={`cb-toast cb-toast-${feedback.type}`}
             initial={{ opacity: 0, y: 50 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 50 }}
@@ -1294,110 +694,58 @@ export function MobileBiddingLivePage() {
         )}
       </AnimatePresence>
 
-      {/* Team Stats */}
-      {myTeam && (
-        <div className="team-stats">
-          <div className="stat-item">
-            <span className="stat-label">Budget</span>
-            <span className="stat-value">₹{myTeam.remainingPurse?.toFixed(1) || '0'}L</span>
-          </div>
-          <div className="stat-item">
-            <span className="stat-label">Players</span>
-            <span className="stat-value">{myTeam.playersBought || 0}/{myTeam.totalPlayerThreshold || 25}</span>
-          </div>
-        </div>
-      )}
-
-      {/* Team Menu Modal - Show credentials and info during bidding */}
+      {/* ── Team Menu Modal ── */}
       <AnimatePresence>
         {showTeamMenu && (
-          <motion.div
-            className="team-menu-overlay"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            onClick={() => setShowTeamMenu(false)}
-          >
+          <motion.div className="cb-modal-overlay" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowTeamMenu(false)}>
             <motion.div
-              className="team-menu-modal"
+              className="cb-modal"
               initial={{ y: '100%' }}
               animate={{ y: 0 }}
               exit={{ y: '100%' }}
               transition={{ type: 'spring', damping: 25 }}
               onClick={(e) => e.stopPropagation()}
             >
-              <div className="menu-header">
-                <h3>Auction Teams & Credentials</h3>
-                <button className="menu-close" onClick={() => setShowTeamMenu(false)}>✕</button>
+              <div className="cb-modal-header">
+                <h3>Auction Teams</h3>
+                <button className="cb-modal-close" onClick={() => setShowTeamMenu(false)}>✕</button>
               </div>
-
-              <div className="teams-menu-list">
+              <div className="cb-modal-body">
                 {runtimeCredentials.map((cred) => (
-                  <motion.div
-                    key={cred.teamId}
-                    className={`team-menu-item ${selectedMenuTeam === cred.teamId ? 'selected' : ''}`}
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.98 }}
-                  >
+                  <div key={cred.teamId} className={`cb-modal-team ${selectedMenuTeam === cred.teamId ? 'expanded' : ''}`}>
                     <button
-                      className="team-menu-select"
-                      onClick={() => setSelectedMenuTeam(cred.teamId)}
-                      style={{ borderColor: cred.primaryColor }}
+                      className="cb-modal-team-btn"
+                      onClick={() => setSelectedMenuTeam(selectedMenuTeam === cred.teamId ? null : cred.teamId)}
+                      style={{ borderLeftColor: cred.primaryColor }}
                     >
-                      <span className="team-menu-name">{cred.teamName}</span>
-                      <span className={`team-connection-status ${myTeam?.id === cred.teamId ? 'connected' : ''}`}>
-                        {myTeam?.id === cred.teamId ? '✓ Connected' : 'Available'}
+                      <span className="cb-modal-team-name">{cred.teamName}</span>
+                      <span className={`cb-modal-team-status ${myTeam?.id === cred.teamId ? 'connected' : ''}`}>
+                        {myTeam?.id === cred.teamId ? '✓ You' : ''}
                       </span>
+                      <IoChevronDown size={14} className={`cb-chevron ${selectedMenuTeam === cred.teamId ? 'open' : ''}`} />
                     </button>
-
-                    {/* Expandable credentials section */}
                     <AnimatePresence>
                       {selectedMenuTeam === cred.teamId && (
                         <motion.div
-                          className="team-menu-details"
+                          className="cb-modal-team-details"
                           initial={{ opacity: 0, height: 0 }}
                           animate={{ opacity: 1, height: 'auto' }}
                           exit={{ opacity: 0, height: 0 }}
-                          transition={{ duration: 0.3 }}
                         >
-                          <div className="credential-row">
-                            <span className="credential-label">Username:</span>
-                            <code className="credential-value">{cred.username}</code>
-                          </div>
-                          <div className="credential-row">
-                            <span className="credential-label">Password:</span>
-                            <code className="credential-value">{cred.password}</code>
-                          </div>
-                          <div className="credential-row">
-                            <span className="credential-label">Team ID:</span>
-                            <code className="credential-value">{cred.teamId}</code>
-                          </div>
-                          <motion.button
-                            className="copy-credentials-btn"
-                            whileTap={{ scale: 0.95 }}
+                          <div className="cb-cred-row"><span>User:</span><code>{cred.username}</code></div>
+                          <div className="cb-cred-row"><span>Pass:</span><code>{cred.password}</code></div>
+                          <button
+                            className="cb-copy-btn"
                             onClick={() => {
-                              const text = `Username: ${cred.username}\nPassword: ${cred.password}`;
-                              navigator.clipboard.writeText(text);
-                              setFeedback({
-                                type: 'success',
-                                message: 'Credentials copied!',
-                                timestamp: Date.now(),
-                              });
+                              navigator.clipboard.writeText(`Username: ${cred.username}\nPassword: ${cred.password}`);
+                              setFeedback({ type: 'success', message: 'Credentials copied!', timestamp: Date.now() });
                             }}
-                          >
-                            📋 Copy Credentials
-                          </motion.button>
+                          >Copy Credentials</button>
                         </motion.div>
                       )}
                     </AnimatePresence>
-                  </motion.div>
+                  </div>
                 ))}
-              </div>
-
-              <div className="menu-footer">
-                <p className="menu-info">
-                  📱 Share these credentials with your team members to let them bid from other devices.
-                </p>
               </div>
             </motion.div>
           </motion.div>

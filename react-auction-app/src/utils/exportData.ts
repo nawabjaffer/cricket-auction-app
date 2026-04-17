@@ -12,32 +12,36 @@ export function generateSoldPlayersCSV(players: SoldPlayerRecord[]): string {
   const headers = [
     'ID',
     'Player Name',
-    'Role',
     'Age',
-    'Matches',
-    'Best Figures',
+    'Player Role',
+    'Player Image URL',
     'Team Name',
     'Sold Amount',
     'Base Price',
-    'Image URL',
+    'Matches',
+    'Best Figures',
+    'Auction Round',
+    'Sold Timestamp',
   ];
 
   const rows = players.map(player => [
     player.id,
     player.playerName,
-    player.role,
     player.age?.toString() || 'N/A',
-    player.matches,
-    player.bestFigures,
+    player.role,
+    player.imageUrl,
     player.teamName,
     player.soldAmount.toString(),
     player.basePrice.toString(),
-    player.imageUrl,
+    player.matches,
+    player.bestFigures,
+    player.auctionRound?.toString() || '1',
+    player.timestamp ? new Date(player.timestamp).toISOString() : 'N/A',
   ]);
 
   const csvContent = [
     headers.join(','),
-    ...rows.map(row => row.map(cell => `"${cell}"`).join(',')),
+    ...rows.map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(',')),
   ].join('\n');
 
   return csvContent;

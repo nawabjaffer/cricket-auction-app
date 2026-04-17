@@ -429,7 +429,7 @@
 
 .tsv-captain-panel {
   width: 100%;
-  min-height: min(86vh, 760px);
+  min-height: min(86vh, 460px);
   border-radius: 28px;
   padding: 1.25rem;
   background: linear-gradient(165deg, rgba(15, 23, 42, 0.86), rgba(30, 41, 59, 0.6));
@@ -444,7 +444,8 @@
 
 .tsv-captain-image-wrapper {
   width: 100%;
-  min-height: 460px;
+  flex: 1 1 auto;
+  min-height: 300px;
   border-radius: 22px;
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02));
   border: 1px solid rgba(255, 255, 255, 0.1);
@@ -452,15 +453,17 @@
   align-items: flex-end;
   justify-content: center;
   overflow: hidden;
+  position: relative;
 }
 
 .tsv-captain-image {
   width: 100%;
-  height: 100%;
+  max-height: 100%;
   object-fit: contain;
   object-position: center bottom;
   filter: drop-shadow(0 16px 34px rgba(0, 0, 0, 0.35));
   background: transparent;
+  display: block;
 }
 
 .tsv-captain-info {
@@ -954,3 +957,85 @@
   }
 }
 
+/* ── Team Stats Panel (replaces duplicate brand section) ── */
+.tsv-team-stats-panel {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  padding: 1.2rem;
+  backdrop-filter: blur(8px);
+  margin-top: auto;
+}
+
+.tsv-stats-heading {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: rgba(255, 255, 255, 0.5);
+  margin: 0 0 0.8rem;
+}
+
+.tsv-stats-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.6rem;
+}
+
+.tsv-stat-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 10px;
+  padding: 0.6rem 0.4rem;
+  text-align: center;
+}
+
+.tsv-stat-value {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #e2e8f0;
+  line-height: 1.2;
+}
+
+.tsv-stat-label {
+  font-size: 0.55rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: rgba(255, 255, 255, 0.4);
+  margin-top: 0.2rem;
+}
+
+.tsv-stat-status {
+  margin-top: 0.8rem;
+  text-align: center;
+}
+
+.tsv-status-badge {
+  display: inline-block;
+  font-size: 0.6rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  padding: 0.3rem 0.8rem;
+  border-radius: 20px;
+}
+
+.tsv-status-full {
+  background: rgba(16, 185, 129, 0.15);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.tsv-status-warning {
+  background: rgba(245, 158, 11, 0.15);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+.tsv-status-open {
+  background: rgba(59, 130, 246, 0.15);
+  color: #60a5fa;
+  border: 1px solid rgba(59, 130, 246, 0.3);
+}

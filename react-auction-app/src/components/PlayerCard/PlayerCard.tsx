@@ -8,6 +8,7 @@ import { GiCricketBat, GiBaseballGlove } from 'react-icons/gi';
 import { IoBaseball, IoStar } from 'react-icons/io5';
 import type { Player } from '../../types';
 import { activeConfig } from '../../config';
+import { formatRoleDisplay, getRoleCategory, getRoleBadgeColor as getRoleBadgeHex } from '../../utils/roleFormatter';
 
 interface PlayerCardProps {
   player: Player;
@@ -27,22 +28,13 @@ export function PlayerCard({
   size = 'large',
 }: PlayerCardProps) {
   const getRoleIcon = (role: Player['role']) => {
-    switch (role) {
+    const category = getRoleCategory(role);
+    switch (category) {
       case 'Batsman': return <GiCricketBat className="inline-block" />;
       case 'Bowler': return <IoBaseball className="inline-block" />;
       case 'All-Rounder': return <IoStar className="inline-block" />;
-      case 'Wicket-Keeper': return <GiBaseballGlove className="inline-block" />;
+      case 'Wicket Keeper Batsman': return <GiBaseballGlove className="inline-block" />;
       default: return <GiCricketBat className="inline-block" />;
-    }
-  };
-
-  const getRoleBadgeColor = (role: Player['role']) => {
-    switch (role) {
-      case 'Batsman': return 'bg-blue-500';
-      case 'Bowler': return 'bg-red-500';
-      case 'All-Rounder': return 'bg-purple-500';
-      case 'Wicket-Keeper': return 'bg-green-500';
-      default: return 'bg-gray-500';
     }
   };
 
@@ -99,15 +91,24 @@ export function PlayerCard({
 
         {/* Under-age Badge */}
         {isUnderAge && (
-          <div className="absolute top-2 right-2 bg-yellow-500 text-black px-2 py-1 rounded text-xs font-bold">
+          <motion.div
+            className="absolute top-2 right-2 text-white px-2.5 py-1 rounded-full text-xs font-bold shadow-lg"
+            style={{ background: 'linear-gradient(135deg, #f59e0b, #f97316)' }}
+            initial={{ scale: 0, rotate: -15 }}
+            animate={{ scale: 1, rotate: 0 }}
+            transition={{ type: 'spring', stiffness: 400, damping: 15, delay: 0.3 }}
+          >
             U-{activeConfig.auction.rules.underAgeLimit}
-          </div>
+          </motion.div>
         )}
 
         {/* Role Badge */}
-        <div className={`absolute bottom-2 left-2 ${getRoleBadgeColor(player.role)} text-white px-3 py-1 rounded-full text-sm font-semibold flex items-center gap-1`}>
+        <div
+          className="absolute bottom-2 left-2 text-white px-3 py-1 rounded-full text-sm font-semibold flex items-center gap-1"
+          style={{ backgroundColor: getRoleBadgeHex(player.role) }}
+        >
           <span>{getRoleIcon(player.role)}</span>
-          <span>{player.role}</span>
+          <span>{formatRoleDisplay(player.role)}</span>
         </div>
       </div>
 

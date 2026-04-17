@@ -4,6 +4,53 @@
 // ============================================================================
 
 // Player Types
+
+// Detailed batting statistics
+export interface BattingStats {
+  matches: string;
+  innings: string;
+  notOut: string;
+  runs: string;
+  highestScore: string;
+  average: string;
+  strikeRate: string;
+  thirties: string;
+  fifties: string;
+  hundreds: string;
+  fours: string;
+  sixes: string;
+}
+
+// Detailed bowling statistics
+export interface BowlingStats {
+  matches: string;
+  innings: string;
+  overs: string;
+  maidens: string;
+  runs: string;
+  wickets: string;
+  bestBowling: string;
+  threeWickets: string;
+  fiveWickets: string;
+  economy: string;
+  strikeRate: string;
+  average: string;
+}
+
+// Default empty stats factories
+export const createEmptyBattingStats = (): BattingStats => ({
+  matches: '0', innings: '0', notOut: '0', runs: '0',
+  highestScore: '0', average: '0.00', strikeRate: '0.00',
+  thirties: '0', fifties: '0', hundreds: '0', fours: '0', sixes: '0',
+});
+
+export const createEmptyBowlingStats = (): BowlingStats => ({
+  matches: '0', innings: '0', overs: '0', maidens: '0',
+  runs: '0', wickets: '0', bestBowling: 'N/A',
+  threeWickets: '0', fiveWickets: '0',
+  economy: '0.00', strikeRate: '0.00', average: '0.00',
+});
+
 export interface Player {
   id: string;
   name: string;
@@ -17,6 +64,9 @@ export interface Player {
   bowlingBestFigures: string;
   basePrice: number;
   dateOfBirth?: string;
+  // Expanded stats (optional for backward compatibility)
+  battingStats?: BattingStats;
+  bowlingStats?: BowlingStats;
 }
 
 export type PlayerRole =
@@ -27,6 +77,22 @@ export type PlayerRole =
   | 'Wicket Keeper'
   | 'Wicket Keeper Batsman'
   | 'Player';
+
+// Canonical role categories for auction ordering
+export type AuctionRoleCategory =
+  | 'Wicket Keeper Batsman'
+  | 'Batsman'
+  | 'Bowler'
+  | 'All-Rounder'
+  | 'Uncategorized';
+
+export const DEFAULT_AUCTION_ROLE_ORDER: AuctionRoleCategory[] = [
+  'Wicket Keeper Batsman',
+  'Batsman',
+  'Bowler',
+  'All-Rounder',
+  'Uncategorized',
+];
 
 export interface SoldPlayer extends Player {
   soldAmount: number;

@@ -6,7 +6,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useQueryClient } from '@tanstack/react-query';
-import { IoClose, IoSave, IoRefresh, IoDownload, IoVideocam, IoAdd, IoTrash } from 'react-icons/io5';
+import { IoClose, IoSave, IoRefresh, IoDownload, IoVideocam, IoAdd, IoTrash, IoArrowUp, IoArrowDown } from 'react-icons/io5';
 import { auctionPersistence, type AdminSettings, type SponsorRecord } from '../../services/auctionPersistence';
 import { googleSheetsService, imagePreloaderService } from '../../services';
 import { useAuctionStore } from '../../store/auctionStore';
@@ -14,7 +14,9 @@ import { exportSoldPlayers } from '../../utils/exportData';
 import FeatureFlagsTab from './FeatureFlagsTab';
 import StreamingTab from './StreamingTab';
 import './AdminPanel.css';
-import type { Team, Player } from '../../types';
+import type { Team, Player, AuctionRoleCategory, BattingStats, BowlingStats } from '../../types';
+import { DEFAULT_AUCTION_ROLE_ORDER, createEmptyBattingStats, createEmptyBowlingStats } from '../../types';
+import { formatRoleDisplay, getRoleCategory, getRoleBadgeColor } from '../../utils/roleFormatter';
 import { localImageCacheService } from '../../services/localImageCache';
 
 type LogoSourceMode = 'drive' | 'upload';
@@ -41,6 +43,11 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
   const [accentColor, setAccentColor] = useState('#f59e0b');
   const [maxUnsoldRounds, setMaxUnsoldRounds] = useState(1);
 
+  // Auction role ordering
+  const [auctionRoleOrder, setAuctionRoleOrder] = useState<AuctionRoleCategory[]>([...DEFAULT_AUCTION_ROLE_ORDER]);
+  // Under-age spotlight threshold
+  const [underAgeThreshold, setUnderAgeThreshold] = useState(18);
+
   // Store
   const { teams, setTeams, soldPlayers, originalPlayers, setPlayers, reconcilePlayerPools } = useAuctionStore();
   const [editingTeams, setEditingTeams] = useState<Team[]>([]);
@@ -63,6 +70,12 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
   const [playerDraft, setPlayerDraft] = useState<Player | null>(null);
   const [isSavingSponsors, setIsSavingSponsors] = useState(false);
   const csvFileInputRef = useRef<HTMLInputElement | null>(null);
+  const [uploadFeedback, setUploadFeedback] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+
+  const showUploadFeedback = (message: string, type: 'success' | 'error' = 'success') => {
+    setUploadFeedback({ message, type });
+    setTimeout(() => setUploadFeedback(null), 3000);
+  };
 
   const filteredPlayers = useMemo(
     () => editingPlayers.filter((player) => player.name.toLowerCase().includes(playerSearch.toLowerCase())),
@@ -140,6 +153,12 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
           setAccentColor(settings.themeColors.accent);
           setMaxUnsoldRounds(settings.maxUnsoldRounds ?? 1);
           useAuctionStore.getState().setMaxUnsoldRounds(settings.maxUnsoldRounds ?? 1);
+          if (settings.auctionRoleOrder?.length) {
+            setAuctionRoleOrder(settings.auctionRoleOrder);
+          }
+          if (settings.underAgeThreshold != null) {
+            setUnderAgeThreshold(settings.underAgeThreshold);
+          }
         }
       } catch (error) {
         console.error('[AdminPanel] Failed to load settings:', error);
@@ -212,6 +231,8 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
         },
         auctionTitle,
         updatedAt: Date.now(),
+        auctionRoleOrder,
+        underAgeThreshold,
       };
 
       await auctionPersistence.saveAdminSettings(settings);
@@ -221,6 +242,7 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
       document.documentElement.style.setProperty('--color-secondary', secondaryColor);
       document.documentElement.style.setProperty('--color-accent', accentColor);
       useAuctionStore.getState().setMaxUnsoldRounds(maxUnsoldRounds);
+      useAuctionStore.getState().setAuctionRoleOrder(auctionRoleOrder);
 
       setSaveStatus('success');
       setTimeout(() => setSaveStatus('idle'), 2000);
@@ -334,14 +356,26 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
     setTeamDraft(null);
   };
 
-  const saveTeamDraft = () => {
+  const saveTeamDraft = async () => {
     if (!editingTeamId || !teamDraft) return;
 
-    setEditingTeams((current) => current.map((team) => (
+    const updatedTeams = editingTeams.map((team) => (
       team.id === editingTeamId
         ? { ...teamDraft }
         : team
-    )));
+    ));
+    setEditingTeams(updatedTeams);
+
+    // Persist to Firebase and update store
+    try {
+      await auctionPersistence.saveTeams(updatedTeams);
+      setTeams(updatedTeams);
+      queryClient.invalidateQueries({ queryKey: ['teams'] });
+      showUploadFeedback(`Team "${teamDraft.name}" saved successfully`);
+    } catch (error) {
+      console.error('[AdminPanel] Failed to save team draft:', error);
+      showUploadFeedback('Failed to save team changes.', 'error');
+    }
     closeTeamEditor();
   };
 
@@ -358,37 +392,84 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
     setPlayerDraft(null);
   };
 
-  const savePlayerDraft = () => {
+  const savePlayerDraft = async () => {
     if (!editingPlayerId || !playerDraft) return;
 
-    setEditingPlayers((current) => current.map((player) => (
+    const updatedPlayers = editingPlayers.map((player) => (
       player.id === editingPlayerId
         ? { ...playerDraft }
         : player
-    )));
+    ));
+    setEditingPlayers(updatedPlayers);
+
+    // Persist to Firebase and update store
+    try {
+      setPlayers(updatedPlayers);
+      await auctionPersistence.saveAdminPlayers(updatedPlayers);
+    } catch (error) {
+      console.error('[AdminPanel] Failed to save player draft:', error);
+    }
     closePlayerEditor();
   };
 
   const handleTeamDraftLogoFileChange = async (file?: File | null) => {
     if (!file || !teamDraft || !editingTeamId) return;
-    const dataUrl = await readFileAsDataUrl(file);
-    setTeamDraft({ ...teamDraft, logoUrl: dataUrl });
-    setTeamLogoSources((prev) => ({ ...prev, [editingTeamId]: 'upload' }));
+    if (!file.type.startsWith('image/')) {
+      showUploadFeedback('Invalid file type. Please select an image file.', 'error');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      showUploadFeedback('Image too large. Max 5MB allowed.', 'error');
+      return;
+    }
+    try {
+      const dataUrl = await readFileAsDataUrl(file);
+      setTeamDraft({ ...teamDraft, logoUrl: dataUrl });
+      setTeamLogoSources((prev) => ({ ...prev, [editingTeamId]: 'upload' }));
+      showUploadFeedback(`Team logo uploaded: ${file.name}`);
+    } catch {
+      showUploadFeedback('Failed to read image file.', 'error');
+    }
   };
 
   const handleTeamDraftOwnerLogoFileChange = async (file?: File | null) => {
     if (!file || !teamDraft || !editingTeamId) return;
-    const dataUrl = await readFileAsDataUrl(file);
-    setTeamDraft({ ...teamDraft, brandLogoUrl: dataUrl });
-    setTeamOwnerLogoSources((prev) => ({ ...prev, [editingTeamId]: 'upload' }));
+    if (!file.type.startsWith('image/')) {
+      showUploadFeedback('Invalid file type. Please select an image file.', 'error');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      showUploadFeedback('Image too large. Max 5MB allowed.', 'error');
+      return;
+    }
+    try {
+      const dataUrl = await readFileAsDataUrl(file);
+      setTeamDraft({ ...teamDraft, brandLogoUrl: dataUrl });
+      setTeamOwnerLogoSources((prev) => ({ ...prev, [editingTeamId]: 'upload' }));
+      showUploadFeedback(`Owner logo uploaded: ${file.name}`);
+    } catch {
+      showUploadFeedback('Failed to read image file.', 'error');
+    }
   };
 
   const handlePlayerDraftImageFileChange = async (file?: File | null) => {
     if (!file || !playerDraft || !editingPlayerId) return;
-
-    const dataUrl = await readFileAsDataUrl(file);
-    setPlayerDraft({ ...playerDraft, imageUrl: dataUrl });
-    setPlayerImageSources((prev) => ({ ...prev, [editingPlayerId]: 'upload' }));
+    if (!file.type.startsWith('image/')) {
+      showUploadFeedback('Invalid file type. Please select an image file.', 'error');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      showUploadFeedback('Image too large. Max 5MB allowed.', 'error');
+      return;
+    }
+    try {
+      const dataUrl = await readFileAsDataUrl(file);
+      setPlayerDraft({ ...playerDraft, imageUrl: dataUrl });
+      setPlayerImageSources((prev) => ({ ...prev, [editingPlayerId]: 'upload' }));
+      showUploadFeedback(`Player image uploaded: ${file.name}`);
+    } catch {
+      showUploadFeedback('Failed to read image file.', 'error');
+    }
   };
 
   const handleAddSponsor = () => {
@@ -435,6 +516,10 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
 
     setEditingPlayers((current) => [...current, newPlayer]);
     setPlayerImageSources((prev) => ({ ...prev, [newPlayerId]: 'drive' }));
+    setPlayerSearch('');
+    setPlayerPage(Math.max(1, Math.ceil((editingPlayers.length + 1) / playerPageSize)));
+    setEditingPlayerId(newPlayerId);
+    setPlayerDraft({ ...newPlayer });
   };
 
   const updateSponsorLogo = async (index: number, source: LogoSourceMode, value?: string) => {
@@ -456,6 +541,16 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
     await updateSponsorLogo(index, 'upload', dataUrl);
   };
 
+  const handleSponsorVideoFileChange = async (index: number, file?: File | null) => {
+    if (!file) return;
+    const dataUrl = await readFileAsDataUrl(file);
+    const updated = [...editingSponsors];
+    if (updated[index]) {
+      updated[index] = { ...updated[index], videoUrl: dataUrl };
+      setEditingSponsors(updated);
+    }
+  };
+
   // Handle export sold players
   const handleExportSoldPlayers = () => {
     if (soldPlayers.length === 0) {
@@ -469,12 +564,14 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
       role: player.role,
       age: player.age,
       matches: player.matches,
-      bestFigures: player.bowlingBestFigures || 'N/A',
+      bestFigures: player.bowlingBestFigures || player.battingBestFigures || 'N/A',
       teamName: player.teamName,
+      teamId: player.teamId,
       soldAmount: player.soldAmount,
       basePrice: player.basePrice,
       imageUrl: player.imageUrl,
       timestamp: new Date(player.soldDate).getTime(),
+      auctionRound: useAuctionStore.getState().currentRound ?? 1,
     }));
 
     exportSoldPlayers(records);
@@ -557,6 +654,29 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
       battingBest: findHeaderIndex(headers, ['battingbestfigures', 'batting_best', 'batting best']),
       bowlingBest: findHeaderIndex(headers, ['bowlingbestfigures', 'bowling_best', 'bowling best']),
       dob: findHeaderIndex(headers, ['dateofbirth', 'dob', 'date_of_birth']),
+      // Expanded batting stats
+      batInnings: findHeaderIndex(headers, ['inns', 'innings', 'bat_innings', 'batting_innings']),
+      batNotOut: findHeaderIndex(headers, ['not out', 'notout', 'not_out', 'no']),
+      batHighestScore: findHeaderIndex(headers, ['highest score', 'highestscore', 'highest_score', 'hs']),
+      batAverage: findHeaderIndex(headers, ['average', 'bat_average', 'batting_average', 'bat_avg']),
+      batStrikeRate: findHeaderIndex(headers, ['strike rate', 'strikerate', 'strike_rate', 'sr', 'bat_sr']),
+      batThirties: findHeaderIndex(headers, ['30s', 'thirties']),
+      batFifties: findHeaderIndex(headers, ['50s', 'fifties']),
+      batHundreds: findHeaderIndex(headers, ['100s', 'hundreds', 'centuries']),
+      batFours: findHeaderIndex(headers, ['4s', 'fours']),
+      batSixes: findHeaderIndex(headers, ['6s', 'sixes']),
+      // Expanded bowling stats
+      bowlMatches: findHeaderIndex(headers, ['bowling matches', 'bowl_matches', 'bowling_matches']),
+      bowlInnings: findHeaderIndex(headers, ['bowling innings', 'bowl_innings', 'bowling_innings']),
+      bowlOvers: findHeaderIndex(headers, ['overs']),
+      bowlMaidens: findHeaderIndex(headers, ['maidens']),
+      bowlRuns: findHeaderIndex(headers, ['bowling runs', 'bowl_runs', 'bowling_runs', 'runs_conceded']),
+      bowlBb: findHeaderIndex(headers, ['bb', 'best bowling', 'best_bowling']),
+      bowlThreeWkts: findHeaderIndex(headers, ['3wkts', '3_wickets', 'three_wickets']),
+      bowlFiveWkts: findHeaderIndex(headers, ['5wkts', '5_wickets', 'five_wickets']),
+      bowlEconomy: findHeaderIndex(headers, ['eco', 'economy']),
+      bowlSr: findHeaderIndex(headers, ['bowl_sr', 'bowling_sr', 'bowling_strike_rate']),
+      bowlAvg: findHeaderIndex(headers, ['bowl_avg', 'bowling_avg', 'bowling_average']),
     };
 
     if (idx.name < 0) {
@@ -575,6 +695,40 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
       const age = Number.parseInt(get(idx.age), 10);
       const idFromCsv = get(idx.id).trim();
 
+      // Build expanded stats if any relevant column exists
+      const hasBattingCols = [idx.batInnings, idx.batNotOut, idx.batHighestScore, idx.batAverage, idx.batStrikeRate, idx.batFifties, idx.batHundreds, idx.batFours, idx.batSixes, idx.batThirties].some((i) => i >= 0);
+      const hasBowlingCols = [idx.bowlMatches, idx.bowlInnings, idx.bowlOvers, idx.bowlMaidens, idx.bowlRuns, idx.bowlBb, idx.bowlThreeWkts, idx.bowlFiveWkts, idx.bowlEconomy, idx.bowlSr, idx.bowlAvg].some((i) => i >= 0);
+
+      const battingStats = hasBattingCols ? {
+        matches: get(idx.matches).trim() || '0',
+        innings: get(idx.batInnings).trim() || '0',
+        notOut: get(idx.batNotOut).trim() || '0',
+        runs: get(idx.runs).trim() || '0',
+        highestScore: get(idx.batHighestScore).trim() || '0',
+        average: get(idx.batAverage).trim() || '0.00',
+        strikeRate: get(idx.batStrikeRate).trim() || '0.00',
+        thirties: get(idx.batThirties).trim() || '0',
+        fifties: get(idx.batFifties).trim() || '0',
+        hundreds: get(idx.batHundreds).trim() || '0',
+        fours: get(idx.batFours).trim() || '0',
+        sixes: get(idx.batSixes).trim() || '0',
+      } : undefined;
+
+      const bowlingStats = hasBowlingCols ? {
+        matches: get(idx.bowlMatches).trim() || get(idx.matches).trim() || '0',
+        innings: get(idx.bowlInnings).trim() || '0',
+        overs: get(idx.bowlOvers).trim() || '0',
+        maidens: get(idx.bowlMaidens).trim() || '0',
+        runs: get(idx.bowlRuns).trim() || '0',
+        wickets: get(idx.wickets).trim() || '0',
+        bestBowling: get(idx.bowlBb).trim() || get(idx.bowlingBest).trim() || 'N/A',
+        threeWickets: get(idx.bowlThreeWkts).trim() || '0',
+        fiveWickets: get(idx.bowlFiveWkts).trim() || '0',
+        economy: get(idx.bowlEconomy).trim() || '0.00',
+        strikeRate: get(idx.bowlSr).trim() || '0.00',
+        average: get(idx.bowlAvg).trim() || '0.00',
+      } : undefined;
+
       parsed.push({
         id: idFromCsv || `CSV-${rowIndex + 1}`,
         name: rawName,
@@ -588,6 +742,8 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
         battingBestFigures: get(idx.battingBest).trim() || 'N/A',
         bowlingBestFigures: get(idx.bowlingBest).trim() || 'N/A',
         dateOfBirth: get(idx.dob).trim() || '',
+        ...(battingStats ? { battingStats } : {}),
+        ...(bowlingStats ? { bowlingStats } : {}),
       });
     });
 
@@ -812,6 +968,65 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
                     />
                   </div>
 
+                  <h3 style={{ marginTop: '2rem' }}>Auction Role Order</h3>
+                  <small style={{ color: '#6b7280', display: 'block', marginBottom: '0.75rem' }}>
+                    Configure the sequence in which player roles appear during the auction. Drag or use arrows to reorder.
+                  </small>
+                  <div className="admin-role-order-list">
+                    {auctionRoleOrder.map((role, index) => (
+                      <div key={role} className="admin-role-order-item">
+                        <span className="admin-role-order-badge" style={{ background: getRoleBadgeColor(role) }}>
+                          {index + 1}
+                        </span>
+                        <span className="admin-role-order-label">{role}</span>
+                        <div className="admin-role-order-actions">
+                          <button
+                            type="button"
+                            className="admin-btn admin-btn-ghost admin-btn-sm"
+                            disabled={index === 0}
+                            onClick={() => {
+                              const updated = [...auctionRoleOrder];
+                              [updated[index - 1], updated[index]] = [updated[index], updated[index - 1]];
+                              setAuctionRoleOrder(updated);
+                            }}
+                            title="Move up"
+                          >
+                            <IoArrowUp size={14} />
+                          </button>
+                          <button
+                            type="button"
+                            className="admin-btn admin-btn-ghost admin-btn-sm"
+                            disabled={index === auctionRoleOrder.length - 1}
+                            onClick={() => {
+                              const updated = [...auctionRoleOrder];
+                              [updated[index], updated[index + 1]] = [updated[index + 1], updated[index]];
+                              setAuctionRoleOrder(updated);
+                            }}
+                            title="Move down"
+                          >
+                            <IoArrowDown size={14} />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <h3 style={{ marginTop: '2rem' }}>Under-Age Spotlight</h3>
+                  <div className="form-group">
+                    <label>Under-Age Threshold</label>
+                    <input
+                      type="number"
+                      min={0}
+                      max={25}
+                      value={underAgeThreshold}
+                      onChange={(e) => setUnderAgeThreshold(Math.max(0, Number.parseInt(e.target.value || '18', 10)))}
+                      placeholder="e.g., 18"
+                    />
+                    <small style={{ color: '#6b7280' }}>
+                      Players below this age will get a special "Under {underAgeThreshold}" spotlight badge during the auction.
+                    </small>
+                  </div>
+
                   <h3 style={{ marginTop: '2rem' }}>Theme Colors</h3>
 
                   <div className="color-grid">
@@ -917,7 +1132,7 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
                         <div key={team.id} className="admin-compact-item">
                           <div className="admin-compact-main">
                             <strong>{team.name || `Team ${absoluteIndex + 1}`}</strong>
-                            <small>Captain: {team.captain || 'Not set'} | Purse: ₹{team.remainingPurse ?? 0}L | Threshold: {team.totalPlayerThreshold ?? 11}</small>
+                            <small>Icon Player: {team.captain || 'Not set'} | Purse: ₹{team.remainingPurse ?? 0}L | Threshold: {team.totalPlayerThreshold ?? 11}</small>
                           </div>
                           <div className="admin-compact-actions">
                             <button
@@ -1139,6 +1354,28 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
 
                           <div className="form-row">
                             <div className="form-group">
+                              <label>Video URL (for break ads)</label>
+                              <input
+                                type="text"
+                                value={sponsor.videoUrl || ''}
+                                onChange={(e) => {
+                                  const updated = [...editingSponsors];
+                                  updated[absoluteIndex] = { ...updated[absoluteIndex], videoUrl: e.target.value };
+                                  setEditingSponsors(updated);
+                                }}
+                                placeholder="https://... or paste video URL"
+                              />
+                              <input
+                                type="file"
+                                accept="video/*"
+                                onChange={(e) => handleSponsorVideoFileChange(absoluteIndex, e.target.files?.[0])}
+                                style={{ marginTop: '4px' }}
+                              />
+                            </div>
+                          </div>
+
+                          <div className="form-row">
+                            <div className="form-group">
                               <label>Display Order</label>
                               <input
                                 type="number"
@@ -1291,8 +1528,16 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
                     {paginatedPlayers.map((player) => (
                       <div key={player.id} className="admin-compact-item">
                         <div className="admin-compact-main">
-                          <strong>{player.name}</strong>
-                          <small>ID: {player.id} | {player.role} | Base: ₹{player.basePrice}L</small>
+                          <div className="admin-player-name-row">
+                            <strong>{player.name}</strong>
+                            {player.age != null && player.age > 0 && player.age < underAgeThreshold && (
+                              <span className="admin-underage-chip">U{underAgeThreshold}</span>
+                            )}
+                          </div>
+                          <small>
+                            <span className="admin-role-dot" style={{ background: getRoleBadgeColor(player.role) }} />
+                            {formatRoleDisplay(player.role)} | Base: ₹{player.basePrice}L
+                          </small>
                         </div>
                         <div className="admin-compact-actions">
                           <button
@@ -1361,10 +1606,49 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
                     <p>Total Revenue: <strong>₹{soldPlayers.reduce((sum, p) => sum + p.soldAmount, 0).toFixed(1)}L</strong></p>
                   </div>
 
+                  {soldPlayers.length > 0 && (
+                    <div className="admin-export-table-wrapper">
+                      <table className="admin-export-table">
+                        <thead>
+                          <tr>
+                            <th>#</th>
+                            <th>Player</th>
+                            <th>Role</th>
+                            <th>Age</th>
+                            <th>Team</th>
+                            <th>Sold (₹L)</th>
+                            <th>Base (₹L)</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {soldPlayers.map((p, i) => (
+                            <tr key={p.id}>
+                              <td>{i + 1}</td>
+                              <td>{p.name}</td>
+                              <td>
+                                <span className="admin-role-dot" style={{ background: getRoleBadgeColor(p.role) }} />
+                                {formatRoleDisplay(p.role)}
+                              </td>
+                              <td>{p.age ?? 'N/A'}</td>
+                              <td>{p.teamName}</td>
+                              <td className="admin-export-amount">₹{p.soldAmount}</td>
+                              <td>₹{p.basePrice}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+
+                  {soldPlayers.length === 0 && (
+                    <div className="admin-empty-state">No players sold yet. Sold players will appear here as the auction progresses.</div>
+                  )}
+
                   <button
                     className="admin-btn admin-btn-success"
                     onClick={handleExportSoldPlayers}
                     disabled={soldPlayers.length === 0}
+                    style={{ marginTop: '1rem' }}
                   >
                     <IoDownload size={18} /> Export Sold Players CSV
                   </button>
@@ -1430,7 +1714,7 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
 
                     <div className="form-row">
                       <div className="form-group">
-                        <label>Captain</label>
+                        <label>Icon Player</label>
                         <input
                           type="text"
                           list="admin-captain-list"
@@ -1517,6 +1801,12 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
                           placeholder="https://drive.google.com/..."
                         />
                       )}
+                      {teamDraft.logoUrl && (
+                        <div className="admin-upload-preview">
+                          <img src={teamDraft.logoUrl} alt="Team logo preview" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                          <span>Logo set</span>
+                        </div>
+                      )}
                     </div>
 
                     <div className="admin-media-field">
@@ -1572,9 +1862,23 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
 
               {playerDraft && editingPlayerId && (
                 <div className="admin-edit-modal-backdrop" onClick={closePlayerEditor}>
-                  <div className="admin-edit-modal" onClick={(e) => e.stopPropagation()}>
-                    <h3>Edit Player</h3>
+                  <div className="admin-edit-modal admin-edit-modal--wide" onClick={(e) => e.stopPropagation()}>
+                    <div className="admin-modal-header-row">
+                      <h3>Edit Player</h3>
+                      <div className="admin-role-preview">
+                        <span
+                          className="admin-role-chip"
+                          style={{ background: getRoleBadgeColor(playerDraft.role), color: '#fff' }}
+                        >
+                          {formatRoleDisplay(playerDraft.role)}
+                        </span>
+                        {playerDraft.age != null && playerDraft.age > 0 && playerDraft.age < underAgeThreshold && (
+                          <span className="admin-underage-chip">U{underAgeThreshold}</span>
+                        )}
+                      </div>
+                    </div>
 
+                    {/* Basic Info */}
                     <div className="form-row">
                       <div className="form-group">
                         <label>Player ID</label>
@@ -1619,7 +1923,7 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
                         />
                       </div>
                       <div className="form-group">
-                        <label>Matches</label>
+                        <label>Matches (legacy)</label>
                         <input
                           type="text"
                           value={playerDraft.matches}
@@ -1630,7 +1934,7 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
 
                     <div className="form-row">
                       <div className="form-group">
-                        <label>Overall Scored</label>
+                        <label>Runs (legacy)</label>
                         <input
                           type="text"
                           value={playerDraft.runs}
@@ -1638,7 +1942,7 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
                         />
                       </div>
                       <div className="form-group">
-                        <label>Wickets</label>
+                        <label>Wickets (legacy)</label>
                         <input
                           type="text"
                           value={playerDraft.wickets}
@@ -1665,6 +1969,55 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
                         />
                       </div>
                     </div>
+
+                    {/* ── Batting Stats ── */}
+                    {(getRoleCategory(playerDraft.role) !== 'Bowler') && (
+                      <>
+                        <h4 className="admin-stats-heading">Batting Statistics</h4>
+                        <div className="admin-stats-grid">
+                          {(Object.keys(playerDraft.battingStats ?? createEmptyBattingStats()) as (keyof BattingStats)[]).map((field) => (
+                            <div key={`bat-${field}`} className="form-group form-group--compact">
+                              <label>{field.replace(/([A-Z])/g, ' $1').replace(/^./, (s) => s.toUpperCase())}</label>
+                              <input
+                                type="text"
+                                value={(playerDraft.battingStats ?? createEmptyBattingStats())[field]}
+                                onChange={(e) => {
+                                  const updated = { ...(playerDraft.battingStats ?? createEmptyBattingStats()), [field]: e.target.value };
+                                  setPlayerDraft({ ...playerDraft, battingStats: updated });
+                                }}
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      </>
+                    )}
+
+                    {/* ── Bowling Stats ── */}
+                    {(getRoleCategory(playerDraft.role) !== 'Batsman' && getRoleCategory(playerDraft.role) !== 'Wicket Keeper Batsman') && (
+                      <>
+                        <h4 className="admin-stats-heading">Bowling Statistics</h4>
+                        <div className="admin-stats-grid">
+                          {(Object.keys(playerDraft.bowlingStats ?? createEmptyBowlingStats()) as (keyof BowlingStats)[]).map((field) => (
+                            <div key={`bowl-${field}`} className="form-group form-group--compact">
+                              <label>{field.replace(/([A-Z])/g, ' $1').replace(/^./, (s) => s.toUpperCase())}</label>
+                              <input
+                                type="text"
+                                value={(playerDraft.bowlingStats ?? createEmptyBowlingStats())[field]}
+                                onChange={(e) => {
+                                  const updated = { ...(playerDraft.bowlingStats ?? createEmptyBowlingStats()), [field]: e.target.value };
+                                  setPlayerDraft({ ...playerDraft, bowlingStats: updated });
+                                }}
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      </>
+                    )}
+
+                    {/* ── All-Rounder: Show both ── */}
+                    {getRoleCategory(playerDraft.role) === 'All-Rounder' && !playerDraft.battingStats && (
+                      <small style={{ color: '#6b7280' }}>All-Rounder: both batting and bowling stats are shown above.</small>
+                    )}
 
                     <div className="admin-media-field">
                       <div className="admin-media-header">
@@ -1693,7 +2046,7 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
                       {playerDraftImageSource === 'upload' ? (
                         <input
                           type="file"
-                                  accept="image/*"
+                          accept="image/*"
                           onChange={(e) => {
                             void handlePlayerDraftImageFileChange(e.target.files?.[0]);
                             e.target.value = '';
@@ -1724,6 +2077,20 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
               {saveStatus === 'error' && (
                 <div className="admin-error">❌ Failed to save. Please try again.</div>
               )}
+
+              {/* Upload Feedback Toast */}
+              <AnimatePresence>
+                {uploadFeedback && (
+                  <motion.div
+                    className={`admin-upload-toast admin-upload-toast--${uploadFeedback.type}`}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: 20 }}
+                  >
+                    {uploadFeedback.type === 'success' ? '✅' : '❌'} {uploadFeedback.message}
+                  </motion.div>
+                )}
+              </AnimatePresence>
       </div>
     </div>
   );

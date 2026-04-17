@@ -12,6 +12,7 @@ import AdminLogin from './components/AdminLogin/AdminLogin'
 import AdminPage from './pages/AdminPage'
 import CameraPage from './pages/CameraPage'
 import LivePage from './pages/LivePage'
+import LiveAdminPage from './pages/LiveAdminPage'
 import './index.css'
 
 setupDebugConsole();
@@ -65,6 +66,7 @@ createRoot(document.getElementById('root')!).render(
             <Route path="/admin" element={<AdminPage />} />
             <Route path="/camera" element={<CameraPage />} />
             <Route path="/live" element={<LivePage />} />
+            <Route path="/live-admin" element={<LiveAdminPage />} />
           </Routes>
         </BrowserRouter>
       </QueryClientProvider>

@@ -6,6 +6,7 @@
 import { useEffect } from 'react';
 import { motion } from 'framer-motion';
 import type { Player, Team } from '../../types';
+import { formatRoleDisplay } from '../../utils/roleFormatter';
 import './SoldAnimation.css';
 
 interface SoldAnimationProps {
@@ -97,7 +98,7 @@ export default function SoldAnimation({
               </div>
               <div className="live-sold-animation__info">
                 <h3 className="live-sold-animation__name">{player.name}</h3>
-                <p className="live-sold-animation__role">{player.role}</p>
+                <p className="live-sold-animation__role">{formatRoleDisplay(player.role)}</p>
               </div>
             </div>
 

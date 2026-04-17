@@ -134,14 +134,19 @@ export function usePlayersQuery() {
  * Combined hook for all initial data loading with image preloading
  * Waits for BOTH data AND images to be preloaded before marking as ready
  */
+
+// Module-level flag: once images have been preloaded in this session,
+// skip the loading screen on subsequent mounts (e.g. returning from /live).
+let _globalPreloadComplete = false;
+
 export function useInitialData() {
   const teamsQuery = useTeamsQuery();
   const playersQuery = usePlayersQuery();
   const soldPlayersQuery = useSoldPlayersQuery();
   const unsoldPlayersQuery = useUnsoldPlayersQuery();
 
-  // Track preload state
-  const [isPreloadingComplete, setIsPreloadingComplete] = useState(false);
+  // Track preload state — initialize from global flag to skip if already done
+  const [isPreloadingComplete, setIsPreloadingComplete] = useState(_globalPreloadComplete);
 
   // Collect all player images for preloading
   const allPlayerImages = useMemo(() => {
@@ -168,6 +173,9 @@ export function useInitialData() {
   // Trigger image preloading when all data is available
   // IMPORTANT: This now waits for preload to complete before allowing app to render
   useEffect(() => {
+    // Skip if already preloaded globally (e.g. returning from /live)
+    if (_globalPreloadComplete) return;
+
     if (allPlayerImages.length > 0 && !imagePreloaderService.isCurrentlyPreloading()) {
       setIsPreloadingComplete(false); // Mark preload as in-progress
 
@@ -188,11 +196,13 @@ export function useInitialData() {
             successRate: `${result.successRate.toFixed(1)}%`,
           });
           // Mark preload as complete - app can now render
+          _globalPreloadComplete = true;
           setIsPreloadingComplete(true);
         })
         .catch(error => {
           console.error('[useInitialData] Image preload error:', error);
           // Even if preload fails, allow app to render with cached/fallback images
+          _globalPreloadComplete = true;
           setIsPreloadingComplete(true);
         });
     }

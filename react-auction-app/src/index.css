@@ -160,6 +160,23 @@ body {
   }
 }
 
+/* NJS Creative Labs branding watermark */
+.njs-branding-watermark {
+  position: fixed;
+  bottom: 6px;
+  right: 12px;
+  font-size: 0.48rem;
+  letter-spacing: 0.06em;
+  color: rgba(255,255,255,0.12);
+  pointer-events: none;
+  z-index: 5;
+  font-family: 'Inter', system-ui, sans-serif;
+}
+.njs-branding-watermark b {
+  color: rgba(129,140,248,0.22);
+  font-weight: 700;
+}
+
 /* Top-Left Corner */
 .corner-gif.tl { 
   top: 0; 
@@ -510,6 +527,174 @@ body {
   font-size: 0.85rem;
   font-weight: 600;
   color: rgba(255, 255, 255, 0.8);
+}
+
+/* Interactive stat pills */
+.stat-pill--interactive {
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: all 0.2s ease;
+}
+.stat-pill--interactive:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+.stat-pill--active {
+  background: rgba(255, 255, 255, 0.12) !important;
+  border-color: rgba(255, 255, 255, 0.18) !important;
+}
+
+/* Stat dropdown */
+.header-stats {
+  position: relative;
+}
+
+.stat-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 320px;
+  max-height: 400px;
+  background: rgba(15, 20, 35, 0.96);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 14px;
+  box-shadow: 0 12px 40px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.04);
+  z-index: 100;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.stat-dropdown__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.65rem 0.85rem;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+
+.stat-dropdown__title {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: rgba(255,255,255,0.7);
+}
+
+.stat-dropdown__close {
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255,255,255,0.06);
+  border: none;
+  border-radius: 6px;
+  color: rgba(255,255,255,0.4);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.stat-dropdown__close:hover {
+  background: rgba(255,255,255,0.12);
+  color: rgba(255,255,255,0.8);
+}
+
+.stat-dropdown__list {
+  overflow-y: auto;
+  max-height: 340px;
+  padding: 0.35rem;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255,255,255,0.1) transparent;
+}
+.stat-dropdown__list::-webkit-scrollbar { width: 4px; }
+.stat-dropdown__list::-webkit-scrollbar-track { background: transparent; }
+.stat-dropdown__list::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 4px; }
+
+.stat-dropdown__empty {
+  padding: 1.5rem;
+  text-align: center;
+  font-size: 0.75rem;
+  color: rgba(255,255,255,0.3);
+}
+
+.stat-dropdown__item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.5rem 0.65rem;
+  border-radius: 8px;
+  transition: background 0.15s;
+}
+.stat-dropdown__item:hover {
+  background: rgba(255,255,255,0.04);
+}
+
+.stat-dropdown__item-left {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+  flex: 1;
+}
+
+.stat-dropdown__item-name {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: rgba(255,255,255,0.9);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.stat-dropdown__item-meta {
+  font-size: 0.62rem;
+  color: rgba(255,255,255,0.35);
+  letter-spacing: 0.02em;
+}
+
+.stat-dropdown__item-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.1rem;
+  flex-shrink: 0;
+  margin-left: 0.75rem;
+}
+
+.stat-dropdown__item-amount {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #4ade80;
+}
+
+.stat-dropdown__item-team {
+  font-size: 0.58rem;
+  color: rgba(255,255,255,0.4);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.stat-dropdown__item-round {
+  font-size: 0.65rem;
+  font-weight: 600;
+  color: rgba(255,255,255,0.4);
+  background: rgba(255,255,255,0.06);
+  padding: 0.1rem 0.4rem;
+  border-radius: 4px;
+}
+
+/* Sold item left accent */
+.stat-dropdown__item--sold {
+  border-left: 2px solid rgba(22, 163, 74, 0.4);
+}
+
+/* Unsold item left accent */
+.stat-dropdown__item--unsold {
+  border-left: 2px solid rgba(239, 68, 68, 0.4);
 }
 
 /* Menu Trigger */

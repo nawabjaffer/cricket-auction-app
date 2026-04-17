@@ -116,15 +116,31 @@ class CameraManagerService {
     }
 
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          deviceId: { exact: deviceId },
-          width: { ideal: 1920 },
-          height: { ideal: 1080 },
-          frameRate: { ideal: 30 },
-        },
-        audio: false,
-      });
+      let stream: MediaStream;
+      try {
+        // Try exact device match first
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            deviceId: { exact: deviceId },
+            width: { ideal: 1920 },
+            height: { ideal: 1080 },
+            frameRate: { ideal: 30 },
+          },
+          audio: false,
+        });
+      } catch {
+        // Exact match failed — try preferred (allows browser to pick closest match)
+        console.warn('[CameraManager] Exact device not found, trying preferred:', deviceId);
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            deviceId: { ideal: deviceId },
+            width: { ideal: 1920 },
+            height: { ideal: 1080 },
+            frameRate: { ideal: 30 },
+          },
+          audio: false,
+        });
+      }
 
       const device = this.availableDevices.find(d => d.deviceId === deviceId);
       const sourceIndex = this.config.sources.length;

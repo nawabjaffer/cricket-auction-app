@@ -13,10 +13,12 @@ import { useAuctionStore } from '../store/auctionStore';
 import { cameraManager } from '../services/cameraManager';
 import { premiumService } from '../services/premiumService';
 import { useAdminAuth } from '../hooks/useAdminAuth';
-import { useAuction, useInitialData, useRealtimeMobileSync, useRealtimeDesktopSync } from '../hooks';
+import { useAuction, useInitialData, useRealtimeMobileSync, useRealtimeDesktopSync, useTheme } from '../hooks';
 import type { CameraSource } from '../types/streaming';
 import type { Player, Team } from '../types';
-import { Header, AnalyticsCarousel, ConnectToTeam } from '../components';
+import { realtimeSync, type BroadcastControlState, type PersistedCameraConfig } from '../services/realtimeSync';
+import { auctionPersistence, type SponsorRecord } from '../services/auctionPersistence';
+import { Header, AnalyticsCarousel, ConnectToTeam, BreakOverlay } from '../components';
 import PlayerOverlay from '../components/Live/PlayerOverlay';
 import SoldAnimation from '../components/Live/SoldAnimation';
 import PlayerTransitionOverlay from '../components/Live/PlayerTransitionOverlay';
@@ -73,7 +75,10 @@ export default function LivePage() {
   const [cameras, setCameras] = useState<CameraSource[]>([]);
   const [activeCamera, setActiveCamera] = useState<number>(1);
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
-  const [showSetup, setShowSetup] = useState(true);
+  const [showSetup, setShowSetup] = useState(() => {
+    // Skip setup if already completed this session
+    return sessionStorage.getItem('live-broadcast-started') !== 'true';
+  });
   const [_isStarted, setIsStarted] = useState(false);
   const [showHeader, setShowHeader] = useState(false);
   const [showCarousel, setShowCarousel] = useState(false);
@@ -90,6 +95,45 @@ export default function LivePage() {
   const [showTeamStats, setShowTeamStats] = useState(false);
   const [selectedTeamIndex, setSelectedTeamIndex] = useState(0);
   const [playerTransitionActive, setPlayerTransitionActive] = useState(false);
+  const [showLiveTransition, setShowLiveTransition] = useState(false);
+
+  const { currentTheme } = useTheme();
+
+  // Broadcast control state (synced from /live-admin)
+  const [broadcastControl, setBroadcastControl] = useState<BroadcastControlState | null>(null);
+  const [liveSponsors, setLiveSponsors] = useState<SponsorRecord[]>([]);
+
+  // Subscribe to broadcast control from /live-admin
+  useEffect(() => {
+    const unsub = realtimeSync.subscribeBroadcastControl((control) => {
+      setBroadcastControl(control);
+    });
+
+    const loadSponsors = async () => {
+      try {
+        const sponsors = await auctionPersistence.getSponsors();
+        setLiveSponsors(sponsors);
+      } catch (err) {
+        console.error('[LivePage] Failed to load sponsors:', err);
+      }
+    };
+    loadSponsors();
+    const unsubSponsors = auctionPersistence.subscribeSponsors((updated) => {
+      setLiveSponsors(updated);
+    });
+
+    return () => {
+      unsub();
+      unsubSponsors();
+    };
+  }, []);
+
+  // Apply camera layout changes from /live-admin in real-time
+  useEffect(() => {
+    if (broadcastControl?.cameraLayout) {
+      cameraManager.setLayout(broadcastControl.cameraLayout);
+    }
+  }, [broadcastControl?.cameraLayout]);
 
   // Video refs for multi-camera
   const mainVideoRef = useRef<HTMLVideoElement | null>(null);
@@ -142,6 +186,62 @@ export default function LivePage() {
       unsubDevices();
     };
   }, [maxCameras, setCameraSources]);
+
+  // Auto-start cameras from persisted config (Firebase).
+  // Runs on mount AND reacts to config changes from /live-admin.
+  // Handles: first visit, page refresh, and real-time config updates.
+  const lastAppliedConfigRef = useRef<number>(0);
+  useEffect(() => {
+    let cancelled = false;
+
+    const applyCameraConfig = async (config: PersistedCameraConfig) => {
+      // Skip if we already applied this exact config version
+      if (config.lastUpdate <= lastAppliedConfigRef.current) return;
+
+      try {
+        // Request camera permission (quick probe, then release)
+        const tempStream = await navigator.mediaDevices.getUserMedia({ video: true });
+        tempStream.getTracks().forEach(t => t.stop());
+
+        if (cancelled) return;
+
+        // Stop existing cameras before applying new config
+        cameraManager.stopAll();
+
+        // Add each saved camera
+        for (const deviceId of config.deviceIds) {
+          if (cancelled) return;
+          await cameraManager.addCamera(deviceId);
+        }
+
+        // Apply layout
+        if (config.layout) {
+          cameraManager.setLayout(config.layout);
+        }
+
+        if (!cancelled) {
+          lastAppliedConfigRef.current = config.lastUpdate;
+          setIsStarted(true);
+          setShowSetup(false);
+          setLive(true);
+          sessionStorage.setItem('live-broadcast-started', 'true');
+        }
+      } catch (err) {
+        console.warn('[LivePage] Failed to apply camera config:', err);
+      }
+    };
+
+    const unsub = realtimeSync.subscribeCameraConfig((config: PersistedCameraConfig | null) => {
+      if (cancelled || !config || !config.deviceIds?.length) return;
+      applyCameraConfig(config);
+    });
+
+    return () => {
+      cancelled = true;
+      unsub();
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Sync auction state from local store (if running on same device)
   // Uses ref-based comparison to prevent infinite update loops
@@ -352,16 +452,23 @@ export default function LivePage() {
   }, [cameras, activeCamera]);
 
   // Keyboard shortcuts - Full auction functionality
+  // Keyboard shortcuts - Auction bidding only (camera controls moved to /live-admin)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement;
-      // Don't handle if user is typing in an input
-      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
-        return;
-      }
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) return;
 
       const key = e.key.toLowerCase();
       const teams = auction.getEligibleTeams();
+
+      // L - Toggle back to auction page with transition
+      if (key === 'l') {
+        if (e.ctrlKey || e.metaKey || e.shiftKey) return;
+        e.preventDefault();
+        setShowLiveTransition(true);
+        setTimeout(() => navigate('/'), 1200);
+        return;
+      }
 
       // Team bidding: 1-8 for teams
       if (/^[1-8]$/.test(key)) {
@@ -373,29 +480,19 @@ export default function LivePage() {
       }
 
       // Bid multiplier: Q to increase, W to decrease
-      if (key === 'q') {
-        setBidMultiplier((prev) => Math.min(prev * 2, 64));
-      }
-      if (key === 'w') {
-        setBidMultiplier((prev) => Math.max(prev / 2, 1));
-      }
+      if (key === 'q') setBidMultiplier((prev) => Math.min(prev * 2, 64));
+      if (key === 'w') setBidMultiplier((prev) => Math.max(prev / 2, 1));
 
       // Show live menu bar
-      if (e.key === '=') {
-        setShowHeader((prev) => !prev);
-      }
+      if (e.key === '=') setShowHeader((prev) => !prev);
 
       // Toggle marquee
-      if (e.key === '-') {
-        setShowCarousel((prev) => !prev);
-      }
+      if (e.key === '-') setShowCarousel((prev) => !prev);
 
-      // Toggle debug details
-      if (e.key === '0') {
-        setShowDebug((prev) => !prev);
-      }
+      // Toggle debug
+      if (e.key === '0') setShowDebug((prev) => !prev);
 
-      // Sold (S) - use actual auction logic
+      // Sold (S)
       if (key === 's' && auction.currentPlayer && auction.selectedTeam) {
         e.preventDefault();
         auction.markAsSold();
@@ -410,84 +507,43 @@ export default function LivePage() {
       // Next player (N)
       if (key === 'n') {
         e.preventDefault();
-        // If we're showing sold/unsold animation, close it first
-        if (soldAnimationData) {
-          setSoldAnimationData(null);
-        }
-        // Clear any bid state and overlay
+        if (soldAnimationData) setSoldAnimationData(null);
         auction.clearBidState();
-        
-        // Trigger exit animation before moving to next player
         setPlayerTransitionActive(true);
         setTimeout(() => {
-          // Re-check state to ensure clearBidState took effect
           auction.selectNextPlayer();
           setPlayerTransitionActive(false);
         }, 400);
       }
 
       // Undo (Z)
-      if (key === 'z') {
-        e.preventDefault();
-        auction.closeOverlay();
-      }
+      if (key === 'z') { e.preventDefault(); auction.closeOverlay(); }
 
-      // Reset Auction (R) - with Shift modifier for safety
+      // Reset Auction (Shift+R)
       if (key === 'r' && e.shiftKey) {
         e.preventDefault();
-        if (window.confirm('Are you sure you want to reset the auction?')) {
-          auction.resetAuction();
-        }
+        if (window.confirm('Are you sure you want to reset the auction?')) auction.resetAuction();
       }
 
-      // Teams overlay toggle (T) - Show/hide team stats panel
-      if (key === 't') {
-        e.preventDefault();
-        setShowTeamStats((prev) => !prev);
-      }
+      // Teams overlay toggle (T)
+      if (key === 't') { e.preventDefault(); setShowTeamStats((prev) => !prev); }
 
-      // Navigate between teams in stats view
-      // [ - Previous team
-      if (e.key === '[') {
-        e.preventDefault();
-        setSelectedTeamIndex((prev) => (prev > 0 ? prev - 1 : teams.length - 1));
-        if (!showTeamStats) setShowTeamStats(true);
-      }
+      // [ ] P O - Team navigation
+      if (e.key === '[') { e.preventDefault(); setSelectedTeamIndex((prev) => (prev > 0 ? prev - 1 : teams.length - 1)); if (!showTeamStats) setShowTeamStats(true); }
+      if (e.key === ']') { e.preventDefault(); setSelectedTeamIndex((prev) => (prev < teams.length - 1 ? prev + 1 : 0)); if (!showTeamStats) setShowTeamStats(true); }
+      if (key === 'p') { e.preventDefault(); setSelectedTeamIndex((prev) => (prev > 0 ? prev - 1 : teams.length - 1)); setShowTeamStats(true); }
+      if (key === 'o') { e.preventDefault(); setSelectedTeamIndex((prev) => (prev < teams.length - 1 ? prev + 1 : 0)); setShowTeamStats(true); }
 
-      // ] - Next team
-      if (e.key === ']') {
-        e.preventDefault();
-        setSelectedTeamIndex((prev) => (prev < teams.length - 1 ? prev + 1 : 0));
-        if (!showTeamStats) setShowTeamStats(true);
-      }
-
-      // P - Show previous team's auction info
-      if (key === 'p') {
-        e.preventDefault();
-        setSelectedTeamIndex((prev) => (prev > 0 ? prev - 1 : teams.length - 1));
-        setShowTeamStats(true);
-      }
-
-      // O - Show next team's auction info (O for "other/next")
-      if (key === 'o') {
-        e.preventDefault();
-        setSelectedTeamIndex((prev) => (prev < teams.length - 1 ? prev + 1 : 0));
-        setShowTeamStats(true);
-      }
-
-      // Escape to exit
+      // Escape
       if (e.key === 'Escape') {
-        if (showSetup) {
-          navigate('/admin');
-        } else {
-          setShowHeader(false);
-        }
+        if (showSetup) navigate('/admin');
+        else setShowHeader(false);
       }
     };
 
     globalThis.addEventListener('keydown', handleKeyDown);
     return () => globalThis.removeEventListener('keydown', handleKeyDown);
-  }, [auction, bidMultiplier, cameras, navigate, showSetup]);
+  }, [auction, bidMultiplier, navigate, showSetup, soldAnimationData, showTeamStats]);
 
   // Add camera handler
   const handleAddCamera = async (deviceId: string) => {
@@ -499,14 +555,18 @@ export default function LivePage() {
     setIsStarted(true);
     setShowSetup(false);
     setLive(true);
+    sessionStorage.setItem('live-broadcast-started', 'true');
   };
 
   // Stop broadcast
-  const handleStopBroadcast = () => {
+  const handleStopBroadcast = useCallback(() => {
     setIsStarted(false);
     setLive(false);
     cameraManager.stopAll();
-  };
+    sessionStorage.removeItem('live-broadcast-started');
+    lastAppliedConfigRef.current = 0; // Allow re-applying config on next start
+  }, [setLive]);
+  void handleStopBroadcast;
 
   // Reset auction handler
   const handleResetAuction = useCallback(() => {
@@ -514,6 +574,7 @@ export default function LivePage() {
       auction.resetAuction();
     }
   }, [auction]);
+  void handleResetAuction;
 
   // Premium gate
   if (!isPremium) {
@@ -656,18 +717,13 @@ export default function LivePage() {
               onClick: () => navigate('/admin'),
             },
             {
-              label: 'Go to Camera Settings',
-              description: 'Devices & preview',
-              onClick: () => navigate('/camera'),
-            },
-            {
-              label: 'Open Live Setup',
-              description: 'Broadcast setup',
-              onClick: () => setShowSetup(true),
+              label: 'Live Admin Panel',
+              description: 'Camera & broadcast control',
+              onClick: () => navigate('/live-admin'),
             },
             {
               label: 'Keyboard Shortcuts',
-              description: '1-8 Bid, S Sold, U Unsold, N Next',
+              description: '1-8 Bid, S Sold, U Unsold, N Next, L Back',
               onClick: () => {},
             },
           ]}
@@ -692,17 +748,13 @@ export default function LivePage() {
               playsInline
             />
 
-            {/* PIP Cameras */}
+            {/* PIP Cameras (display only - controls on /live-admin) */}
             {cameras.map((camera, index) => {
-              if (index + 1 === activeCamera) return null; // Skip active camera
+              if (index + 1 === activeCamera) return null;
               return (
                 <div
                   key={camera.id}
                   className={`live-page__pip-camera live-page__pip-camera--top-${index === 0 ? 'right' : index === 1 ? 'left' : 'right'}`}
-                  onClick={() => {
-                    setActiveCamera(index + 1);
-                    cameraManager.switchCamera(index + 1);
-                  }}
                 >
                   <video
                     ref={(el) => { videoRefs.current[index] = el; }}
@@ -722,28 +774,6 @@ export default function LivePage() {
             <p>No camera connected</p>
           </div>
         )}
-      </div>
-
-      {/* Camera Selector */}
-      <div className="live-page__camera-selector">
-        {[1, 2, 3, 4].map((num) => {
-          const hasCamera = cameras[num - 1];
-          return (
-            <button
-              key={num}
-              className={`live-page__camera-btn ${activeCamera === num ? 'live-page__camera-btn--active' : ''} ${!hasCamera ? 'live-page__camera-btn--empty' : ''}`}
-              onClick={() => {
-                if (hasCamera) {
-                  setActiveCamera(num);
-                  cameraManager.switchCamera(num);
-                }
-              }}
-              disabled={!hasCamera}
-            >
-              {num}
-            </button>
-          );
-        })}
       </div>
 
       {/* Live Indicator */}
@@ -846,43 +876,6 @@ export default function LivePage() {
           />
         )}
       </AnimatePresence>
-
-      {/* Controls */}
-      {showHeader && (
-        <div className="live-page__controls">
-          <button
-            className="live-page__control-btn"
-            onClick={() => setShowSetup(true)}
-            title="Settings"
-          >
-            <svg viewBox="0 0 24 24" fill="currentColor">
-              <path d="M19.14 12.94c.04-.31.06-.63.06-.94 0-.31-.02-.63-.06-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.04.31-.06.63-.06.94s.02.63.06.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z" />
-            </svg>
-          </button>
-
-          <button
-            className="live-page__control-btn"
-            onClick={handleResetAuction}
-            title="Reset Auction (R)"
-            style={{ background: 'rgba(251, 191, 36, 0.3)' }}
-          >
-            <svg viewBox="0 0 24 24" fill="currentColor">
-              <path d="M17.65 6.35A7.958 7.958 0 0012 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0112 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
-            </svg>
-          </button>
-
-          <button
-            className="live-page__control-btn"
-            onClick={handleStopBroadcast}
-            title="Stop Broadcast"
-            style={{ background: 'rgba(239, 68, 68, 0.3)' }}
-          >
-            <svg viewBox="0 0 24 24" fill="currentColor">
-              <path d="M6 6h12v12H6z" />
-            </svg>
-          </button>
-        </div>
-      )}
 
       {/* Bid Multiplier Indicator */}
       {bidMultiplier > 1 && (
@@ -1083,7 +1076,7 @@ export default function LivePage() {
                 <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#34d399' }}>
                   {teams[selectedTeamIndex]?.captain || 'None'}
                 </div>
-                <div style={{ fontSize: '0.75rem', opacity: 0.7 }}>Captain</div>
+                <div style={{ fontSize: '0.75rem', opacity: 0.7 }}>Icon Player</div>
               </div>
             </div>
 
@@ -1101,6 +1094,88 @@ export default function LivePage() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Break Overlay controlled by /live-admin */}
+      <BreakOverlay
+        isVisible={broadcastControl?.mode === 'break'}
+        durationSeconds={broadcastControl?.breakDuration || 120}
+        sponsorDisplayDuration={broadcastControl?.sponsorDisplayDuration || 15}
+        sponsors={liveSponsors}
+        organizerLogo={currentTheme.seasonLogo}
+        auctionTitle={currentTheme.name ? `${currentTheme.name} AUCTION` : undefined}
+        onClose={() => {
+          realtimeSync.setBroadcastControl({ mode: 'auction', lastUpdate: Date.now() });
+        }}
+      />
+
+      {/* L-key transition overlay (back to auction) */}
+      <AnimatePresence>
+        {showLiveTransition && (
+          <motion.div
+            style={{
+              position: 'fixed',
+              inset: 0,
+              zIndex: 99999,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              background: '#000',
+              overflow: 'hidden',
+            }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.3 }}
+          >
+            <motion.div
+              style={{
+                position: 'absolute',
+                top: 0, left: 0, right: 0,
+                height: '50%',
+                background: `linear-gradient(180deg, ${currentTheme.colors.primary || '#0a0f1e'} 0%, ${currentTheme.colors.secondary || '#1a1040'} 100%)`,
+                transformOrigin: 'top center',
+              }}
+              initial={{ scaleY: 0 }}
+              animate={{ scaleY: 1 }}
+              transition={{ duration: 0.4, ease: 'easeInOut' }}
+            />
+            <motion.div
+              style={{
+                position: 'absolute',
+                bottom: 0, left: 0, right: 0,
+                height: '50%',
+                background: `linear-gradient(0deg, ${currentTheme.colors.primary || '#0a0f1e'} 0%, ${currentTheme.colors.secondary || '#1a1040'} 100%)`,
+                transformOrigin: 'bottom center',
+              }}
+              initial={{ scaleY: 0 }}
+              animate={{ scaleY: 1 }}
+              transition={{ duration: 0.4, ease: 'easeInOut' }}
+            />
+            <motion.div
+              style={{ position: 'relative', zIndex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem' }}
+              initial={{ rotateY: 0, scale: 0.5, opacity: 0 }}
+              animate={{ rotateY: 360, scale: 1, opacity: 1 }}
+              transition={{ duration: 0.8, delay: 0.3, ease: 'easeInOut' }}
+            >
+              {currentTheme.seasonLogo ? (
+                <img src={currentTheme.seasonLogo} alt="Logo" style={{ width: 120, height: 120, objectFit: 'contain', filter: 'drop-shadow(0 0 20px rgba(255,255,255,0.3))' }} />
+              ) : (
+                <div style={{ fontSize: '4rem', background: `linear-gradient(135deg, ${currentTheme.colors.accent || '#a78bfa'}, ${currentTheme.colors.primary || '#60a5fa'})`, WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', fontWeight: 800 }}>
+                  {currentTheme.name || 'LIVE'}
+                </div>
+              )}
+              <div style={{ fontSize: '1.2rem', fontWeight: 700, letterSpacing: '0.2em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.8)' }}>
+                BACK TO AUCTION
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* NJS Creative Labs branding */}
+      <div className="njs-branding-watermark" aria-hidden>
+        powered by <b>NJS Creative Labs</b>
+      </div>
     </div>
   );
 }

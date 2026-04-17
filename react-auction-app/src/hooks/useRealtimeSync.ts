@@ -148,6 +148,11 @@ export interface RealtimeMobileSyncState {
   lastUpdate: number;
   lastSessionReset: number;
   submitBid: (teamId: string, amount: number, type?: 'raise' | 'stop') => Promise<boolean>;
+  mobileBiddingConfig: {
+    maxStatsToShow: number;
+    enableRaiseBid: boolean;
+    enableStopBidding: boolean;
+  };
 }
 
 /**
@@ -246,19 +251,21 @@ export function useRealtimeMobileSync(): RealtimeMobileSyncState {
   }, []);
 
   // Convert state to Player/Team types
-  // Note: Using partial data from Firebase - missing fields will use defaults
+  // Note: Using full data from Firebase including stats
   const currentPlayer: Player | null = syncState.currentPlayer ? {
     id: syncState.currentPlayer.id,
     name: syncState.currentPlayer.name,
     role: syncState.currentPlayer.role as Player['role'],
     imageUrl: syncState.currentPlayer.imageUrl,
     basePrice: syncState.currentPlayer.basePrice,
-    age: null,
-    matches: '',
-    runs: '',
-    wickets: '',
-    battingBestFigures: '',
-    bowlingBestFigures: '',
+    age: syncState.currentPlayer.age ?? null,
+    matches: syncState.currentPlayer.matches || '',
+    runs: syncState.currentPlayer.runs || '',
+    wickets: syncState.currentPlayer.wickets || '',
+    battingBestFigures: syncState.currentPlayer.battingBestFigures || '',
+    bowlingBestFigures: syncState.currentPlayer.bowlingBestFigures || '',
+    battingStats: syncState.currentPlayer.battingStats,
+    bowlingStats: syncState.currentPlayer.bowlingStats,
   } : null;
 
   const selectedTeam: Team | null = syncState.selectedTeam ? {
@@ -285,13 +292,20 @@ export function useRealtimeMobileSync(): RealtimeMobileSyncState {
     playersBought: t.playersBought,
     totalPlayerThreshold: t.totalPlayerThreshold,
     remainingPlayers: 0,
-    allocatedAmount: 0,
-    highestBid: 0,
-    captain: '',
-    underAgePlayers: 0,
+    allocatedAmount: t.allocatedAmount || 0,
+    highestBid: t.highestBid || 0,
+    captain: t.captain || '',
+    underAgePlayers: t.underAgePlayers || 0,
     primaryColor: t.primaryColor,
     secondaryColor: t.secondaryColor,
   }));
+
+  // Extract mobile bidding config
+  const mobileBiddingConfig = syncState.mobileBiddingConfig || {
+    maxStatsToShow: 6,
+    enableRaiseBid: true,
+    enableStopBidding: true,
+  };
 
   return {
     currentPlayer,
@@ -303,5 +317,6 @@ export function useRealtimeMobileSync(): RealtimeMobileSyncState {
     lastUpdate: syncState.lastUpdate,
     lastSessionReset,
     submitBid,
+    mobileBiddingConfig,
   };
 }

@@ -10,7 +10,7 @@ import {
   onValue,
   type Database 
 } from 'firebase/database';
-import type { Player, Team, SoldPlayer } from '../types';
+import type { Player, Team, SoldPlayer, AuctionRoleCategory } from '../types';
 
 // Database paths
 const DB_PATHS = {
@@ -27,6 +27,7 @@ export interface SponsorRecord {
   id: string;
   name: string;
   logoUrl?: string;
+  videoUrl?: string;
   website?: string;
   tier?: string;
   isTitleSponsor?: boolean;
@@ -104,6 +105,9 @@ export interface SoldPlayerRecord {
   basePrice: number;
   imageUrl: string;
   timestamp: number;
+  // Additional export fields
+  teamId?: string;
+  auctionRound?: number;
 }
 
 // Unsold player record format for Firebase
@@ -141,6 +145,10 @@ export interface AdminSettings {
   };
   auctionTitle: string;
   updatedAt: number;
+  // Auction role ordering — persisted sequence of role categories
+  auctionRoleOrder?: AuctionRoleCategory[];
+  // Under-age spotlight threshold (e.g. 18)
+  underAgeThreshold?: number;
 }
 
 class AuctionPersistenceService {
@@ -162,13 +170,13 @@ class AuctionPersistenceService {
       id: player.id,
       playerName: player.name,
       role: player.role,
-      age: player.age,
-      matches: player.matches,
+      age: player.age ?? null,
+      matches: player.matches ?? '',
       bestFigures: player.bowlingBestFigures || player.battingBestFigures || 'N/A',
       teamName,
       soldAmount: player.soldAmount,
-      basePrice: player.basePrice,
-      imageUrl: player.imageUrl,
+      basePrice: player.basePrice ?? 0,
+      imageUrl: player.imageUrl ?? '',
       timestamp: Date.now(),
     };
 
@@ -203,13 +211,13 @@ class AuctionPersistenceService {
       id: player.id,
       name: player.name,
       role: player.role,
-      age: player.age,
-      matches: player.matches,
+      age: player.age ?? null,
+      matches: player.matches ?? '',
       bowlingBest: player.bowlingBestFigures || 'N/A',
-      basePrice: player.basePrice,
+      basePrice: player.basePrice ?? 0,
       round,
       timestamp: Date.now(),
-      imageUrl: player.imageUrl,
+      imageUrl: player.imageUrl ?? '',
     };
 
     const unsoldPlayerRef = ref(this.db, `${DB_PATHS.UNSOLD_PLAYERS}/${player.id}`);
@@ -322,8 +330,31 @@ class AuctionPersistenceService {
   async saveTeams(teams: Team[]): Promise<void> {
     if (!this.db) throw new Error('Database not initialized');
 
+    // Strip undefined values — Firebase RTDB rejects them
+    const cleaned = teams.map(t => {
+      const record: Record<string, unknown> = {
+        id: t.id,
+        name: t.name,
+        logoUrl: t.logoUrl ?? '',
+        playersBought: t.playersBought ?? 0,
+        totalPlayerThreshold: t.totalPlayerThreshold ?? 11,
+        remainingPlayers: t.remainingPlayers ?? 0,
+        allocatedAmount: t.allocatedAmount ?? 0,
+        remainingPurse: t.remainingPurse ?? 0,
+        highestBid: t.highestBid ?? 0,
+        captain: t.captain ?? '',
+        underAgePlayers: t.underAgePlayers ?? 0,
+      };
+      if (t.primaryColor) record.primaryColor = t.primaryColor;
+      if (t.secondaryColor) record.secondaryColor = t.secondaryColor;
+      if (t.brandLogoUrl) record.brandLogoUrl = t.brandLogoUrl;
+      if (t.ownerCompany) record.ownerCompany = t.ownerCompany;
+      if (t.brandTagline) record.brandTagline = t.brandTagline;
+      return record;
+    });
+
     const teamsRef = ref(this.db, DB_PATHS.TEAMS);
-    await set(teamsRef, teams);
+    await set(teamsRef, cleaned);
   }
 
   /**
@@ -344,12 +375,34 @@ class AuctionPersistenceService {
 
   /**
    * Save admin-edited player list
+   * Strips undefined values to avoid Firebase RTDB rejection
    */
   async saveAdminPlayers(players: Player[]): Promise<void> {
     if (!this.db) throw new Error('Database not initialized');
 
+    // Firebase RTDB rejects undefined values — strip them
+    const cleaned = players.map(p => {
+      const record: Record<string, unknown> = {
+        id: p.id,
+        name: p.name,
+        imageUrl: p.imageUrl ?? '',
+        role: p.role,
+        age: p.age ?? null,
+        matches: p.matches ?? '',
+        runs: p.runs ?? '',
+        wickets: p.wickets ?? '',
+        battingBestFigures: p.battingBestFigures ?? '',
+        bowlingBestFigures: p.bowlingBestFigures ?? '',
+        basePrice: p.basePrice ?? 0,
+      };
+      if (p.dateOfBirth) record.dateOfBirth = p.dateOfBirth;
+      if (p.battingStats) record.battingStats = p.battingStats;
+      if (p.bowlingStats) record.bowlingStats = p.bowlingStats;
+      return record;
+    });
+
     const playersRef = ref(this.db, DB_PATHS.ADMIN_PLAYERS);
-    await set(playersRef, players);
+    await set(playersRef, cleaned);
   }
 
   /**

@@ -5,24 +5,35 @@
 
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { createPortal } from 'react-dom';
+import { useNavigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AnimatePresence, motion } from 'framer-motion';
 import { 
   GiCricketBat, 
   GiBaseballGlove,
 } from 'react-icons/gi';
-import { 
+import {
   IoBaseball,
   IoStar,
   IoPerson,
   IoClose,
   IoSearch,
+  IoPhonePortrait,
+  IoTv,
+  IoSettings,
+  IoCamera,
+  IoPeople,
+  IoStatsChart,
+  IoShieldCheckmark,
+  IoKeypad,
+  IoInformationCircle,
 } from 'react-icons/io5';
 import {
   Header,
   SoldOverlay,
   UnsoldOverlay,
   EndOverlay,
+  BreakOverlay,
   CoinJar,
   NotificationContainer,
   TeamSquadView,
@@ -51,6 +62,7 @@ import { auctionRules } from './services/auctionRules';
 import { realtimeSync } from './services/realtimeSync';
 import { useActiveOverlay, useNotification, useCurrentPlayer, useSoldPlayers, useAvailablePlayers, useOriginalPlayers, useTeams } from './store';
 import { extractDriveFileId } from './utils/driveImage';
+import { formatRoleDisplay, getRoleCategory } from './utils/roleFormatter';
 import './index.css';
 
 // Create Query Client
@@ -83,6 +95,7 @@ export default function App() {
 
 // Auction App Content
 function AuctionApp() {
+  const navigate = useNavigate();
   const [showCoinJar, setShowCoinJar] = useState(false);
   const [selectedPlayerName, setSelectedPlayerName] = useState<string>('');
   const [showHelpModal, setShowHelpModal] = useState(false);
@@ -94,7 +107,16 @@ function AuctionApp() {
   const [showJumpModal, setShowJumpModal] = useState(false);
   const [jumpInput, setJumpInput] = useState('');
   const [jumpError, setJumpError] = useState('');
+  const [showLiveTransition, setShowLiveTransition] = useState(false);
   const jumpInputRef = useRef<HTMLInputElement>(null);
+
+  // Restore keyboard focus when returning from /live or other pages
+  useEffect(() => {
+    // Blur any focused element (buttons, links from navigation) so keyboard shortcuts work
+    if (document.activeElement instanceof HTMLElement && document.activeElement !== document.body) {
+      document.activeElement.blur();
+    }
+  }, []);
   
   // Connect to Team modal state
   const [showConnectToTeamModal, setShowConnectToTeamModal] = useState(false);
@@ -106,6 +128,10 @@ function AuctionApp() {
   const [showAdminPanel, setShowAdminPanel] = useState(false);
   const [sponsors, setSponsors] = useState<SponsorRecord[]>([]);
   const [sponsorLoadState, setSponsorLoadState] = useState<'loading' | 'ready' | 'error'>('loading');
+  
+  // Break overlay state
+  const [showBreakOverlay, setShowBreakOverlay] = useState(false);
+  const breakDurationSeconds = 120; // 2 minutes default
   
   // Image polling state
   const [imageLoadingState, setImageLoadingState] = useState<'loading' | 'loaded' | 'error'>('loading');
@@ -227,6 +253,46 @@ function AuctionApp() {
     window.addEventListener('keydown', handleAdminKeyboard);
     return () => window.removeEventListener('keydown', handleAdminKeyboard);
   }, []);
+
+  // Break overlay keyboard shortcut (B key)
+  useEffect(() => {
+    const handleBreakKey = (e: KeyboardEvent) => {
+      if (e.key === 'b' || e.key === 'B') {
+        // Don't trigger when typing in input fields or when admin/modals are open
+        const target = e.target as HTMLElement;
+        if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) return;
+        if (showAdminPanel || showJumpModal || showCoinJar) return;
+        
+        e.preventDefault();
+        setShowBreakOverlay(prev => !prev);
+      }
+    };
+
+    window.addEventListener('keydown', handleBreakKey);
+    return () => window.removeEventListener('keydown', handleBreakKey);
+  }, [showAdminPanel, showJumpModal, showCoinJar]);
+
+  // Live transition keyboard shortcut (L key) - flip transition to /live
+  useEffect(() => {
+    const handleLiveKey = (e: KeyboardEvent) => {
+      if (e.key === 'l' || e.key === 'L') {
+        const target = e.target as HTMLElement;
+        if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) return;
+        if (showAdminPanel || showJumpModal || showCoinJar || showBreakOverlay) return;
+        if (e.ctrlKey || e.metaKey || e.shiftKey) return; // Don't conflict with Ctrl+L etc.
+        
+        e.preventDefault();
+        setShowLiveTransition(true);
+        // Navigate to /live after animation completes
+        setTimeout(() => {
+          navigate('/live');
+        }, 1200);
+      }
+    };
+
+    window.addEventListener('keydown', handleLiveKey);
+    return () => window.removeEventListener('keydown', handleLiveKey);
+  }, [showAdminPanel, showJumpModal, showCoinJar, showBreakOverlay, navigate]);
 
   const handleJumpSubmit = () => {
     if (auction.selectionMode !== 'sequential') {
@@ -644,6 +710,11 @@ function AuctionApp() {
       {/* Full-screen neon light bands (top + bottom) */}
       <div className="screen-neon-bands" aria-hidden />
 
+      {/* NJS Creative Labs branding watermark */}
+      <div className="njs-branding-watermark" aria-hidden>
+        powered by <b>NJS Creative Labs</b>
+      </div>
+
       {showHeader && (
         <Header 
           onRefresh={refreshAll}
@@ -751,7 +822,7 @@ function AuctionApp() {
                   transition={{ duration: 0.5, delay: 0.15, ease: [0.32, 0.72, 0, 1] }}
                 >
                   <span className="role-arrow">▶▶</span>
-                  <span className="role-text">{currentPlayer.role || 'Player'}</span>
+                  <span className="role-text">{formatRoleDisplay(currentPlayer.role)}</span>
                 </motion.div>
                 {statRows.map((row, index) => (
                   <motion.div 
@@ -1042,7 +1113,7 @@ function AuctionApp() {
               )}
 
               {/* Default/Unknown role - Generic cricket icons */}
-              {(!currentPlayer?.role || !['Batsman', 'Bowler', 'All-Rounder', 'Wicket-Keeper', 'Wicket Keeper', 'Wicket Keeper Batsman'].includes(currentPlayer.role)) && (
+              {(!currentPlayer?.role || getRoleCategory(currentPlayer.role) === 'Uncategorized') && (
                 <>
                   <span className="float-item float-1">
                     <IoBaseball className="float-icon" />
@@ -1225,7 +1296,7 @@ function AuctionApp() {
                         <div className="player-info-apple">
                           <div className="player-name-apple">{player.name}</div>
                           <div className="player-role-apple">
-                            <RoleIcon role={player.role} /> {player.role}
+                            <RoleIcon role={player.role} /> {formatRoleDisplay(player.role)}
                           </div>
                         </div>
                         <div className="player-price-apple">₹{player.soldAmount}L</div>
@@ -1261,6 +1332,113 @@ function AuctionApp() {
         onStartNextRound={auction.startNextRound}
         onShowTeam={handleTeamSquadView}
       />
+
+      {/* Break Overlay with sponsor ads */}
+      <BreakOverlay
+        isVisible={showBreakOverlay}
+        durationSeconds={breakDurationSeconds}
+        sponsors={sponsors}
+        onClose={() => setShowBreakOverlay(false)}
+      />
+
+      {/* Live Transition Animation */}
+      <AnimatePresence>
+        {showLiveTransition && (
+          <motion.div
+            style={{
+              position: 'fixed',
+              inset: 0,
+              zIndex: 99999,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              background: '#000',
+              overflow: 'hidden',
+            }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.3 }}
+          >
+            {/* Top curtain */}
+            <motion.div
+              style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                right: 0,
+                height: '50%',
+                background: `linear-gradient(180deg, ${currentTheme.colors.primary || '#0a0f1e'} 0%, ${currentTheme.colors.secondary || '#1a1040'} 100%)`,
+                transformOrigin: 'top center',
+              }}
+              initial={{ scaleY: 0 }}
+              animate={{ scaleY: 1 }}
+              transition={{ duration: 0.4, ease: 'easeInOut' }}
+            />
+            {/* Bottom curtain */}
+            <motion.div
+              style={{
+                position: 'absolute',
+                bottom: 0,
+                left: 0,
+                right: 0,
+                height: '50%',
+                background: `linear-gradient(0deg, ${currentTheme.colors.primary || '#0a0f1e'} 0%, ${currentTheme.colors.secondary || '#1a1040'} 100%)`,
+                transformOrigin: 'bottom center',
+              }}
+              initial={{ scaleY: 0 }}
+              animate={{ scaleY: 1 }}
+              transition={{ duration: 0.4, ease: 'easeInOut' }}
+            />
+            {/* Flipping logo */}
+            <motion.div
+              style={{
+                position: 'relative',
+                zIndex: 1,
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: '1rem',
+              }}
+              initial={{ rotateY: 0, scale: 0.5, opacity: 0 }}
+              animate={{ rotateY: 360, scale: 1, opacity: 1 }}
+              transition={{ duration: 0.8, delay: 0.3, ease: 'easeInOut' }}
+            >
+              {currentTheme.seasonLogo ? (
+                <img
+                  src={currentTheme.seasonLogo}
+                  alt="Tournament Logo"
+                  style={{
+                    width: '120px',
+                    height: '120px',
+                    objectFit: 'contain',
+                    filter: 'drop-shadow(0 0 20px rgba(255,255,255,0.3))',
+                  }}
+                />
+              ) : (
+                <div style={{
+                  fontSize: '4rem',
+                  background: `linear-gradient(135deg, ${currentTheme.colors.accent || '#a78bfa'}, ${currentTheme.colors.primary || '#60a5fa'})`,
+                  WebkitBackgroundClip: 'text',
+                  WebkitTextFillColor: 'transparent',
+                  fontWeight: 800,
+                }}>
+                  {currentTheme.name || 'LIVE'}
+                </div>
+              )}
+              <div style={{
+                fontSize: '1.2rem',
+                fontWeight: 700,
+                letterSpacing: '0.2em',
+                textTransform: 'uppercase',
+                color: 'rgba(255,255,255,0.8)',
+              }}>
+                GOING LIVE
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Coin Jar Animation */}
       <CoinJar 
@@ -1456,35 +1634,156 @@ function ErrorScreen({ error, onRetry }: { error: Error | null; onRetry: () => v
 // Help Modal
 function HelpModal({ onClose }: { onClose: () => void }) {
   const hotkeyList = useHotkeyHelp();
+  const [activeTab, setActiveTab] = useState<'features' | 'shortcuts'>('features');
+
+  const features = [
+    {
+      icon: <GiCricketBat size={22} />,
+      label: 'Auction',
+      desc: 'Live player bidding with keyboard controls',
+      color: '#f59e0b',
+    },
+    {
+      icon: <IoPeople size={22} />,
+      label: 'Teams',
+      desc: 'Budget tracking & squad management',
+      color: '#10b981',
+    },
+    {
+      icon: <IoPhonePortrait size={22} />,
+      label: 'Mobile Bidding',
+      desc: 'Teams bid from phones via /connect-bidding',
+      color: '#6366f1',
+    },
+    {
+      icon: <IoTv size={22} />,
+      label: 'Live Broadcast',
+      desc: 'OBS-ready camera overlay at /live',
+      color: '#ef4444',
+    },
+    {
+      icon: <IoCamera size={22} />,
+      label: 'Multi-Camera',
+      desc: 'Single / PiP / Split / Quad layouts',
+      color: '#ec4899',
+    },
+    {
+      icon: <IoSettings size={22} />,
+      label: 'Broadcast Control',
+      desc: 'Switch modes & camera config at /live-admin',
+      color: '#8b5cf6',
+    },
+    {
+      icon: <IoStatsChart size={22} />,
+      label: 'Analytics',
+      desc: 'Real-time auction stats & sold/unsold lists',
+      color: '#06b6d4',
+    },
+    {
+      icon: <IoShieldCheckmark size={22} />,
+      label: 'Bid Rules',
+      desc: 'Budget caps, min-balance & increment guards',
+      color: '#84cc16',
+    },
+  ];
 
   return (
-    <div 
+    <div
       className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-sm"
       onClick={onClose}
     >
-      <div 
-        className="bg-[var(--theme-surface)] rounded-2xl p-8 max-w-md w-full mx-4 shadow-2xl"
+      <div
+        className="bg-[var(--theme-surface)] rounded-2xl w-full max-w-lg mx-4 shadow-2xl overflow-hidden"
         onClick={e => e.stopPropagation()}
       >
-        <h2 className="text-2xl font-bold text-[var(--theme-text-primary)] mb-6">
-          ⌨️ Keyboard Shortcuts
-        </h2>
-        <div className="space-y-3">
-          {hotkeyList.map((item: { key: string; description: string }) => (
-            <div key={item.key} className="flex justify-between items-center">
-              <span className="text-[var(--theme-text-secondary)]">{item.description}</span>
-              <kbd className="px-3 py-1 bg-[var(--theme-secondary)]/20 rounded font-mono text-sm">
-                {item.key}
-              </kbd>
-            </div>
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 pt-5 pb-3">
+          <div>
+            <p className="text-xs text-[var(--theme-text-secondary)] uppercase tracking-widest font-semibold">
+              powered by NJS Creative Labs
+            </p>
+            <h2 className="text-xl font-bold text-[var(--theme-text-primary)]">
+              EPL Auction — Help
+            </h2>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-2 rounded-full hover:bg-[var(--theme-secondary)]/20 text-[var(--theme-text-secondary)]"
+          >
+            <IoClose size={20} />
+          </button>
+        </div>
+
+        {/* Tabs */}
+        <div className="flex border-b border-[var(--theme-secondary)]/20 mx-6">
+          {([
+            { id: 'features', icon: <IoInformationCircle size={16} />, label: 'Features' },
+            { id: 'shortcuts', icon: <IoKeypad size={16} />, label: 'Shortcuts' },
+          ] as const).map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium transition-colors border-b-2 -mb-px ${
+                activeTab === tab.id
+                  ? 'border-[var(--theme-accent)] text-[var(--theme-accent)]'
+                  : 'border-transparent text-[var(--theme-text-secondary)] hover:text-[var(--theme-text-primary)]'
+              }`}
+            >
+              {tab.icon}{tab.label}
+            </button>
           ))}
         </div>
-        <button
-          onClick={onClose}
-          className="mt-8 w-full py-3 bg-[var(--theme-accent)] text-white rounded-lg font-semibold"
-        >
-          Got it!
-        </button>
+
+        {/* Content */}
+        <div className="p-6 max-h-[60vh] overflow-y-auto">
+          {activeTab === 'features' && (
+            <div className="grid grid-cols-2 gap-3">
+              {features.map(f => (
+                <div
+                  key={f.label}
+                  className="flex items-start gap-3 p-3 rounded-xl bg-[var(--theme-secondary)]/10"
+                >
+                  <div
+                    className="flex-shrink-0 w-9 h-9 rounded-lg flex items-center justify-center text-white"
+                    style={{ background: f.color }}
+                  >
+                    {f.icon}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-[var(--theme-text-primary)] leading-tight">
+                      {f.label}
+                    </p>
+                    <p className="text-xs text-[var(--theme-text-secondary)] mt-0.5 leading-snug">
+                      {f.desc}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {activeTab === 'shortcuts' && (
+            <div className="space-y-2.5">
+              {hotkeyList.map((item: { key: string; description: string }) => (
+                <div key={item.key} className="flex justify-between items-center">
+                  <span className="text-sm text-[var(--theme-text-secondary)]">
+                    {item.description}
+                  </span>
+                  <kbd className="px-2.5 py-1 bg-[var(--theme-secondary)]/20 rounded font-mono text-xs">
+                    {item.key}
+                  </kbd>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Disclaimer */}
+        <div className="px-6 pb-5 pt-2 border-t border-[var(--theme-secondary)]/20">
+          <p className="text-[10px] text-[var(--theme-text-secondary)]/60 leading-relaxed text-center">
+            For private use only. Player stats sourced from public cricket records. NJS Creative Labs is not affiliated with any cricket board or franchise. All team names and logos are property of their respective owners.
+          </p>
+        </div>
       </div>
     </div>
   );
@@ -1493,16 +1792,15 @@ function HelpModal({ onClose }: { onClose: () => void }) {
 // Role Icon Component - Using react-icons library
 function RoleIcon({ role }: { readonly role: string }) {
   const iconClass = "role-icon-svg";
+  const category = getRoleCategory(role);
   
-  switch (role) {
+  switch (category) {
     case 'Batsman':
       return <GiCricketBat className={iconClass} />;
     case 'Bowler':
       return <IoBaseball className={iconClass} />;
     case 'All-Rounder':
       return <IoStar className={iconClass} />;
-    case 'Wicket-Keeper':
-    case 'Wicket Keeper':
     case 'Wicket Keeper Batsman':
       return <GiBaseballGlove className={iconClass} />;
     default:

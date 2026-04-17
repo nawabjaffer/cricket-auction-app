@@ -7,6 +7,7 @@ import { useState, useMemo, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useSoldPlayers } from '../../store';
 import { extractDriveFileId } from '../../utils/driveImage';
+import { formatRoleDisplay } from '../../utils/roleFormatter';
 
 // Pre-generated particles (deterministic, outside component)
 const CELEBRATION_PARTICLES = Array.from({ length: 30 }, (_, i) => ({
@@ -171,7 +172,7 @@ export function SoldOverlay({ isVisible, onClose }: Readonly<SoldOverlayProps>) 
                 animate={{ y: 0, opacity: 1 }}
                 transition={{ delay: 0.45, duration: 0.4 }}
               >
-                {lastSoldPlayer.role}
+                {formatRoleDisplay(lastSoldPlayer.role)}
               </motion.div>
 
               {/* Amount display */}

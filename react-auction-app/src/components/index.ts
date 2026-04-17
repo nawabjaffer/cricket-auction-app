@@ -5,7 +5,7 @@
 export { PlayerCard } from './PlayerCard';
 export { BidDisplay } from './BidDisplay';
 export { TeamSelector } from './TeamSelector';
-export { SoldOverlay, UnsoldOverlay, EndOverlay } from './Overlays';
+export { SoldOverlay, UnsoldOverlay, EndOverlay, BreakOverlay } from './Overlays';
 export { CoinJar } from './CoinJar';
 export { NotificationToast, NotificationContainer } from './Notification';
 export { Header } from './Header';

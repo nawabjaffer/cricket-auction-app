@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useAdminAuth } from '../hooks/useAdminAuth';
-import { useAdminPlayersOverrides, useInitialData } from '../hooks';
+import { useAdminPlayersOverrides, useInitialData, useAuctionDataLoader } from '../hooks';
 import { AdminPanel } from '../components/AdminPanel/AdminPanel';
 import './AdminPage.css';
 
@@ -13,6 +13,9 @@ const AdminPageContent: React.FC = () => {
 
   // Load data for admin views (teams/players)
   useInitialData();
+
+  // Load auction state (sold/unsold players) from Firebase
+  useAuctionDataLoader();
 
   // Apply admin-edited player overrides
   useAdminPlayersOverrides();

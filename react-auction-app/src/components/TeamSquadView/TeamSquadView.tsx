@@ -102,7 +102,7 @@ export function TeamSquadView({
   };
 
   const teamLogoCandidates = useMemo(
-    () => buildImageCandidates(activeTeam?.logoUrl, false),
+    () => buildImageCandidates(activeTeam?.logoUrl),
     [activeTeam?.logoUrl],
   );
 
@@ -125,8 +125,25 @@ export function TeamSquadView({
 
     const normalizeRole = (role: string) => role.toLowerCase().trim();
 
+    // Normalize name for fuzzy matching (strip dots, extra spaces, lowercase)
+    const normalizeName = (name: string) => name.toLowerCase().replace(/\./g, '').replace(/\s+/g, ' ').trim();
+
+    // Build a name→imageUrl map from allPlayers for freshest image data
+    const playerImageMap = new Map<string, string>();
+    for (const p of allPlayers) {
+      if (p.imageUrl) playerImageMap.set(normalizeName(p.name), p.imageUrl);
+    }
+
     return soldPlayers
       .filter(p => p.teamId === activeTeam.id || p.teamName === activeTeam.name)
+      .map(p => {
+        // Use freshest image from allPlayers if available (fuzzy name match)
+        const freshImage = playerImageMap.get(normalizeName(p.name));
+        if (freshImage && freshImage !== p.imageUrl) {
+          return { ...p, imageUrl: freshImage };
+        }
+        return p;
+      })
       .slice()
       .sort((left, right) => {
         const leftRank = roleRank[normalizeRole(left.role)] ?? 99;
@@ -136,7 +153,7 @@ export function TeamSquadView({
 
         return left.name.localeCompare(right.name);
       });
-  }, [soldPlayers, activeTeam]);
+  }, [soldPlayers, activeTeam, allPlayers]);
 
   const playerPlaceholderImage = '/assets/squadPlaceholder.png';
 
@@ -173,18 +190,27 @@ export function TeamSquadView({
   const captainData = useMemo(() => {
     if (!activeTeam?.captain) return null;
 
-    const captain = allPlayers.find(
-      (player) => player.name?.toLowerCase() === activeTeam.captain?.toLowerCase()
+    // Normalize for fuzzy matching
+    const normCaptain = activeTeam.captain.toLowerCase().replace(/\./g, '').replace(/\s+/g, ' ').trim();
+    const fuzzyMatch = (name: string) => name.toLowerCase().replace(/\./g, '').replace(/\s+/g, ' ').trim() === normCaptain;
+
+    // First check allPlayers (original data with latest uploaded images)
+    const fromAll = allPlayers.find(
+      (player) => fuzzyMatch(player.name || '')
     );
 
-    if (!captain) return null;
+    // Also check soldPlayers for this team
+    const fromSold = teamPlayers.find(
+      (player) => fuzzyMatch(player.name || '')
+    );
 
-    return {
-      name: captain.name,
-      imageUrl: captain.imageUrl,
-      role: captain.role,
-    };
-  }, [activeTeam, allPlayers]);
+    // Prefer allPlayers imageUrl (latest), fallback to soldPlayers imageUrl
+    const imageUrl = fromAll?.imageUrl || fromSold?.imageUrl || '';
+    const name = fromAll?.name || fromSold?.name || activeTeam.captain;
+    const role = fromAll?.role || fromSold?.role || '';
+
+    return { name, imageUrl, role };
+  }, [activeTeam, allPlayers, teamPlayers]);
 
   const squadTargetCount = activeTeam?.totalPlayerThreshold || teamPlayers.length;
   const remainingSlots = Math.max(squadTargetCount - teamPlayers.length, 0);
@@ -256,6 +282,13 @@ export function TeamSquadView({
               src={teamLogoForDisplay}
               alt=""
               className="tsv-team-logo-bg-image"
+              onError={() => {
+                if (teamLogoUrlIndex < teamLogoCandidates.length - 1) {
+                  setTeamLogoUrlIndex((prev) => prev + 1);
+                } else {
+                  setTeamLogoFailed(true);
+                }
+              }}
             />
           </div>
         )}
@@ -328,6 +361,7 @@ export function TeamSquadView({
                             src={teamLogoForDisplay}
                             alt=""
                             className="tsv-player-team-watermark"
+                            onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
                           />
                         )}
                         <PlayerImage
@@ -400,37 +434,54 @@ export function TeamSquadView({
               </div>
 
               <div className="tsv-captain-info">
-                <span className="tsv-captain-badge">CAPTAIN</span>
+                <span className="tsv-captain-badge">ICON PLAYER</span>
                 <h3 className="tsv-captain-name">
-                  {captainData?.name || activeTeam.captain || 'Captain not assigned'}
+                  {captainData?.name || activeTeam.captain || 'No Icon player'}
                 </h3>
               </div>
             </motion.div>
 
             <motion.div
-              className="tsv-brand-section"
+              className="tsv-team-stats-panel"
               initial={{ y: 20, opacity: 0 }}
               animate={{ y: 0, opacity: 1 }}
               transition={{ duration: 0.4, delay: 0.5 }}
             >
-              {brandLogoForDisplay && (
-                <img
-                  src={brandLogoForDisplay}
-                  alt="Brand logo"
-                  className="tsv-brand-logo"
-                  loading="lazy"
-                  onError={() => {
-                    if (brandLogoUrlIndex < brandLogoCandidates.length - 1) {
-                      setBrandLogoUrlIndex((prev) => prev + 1);
-                    } else {
-                      setBrandLogoFailed(true);
-                    }
-                  }}
-                />
-              )}
-              <div className="tsv-brand-info">
-                <p className="tsv-brand-company">{activeTeam.ownerCompany || 'Owner Company'}</p>
-                <p className="tsv-brand-tagline">{activeTeam.brandTagline || 'Brand tagline goes here'}</p>
+              <h4 className="tsv-stats-heading">Team Stats</h4>
+              <div className="tsv-stats-grid">
+                <div className="tsv-stat-item">
+                  <span className="tsv-stat-value">{teamPlayers.length}</span>
+                  <span className="tsv-stat-label">Players Filled</span>
+                </div>
+                <div className="tsv-stat-item">
+                  <span className="tsv-stat-value">{remainingSlots}</span>
+                  <span className="tsv-stat-label">Players Needed</span>
+                </div>
+                <div className="tsv-stat-item">
+                  <span className="tsv-stat-value">₹{((activeTeam.highestBid || 0)).toFixed(1)}L</span>
+                  <span className="tsv-stat-label">Highest Bid</span>
+                </div>
+                <div className="tsv-stat-item">
+                  <span className="tsv-stat-value">₹{((activeTeam.remainingPurse || 0)).toFixed(1)}L</span>
+                  <span className="tsv-stat-label">Remaining Budget</span>
+                </div>
+                <div className="tsv-stat-item">
+                  <span className="tsv-stat-value">₹{((activeTeam.allocatedAmount || 0)).toFixed(1)}L</span>
+                  <span className="tsv-stat-label">Total Budget</span>
+                </div>
+                <div className="tsv-stat-item">
+                  <span className="tsv-stat-value">{activeTeam.underAgePlayers || 0}</span>
+                  <span className="tsv-stat-label">Under-Age Players</span>
+                </div>
+              </div>
+              <div className="tsv-stat-status">
+                {remainingSlots === 0 ? (
+                  <span className="tsv-status-badge tsv-status-full">Squad Full</span>
+                ) : remainingSlots <= 3 ? (
+                  <span className="tsv-status-badge tsv-status-warning">Nearly Full</span>
+                ) : (
+                  <span className="tsv-status-badge tsv-status-open">Open Slots</span>
+                )}
               </div>
             </motion.div>
           </div>

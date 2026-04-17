@@ -8,6 +8,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { IoCloseCircle } from 'react-icons/io5';
 import { useUnsoldPlayers } from '../../store';
 import { extractDriveFileId } from '../../utils/driveImage';
+import { formatRoleDisplay } from '../../utils/roleFormatter';
 
 // Pre-generated particles (deterministic, outside component)
 const FALLING_PARTICLES = Array.from({ length: 20 }, (_, i) => ({
@@ -174,7 +175,7 @@ export function UnsoldOverlay({ isVisible, onClose }: Readonly<UnsoldOverlayProp
                 animate={{ y: 0, opacity: 1 }}
                 transition={{ delay: 0.45, duration: 0.4 }}
               >
-                {lastUnsoldPlayer.role}
+                {formatRoleDisplay(lastUnsoldPlayer.role)}
               </motion.div>
 
               {/* Base price display */}
