@@ -875,6 +875,54 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
     }
   };
 
+  // Soft reset — clears all auction progress but keeps current player data (no sheets reload)
+  const handleSoftResetAuction = async () => {
+    const confirmed = globalThis.confirm(
+      'RESET AUCTION PROGRESS?\n\nThis will:\n• Clear ALL sold & unsold players\n• Reset ALL team budgets & stats to original\n• Reset rounds back to Round 1\n• Clear bid history\n\nPlayer data will NOT be reloaded from sheets.\nThis cannot be undone.'
+    );
+    if (!confirmed) return;
+
+    try {
+      setIsSaving(true);
+
+      // 1. Clear Firebase auction data (sold, unsold, teams)
+      await auctionPersistence.clearAuctionData();
+
+      // 2. Reset teams to original budgets (zero out auction progress)
+      const store = useAuctionStore.getState();
+      const resetTeams = store.teams.map((team) => ({
+        ...team,
+        playersBought: 0,
+        remainingPlayers: team.totalPlayerThreshold,
+        remainingPurse: team.allocatedAmount,
+        highestBid: 0,
+        underAgePlayers: 0,
+      }));
+
+      // 3. Apply reset to store
+      store.setTeams(resetTeams);
+      store.setSoldPlayers([]);
+      store.setUnsoldPlayers([]);
+      store.resetAuction();
+
+      // 4. Re-populate available players from current data (not from sheets)
+      const currentPlayers = editingPlayers.length > 0 ? editingPlayers : originalPlayers;
+      store.setPlayers(currentPlayers);
+
+      // 5. Persist reset teams to Firebase
+      await auctionPersistence.saveTeams(resetTeams);
+
+      setSaveStatus('success');
+      setTimeout(() => setSaveStatus('idle'), 2500);
+    } catch (error) {
+      console.error('[AdminPanel] Failed to soft-reset auction:', error);
+      setSaveStatus('error');
+      setTimeout(() => setSaveStatus('idle'), 3000);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const panelContent = (
     <div className={`admin-panel ${mode === 'page' ? 'admin-panel--page' : ''}`}>
       {/* Global saving progress bar */}
@@ -1724,10 +1772,36 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
               {/* Reset Tab */}
               {activeTab === 'reset' && (
                 <div className="admin-section">
-                  <h3>Reset Auction</h3>
+                  {/* Soft Reset — keeps player data, clears progress */}
+                  <h3>Reset Auction Progress</h3>
+                  <div className="reset-warning reset-warning--amber">
+                    <p>⚠️ This will:</p>
+                    <ul>
+                      <li>Clear all sold & unsold player records</li>
+                      <li>Reset all team budgets & stats to original</li>
+                      <li>Reset rounds back to Round 1</li>
+                      <li>Clear all bid history</li>
+                    </ul>
+                    <p style={{ marginTop: '0.5rem', opacity: 0.8, fontSize: '0.8rem' }}>
+                      ✓ Player data will be kept as-is (no reload from sheets)
+                    </p>
+                  </div>
 
+                  <button
+                    className="admin-btn admin-btn-warning"
+                    onClick={handleSoftResetAuction}
+                    disabled={isSaving}
+                    style={{ marginBottom: '2rem' }}
+                  >
+                    <IoRefresh size={18} /> Reset Auction Progress
+                  </button>
+
+                  <hr style={{ border: 'none', borderTop: '1px solid rgba(0,0,0,0.1)', margin: '1.5rem 0' }} />
+
+                  {/* Full Reset — reloads from sheets snapshot */}
+                  <h3>Full Reset (Reload from Sheets)</h3>
                   <div className="reset-warning">
-                    <p>⚠️ This action will:</p>
+                    <p>🔴 This action will:</p>
                     <ul>
                       <li>Clear all sold and unsold players</li>
                       <li>Reset team statistics</li>
@@ -1741,8 +1815,10 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
                     onClick={handleResetAuction}
                     disabled={isSaving}
                   >
-                    <IoRefresh size={18} /> Reset Auction
+                    <IoRefresh size={18} /> Full Reset & Reload
                   </button>
+
+                  <hr style={{ border: 'none', borderTop: '1px solid rgba(0,0,0,0.1)', margin: '1.5rem 0' }} />
 
                   <button
                     className="admin-btn admin-btn-secondary"

@@ -651,6 +651,19 @@
   margin: 0.5rem 0;
 }
 
+.reset-warning--amber {
+  background: #fffbeb;
+  border-left-color: #f59e0b;
+}
+
+.reset-warning--amber p {
+  color: #92400e;
+}
+
+.reset-warning--amber ul {
+  color: #78350f;
+}
+
 /* Buttons */
 .admin-btn {
   padding: 0.75rem 1.5rem;

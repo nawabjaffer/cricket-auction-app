@@ -62,7 +62,7 @@ import { auctionRules } from './services/auctionRules';
 import { realtimeSync } from './services/realtimeSync';
 import { useActiveOverlay, useNotification, useCurrentPlayer, useSoldPlayers, useAvailablePlayers, useOriginalPlayers, useTeams } from './store';
 import { extractDriveFileId } from './utils/driveImage';
-import { formatRoleDisplay, getRoleCategory } from './utils/roleFormatter';
+import { formatRoleDisplay, getRoleCategory, parseRoleDetails, getRoleBadgeColor } from './utils/roleFormatter';
 import './index.css';
 
 // Create Query Client
@@ -729,8 +729,30 @@ function AuctionApp() {
                   }}
                   transition={{ duration: 0.5, delay: 0.15, ease: [0.32, 0.72, 0, 1] }}
                 >
-                  <span className="role-arrow">▶▶</span>
-                  <span className="role-text">{formatRoleDisplay(currentPlayer.role)}</span>
+                  {(() => {
+                    const parsed = parseRoleDetails(currentPlayer.role);
+                    const roleColor = getRoleBadgeColor(currentPlayer.role);
+                    return (
+                      <>
+                        <span className="role-badge-chip role-badge-chip--primary" style={{ background: roleColor }}>
+                          {parsed.badge}
+                        </span>
+                        <span className="role-core-text">{parsed.coreRole}</span>
+                        {parsed.battingHand && (
+                          <span className="role-detail-chip role-detail-chip--bat">
+                            <span className="role-detail-icon">🏏</span>
+                            {parsed.battingHand}
+                          </span>
+                        )}
+                        {parsed.bowlingStyle && (
+                          <span className="role-detail-chip role-detail-chip--bowl">
+                            <span className="role-detail-icon">⚾</span>
+                            {parsed.bowlingStyle}
+                          </span>
+                        )}
+                      </>
+                    );
+                  })()}
                 </motion.div>
                 {statRows.map((row, index) => (
                   <motion.div 
