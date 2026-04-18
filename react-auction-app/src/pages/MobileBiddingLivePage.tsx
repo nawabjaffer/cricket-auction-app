@@ -8,7 +8,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { GiCricketBat } from 'react-icons/gi';
-import { IoWifi, IoWifiOutline, IoSwapVertical, IoRefresh, IoPeople, IoChevronDown, IoSearch, IoClose } from 'react-icons/io5';
+import { IoSwapVertical, IoRefresh, IoPeople, IoChevronDown, IoSearch, IoClose, IoFlash, IoPersonCircle, IoList, IoTrophy, IoWallet, IoStatsChart, IoEllipsisHorizontal } from 'react-icons/io5';
 import { authService } from '../services';
 import type { AuthSession } from '../services';
 import { auctionPersistence, type SponsorRecord } from '../services/auctionPersistence';
@@ -37,10 +37,15 @@ interface ExpandedPlayerStats {
   statsView: StatsView;
 }
 
+const TAB_CONFIG: { key: MainTab; label: string; icon: typeof IoFlash }[] = [
+  { key: 'live', label: 'Live', icon: IoFlash },
+  { key: 'myteam', label: 'My Team', icon: IoPersonCircle },
+  { key: 'players', label: 'Players', icon: IoList },
+];
+
 export function MobileBiddingLivePage() {
   const [session, setSession] = useState<AuthSession | null>(authService.getSession());
   const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
   const [loginError, setLoginError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [feedback, setFeedback] = useState<BidFeedback | null>(null);
@@ -76,11 +81,11 @@ export function MobileBiddingLivePage() {
         password: `${uname}123`,
         primaryColor: team.primaryColor || '#3b82f6',
         secondaryColor: team.secondaryColor || '#1e40af',
+        logoUrl: team.logoUrl || '',
       };
     });
   }, [teams]);
 
-  const [showCredentialsHint, setShowCredentialsHint] = useState(false);
   const [loginScreen, setLoginScreen] = useState<LoginScreen>('access');
   const [previewTeamId, setPreviewTeamId] = useState<string | null>(null);
   const [showTeamMenu, setShowTeamMenu] = useState(false);
@@ -98,6 +103,10 @@ export function MobileBiddingLivePage() {
   const [roleFilter, setRoleFilter] = useState<string>('all');
   const [expandedPlayer, setExpandedPlayer] = useState<ExpandedPlayerStats | null>(null);
   const [playersLoaded, setPlayersLoaded] = useState(false);
+  const [showTopBuysCarousel, setShowTopBuysCarousel] = useState(false);
+  const [topBuysIndex, setTopBuysIndex] = useState(0);
+  const [scoutSearch, setScoutSearch] = useState('');
+  const [scoutRoleFilter, setScoutRoleFilter] = useState<string>('all');
 
   useEffect(() => {
     if (runtimeCredentials.length > 0) {
@@ -129,9 +138,9 @@ export function MobileBiddingLivePage() {
     return () => { isMounted = false; };
   }, []);
 
-  // Load all players & sold records for My Team / Players tabs
+  // Load all players & sold records for Scout / My Team / Players tabs
   useEffect(() => {
-    if (!session || playersLoaded) return;
+    if (playersLoaded) return;
     let isMounted = true;
     const loadAllData = async () => {
       try {
@@ -151,7 +160,7 @@ export function MobileBiddingLivePage() {
     };
     loadAllData();
     return () => { isMounted = false; };
-  }, [session, playersLoaded]);
+  }, [playersLoaded]);
 
   // Auto-reconnect with exponential backoff
   useEffect(() => {
@@ -238,13 +247,35 @@ export function MobileBiddingLivePage() {
     setFeedback({ type: 'info', message: motionEnabled ? 'Gesture bidding disabled' : 'Gesture bidding enabled', timestamp: Date.now() });
   }, [motionEnabled]);
 
-  // Login
+  // Username-only team login (password auto-resolved from credentials)
+  const handleTeamLogin = useCallback(async (cred: typeof runtimeCredentials[0]) => {
+    setIsLoading(true);
+    setLoginError('');
+    setPreviewTeamId(cred.teamId);
+    try {
+      const result = await authService.login(cred.username, cred.password);
+      if (result.success && result.session) {
+        setSession(result.session);
+        setFeedback({ type: 'success', message: `Welcome, ${result.session.teamName}!`, timestamp: Date.now() });
+      } else {
+        setLoginError(result.error || 'Login failed');
+      }
+    } catch {
+      setLoginError('Connection error');
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  // Login by username only — auto-resolve password from credentials
   const handleLogin = useCallback(async () => {
-    if (!username || !password) { setLoginError('Enter username and password'); return; }
+    if (!username) { setLoginError('Enter team username'); return; }
+    const matchingCred = runtimeCredentials.find(c => c.username.toLowerCase() === username.toLowerCase());
+    if (!matchingCred) { setLoginError('Team not found. Check the username.'); return; }
     setIsLoading(true);
     setLoginError('');
     try {
-      const result = await authService.login(username, password);
+      const result = await authService.login(matchingCred.username, matchingCred.password);
       if (result.success && result.session) {
         setSession(result.session);
         setFeedback({ type: 'success', message: `Welcome, ${result.session.teamName}!`, timestamp: Date.now() });
@@ -256,7 +287,7 @@ export function MobileBiddingLivePage() {
     } finally {
       setIsLoading(false);
     }
-  }, [username, password]);
+  }, [username, runtimeCredentials]);
 
   const handleLogout = useCallback(() => {
     authService.logout();
@@ -329,6 +360,13 @@ export function MobileBiddingLivePage() {
 
   const spentAmount = useMemo(() => mySquad.reduce((sum, p) => sum + p.soldAmount, 0), [mySquad]);
 
+  // Budget usage percentage
+  const budgetPct = useMemo(() => {
+    if (!myTeam) return 0;
+    const total = myTeam.allocatedAmount || (myTeam.remainingPurse + spentAmount);
+    return total > 0 ? Math.round((spentAmount / total) * 100) : 0;
+  }, [myTeam, spentAmount]);
+
   // Filtered player list for search
   const filteredPlayers = useMemo(() => {
     if (allPlayers.length === 0) return [];
@@ -350,6 +388,63 @@ export function MobileBiddingLivePage() {
     const roles = new Set(allPlayers.map(p => getRoleLabel(p.role)));
     return ['all', ...Array.from(roles)];
   }, [allPlayers]);
+
+  // Top 3 buys across all teams (sorted by amount desc)
+  const topBuys = useMemo(() => {
+    if (allPlayers.length === 0 || soldRecords.length === 0) return [];
+    return [...soldRecords]
+      .sort((a, b) => b.soldAmount - a.soldAmount)
+      .slice(0, 3)
+      .map(s => {
+        const player = allPlayers.find(p => p.id === s.id);
+        const team = teams.find(t => t.name === s.teamName);
+        const cred = runtimeCredentials.find(c => c.teamId === team?.id);
+        return {
+          ...s,
+          player,
+          team,
+          primaryColor: cred?.primaryColor || team?.primaryColor || '#3b82f6',
+          secondaryColor: cred?.secondaryColor || team?.secondaryColor || '#1e40af',
+          logoUrl: team?.logoUrl || cred?.logoUrl || '',
+        };
+      });
+  }, [allPlayers, soldRecords, teams, runtimeCredentials]);
+
+  // Available (unsold) players for scout view
+  const availablePlayers = useMemo(() => {
+    const soldIds = new Set(soldRecords.map(s => s.id));
+    let available = allPlayers.filter(p => !soldIds.has(p.id));
+    if (scoutRoleFilter !== 'all') {
+      available = available.filter(p => getRoleLabel(p.role).toLowerCase() === scoutRoleFilter.toLowerCase());
+    }
+    if (scoutSearch.trim()) {
+      const q = scoutSearch.toLowerCase();
+      available = available.filter(p => p.name.toLowerCase().includes(q));
+    }
+    return available;
+  }, [allPlayers, soldRecords, scoutRoleFilter, scoutSearch]);
+
+  // Keyboard shortcut: "n" to open top buys carousel
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      if (e.key === 'n' || e.key === 'N') {
+        if (topBuys.length > 0) {
+          setShowTopBuysCarousel(prev => !prev);
+          setTopBuysIndex(0);
+          
+        }
+      }
+      // Left/right arrow to navigate carousel
+      if (showTopBuysCarousel) {
+        if (e.key === 'ArrowRight') setTopBuysIndex(prev => Math.min(prev + 1, topBuys.length - 1));
+        if (e.key === 'ArrowLeft') setTopBuysIndex(prev => Math.max(prev - 1, 0));
+        if (e.key === 'Escape') { setShowTopBuysCarousel(false);  }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [topBuys.length, showTopBuysCarousel]);
 
   // Render full batting + bowling stats panel for a player
   const renderFullStatsPanel = (player: Player, statsView: StatsView, setView: (v: StatsView) => void) => {
@@ -423,6 +518,12 @@ export function MobileBiddingLivePage() {
     const themePrimary = previewTeam?.primaryColor || '#e4be75';
     const themeSecondary = previewTeam?.secondaryColor || '#24467c';
 
+    // Compute auction-wide stats for login dashboard
+    const totalPlayersSold = teams.reduce((s, t) => s + (t.playersBought || 0), 0);
+    const totalMoneySpent = teams.reduce((s, t) => s + ((t.allocatedAmount || 0) - t.remainingPurse), 0);
+    const topBuyTeam = [...teams].sort((a, b) => (b.highestBid || 0) - (a.highestBid || 0))[0];
+    const teamsByPlayers = [...teams].sort((a, b) => (b.playersBought || 0) - (a.playersBought || 0));
+
     return (
       <div
         className="cb-login-page"
@@ -430,79 +531,75 @@ export function MobileBiddingLivePage() {
       >
         <div className="cb-login-bg" />
 
-        <motion.div
-          className={`cb-login-card ${loginScreen === 'scout' ? 'scout-mode' : ''}`}
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4 }}
-        >
-          {/* Tab Nav */}
-          <div className="cb-login-tabs" role="tablist">
-            <button
-              className={`cb-login-tab ${loginScreen === 'access' ? 'active' : ''}`}
-              onClick={() => setLoginScreen('access')}
-              role="tab" aria-selected={loginScreen === 'access'}
-            >Team Access</button>
-            <button
-              className={`cb-login-tab ${loginScreen === 'scout' ? 'active' : ''}`}
-              onClick={() => setLoginScreen('scout')}
-              role="tab" aria-selected={loginScreen === 'scout'}
-            >Player Scout</button>
-          </div>
-
-          {/* Team theme chips */}
-          {runtimeCredentials.length > 0 && (
-            <div className="cb-team-chips">
-              {runtimeCredentials.slice(0, 8).map((cred) => (
-                <button
-                  key={cred.teamId}
-                  type="button"
-                  className={`cb-team-chip ${previewTeam?.teamId === cred.teamId ? 'active' : ''}`}
-                  onClick={() => { setPreviewTeamId(cred.teamId); setUsername(cred.username); setPassword(cred.password); }}
-                  style={{ '--chip-bg': cred.primaryColor } as React.CSSProperties}
-                  title={cred.teamName}
-                >
-                  {cred.teamName.slice(0, 2).toUpperCase()}
-                </button>
-              ))}
+        <div className="cb-login-scroll">
+          <motion.div
+            className={`cb-login-card ${loginScreen === 'scout' ? 'scout-mode' : ''}`}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4 }}
+          >
+            {/* Tab Nav */}
+            <div className="cb-login-tabs" role="tablist">
+              <button
+                className={`cb-login-tab ${loginScreen === 'access' ? 'active' : ''}`}
+                onClick={() => setLoginScreen('access')}
+                role="tab" aria-selected={loginScreen === 'access'}
+              >Team Access</button>
+              <button
+                className={`cb-login-tab ${loginScreen === 'scout' ? 'active' : ''}`}
+                onClick={() => setLoginScreen('scout')}
+                role="tab" aria-selected={loginScreen === 'scout'}
+              >Player Scout</button>
             </div>
-          )}
 
-          {loginScreen === 'access' ? (
-            <>
-              <div className="cb-login-brand">
-                <motion.div className="cb-login-icon" initial={{ scale: 0.8 }} animate={{ scale: 1 }} transition={{ delay: 0.2, type: 'spring' }}>
-                  <GiCricketBat size={48} color="#fff" />
-                </motion.div>
-                <h1>Team Bidding</h1>
-                <p>Live Auction Access</p>
-              </div>
-
-              <div className={`cb-status-pill ${isConnected ? 'live' : ''}`}>
-                <span className="cb-status-dot" />
-                <span>{isConnected ? 'Auction Live' : 'Waiting for auction...'}</span>
-                {teams.length > 0 && <span className="cb-team-count">{teams.length} teams</span>}
-              </div>
-
-              <form className="cb-login-form" onSubmit={(e) => { e.preventDefault(); handleLogin(); }}>
-                <div className="cb-field">
-                  <label htmlFor="cb-username">Team Username</label>
-                  <input
-                    type="text" id="cb-username" value={username}
-                    onChange={(e) => setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9]/g, ''))}
-                    placeholder="e.g., royalchallengers"
-                    disabled={isLoading} autoComplete="username" autoCapitalize="none"
-                  />
+            {loginScreen === 'access' ? (
+              <>
+                <div className="cb-login-brand">
+                  <motion.div className="cb-login-icon" initial={{ scale: 0.8 }} animate={{ scale: 1 }} transition={{ delay: 0.2, type: 'spring' }}>
+                    <GiCricketBat size={44} color="#fff" />
+                  </motion.div>
+                  <h1>Auction Bidding</h1>
+                  <p>Select your team to join</p>
                 </div>
-                <div className="cb-field">
-                  <label htmlFor="cb-password">Password</label>
-                  <input
-                    type="password" id="cb-password" value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder="Enter your team password"
-                    disabled={isLoading} autoComplete="current-password"
-                  />
+
+                <div className={`cb-status-pill ${isConnected ? 'live' : ''}`}>
+                  <span className="cb-status-dot" />
+                  <span>{isConnected ? 'Auction Live' : 'Waiting for auction...'}</span>
+                  {teams.length > 0 && <span className="cb-team-count">{teams.length} teams</span>}
                 </div>
+
+                {/* Team cards — tap to login (username-based, no password) */}
+                {runtimeCredentials.length > 0 && (
+                  <div className="cb-team-card-grid">
+                    {runtimeCredentials.map((cred) => {
+                      const teamData = teams.find(t => t.id === cred.teamId);
+                      return (
+                        <motion.button
+                          key={cred.teamId}
+                          type="button"
+                          className={`cb-team-card-btn ${previewTeam?.teamId === cred.teamId ? 'active' : ''}`}
+                          onClick={() => handleTeamLogin(cred)}
+                          style={{ '--card-bg': cred.primaryColor, '--card-bg2': cred.secondaryColor } as React.CSSProperties}
+                          whileTap={{ scale: 0.96 }}
+                          disabled={isLoading}
+                        >
+                          {cred.logoUrl ? (
+                            <TeamLogo logoUrl={cred.logoUrl} teamName={cred.teamName} size="sm" className="cb-team-card-logo" />
+                          ) : (
+                            <div className="cb-team-card-initials">{cred.teamName.slice(0, 2).toUpperCase()}</div>
+                          )}
+                          <span className="cb-team-card-name">{cred.teamName}</span>
+                          <span className="cb-team-card-username">@{cred.username}</span>
+                          {teamData && (
+                            <span className="cb-team-card-meta">
+                              {teamData.playersBought || 0} players &middot; {formatLakhs(teamData.remainingPurse)}
+                            </span>
+                          )}
+                        </motion.button>
+                      );
+                    })}
+                  </div>
+                )}
 
                 {loginError && (
                   <motion.div className="cb-error" initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }}>
@@ -510,91 +607,338 @@ export function MobileBiddingLivePage() {
                   </motion.div>
                 )}
 
-                <motion.button
-                  type="submit" className="cb-login-btn"
-                  disabled={isLoading || !username || !password}
-                  whileTap={{ scale: 0.98 }}
-                >
-                  {isLoading ? <span className="cb-spinner" /> : 'Login to Bid'}
-                </motion.button>
-              </form>
+                {/* Manual username login */}
+                <details className="cb-manual-login">
+                  <summary>Enter username manually</summary>
+                  <form className="cb-login-form" onSubmit={(e) => { e.preventDefault(); handleLogin(); }}>
+                    <div className="cb-field">
+                      <input
+                        type="text" id="cb-username" value={username}
+                        onChange={(e) => setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9]/g, ''))}
+                        placeholder="Team username (e.g. royal)"
+                        disabled={isLoading} autoComplete="username" autoCapitalize="none"
+                      />
+                    </div>
+                    <motion.button
+                      type="submit" className="cb-login-btn"
+                      disabled={isLoading || !username}
+                      whileTap={{ scale: 0.98 }}
+                    >
+                      {isLoading ? <span className="cb-spinner" /> : 'Join Team'}
+                    </motion.button>
+                  </form>
+                </details>
+              </>
+            ) : (
+              /* ── Scout Screen — Available Players ── */
+              <div className="cb-scout">
+                <div className="cb-scout-header">
+                  <span className="cb-scout-brand">PLAYER SCOUT</span>
+                  <button type="button" className="cb-scout-login-cta" onClick={() => setLoginScreen('access')}>Go to Login</button>
+                </div>
 
-              {/* Credentials help */}
-              <div className="cb-help-section">
-                <button type="button" className="cb-help-toggle" onClick={() => setShowCredentialsHint(!showCredentialsHint)}>
-                  {showCredentialsHint ? 'Hide Help' : 'Need Help?'}
-                </button>
-                <AnimatePresence>
-                  {showCredentialsHint && (
-                    <motion.div className="cb-help-panel" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}>
-                      <p><strong>Username:</strong> team name (lowercase, no spaces)</p>
-                      <p><strong>Password:</strong> username + "123"</p>
-                      {teams.length > 0 && (
-                        <div className="cb-teams-grid">
-                          {runtimeCredentials.slice(0, 6).map((cred, idx) => (
-                            <button
-                              key={cred.teamId || idx} type="button" className="cb-team-fill"
-                              onClick={() => { setUsername(cred.username); setPassword(cred.password); setPreviewTeamId(cred.teamId); }}
-                              style={{ borderColor: cred.primaryColor } as React.CSSProperties}
-                            >
-                              <span>{cred.teamName}</span>
-                              <small>Tap to fill</small>
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </div>
-            </>
-          ) : (
-            /* ── Scout Screen ── */
-            <div className="cb-scout">
-              <div className="cb-scout-header">
-                <span className="cb-scout-brand">CRICKET ARENA</span>
-                <button type="button" className="cb-scout-login-cta" onClick={() => setLoginScreen('access')}>Go to Login</button>
-              </div>
-
-              {currentPlayer ? (
-                <div className="cb-scout-player">
-                  <div className="cb-scout-player-header">
-                    <h2>{currentPlayer.name}</h2>
-                    <span className={`cb-role-badge ${getRoleBadgeClass(currentPlayer.role)}`}>{getRoleLabel(currentPlayer.role)}</span>
-                  </div>
-                  <div className="cb-scout-price-row">
-                    <div><span>Base Price</span><strong>{formatLakhs(currentPlayer.basePrice || 0)}</strong></div>
-                    <div><span>Current Bid</span><strong>{formatLakhs(currentBid)}</strong></div>
-                  </div>
-                  <div className="cb-scout-stats-grid">
-                    {getRoleBasedStats(currentPlayer, 6).map((stat) => (
-                      <div key={stat.label} className={`cb-scout-stat ${stat.category}`}>
-                        <span className="cb-stat-label">{stat.label}</span>
-                        <strong className="cb-stat-value">{stat.value || '--'}</strong>
+                {/* Live auction player (if active) */}
+                {currentPlayer && (
+                  <div className="cb-scout-live-highlight">
+                    <span className="cb-scout-live-badge"><span className="cb-live-pulse" /> Now Bidding</span>
+                    <div className="cb-scout-player compact">
+                      <div className="cb-scout-player-header">
+                        <h2>{currentPlayer.name}</h2>
+                        <span className={`cb-role-badge ${getRoleBadgeClass(currentPlayer.role)}`}>{getRoleLabel(currentPlayer.role)}</span>
                       </div>
+                      <div className="cb-scout-price-row">
+                        <div><span>Base Price</span><strong>{formatLakhs(currentPlayer.basePrice || 0)}</strong></div>
+                        <div><span>Current Bid</span><strong>{formatLakhs(currentBid)}</strong></div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Search & filter for available players */}
+                <div className="cb-scout-filters">
+                  <div className="cb-scout-search-bar">
+                    <IoSearch size={16} />
+                    <input
+                      type="text"
+                      placeholder="Search available players..."
+                      value={scoutSearch}
+                      onChange={(e) => setScoutSearch(e.target.value)}
+                    />
+                    {scoutSearch && (
+                      <button className="cb-search-clear" onClick={() => setScoutSearch('')}><IoClose size={14} /></button>
+                    )}
+                  </div>
+                  <div className="cb-scout-role-chips">
+                    {availableRoles.map((role) => (
+                      <button
+                        key={role}
+                        className={`cb-role-chip ${scoutRoleFilter === role ? 'active' : ''}`}
+                        onClick={() => setScoutRoleFilter(role)}
+                      >{role === 'all' ? 'All' : role}</button>
                     ))}
                   </div>
                 </div>
-              ) : (
-                <div className="cb-scout-empty">
-                  <GiCricketBat size={40} color="rgba(255,255,255,0.3)" />
-                  <p>No active listing. Player stats will appear here once a lot is activated.</p>
+
+                <div className="cb-scout-count">
+                  {availablePlayers.length} available &middot; {soldRecords.length} sold &middot; {allPlayers.length} total
                 </div>
-              )}
 
-              {/* Auction snapshot */}
-              <div className="cb-scout-snapshot">
-                <div className="cb-snap-item"><span>Teams</span><strong>{teams.length}</strong></div>
-                <div className="cb-snap-item"><span>Slots Filled</span><strong>{teams.reduce((s, t) => s + (t.playersBought || 0), 0)}</strong></div>
-                <div className="cb-snap-item"><span>Avg Purse</span><strong>{formatLakhs(teams.length > 0 ? teams.reduce((s, t) => s + t.remainingPurse, 0) / teams.length : 0)}</strong></div>
+                {/* Available players list */}
+                {!playersLoaded ? (
+                  <div className="cb-loading-state"><span className="cb-spinner" /> Loading players...</div>
+                ) : availablePlayers.length === 0 ? (
+                  <div className="cb-scout-empty">
+                    <GiCricketBat size={40} color="rgba(255,255,255,0.3)" />
+                    <p>No available players match your filter.</p>
+                  </div>
+                ) : (
+                  <div className="cb-scout-player-list">
+                    {availablePlayers.slice(0, 50).map((p) => {
+                      const parsed = parseRoleDetails(p.role);
+                      return (
+                        <div key={p.id} className="cb-scout-player-item">
+                          <div className="cb-scout-player-img-wrap">
+                            <PlayerImage imageUrl={p.imageUrl || ''} playerName={p.name} size="sm" className="cb-scout-player-img" />
+                          </div>
+                          <div className="cb-scout-player-body">
+                            <span className="cb-scout-player-name">{p.name}</span>
+                            <div className="cb-scout-player-meta">
+                              <span className="cb-squad-role-badge" style={{ background: getRoleBadgeColor(parsed.category) }}>
+                                {parsed.badge} {parsed.coreRole}
+                              </span>
+                              <span className="cb-scout-player-base">{formatLakhs(p.basePrice)}</span>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                    {availablePlayers.length > 50 && (
+                      <div className="cb-scout-more">+{availablePlayers.length - 50} more players</div>
+                    )}
+                  </div>
+                )}
+
+                {/* Auction snapshot */}
+                <div className="cb-scout-snapshot">
+                  <div className="cb-snap-item"><span>Teams</span><strong>{teams.length}</strong></div>
+                  <div className="cb-snap-item"><span>Sold</span><strong>{soldRecords.length}</strong></div>
+                  <div className="cb-snap-item"><span>Available</span><strong>{allPlayers.length - soldRecords.length}</strong></div>
+                </div>
               </div>
-            </div>
-          )}
+            )}
 
-          <div className="cb-login-footer">
-            <p>powered by <b>NJS Creative Labs</b></p>
-          </div>
-        </motion.div>
+            <div className="cb-login-footer">
+              <p>powered by <b>NJS Creative Labs</b></p>
+            </div>
+          </motion.div>
+
+          {/* ═══════ AUCTION DASHBOARD (below login card) ═══════ */}
+          {teams.length > 0 && (
+            <motion.div
+              className="cb-auction-dashboard"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.4, delay: 0.15 }}
+            >
+              <h2 className="cb-dash-title">
+                <IoStatsChart size={18} />
+                Auction Overview
+              </h2>
+
+              {/* Key stats row */}
+              <div className="cb-dash-stats">
+                <div className="cb-dash-stat">
+                  <div className="cb-dash-stat-icon sold"><IoPeople size={18} /></div>
+                  <div className="cb-dash-stat-body">
+                    <span className="cb-dash-stat-value">{totalPlayersSold}</span>
+                    <span className="cb-dash-stat-label">Players Sold</span>
+                  </div>
+                </div>
+                <div className="cb-dash-stat">
+                  <div className="cb-dash-stat-icon spent"><IoWallet size={18} /></div>
+                  <div className="cb-dash-stat-body">
+                    <span className="cb-dash-stat-value">{formatLakhs(totalMoneySpent)}</span>
+                    <span className="cb-dash-stat-label">Total Spent</span>
+                  </div>
+                </div>
+                <div className="cb-dash-stat">
+                  <div className="cb-dash-stat-icon top"><IoTrophy size={18} /></div>
+                  <div className="cb-dash-stat-body">
+                    <span className="cb-dash-stat-value">{formatLakhs(topBuyTeam?.highestBid || 0)}</span>
+                    <span className="cb-dash-stat-label">Highest Bid</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Team leaderboard */}
+              <div className="cb-dash-leaderboard">
+                <h3 className="cb-dash-section-title">Team Standings</h3>
+                {teamsByPlayers.map((t, i) => {
+                  const spent = (t.allocatedAmount || 0) - t.remainingPurse;
+                  const purseUsedPct = t.allocatedAmount ? Math.round((spent / t.allocatedAmount) * 100) : 0;
+                  const teamCred = runtimeCredentials.find(c => c.teamId === t.id);
+                  return (
+                    <div key={t.id} className="cb-dash-team-row" style={{ '--row-color': teamCred?.primaryColor || '#3b82f6' } as React.CSSProperties}>
+                      <div className="cb-dash-team-rank">#{i + 1}</div>
+                      <div className="cb-dash-team-logo">
+                        {t.logoUrl ? <TeamLogo logoUrl={t.logoUrl} teamName={t.name} size="sm" /> : <div className="cb-dash-team-initial">{t.name.slice(0, 2).toUpperCase()}</div>}
+                      </div>
+                      <div className="cb-dash-team-info">
+                        <span className="cb-dash-team-name">{t.name}</span>
+                        <div className="cb-dash-team-bar-wrap">
+                          <div className="cb-dash-team-bar">
+                            <div className="cb-dash-team-bar-fill" style={{ width: `${purseUsedPct}%` }} />
+                          </div>
+                          <span className="cb-dash-team-pct">{purseUsedPct}%</span>
+                        </div>
+                      </div>
+                      <div className="cb-dash-team-nums">
+                        <span className="cb-dash-team-players">{t.playersBought || 0} <small>players</small></span>
+                        <span className="cb-dash-team-purse">{formatLakhs(t.remainingPurse)}</span>
+                        {(t.highestBid || 0) > 0 && <span className="cb-dash-team-top-buy">Top: {formatLakhs(t.highestBid)}</span>}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </motion.div>
+          )}
+        </div>
+
+        {/* ═══════ TOP BUYS CAROUSEL (press "n") ═══════ */}
+        <AnimatePresence>
+          {showTopBuysCarousel && topBuys.length > 0 && (
+            <motion.div
+              className="cb-topbuys-overlay"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => { setShowTopBuysCarousel(false);  }}
+            >
+              <motion.div
+                className="cb-topbuys-container"
+                initial={{ scale: 0.6, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.7, opacity: 0 }}
+                transition={{ type: 'spring', damping: 20, stiffness: 200 }}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="cb-topbuys-header">
+                  <IoTrophy size={22} color="#fbbf24" />
+                  <h2>Top Buys</h2>
+                  <button className="cb-topbuys-close" onClick={() => { setShowTopBuysCarousel(false);  }}>
+                    <IoClose size={20} />
+                  </button>
+                </div>
+
+                <div className="cb-topbuys-carousel">
+                  <AnimatePresence mode="wait">
+                    {topBuys.map((buy, i) => i === topBuysIndex && (
+                      <motion.div
+                        key={buy.id}
+                        className="cb-topbuy-card"
+                        initial={{ opacity: 0, x: 80, scale: 0.92 }}
+                        animate={{ opacity: 1, x: 0, scale: 1 }}
+                        exit={{ opacity: 0, x: -80, scale: 0.92 }}
+                        transition={{ type: 'spring', damping: 22, stiffness: 220 }}
+                        style={{ '--buy-color': buy.primaryColor, '--buy-color2': buy.secondaryColor } as React.CSSProperties}
+                      >
+                        {/* Team brand reveal */}
+                        <motion.div
+                          className="cb-topbuy-brand"
+                          initial={{ height: 0, opacity: 0 }}
+                          animate={{ height: 'auto', opacity: 1 }}
+                          transition={{ delay: 0.15, duration: 0.5, ease: 'easeOut' }}
+                        >
+                          <div className="cb-topbuy-brand-bg" style={{ background: `linear-gradient(135deg, ${buy.secondaryColor}, ${buy.primaryColor})` }}>
+                            {buy.logoUrl && (
+                              <motion.div
+                                className="cb-topbuy-brand-logo"
+                                initial={{ scale: 0, rotate: -20 }}
+                                animate={{ scale: 1, rotate: 0 }}
+                                transition={{ delay: 0.35, type: 'spring', stiffness: 200 }}
+                              >
+                                <TeamLogo logoUrl={buy.logoUrl} teamName={buy.teamName} size="md" />
+                              </motion.div>
+                            )}
+                            <motion.span
+                              className="cb-topbuy-team-name"
+                              initial={{ opacity: 0, y: 10 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              transition={{ delay: 0.5 }}
+                            >{buy.teamName}</motion.span>
+                          </div>
+                        </motion.div>
+
+                        {/* Rank badge */}
+                        <motion.div
+                          className={`cb-topbuy-rank rank-${i + 1}`}
+                          initial={{ scale: 0 }}
+                          animate={{ scale: 1 }}
+                          transition={{ delay: 0.3, type: 'spring', stiffness: 300 }}
+                        >
+                          #{i + 1}
+                        </motion.div>
+
+                        {/* Player details */}
+                        {buy.player && (
+                          <motion.div
+                            className="cb-topbuy-player"
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: 0.4, duration: 0.4 }}
+                          >
+                            <div className="cb-topbuy-player-img-wrap">
+                              <PlayerImage imageUrl={buy.player.imageUrl || ''} playerName={buy.player.name} size="lg" className="cb-topbuy-player-img" />
+                            </div>
+                            <h3 className="cb-topbuy-player-name">{buy.player.name}</h3>
+                            <span className={`cb-role-badge ${getRoleBadgeClass(buy.player.role)}`}>{getRoleLabel(buy.player.role)}</span>
+
+                            <motion.div
+                              className="cb-topbuy-amount"
+                              initial={{ scale: 0.5, opacity: 0 }}
+                              animate={{ scale: 1, opacity: 1 }}
+                              transition={{ delay: 0.6, type: 'spring', stiffness: 200 }}
+                            >
+                              {formatLakhs(buy.soldAmount)}
+                            </motion.div>
+
+                            {/* Quick stats */}
+                            <div className="cb-topbuy-stats">
+                              {getRoleBasedStats(buy.player, 4).map((stat) => (
+                                <div key={stat.label} className="cb-topbuy-stat">
+                                  <span>{stat.label}</span>
+                                  <strong>{stat.value || '--'}</strong>
+                                </div>
+                              ))}
+                            </div>
+                          </motion.div>
+                        )}
+                      </motion.div>
+                    ))}
+                  </AnimatePresence>
+                </div>
+
+                {/* Dots + nav */}
+                <div className="cb-topbuys-nav">
+                  <button className="cb-topbuys-arrow" disabled={topBuysIndex === 0} onClick={() => setTopBuysIndex(i => i - 1)}>&lsaquo;</button>
+                  <div className="cb-topbuys-dots">
+                    {topBuys.map((_, i) => (
+                      <button
+                        key={i}
+                        className={`cb-topbuys-dot ${i === topBuysIndex ? 'active' : ''}`}
+                        onClick={() => setTopBuysIndex(i)}
+                      />
+                    ))}
+                  </div>
+                  <button className="cb-topbuys-arrow" disabled={topBuysIndex === topBuys.length - 1} onClick={() => setTopBuysIndex(i => i + 1)}>&rsaquo;</button>
+                </div>
+
+                <div className="cb-topbuys-hint">Press N to toggle &middot; ←→ to navigate &middot; Esc to close</div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     );
   }
@@ -623,41 +967,65 @@ export function MobileBiddingLivePage() {
         )}
       </AnimatePresence>
 
-      {/* ── Header ── */}
+      {/* ── Team Dashboard Header ── */}
       <header className="cb-header">
-        <div className="cb-header-left">
-          {myTeam?.logoUrl && <TeamLogo logoUrl={myTeam.logoUrl} teamName={session.teamName} size="sm" />}
-          <div className="cb-header-team">
-            <span className="cb-team-name">{session.teamName}</span>
-            <span className="cb-bid-count">{bidCount} bids</span>
+        <div className="cb-header-banner" style={{ background: `linear-gradient(135deg, ${teamSecondary}, ${teamPrimary})` }}>
+          <div className="cb-header-top">
+            <div className="cb-header-left">
+              {myTeam?.logoUrl && <TeamLogo logoUrl={myTeam.logoUrl} teamName={session.teamName} size="sm" className="cb-header-logo" />}
+              <div className="cb-header-team">
+                <span className="cb-team-name">{session.teamName}</span>
+                <span className="cb-header-sub">
+                  <span className={`cb-conn-dot ${isConnected ? 'live' : ''}`} />
+                  {isConnected ? formattedTime : 'Offline'}
+                  {bidCount > 0 && <> &middot; {bidCount} bids</>}
+                </span>
+              </div>
+            </div>
+            <div className="cb-header-right">
+              <motion.button className="cb-icon-btn" onClick={handleManualRefresh} whileTap={{ scale: 0.9 }} title="Refresh">
+                <IoRefresh size={18} />
+              </motion.button>
+              {motionSupported && (
+                <motion.button
+                  className={`cb-icon-btn ${motionActive ? 'active' : ''}`}
+                  onClick={handleToggleMotionSensor} whileTap={{ scale: 0.9 }}
+                  title={motionActive ? 'Gesture active' : 'Enable gesture'}
+                >
+                  <IoSwapVertical size={18} />
+                </motion.button>
+              )}
+              <motion.button className="cb-icon-btn" onClick={() => setShowTeamMenu(true)} whileTap={{ scale: 0.9 }} title="Teams">
+                <IoPeople size={18} />
+              </motion.button>
+              <motion.button className="cb-icon-btn logout" onClick={handleLogout} whileTap={{ scale: 0.9 }} title="Logout">
+                <IoEllipsisHorizontal size={18} />
+              </motion.button>
+            </div>
           </div>
-        </div>
-        <div className="cb-header-right">
-          <motion.button className="cb-icon-btn" onClick={handleManualRefresh} whileTap={{ scale: 0.9 }} title="Refresh">
-            <IoRefresh size={18} />
-          </motion.button>
-          {motionSupported && (
-            <motion.button
-              className={`cb-icon-btn ${motionActive ? 'active' : ''}`}
-              onClick={handleToggleMotionSensor} whileTap={{ scale: 0.9 }}
-              title={motionActive ? 'Gesture active' : 'Enable gesture'}
-            >
-              <IoSwapVertical size={18} />
-            </motion.button>
+
+          {/* Budget progress inline */}
+          {myTeam && (
+            <div className="cb-header-budget">
+              <div className="cb-hb-labels">
+                <span className="cb-hb-label">
+                  <IoWallet size={12} />
+                  {formatLakhs(myTeam.remainingPurse)}
+                </span>
+                <span className="cb-hb-players">{myTeam.playersBought || 0}/{myTeam.totalPlayerThreshold || 25} players</span>
+              </div>
+              <div className="cb-hb-bar">
+                <motion.div
+                  className="cb-hb-bar-fill"
+                  initial={{ width: 0 }}
+                  animate={{ width: `${budgetPct}%` }}
+                  transition={{ duration: 0.5, ease: 'easeOut' }}
+                />
+              </div>
+            </div>
           )}
-          <motion.button className="cb-icon-btn" onClick={() => setShowTeamMenu(true)} whileTap={{ scale: 0.9 }} title="Teams">
-            <IoPeople size={18} />
-          </motion.button>
-          <button className="cb-logout-btn" onClick={handleLogout}>Logout</button>
         </div>
       </header>
-
-      {/* ── Connection bar ── */}
-      <div className={`cb-conn-bar ${isConnected ? 'live' : 'off'}`}>
-        {isConnected ? <IoWifi size={14} /> : <IoWifiOutline size={14} />}
-        <span>{isConnected ? 'Connected' : 'Reconnecting...'}</span>
-        <span className="cb-conn-time">{formattedTime}</span>
-      </div>
 
       {/* ── Motion indicator ── */}
       <AnimatePresence>
@@ -669,168 +1037,169 @@ export function MobileBiddingLivePage() {
         )}
       </AnimatePresence>
 
-      {/* ── Tab Navigation ── */}
-      <nav className="cb-tab-nav">
-        {(['live', 'myteam', 'players'] as MainTab[]).map((tab) => (
-          <button
-            key={tab}
-            className={`cb-tab-item ${activeTab === tab ? 'active' : ''}`}
-            onClick={() => setActiveTab(tab)}
+      {/* ── Floating live banner on non-live tabs ── */}
+      <AnimatePresence>
+        {activeTab !== 'live' && currentPlayer && (
+          <motion.button
+            className="cb-live-banner"
+            initial={{ opacity: 0, y: -30 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -30 }}
+            onClick={() => setActiveTab('live')}
           >
-            {tab === 'live' ? '🔴 Live' : tab === 'myteam' ? '🏏 My Team' : '🔍 Players'}
-            {tab === 'live' && currentPlayer && <span className="cb-tab-dot" />}
-          </button>
-        ))}
-      </nav>
+            <span className="cb-live-banner-dot" />
+            <span className="cb-live-banner-name">{currentPlayer.name}</span>
+            <span className="cb-live-banner-bid">{formatLakhs(currentBid)}</span>
+            {isMyBid && <span className="cb-live-banner-my">YOUR BID</span>}
+          </motion.button>
+        )}
+      </AnimatePresence>
 
       {/* ═══════════════ LIVE TAB ═══════════════ */}
       {activeTab === 'live' && (
-        <>
-          {/* ── Content area ── */}
-          <div className="cb-content">
-            {/* Team budget bar */}
-            {myTeam && (
-              <div className="cb-budget-strip">
-                <div className="cb-budget-item">
-                  <span>Budget</span>
-                  <strong>{formatLakhs(myTeam.remainingPurse)}</strong>
-                </div>
-                <div className="cb-budget-divider" />
-                <div className="cb-budget-item">
-                  <span>Players</span>
-                  <strong>{myTeam.playersBought || 0}/{myTeam.totalPlayerThreshold || 25}</strong>
-                </div>
-                <div className="cb-budget-divider" />
-                <div className="cb-budget-item">
-                  <span>Max Bid</span>
-                  <strong>{formatLakhs(maxAffordableBid)}</strong>
-                </div>
+        <div className="cb-content cb-live-content">
+          {/* Team budget bar */}
+          {myTeam && (
+            <div className="cb-budget-strip">
+              <div className="cb-budget-item">
+                <span>Budget</span>
+                <strong>{formatLakhs(myTeam.remainingPurse)}</strong>
               </div>
-            )}
+              <div className="cb-budget-divider" />
+              <div className="cb-budget-item">
+                <span>Players</span>
+                <strong>{myTeam.playersBought || 0}/{myTeam.totalPlayerThreshold || 25}</strong>
+              </div>
+              <div className="cb-budget-divider" />
+              <div className="cb-budget-item">
+                <span>Max Bid</span>
+                <strong>{formatLakhs(maxAffordableBid)}</strong>
+              </div>
+            </div>
+          )}
 
-            {/* Player card */}
-            {currentPlayer ? (
-              <motion.div
-                className="cb-player-card"
-                key={currentPlayer.id}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.3 }}
-              >
-                {/* Player image + basic info */}
-                <div className="cb-player-top">
-                  <div className="cb-player-image-wrap">
-                    <PlayerImage
-                      imageUrl={currentPlayer.imageUrl || ''}
-                      playerName={currentPlayer.name}
-                      size="lg"
-                      className="cb-player-img"
-                    />
-                  </div>
-                  <div className="cb-player-info">
-                    <h2 className="cb-player-name">{currentPlayer.name}</h2>
-                    <span className={`cb-role-badge ${getRoleBadgeClass(currentPlayer.role)}`}>
-                      {getRoleLabel(currentPlayer.role)}
-                    </span>
-                    <div className="cb-price-row">
+          {/* Player card */}
+          {currentPlayer ? (
+            <motion.div
+              className="cb-player-card"
+              key={currentPlayer.id}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.3 }}
+            >
+              {/* Player image + basic info */}
+              <div className="cb-player-top">
+                <div className="cb-player-image-wrap">
+                  <PlayerImage
+                    imageUrl={currentPlayer.imageUrl || ''}
+                    playerName={currentPlayer.name}
+                    size="lg"
+                    className="cb-player-img"
+                  />
+                </div>
+                <div className="cb-player-info">
+                  <h2 className="cb-player-name">{currentPlayer.name}</h2>
+                  <span className={`cb-role-badge ${getRoleBadgeClass(currentPlayer.role)}`}>
+                    {getRoleLabel(currentPlayer.role)}
+                  </span>
+                  <div className="cb-price-row">
+                    <div className="cb-price-item">
+                      <span>Base</span>
+                      <strong>{formatLakhs(currentPlayer.basePrice)}</strong>
+                    </div>
+                    {currentPlayer.age && (
                       <div className="cb-price-item">
-                        <span>Base</span>
-                        <strong>{formatLakhs(currentPlayer.basePrice)}</strong>
+                        <span>Age</span>
+                        <strong>{currentPlayer.age}</strong>
                       </div>
-                      {currentPlayer.age && (
-                        <div className="cb-price-item">
-                          <span>Age</span>
-                          <strong>{currentPlayer.age}</strong>
-                        </div>
-                      )}
-                    </div>
+                    )}
                   </div>
                 </div>
-
-                {/* Role-based stats grid */}
-                <div className="cb-stats-grid">
-                  {playerStats.map((stat) => (
-                    <div key={stat.label} className={`cb-stat-tile ${stat.category}`}>
-                      <span className="cb-stat-label">{stat.label}</span>
-                      <strong className="cb-stat-value">{stat.value || '--'}</strong>
-                    </div>
-                  ))}
-                </div>
-
-                {/* Full stats toggle for current player */}
-                <button
-                  className="cb-view-full-stats"
-                  onClick={() => setExpandedPlayer(expandedPlayer?.player.id === currentPlayer.id ? null : { player: currentPlayer, statsView: 'batting' })}
-                >
-                  {expandedPlayer?.player.id === currentPlayer.id ? 'Hide Full Stats' : 'View Full Stats ▾'}
-                </button>
-                <AnimatePresence>
-                  {expandedPlayer?.player.id === currentPlayer.id && (
-                    <motion.div
-                      className="cb-full-stats-panel"
-                      initial={{ opacity: 0, height: 0 }}
-                      animate={{ opacity: 1, height: 'auto' }}
-                      exit={{ opacity: 0, height: 0 }}
-                    >
-                      {renderFullStatsPanel(expandedPlayer.player, expandedPlayer.statsView, (v) => setExpandedPlayer({ player: expandedPlayer.player, statsView: v }))}
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-
-                {/* Current bid section */}
-                <div className="cb-bid-section">
-                  <div className="cb-current-bid">
-                    <span className="cb-bid-label">Current Bid</span>
-                    <motion.span
-                      className="cb-bid-amount"
-                      key={currentBid}
-                      initial={{ scale: 1.15 }}
-                      animate={{ scale: 1 }}
-                      transition={{ type: 'spring', stiffness: 300 }}
-                    >
-                      {formatLakhs(currentBid)}
-                    </motion.span>
-                  </div>
-                  {selectedTeam && (
-                    <div className={`cb-leading-team ${isMyBid ? 'mine' : ''}`}>
-                      {selectedTeam.logoUrl && <TeamLogo logoUrl={selectedTeam.logoUrl} teamName={selectedTeam.name} size="sm" />}
-                      <span>{selectedTeam.name}</span>
-                      {isMyBid && <span className="cb-my-bid-badge">YOUR BID</span>}
-                    </div>
-                  )}
-                </div>
-              </motion.div>
-            ) : lastSoldPlayer ? (
-              <motion.div
-                className={`cb-sold-card ${lastSoldPlayer.winnerTeam === session.teamName ? 'won' : 'lost'}`}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-              >
-                {lastSoldPlayer.winnerTeam === session.teamName ? (
-                  <>
-                    <div className="cb-sold-emoji">🎉</div>
-                    <h2>Congratulations!</h2>
-                    <p>You won <strong>{lastSoldPlayer.name}</strong></p>
-                    <div className="cb-sold-amount">{formatLakhs(lastSoldPlayer.amount)}</div>
-                  </>
-                ) : (
-                  <>
-                    <div className="cb-sold-emoji">🎯</div>
-                    <h2>Better Player Ahead</h2>
-                    <p><strong>{lastSoldPlayer.winnerTeam}</strong> won {lastSoldPlayer.name}</p>
-                    <p className="cb-motivation">Stay patient, bid smart, and win the right lot.</p>
-                  </>
-                )}
-                <p className="cb-waiting-hint">Waiting for next player...</p>
-              </motion.div>
-            ) : (
-              <div className="cb-empty-state">
-                <GiCricketBat size={56} color="rgba(255,255,255,0.25)" />
-                <p>Waiting for next player...</p>
-                <p className="cb-empty-hint">The auction master will start the bidding</p>
               </div>
-            )}
-          </div>
+
+              {/* Role-based stats grid */}
+              <div className="cb-stats-grid">
+                {playerStats.map((stat) => (
+                  <div key={stat.label} className={`cb-stat-tile ${stat.category}`}>
+                    <span className="cb-stat-label">{stat.label}</span>
+                    <strong className="cb-stat-value">{stat.value || '--'}</strong>
+                  </div>
+                ))}
+              </div>
+
+              {/* Full stats toggle for current player */}
+              <button
+                className="cb-view-full-stats"
+                onClick={() => setExpandedPlayer(expandedPlayer?.player.id === currentPlayer.id ? null : { player: currentPlayer, statsView: 'batting' })}
+              >
+                {expandedPlayer?.player.id === currentPlayer.id ? 'Hide Full Stats ▴' : 'View Full Stats ▾'}
+              </button>
+              <AnimatePresence>
+                {expandedPlayer?.player.id === currentPlayer.id && (
+                  <motion.div
+                    className="cb-full-stats-panel"
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    exit={{ opacity: 0, height: 0 }}
+                  >
+                    {renderFullStatsPanel(expandedPlayer.player, expandedPlayer.statsView, (v) => setExpandedPlayer({ player: expandedPlayer.player, statsView: v }))}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              {/* Current bid section */}
+              <div className="cb-bid-section">
+                <div className="cb-current-bid">
+                  <span className="cb-bid-label">Current Bid</span>
+                  <motion.span
+                    className="cb-bid-amount"
+                    key={currentBid}
+                    initial={{ scale: 1.15 }}
+                    animate={{ scale: 1 }}
+                    transition={{ type: 'spring', stiffness: 300 }}
+                  >
+                    {formatLakhs(currentBid)}
+                  </motion.span>
+                </div>
+                {selectedTeam && (
+                  <div className={`cb-leading-team ${isMyBid ? 'mine' : ''}`}>
+                    {selectedTeam.logoUrl && <TeamLogo logoUrl={selectedTeam.logoUrl} teamName={selectedTeam.name} size="sm" />}
+                    <span>{selectedTeam.name}</span>
+                    {isMyBid && <span className="cb-my-bid-badge">YOUR BID</span>}
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          ) : lastSoldPlayer ? (
+            <motion.div
+              className={`cb-sold-card ${lastSoldPlayer.winnerTeam === session.teamName ? 'won' : 'lost'}`}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+            >
+              {lastSoldPlayer.winnerTeam === session.teamName ? (
+                <>
+                  <div className="cb-sold-emoji">🎉</div>
+                  <h2>Congratulations!</h2>
+                  <p>You won <strong>{lastSoldPlayer.name}</strong></p>
+                  <div className="cb-sold-amount">{formatLakhs(lastSoldPlayer.amount)}</div>
+                </>
+              ) : (
+                <>
+                  <div className="cb-sold-emoji">🎯</div>
+                  <h2>Better Player Ahead</h2>
+                  <p><strong>{lastSoldPlayer.winnerTeam}</strong> won {lastSoldPlayer.name}</p>
+                  <p className="cb-motivation">Stay patient, bid smart, and win the right lot.</p>
+                </>
+              )}
+              <p className="cb-waiting-hint">Waiting for next player...</p>
+            </motion.div>
+          ) : (
+            <div className="cb-empty-state">
+              <GiCricketBat size={56} color="rgba(255,255,255,0.25)" />
+              <p>Waiting for next player...</p>
+              <p className="cb-empty-hint">The auction master will start the bidding</p>
+            </div>
+          )}
 
           {/* ── Action Buttons ── */}
           <div className="cb-actions">
@@ -841,7 +1210,6 @@ export function MobileBiddingLivePage() {
                 disabled={!currentPlayer || !isConnected}
                 whileTap={{ scale: 0.95 }}
               >
-                <span className="cb-action-icon">⬆️</span>
                 <span className="cb-action-label">RAISE BID</span>
                 <span className="cb-action-sub">+₹100L</span>
               </motion.button>
@@ -853,12 +1221,11 @@ export function MobileBiddingLivePage() {
                 disabled={!currentPlayer || !isMyBid}
                 whileTap={{ scale: 0.95 }}
               >
-                <span className="cb-action-icon">✋</span>
-                <span className="cb-action-label">STOP</span>
+                <span className="cb-action-label">PASS</span>
               </motion.button>
             )}
           </div>
-        </>
+        </div>
       )}
 
       {/* ═══════════════ MY TEAM TAB ═══════════════ */}
@@ -867,22 +1234,31 @@ export function MobileBiddingLivePage() {
           {/* Team overview card */}
           <div className="cb-team-overview">
             <div className="cb-team-overview-header">
-              {myTeam.logoUrl && <TeamLogo logoUrl={myTeam.logoUrl} teamName={myTeam.name} size="md" />}
+              {myTeam.logoUrl && <TeamLogo logoUrl={myTeam.logoUrl} teamName={myTeam.name} size="sm" className="cb-overview-logo" />}
               <div className="cb-team-overview-info">
                 <h2>{myTeam.name}</h2>
                 {myTeam.captain && <span className="cb-captain-badge">C: {myTeam.captain}</span>}
               </div>
             </div>
 
+            {/* Budget progress bar */}
+            <div className="cb-budget-progress">
+              <div className="cb-budget-progress-labels">
+                <span>Spent {formatLakhs(spentAmount)}</span>
+                <span>Left {formatLakhs(myTeam.remainingPurse)}</span>
+              </div>
+              <div className="cb-budget-progress-bar">
+                <motion.div
+                  className="cb-budget-progress-fill"
+                  initial={{ width: 0 }}
+                  animate={{ width: `${budgetPct}%` }}
+                  transition={{ duration: 0.6, ease: 'easeOut' }}
+                />
+              </div>
+              <span className="cb-budget-progress-pct">{budgetPct}% used</span>
+            </div>
+
             <div className="cb-team-stats-grid">
-              <div className="cb-team-stat">
-                <span className="cb-tstat-value">{formatLakhs(myTeam.remainingPurse)}</span>
-                <span className="cb-tstat-label">Remaining</span>
-              </div>
-              <div className="cb-team-stat">
-                <span className="cb-tstat-value">{formatLakhs(spentAmount)}</span>
-                <span className="cb-tstat-label">Spent</span>
-              </div>
               <div className="cb-team-stat">
                 <span className="cb-tstat-value">{myTeam.playersBought || 0}</span>
                 <span className="cb-tstat-label">Bought</span>
@@ -897,7 +1273,7 @@ export function MobileBiddingLivePage() {
               </div>
               <div className="cb-team-stat">
                 <span className="cb-tstat-value">{formatLakhs(myTeam.highestBid || 0)}</span>
-                <span className="cb-tstat-label">Highest Bid</span>
+                <span className="cb-tstat-label">Top Buy</span>
               </div>
             </div>
           </div>
@@ -932,6 +1308,7 @@ export function MobileBiddingLivePage() {
                             <span className="cb-squad-price">{formatLakhs(p.soldAmount)}</span>
                           </div>
                         </div>
+                        <IoChevronDown size={14} className={`cb-expand-icon ${expandedPlayer?.player.id === p.id ? 'open' : ''}`} />
                       </div>
                       <AnimatePresence>
                         {expandedPlayer?.player.id === p.id && (
@@ -951,6 +1328,7 @@ export function MobileBiddingLivePage() {
               </div>
             ) : (
               <div className="cb-squad-empty">
+                <GiCricketBat size={36} color="rgba(255,255,255,0.15)" />
                 <p>No players acquired yet</p>
                 <p className="cb-empty-hint">Players you win will appear here</p>
               </div>
@@ -964,7 +1342,7 @@ export function MobileBiddingLivePage() {
               {[...teams].sort((a, b) => (b.playersBought || 0) - (a.playersBought || 0)).map((t) => (
                 <div key={t.id} className={`cb-leaderboard-row ${t.id === myTeam.id ? 'mine' : ''}`}>
                   <div className="cb-lb-team">
-                    {t.logoUrl && <TeamLogo logoUrl={t.logoUrl} teamName={t.name} size="sm" />}
+                    {t.id === myTeam.id && t.logoUrl && <TeamLogo logoUrl={t.logoUrl} teamName={t.name} size="sm" className="cb-lb-logo" />}
                     <span>{t.name}</span>
                   </div>
                   <div className="cb-lb-stats">
@@ -981,34 +1359,36 @@ export function MobileBiddingLivePage() {
       {/* ═══════════════ PLAYERS TAB ═══════════════ */}
       {activeTab === 'players' && (
         <div className="cb-content cb-players-tab">
-          {/* Search bar */}
-          <div className="cb-search-bar">
-            <IoSearch size={18} className="cb-search-icon" />
-            <input
-              type="text"
-              className="cb-search-input"
-              placeholder="Search player name or ID..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
-            {searchQuery && (
-              <button className="cb-search-clear" onClick={() => setSearchQuery('')}>
-                <IoClose size={16} />
-              </button>
-            )}
-          </div>
+          {/* Sticky search header */}
+          <div className="cb-search-sticky">
+            <div className="cb-search-bar">
+              <IoSearch size={18} className="cb-search-icon" />
+              <input
+                type="text"
+                className="cb-search-input"
+                placeholder="Search player name or ID..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+              {searchQuery && (
+                <button className="cb-search-clear" onClick={() => setSearchQuery('')}>
+                  <IoClose size={16} />
+                </button>
+              )}
+            </div>
 
-          {/* Role filter chips */}
-          <div className="cb-role-filters">
-            {availableRoles.map((role) => (
-              <button
-                key={role}
-                className={`cb-role-chip ${roleFilter === role ? 'active' : ''}`}
-                onClick={() => setRoleFilter(role)}
-              >
-                {role === 'all' ? 'All' : role}
-              </button>
-            ))}
+            {/* Role filter chips */}
+            <div className="cb-role-filters">
+              {availableRoles.map((role) => (
+                <button
+                  key={role}
+                  className={`cb-role-chip ${roleFilter === role ? 'active' : ''}`}
+                  onClick={() => setRoleFilter(role)}
+                >
+                  {role === 'all' ? 'All' : role}
+                </button>
+              ))}
+            </div>
           </div>
 
           <div className="cb-player-count">
@@ -1054,7 +1434,8 @@ export function MobileBiddingLivePage() {
                       </div>
                       <div className="cb-player-row-right">
                         <span className="cb-player-row-base">{formatLakhs(p.basePrice)}</span>
-                        {sold && <span className="cb-player-row-sold-badge">{sold.teamName} — {formatLakhs(sold.soldAmount)}</span>}
+                        {sold && <span className="cb-player-row-sold-badge">{sold.teamName}</span>}
+                        {sold && <span className="cb-player-row-sold-amt">{formatLakhs(sold.soldAmount)}</span>}
                       </div>
                     </div>
                     <AnimatePresence>
@@ -1077,6 +1458,108 @@ export function MobileBiddingLivePage() {
           )}
         </div>
       )}
+
+      {/* ── Bottom Tab Bar ── */}
+      <nav className="cb-bottom-nav">
+        {TAB_CONFIG.map(({ key, label, icon: Icon }) => (
+          <button
+            key={key}
+            className={`cb-bottom-tab ${activeTab === key ? 'active' : ''}`}
+            onClick={() => setActiveTab(key)}
+          >
+            <Icon size={22} />
+            <span>{label}</span>
+            {key === 'live' && currentPlayer && <span className="cb-tab-dot" />}
+          </button>
+        ))}
+      </nav>
+
+      {/* ═══════ TOP BUYS CAROUSEL (press "n") ═══════ */}
+      <AnimatePresence>
+        {showTopBuysCarousel && topBuys.length > 0 && (
+          <motion.div
+            className="cb-topbuys-overlay"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => { setShowTopBuysCarousel(false);  }}
+          >
+            <motion.div
+              className="cb-topbuys-container"
+              initial={{ scale: 0.6, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.7, opacity: 0 }}
+              transition={{ type: 'spring', damping: 20, stiffness: 200 }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="cb-topbuys-header">
+                <IoTrophy size={22} color="#fbbf24" />
+                <h2>Top Buys</h2>
+                <button className="cb-topbuys-close" onClick={() => { setShowTopBuysCarousel(false);  }}>
+                  <IoClose size={20} />
+                </button>
+              </div>
+              <div className="cb-topbuys-carousel">
+                <AnimatePresence mode="wait">
+                  {topBuys.map((buy, i) => i === topBuysIndex && (
+                    <motion.div
+                      key={buy.id}
+                      className="cb-topbuy-card"
+                      initial={{ opacity: 0, x: 80, scale: 0.92 }}
+                      animate={{ opacity: 1, x: 0, scale: 1 }}
+                      exit={{ opacity: 0, x: -80, scale: 0.92 }}
+                      transition={{ type: 'spring', damping: 22, stiffness: 220 }}
+                      style={{ '--buy-color': buy.primaryColor, '--buy-color2': buy.secondaryColor } as React.CSSProperties}
+                    >
+                      <motion.div className="cb-topbuy-brand" initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} transition={{ delay: 0.15, duration: 0.5 }}>
+                        <div className="cb-topbuy-brand-bg" style={{ background: `linear-gradient(135deg, ${buy.secondaryColor}, ${buy.primaryColor})` }}>
+                          {buy.logoUrl && (
+                            <motion.div className="cb-topbuy-brand-logo" initial={{ scale: 0, rotate: -20 }} animate={{ scale: 1, rotate: 0 }} transition={{ delay: 0.35, type: 'spring', stiffness: 200 }}>
+                              <TeamLogo logoUrl={buy.logoUrl} teamName={buy.teamName} size="md" />
+                            </motion.div>
+                          )}
+                          <motion.span className="cb-topbuy-team-name" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5 }}>{buy.teamName}</motion.span>
+                        </div>
+                      </motion.div>
+                      <motion.div className={`cb-topbuy-rank rank-${i + 1}`} initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ delay: 0.3, type: 'spring', stiffness: 300 }}>#{i + 1}</motion.div>
+                      {buy.player && (
+                        <motion.div className="cb-topbuy-player" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4, duration: 0.4 }}>
+                          <div className="cb-topbuy-player-img-wrap">
+                            <PlayerImage imageUrl={buy.player.imageUrl || ''} playerName={buy.player.name} size="lg" className="cb-topbuy-player-img" />
+                          </div>
+                          <h3 className="cb-topbuy-player-name">{buy.player.name}</h3>
+                          <span className={`cb-role-badge ${getRoleBadgeClass(buy.player.role)}`}>{getRoleLabel(buy.player.role)}</span>
+                          <motion.div className="cb-topbuy-amount" initial={{ scale: 0.5, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ delay: 0.6, type: 'spring', stiffness: 200 }}>
+                            {formatLakhs(buy.soldAmount)}
+                          </motion.div>
+                          <div className="cb-topbuy-stats">
+                            {getRoleBasedStats(buy.player, 4).map((stat) => (
+                              <div key={stat.label} className="cb-topbuy-stat">
+                                <span>{stat.label}</span>
+                                <strong>{stat.value || '--'}</strong>
+                              </div>
+                            ))}
+                          </div>
+                        </motion.div>
+                      )}
+                    </motion.div>
+                  ))}
+                </AnimatePresence>
+              </div>
+              <div className="cb-topbuys-nav">
+                <button className="cb-topbuys-arrow" disabled={topBuysIndex === 0} onClick={() => setTopBuysIndex(i => i - 1)}>&lsaquo;</button>
+                <div className="cb-topbuys-dots">
+                  {topBuys.map((_, i) => (
+                    <button key={i} className={`cb-topbuys-dot ${i === topBuysIndex ? 'active' : ''}`} onClick={() => setTopBuysIndex(i)} />
+                  ))}
+                </div>
+                <button className="cb-topbuys-arrow" disabled={topBuysIndex === topBuys.length - 1} onClick={() => setTopBuysIndex(i => i + 1)}>&rsaquo;</button>
+              </div>
+              <div className="cb-topbuys-hint">Press N to toggle &middot; ←→ to navigate &middot; Esc to close</div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* ── Feedback toast ── */}
       <AnimatePresence>

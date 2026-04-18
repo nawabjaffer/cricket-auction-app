@@ -740,7 +740,7 @@ function AuctionApp() {
                         <span className="role-core-text">{parsed.coreRole}</span>
                         {parsed.battingHand && (
                           <span className="role-detail-chip role-detail-chip--bat">
-                            <span className="role-detail-icon">🏏</span>
+                            <span className="role-detail-icon"></span>
                             {parsed.battingHand}
                           </span>
                         )}
@@ -844,14 +844,14 @@ function AuctionApp() {
                 <motion.div
                   className="team-bid-paddle"
                   key={`paddle-${selectedTeam.id}-${auction.currentBid}`}
-                  initial={{ y: 30, scale: 0.5, opacity: 0, rotate: -15 }}
-                  animate={{ y: 0, scale: 1, opacity: 1, rotate: 0 }}
-                  transition={{ type: 'spring', stiffness: 400, damping: 18, delay: 0.1 }}
+                  initial={{ y: -60, scale: 0.8, opacity: 0, rotate: -20 }}
+                  animate={{ y: -20, scale: 1.4, opacity: 1, rotate: 0 }}
+                  transition={{ type: 'spring', stiffness: 350, damping: 16, delay: 0.1 }}
                 >
                   <motion.div
                     className="team-bid-paddle-inner"
-                    animate={{ y: [0, -6, 0] }}
-                    transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
+                    animate={{ y: [0, -1, 0], scale: [1.0, 1.4, 1.0] }}
+                    transition={{ duration: 2.2, repeat: Infinity, ease: 'easeInOut' }}
                   >
                     {selectedTeam.logoUrl && (
                       <img
@@ -866,8 +866,8 @@ function AuctionApp() {
                   {/* Glow ring */}
                   <motion.div
                     className="team-bid-paddle-glow"
-                    animate={{ scale: [1, 1.3, 1], opacity: [0.6, 0, 0.6] }}
-                    transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
+                    animate={{  y: [-8, -8, -8] }}
+                    transition={{ duration: 2.2, repeat: Infinity, ease: 'easeInOut' }}
                   />
                 </motion.div>
 

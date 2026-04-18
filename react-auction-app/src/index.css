@@ -1266,8 +1266,8 @@ button:focus-visible {
   gap: 0.3rem;
   padding: 0.2rem 0.6rem;
   border-radius: 20px;
-  font-size: 0.7rem;
-  font-weight: 600;
+  font-size: 1.2rem;
+  font-weight: 800;
   letter-spacing: 0.04em;
   white-space: nowrap;
   backdrop-filter: blur(8px);
@@ -1276,7 +1276,7 @@ button:focus-visible {
 .role-detail-chip--bat {
   background: rgba(59, 130, 246, 0.15);
   border: 1px solid rgba(59, 130, 246, 0.3);
-  color: #93c5fd;
+  color: #fff;
 }
 
 .role-detail-chip--bowl {
@@ -1435,49 +1435,46 @@ button:focus-visible {
   display: flex;
   flex-direction: column;
   align-items: center;
-  margin-bottom: -10px;
+  justify-content: center;
   z-index: 2;
 }
 
 .team-bid-paddle-inner {
-  width: 72px;
-  height: 72px;
+  width: 100px;
+  height: 100px;
   border-radius: 50%;
-  background: radial-gradient(ellipse at 30% 30%, rgba(255,255,255,0.25), rgba(255,255,255,0.05));
-  backdrop-filter: blur(12px);
-  border: 2px solid rgba(255, 255, 255, 0.3);
+  background: #ffffff;
+  border: 3px solid rgba(255, 255, 255, 0.9);
   display: flex;
   align-items: center;
   justify-content: center;
   box-shadow:
-    0 8px 32px rgba(0, 0, 0, 0.4),
-    0 0 24px rgba(129, 140, 248, 0.3),
-    inset 0 1px 0 rgba(255, 255, 255, 0.4);
+    0 10px 40px rgba(0, 0, 0, 0.35),
+    0 0 30px rgba(255, 255, 255, 0.25),
+    0 0 60px rgba(129, 140, 248, 0.2),
+    inset 0 2px 0 rgba(255, 255, 255, 1);
 }
 
 .team-bid-paddle-logo {
-  width: 48px;
-  height: 48px;
+  width: 64px;
+  height: 64px;
   object-fit: contain;
-  filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.5));
+  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.2));
 }
 
 .team-bid-paddle-stick {
-  width: 3px;
-  height: 18px;
-  background: linear-gradient(180deg, rgba(255,255,255,0.4), rgba(255,255,255,0.1));
-  border-radius: 0 0 2px 2px;
+  width: 4px;
+  height: 22px;
+  background: linear-gradient(180deg, #ffffff, rgba(255,255,255,0.3));
+  border-radius: 0 0 3px 3px;
 }
 
 .team-bid-paddle-glow {
   position: absolute;
-  top: 0;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 72px;
-  height: 72px;
+  width: 100px;
+  height: 100px;
   border-radius: 50%;
-  border: 2px solid rgba(129, 140, 248, 0.5);
+  border: 2.5px solid rgba(255, 255, 255, 0.5);
   pointer-events: none;
 }
 
