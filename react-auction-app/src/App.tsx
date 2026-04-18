@@ -911,7 +911,17 @@ function AuctionApp() {
                 transition={{ type: 'spring', damping: 25, stiffness: 300 }}
               >
                 <div className="team-bid-card">
-                  <div className="team-bid-name">{selectedTeam.name}</div>
+                  <div className="team-bid-header-row">
+                    {selectedTeam.logoUrl && (
+                      <img
+                        src={selectedTeam.logoUrl}
+                        alt=""
+                        className="team-bid-logo"
+                        onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                      />
+                    )}
+                    <div className="team-bid-name">{selectedTeam.name}</div>
+                  </div>
                   <div className="team-bid-amount">₹{auction.currentBid.toFixed(2)}L</div>
                   <div className="team-bid-max">Max: ₹{auction.getMaxBidForTeam(selectedTeam)?.toFixed(1)}L</div>
                 </div>

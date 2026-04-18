@@ -88,6 +88,12 @@ export const PlayerImage: React.FC<PlayerImageProps> = ({
         return;
       }
 
+      // Data/blob URLs are already fully resolved — use them directly without async fetch
+      if (currentUrl.startsWith('data:') || currentUrl.startsWith('blob:')) {
+        setResolvedSrc(currentUrl);
+        return;
+      }
+
       const result = await localImageCacheService.resolveImageSrc(currentUrl);
       if (!isActive) {
         result.revoke?.();

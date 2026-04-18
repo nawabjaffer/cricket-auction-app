@@ -55,16 +55,14 @@ export function useRealtimeDesktopSync(): void {
         console.log('[useRealtimeDesktopSync] ✅ Desktop sync initialized and ready');
         
         // Force an immediate state broadcast after initialization
-        setTimeout(() => {
-          console.log('[useRealtimeDesktopSync] 📡 Broadcasting initial state...');
-          realtimeSyncService.broadcastState(
-            currentPlayer,
-            currentBid,
-            selectedTeam,
-            teams,
-            auctionState.isAuctionActive
-          );
-        }, 500);
+        console.log('[useRealtimeDesktopSync] 📡 Broadcasting initial state...');
+        realtimeSyncService.broadcastState(
+          currentPlayer,
+          currentBid,
+          selectedTeam,
+          teams,
+          auctionState.isAuctionActive
+        );
       }).catch(error => {
         console.error('[useRealtimeDesktopSync] ❌ Failed to initialize:', error);
       });
@@ -129,7 +127,7 @@ export function useRealtimeDesktopSync(): void {
         teamsRef.current,
         auctionActiveRef.current
       );
-    }, 2000);
+    }, 800);
 
     return () => clearInterval(interval);
   }, []);
@@ -204,7 +202,7 @@ export function useRealtimeMobileSync(): RealtimeMobileSyncState {
     // Check connection status periodically
     const connectionCheck = setInterval(() => {
       setIsConnected(realtimeSyncService.isDesktopConnected());
-    }, 2000);
+    }, 800);
 
     // Subscribe to session reset events
     const unsubscribeReset = realtimeSyncService.onSessionReset((reset) => {

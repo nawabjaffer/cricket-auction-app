@@ -5,7 +5,7 @@
 
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useSoldPlayers } from '../../store';
+import { useSoldPlayers, useTeams } from '../../store';
 import { extractDriveFileId } from '../../utils/driveImage';
 import { formatRoleDisplay } from '../../utils/roleFormatter';
 
@@ -25,9 +25,16 @@ interface SoldOverlayProps {
 
 export function SoldOverlay({ isVisible, onClose }: Readonly<SoldOverlayProps>) {
   const soldPlayers = useSoldPlayers();
+  const teams = useTeams();
   const lastSoldPlayer = soldPlayers.at(-1);
   const [currentUrlIndex, setCurrentUrlIndex] = useState(0);
   const [imageError, setImageError] = useState(false);
+
+  // Find the team logo for the sold player's team
+  const soldTeam = useMemo(() => {
+    if (!lastSoldPlayer) return null;
+    return teams.find(t => t.id === lastSoldPlayer.teamId || t.name === lastSoldPlayer.teamName) || null;
+  }, [lastSoldPlayer, teams]);
 
   // Get image URL from last sold player
   const playerImageUrl = lastSoldPlayer?.imageUrl ?? '';
@@ -210,7 +217,17 @@ export function SoldOverlay({ isVisible, onClose }: Readonly<SoldOverlayProps>) 
                 transition={{ delay: 0.65, duration: 0.4 }}
               >
                 <span className="team-label">Bought by</span>
-                <span className="team-name-overlay">{lastSoldPlayer.teamName}</span>
+                <div className="team-info-row">
+                  {soldTeam?.logoUrl && (
+                    <img
+                      src={soldTeam.logoUrl}
+                      alt={soldTeam.name}
+                      className="sold-team-logo"
+                      onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                    />
+                  )}
+                  <span className="team-name-overlay">{lastSoldPlayer.teamName}</span>
+                </div>
               </motion.div>
             </div>
 

@@ -1380,13 +1380,28 @@ button:focus-visible {
     inset 0 1px 0 rgba(255, 255, 255, 0.25);
 }
 
+.team-bid-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-bottom: 0.35rem;
+}
+
+.team-bid-logo {
+  width: 30px;
+  height: 30px;
+  object-fit: contain;
+  flex-shrink: 0;
+  filter: drop-shadow(0 1px 4px rgba(0, 0, 0, 0.4));
+}
+
 .team-bid-name {
   font-size: 0.85rem;
   font-weight: 600;
   color: rgba(255, 255, 255, 0.7);
   text-transform: uppercase;
   letter-spacing: 0.15em;
-  margin-bottom: 0.35rem;
 }
 
 .team-bid-amount {
@@ -3305,13 +3320,36 @@ button:focus-visible {
 /* Team info overlay (sold) */
 .team-info-overlay {
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 12px;
-  padding: 14px 20px;
+  gap: 10px;
+  padding: 14px 24px;
   background: rgba(255, 255, 255, 0.03);
-  border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.team-info-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.sold-team-logo {
+  width: 52px;
+  height: 52px;
+  object-fit: contain;
+  filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.5));
+  flex-shrink: 0;
+}
+
+.team-name-overlay {
+  font-size: 1.6rem;
+  font-weight: 700;
+  color: white;
+  text-shadow: 0 0 20px rgba(255, 255, 255, 0.3);
+  letter-spacing: 0.02em;
 }
 
 .team-info-overlay .team-logo-small {

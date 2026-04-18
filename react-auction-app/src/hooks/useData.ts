@@ -139,14 +139,34 @@ export function usePlayersQuery() {
 // skip the loading screen on subsequent mounts (e.g. returning from /live).
 let _globalPreloadComplete = false;
 
+// localStorage-based preload cache: skip preload on page reload if recently completed
+const PRELOAD_LS_KEY = 'epl_preload_done_v1';
+const PRELOAD_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+
+function isPreloadCachedLocally(): boolean {
+  try {
+    const ts = localStorage.getItem(PRELOAD_LS_KEY);
+    return !!ts && (Date.now() - Number(ts) < PRELOAD_TTL_MS);
+  } catch {
+    return false;
+  }
+}
+
+function markPreloadComplete(): void {
+  _globalPreloadComplete = true;
+  try { localStorage.setItem(PRELOAD_LS_KEY, Date.now().toString()); } catch { /* ignore */ }
+}
+
 export function useInitialData() {
   const teamsQuery = useTeamsQuery();
   const playersQuery = usePlayersQuery();
   const soldPlayersQuery = useSoldPlayersQuery();
   const unsoldPlayersQuery = useUnsoldPlayersQuery();
 
-  // Track preload state — initialize from global flag to skip if already done
-  const [isPreloadingComplete, setIsPreloadingComplete] = useState(_globalPreloadComplete);
+  // Track preload state — initialize from global flag or localStorage cache to skip if already done
+  const [isPreloadingComplete, setIsPreloadingComplete] = useState(
+    _globalPreloadComplete || isPreloadCachedLocally()
+  );
 
   // Collect all player images for preloading
   const allPlayerImages = useMemo(() => {
@@ -173,8 +193,11 @@ export function useInitialData() {
   // Trigger image preloading when all data is available
   // IMPORTANT: This now waits for preload to complete before allowing app to render
   useEffect(() => {
-    // Skip if already preloaded globally (e.g. returning from /live)
-    if (_globalPreloadComplete) return;
+    // Skip if already preloaded globally (e.g. returning from /live) or cached in localStorage
+    if (_globalPreloadComplete || isPreloadCachedLocally()) {
+      if (!isPreloadingComplete) setIsPreloadingComplete(true);
+      return;
+    }
 
     if (allPlayerImages.length > 0 && !imagePreloaderService.isCurrentlyPreloading()) {
       setIsPreloadingComplete(false); // Mark preload as in-progress
@@ -196,13 +219,13 @@ export function useInitialData() {
             successRate: `${result.successRate.toFixed(1)}%`,
           });
           // Mark preload as complete - app can now render
-          _globalPreloadComplete = true;
+          markPreloadComplete();
           setIsPreloadingComplete(true);
         })
         .catch(error => {
           console.error('[useInitialData] Image preload error:', error);
           // Even if preload fails, allow app to render with cached/fallback images
-          _globalPreloadComplete = true;
+          markPreloadComplete();
           setIsPreloadingComplete(true);
         });
     }
