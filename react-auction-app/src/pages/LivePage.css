@@ -929,3 +929,193 @@
   margin: 0;
   text-shadow: 0 2px 8px rgba(255, 215, 0, 0.3);
 }
+
+/* ============================================================================
+   WAITING OVERLAY - Pre-auction standby screen with camera visible behind
+   ============================================================================ */
+.live-page__waiting-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.live-page__waiting-bg {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.live-page__waiting-shape {
+  position: absolute;
+  border-radius: 50%;
+  opacity: 0.08;
+  filter: blur(80px);
+}
+
+.live-page__waiting-shape--1 {
+  width: 600px; height: 600px;
+  background: #818cf8;
+  top: -200px; left: -200px;
+  animation: waiting-float-1 12s ease-in-out infinite;
+}
+
+.live-page__waiting-shape--2 {
+  width: 500px; height: 500px;
+  background: #a78bfa;
+  bottom: -150px; right: -150px;
+  animation: waiting-float-2 15s ease-in-out infinite;
+}
+
+.live-page__waiting-shape--3 {
+  width: 400px; height: 400px;
+  background: #60a5fa;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  animation: waiting-float-3 10s ease-in-out infinite;
+}
+
+@keyframes waiting-float-1 {
+  0%, 100% { transform: translate(0, 0); }
+  50% { transform: translate(80px, 60px); }
+}
+@keyframes waiting-float-2 {
+  0%, 100% { transform: translate(0, 0); }
+  50% { transform: translate(-60px, -40px); }
+}
+@keyframes waiting-float-3 {
+  0%, 100% { transform: translate(-50%, -50%) scale(1); }
+  50% { transform: translate(-50%, -50%) scale(1.2); }
+}
+
+.live-page__waiting-content {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.5rem;
+  text-align: center;
+}
+
+.live-page__waiting-logo {
+  width: 140px;
+  height: 140px;
+  object-fit: contain;
+  filter: drop-shadow(0 0 30px rgba(129, 140, 248, 0.4));
+}
+
+.live-page__waiting-logo-fallback {
+  width: 140px;
+  height: 140px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 3rem;
+  font-weight: 800;
+  background: linear-gradient(135deg, #818cf8, #a78bfa);
+  color: white;
+  box-shadow: 0 0 40px rgba(129, 140, 248, 0.3);
+}
+
+.live-page__waiting-title {
+  font-size: 3rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: white;
+  margin: 0;
+  text-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+}
+
+.live-page__waiting-title-accent {
+  background: linear-gradient(135deg, #818cf8, #c084fc);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.live-page__waiting-subtitle {
+  font-size: 1.1rem;
+  color: rgba(255, 255, 255, 0.5);
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  margin: 0;
+}
+
+.live-page__waiting-pulse {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  color: rgba(255, 255, 255, 0.6);
+  text-transform: uppercase;
+}
+
+.live-page__waiting-pulse-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #818cf8;
+  animation: waiting-pulse 2s ease-in-out infinite;
+}
+
+@keyframes waiting-pulse {
+  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(129, 140, 248, 0.6); }
+  50% { opacity: 0.5; box-shadow: 0 0 0 12px rgba(129, 140, 248, 0); }
+}
+
+.live-page__waiting-sponsors {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  margin-top: 1rem;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.live-page__waiting-sponsor-logo {
+  width: 40px;
+  height: 40px;
+  object-fit: contain;
+  opacity: 0.4;
+  filter: grayscale(0.8);
+  transition: opacity 0.3s, filter 0.3s;
+}
+
+.live-page__waiting-sponsor-logo--title {
+  width: 60px;
+  height: 60px;
+  opacity: 0.7;
+  filter: grayscale(0.3);
+}
+
+.live-page__waiting-footer {
+  position: absolute;
+  bottom: 2rem;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.4);
+  z-index: 1;
+}
+
+.live-page__waiting-footer kbd {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  background: rgba(255, 255, 255, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: rgba(255, 255, 255, 0.8);
+}

@@ -789,7 +789,7 @@ function AuctionApp() {
                 </div>
               </div>
 
-              <div className="empty-title">Welcome to Eruvai Premier League Auctions</div>
+              <div className="empty-title">Welcome to Eruvai Premier League Auction</div>
               <div className="empty-hint">Press <kbd>N</kbd> for next player</div>
               {sponsorLoadState === 'ready' && (
                 <>
@@ -813,11 +813,42 @@ function AuctionApp() {
             {selectedTeam && (
               <motion.div
                 className="team-bid-overlay"
-                initial={{ opacity: 0, y: 20, scale: 0.9 }}
+                initial={{ opacity: 0, y: 40, scale: 0.85 }}
                 animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={{ opacity: 0, y: -20, scale: 0.9 }}
-                transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+                exit={{ opacity: 0, y: -30, scale: 0.9 }}
+                transition={{ type: 'spring', damping: 22, stiffness: 280 }}
               >
+                {/* Paddle Logo — rises above the card */}
+                <motion.div
+                  className="team-bid-paddle"
+                  key={`paddle-${selectedTeam.id}-${auction.currentBid}`}
+                  initial={{ y: 30, scale: 0.5, opacity: 0, rotate: -15 }}
+                  animate={{ y: 0, scale: 1, opacity: 1, rotate: 0 }}
+                  transition={{ type: 'spring', stiffness: 400, damping: 18, delay: 0.1 }}
+                >
+                  <motion.div
+                    className="team-bid-paddle-inner"
+                    animate={{ y: [0, -6, 0] }}
+                    transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
+                  >
+                    {selectedTeam.logoUrl && (
+                      <img
+                        src={selectedTeam.logoUrl}
+                        alt=""
+                        className="team-bid-paddle-logo"
+                        onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                      />
+                    )}
+                  </motion.div>
+                  <div className="team-bid-paddle-stick" />
+                  {/* Glow ring */}
+                  <motion.div
+                    className="team-bid-paddle-glow"
+                    animate={{ scale: [1, 1.3, 1], opacity: [0.6, 0, 0.6] }}
+                    transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
+                  />
+                </motion.div>
+
                 <div className="team-bid-card">
                   {/* Blurred team logo background */}
                   {selectedTeam.logoUrl && (
@@ -840,9 +871,27 @@ function AuctionApp() {
                     )}
                     <div className="team-bid-name">{selectedTeam.name}</div>
                   </div>
-                  <div className="team-bid-amount">₹{auction.currentBid.toFixed(2)}L</div>
+                  {/* Bid amount — animated on change */}
+                  <motion.div
+                    className="team-bid-amount"
+                    key={`bid-${auction.currentBid}`}
+                    initial={{ scale: 1.3, color: '#fbbf24' }}
+                    animate={{ scale: 1, color: '#ffffff' }}
+                    transition={{ type: 'spring', stiffness: 300, damping: 15 }}
+                  >
+                    ₹{auction.currentBid.toFixed(2)}L
+                  </motion.div>
                   <div className="team-bid-max">Max: ₹{auction.getMaxBidForTeam(selectedTeam)?.toFixed(1)}L</div>
                 </div>
+
+                {/* Ripple burst on new bid */}
+                <motion.div
+                  className="team-bid-ripple"
+                  key={`ripple-${auction.currentBid}`}
+                  initial={{ scale: 0.5, opacity: 0.8 }}
+                  animate={{ scale: 2.5, opacity: 0 }}
+                  transition={{ duration: 0.6, ease: 'easeOut' }}
+                />
               </motion.div>
             )}
           </AnimatePresence>
@@ -1494,47 +1543,51 @@ function AuctionApp() {
   );
 }
 
-// Loading Screen
+// Loading Screen — cinematic broadcast-style transition
 function LoadingScreen() {
-  const cacheStats = imageCacheService.getStats();
-  const totalCached = cacheStats.total;
-  const successfulCached = cacheStats.successful;
-  const loadPercentage = totalCached > 0 ? Math.round((successfulCached / totalCached) * 100) : 0;
-
   return (
-    <div className="min-h-screen bg-[var(--theme-background)] flex items-center justify-center">
-      <div className="text-center">
-        <div className="text-6xl mb-4 animate-bounce"><GiCricketBat /></div>
-        <div className="text-xl font-semibold text-[var(--theme-text-primary)] mb-4">
-          Loading Auction Data & Images...
-        </div>
-        
-        {/* Main progress bar */}
-        <div className="mt-6 w-64 h-3 bg-[var(--theme-secondary)]/20 rounded-full overflow-hidden mx-auto shadow-lg">
-          <div 
-            className="h-full bg-gradient-to-r from-[var(--theme-accent)] to-[var(--theme-secondary)] rounded-full animate-pulse transition-all duration-500" 
-            style={{ width: `${loadPercentage}%` }} 
-          />
-        </div>
+    <div className="loading-transition">
+      {/* Animated background */}
+      <div className="loading-transition__bg">
+        <div className="loading-transition__shape loading-transition__shape--1" />
+        <div className="loading-transition__shape loading-transition__shape--2" />
+        <div className="loading-transition__shape loading-transition__shape--3" />
+      </div>
 
-        {/* Progress text */}
-        <div className="mt-4 text-[var(--theme-text-secondary)] text-sm">
-          {totalCached > 0 ? (
-            <>
-              <div>Images loaded: {successfulCached} / {totalCached}</div>
-              <div className="text-xs mt-1 opacity-75">{loadPercentage}% complete</div>
-            </>
-          ) : (
-            <div>Preparing images...</div>
-          )}
-        </div>
+      {/* Curtain wipe — top & bottom panels close then open */}
+      <motion.div
+        className="loading-transition__curtain loading-transition__curtain--top"
+        initial={{ scaleY: 0 }}
+        animate={{ scaleY: [0, 1, 1, 0] }}
+        transition={{ duration: 3, times: [0, 0.3, 0.7, 1], ease: 'easeInOut', repeat: Infinity }}
+      />
+      <motion.div
+        className="loading-transition__curtain loading-transition__curtain--bottom"
+        initial={{ scaleY: 0 }}
+        animate={{ scaleY: [0, 1, 1, 0] }}
+        transition={{ duration: 3, times: [0, 0.3, 0.7, 1], ease: 'easeInOut', repeat: Infinity }}
+      />
 
-        {/* Status indicator */}
-        <div className="mt-6 flex justify-center gap-2">
-          <div className="w-2 h-2 bg-[var(--theme-accent)] rounded-full animate-bounce" style={{ animationDelay: '0s' }} />
-          <div className="w-2 h-2 bg-[var(--theme-accent)] rounded-full animate-bounce" style={{ animationDelay: '0.2s' }} />
-          <div className="w-2 h-2 bg-[var(--theme-accent)] rounded-full animate-bounce" style={{ animationDelay: '0.4s' }} />
-        </div>
+      {/* Center content */}
+      <motion.div
+        className="loading-transition__center"
+        initial={{ opacity: 0, scale: 0.6 }}
+        animate={{ opacity: [0, 1, 1, 0], scale: [0.6, 1, 1, 0.8] }}
+        transition={{ duration: 3, times: [0, 0.3, 0.7, 1], ease: 'easeInOut', repeat: Infinity }}
+      >
+        <img
+          src="/assets/BCC Season 6.png"
+          alt="Tournament"
+          className="loading-transition__logo"
+          onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
+        />
+        <div className="loading-transition__title">AUCTION</div>
+        <div className="loading-transition__subtitle">LIVE</div>
+      </motion.div>
+
+      {/* Bottom branding */}
+      <div className="loading-transition__footer">
+        powered by <b>NJS Creative Labs</b>
       </div>
     </div>
   );

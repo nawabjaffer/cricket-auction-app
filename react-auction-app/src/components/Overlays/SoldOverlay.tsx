@@ -242,6 +242,38 @@ export function SoldOverlay({ isVisible, onClose }: Readonly<SoldOverlayProps>) 
             </motion.div>
           </motion.div>
 
+          {/* ═══ Fly-to-team animation — player name plate shoots to team logo ═══ */}
+          <motion.div
+            className="sold-fly-to-team"
+            initial={{ opacity: 0, scale: 0.6, x: '-50%', y: '0%' }}
+            animate={{
+              opacity: [0, 1, 1, 1, 0],
+              scale: [0.6, 1, 1, 0.6, 0.3],
+              x: ['-50%', '-50%', '-50%', '80%', '120%'],
+              y: ['0%', '0%', '0%', '-120%', '-180%'],
+            }}
+            transition={{
+              duration: 2.5,
+              delay: 1.5,
+              times: [0, 0.15, 0.5, 0.85, 1],
+              ease: [0.32, 0.72, 0, 1],
+            }}
+          >
+            {soldTeam?.logoUrl && (
+              <img src={soldTeam.logoUrl} alt="" className="sold-fly-team-logo" />
+            )}
+            <div className="sold-fly-info">
+              <span className="sold-fly-name">{lastSoldPlayer.name}</span>
+              <span className="sold-fly-amount">₹{lastSoldPlayer.soldAmount.toFixed(1)}L</span>
+            </div>
+            {/* Trail particles */}
+            <motion.div
+              className="sold-fly-trail"
+              animate={{ opacity: [0.8, 0], scaleX: [1, 0.3] }}
+              transition={{ duration: 0.5, repeat: Infinity }}
+            />
+          </motion.div>
+
           {/* Celebration particles */}
           <CelebrationParticles />
         </motion.div>

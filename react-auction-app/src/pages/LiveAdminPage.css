@@ -459,6 +459,11 @@
   color: rgba(255, 255, 255, 0.6);
 }
 
+.la-break-live-preview-status.idle {
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.4);
+}
+
 .la-break-live-preview-frame {
   position: relative;
   width: 100%;

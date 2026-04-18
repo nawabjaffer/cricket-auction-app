@@ -6,7 +6,7 @@
 // ============================================================================
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import {
   IoPlay, IoPause, IoStop, IoTv, IoTime, IoImage, IoTrophy,
   IoRefresh, IoVideocam, IoGrid, IoSwapHorizontal, IoTrash,
@@ -62,10 +62,14 @@ export default function LiveAdminPage() {
   const [mbEnableStop, setMbEnableStop] = useState(true);
   const [savedMbConfig, setSavedMbConfig] = useState(false);
 
-  // Load sponsors
+  // Load sponsors (wait for DB initialization)
   useEffect(() => {
     const loadSponsors = async () => {
       try {
+        // Ensure Firebase DB is ready before accessing auctionPersistence
+        await realtimeSync.ensureInitialized();
+        const db = realtimeSync.getDatabase();
+        if (db) auctionPersistence.initialize(db);
         const loaded = await auctionPersistence.getSponsors();
         setSponsors(loaded);
       } catch (err) {
@@ -405,99 +409,93 @@ export default function LiveAdminPage() {
               </div>
             </section>
 
-            {/* Break Timer Control with Live BreakOverlay Preview */}
-            <AnimatePresence>
-              {currentMode === 'break' && (
-                <motion.section
-                  className="la-section"
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: 'auto' }}
-                  exit={{ opacity: 0, height: 0 }}
-                >
-                  <h2 className="la-section-title">
-                    <IoTime size={18} /> Break Timer
-                  </h2>
+            {/* Break Timer Control with Live BreakOverlay Preview — always visible */}
+            <section className="la-section">
+              <h2 className="la-section-title">
+                <IoTime size={18} /> Break Preview & Timer
+              </h2>
 
-                  {/* Actual BreakOverlay preview — scaled inside a frame */}
-                  <div className="la-break-live-preview">
-                    <div className={`la-break-live-preview-status ${breakRunning ? 'live' : 'preview'}`}>
-                      {breakRunning ? '● LIVE ON AIR' : '○ PREVIEW — NOT LIVE YET'}
-                    </div>
-                    <div className="la-break-live-preview-frame">
-                      <BreakOverlay
-                        isVisible={true}
-                        durationSeconds={breakTimeLeft}
-                        sponsorDisplayDuration={sponsorDisplayDuration}
-                        sponsors={sponsors}
-                        organizerLogo={currentTheme.seasonLogo}
-                        auctionTitle={currentTheme.name ? `${currentTheme.name} AUCTION` : undefined}
-                        onClose={() => {
-                          setBreakRunning(false);
-                          handleModeChange('auction');
+              {/* Actual BreakOverlay preview — scaled inside a frame */}
+              <div className="la-break-live-preview">
+                <div className={`la-break-live-preview-status ${breakRunning ? 'live' : currentMode === 'break' ? 'preview' : 'idle'}`}>
+                  {breakRunning ? '● LIVE ON AIR' : currentMode === 'break' ? '○ PREVIEW — NOT LIVE YET' : '○ STANDBY'}
+                </div>
+                <div className="la-break-live-preview-frame">
+                  <BreakOverlay
+                    isVisible={true}
+                    durationSeconds={breakTimeLeft}
+                    sponsorDisplayDuration={sponsorDisplayDuration}
+                    sponsors={sponsors}
+                    organizerLogo={currentTheme.seasonLogo}
+                    auctionTitle={currentTheme.name ? `${currentTheme.name} AUCTION` : undefined}
+                    onClose={() => {
+                      setBreakRunning(false);
+                      handleModeChange('auction');
+                    }}
+                  />
+                </div>
+              </div>
+
+              <div className="la-timer-panel">
+                <div className="la-timer-display">{formatTime(breakTimeLeft)}</div>
+                <div className="la-timer-controls">
+                  <label>
+                    Break Duration (seconds):
+                    <input
+                      type="number"
+                      value={breakDuration}
+                      onChange={(e) => setBreakDuration(Math.max(10, Number(e.target.value) || 120))}
+                      min={10}
+                      max={3600}
+                      className="la-input"
+                    />
+                  </label>
+                  <label>
+                    Sponsor Display (seconds):
+                    <input
+                      type="number"
+                      value={sponsorDisplayDuration}
+                      onChange={(e) => setSponsorDisplayDuration(Math.max(10, Math.min(60, Number(e.target.value) || 15)))}
+                      min={10}
+                      max={60}
+                      className="la-input"
+                    />
+                  </label>
+                  <div className="la-timer-buttons">
+                    {!breakRunning ? (
+                      <button
+                        className="la-btn la-btn-success la-btn-push-live"
+                        onClick={() => {
+                          if (currentMode !== 'break') handleModeChange('break');
+                          pushBreakToLive();
                         }}
-                      />
-                    </div>
+                      >
+                        <IoPlay size={16} /> Push Break to Live
+                      </button>
+                    ) : (
+                      <>
+                        <button
+                          className="la-btn la-btn-success"
+                          onClick={() => {
+                            setBreakTimeLeft(breakDuration);
+                            setBreakRunning(true);
+                            syncControl('break', { breakDuration, breakStartedAt: Date.now(), sponsorDisplayDuration });
+                          }}
+                        >
+                          <IoRefresh size={16} /> Reset & Restart
+                        </button>
+                        <button
+                          className="la-btn la-btn-danger"
+                          onClick={() => { setBreakRunning(false); handleModeChange('auction'); }}
+                        >
+                          <IoStop size={16} /> End Break
+                        </button>
+                      </>
+                    )}
                   </div>
-
-                  <div className="la-timer-panel">
-                    <div className="la-timer-display">{formatTime(breakTimeLeft)}</div>
-                    <div className="la-timer-controls">
-                      <label>
-                        Break Duration (seconds):
-                        <input
-                          type="number"
-                          value={breakDuration}
-                          onChange={(e) => setBreakDuration(Math.max(10, Number(e.target.value) || 120))}
-                          min={10}
-                          max={3600}
-                          className="la-input"
-                        />
-                      </label>
-                      <label>
-                        Sponsor Display (seconds):
-                        <input
-                          type="number"
-                          value={sponsorDisplayDuration}
-                          onChange={(e) => setSponsorDisplayDuration(Math.max(10, Math.min(60, Number(e.target.value) || 15)))}
-                          min={10}
-                          max={60}
-                          className="la-input"
-                        />
-                      </label>
-                      <div className="la-timer-buttons">
-                        {!breakRunning ? (
-                          <button
-                            className="la-btn la-btn-success la-btn-push-live"
-                            onClick={pushBreakToLive}
-                          >
-                            <IoPlay size={16} /> Push to Live
-                          </button>
-                        ) : (
-                          <>
-                            <button
-                              className="la-btn la-btn-success"
-                              onClick={() => {
-                                setBreakTimeLeft(breakDuration);
-                                setBreakRunning(true);
-                                syncControl('break', { breakDuration, breakStartedAt: Date.now(), sponsorDisplayDuration });
-                              }}
-                            >
-                              <IoRefresh size={16} /> Reset & Restart
-                            </button>
-                            <button
-                              className="la-btn la-btn-danger"
-                              onClick={() => { setBreakRunning(false); handleModeChange('auction'); }}
-                            >
-                              <IoStop size={16} /> End Break
-                            </button>
-                          </>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </motion.section>
-              )}
-            </AnimatePresence>
+                </div>
+              </div>
+            </section>
 
             {/* Ad Runner */}
             <section className="la-section">

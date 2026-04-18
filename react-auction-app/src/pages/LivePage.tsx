@@ -332,19 +332,8 @@ export default function LivePage() {
     syncBid,
   ]);
 
-  // Fallback: if no current player is available, use first loaded player
-  useEffect(() => {
-    if (currentPlayer || auctionStore.currentPlayer || syncPlayerState) return;
-    if (auctionStore.originalPlayers.length === 0) return;
-
-    syncPlayer(auctionStore.originalPlayers[0]);
-  }, [
-    currentPlayer,
-    auctionStore.currentPlayer,
-    syncPlayerState,
-    auctionStore.originalPlayers,
-    syncPlayer,
-  ]);
+  // Fallback removed — don't auto-pick a player. Wait for N press or sync.
+  // (Previously auto-selected originalPlayers[0] which showed player details before auction starts)
 
   // Listen for sold/unsold events to trigger animation with player details
   useEffect(() => {
@@ -783,6 +772,77 @@ export default function LivePage() {
           <span className="live-page__live-text">Live</span>
         </div>
       )}
+
+      {/* Waiting Overlay — shown before auction starts (no player selected) */}
+      <AnimatePresence>
+        {!currentPlayer && !playerTransitionActive && broadcastControl?.mode !== 'break' && (
+          <motion.div
+            className="live-page__waiting-overlay"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.6 }}
+          >
+            {/* Animated background shapes */}
+            <div className="live-page__waiting-bg">
+              <div className="live-page__waiting-shape live-page__waiting-shape--1" />
+              <div className="live-page__waiting-shape live-page__waiting-shape--2" />
+              <div className="live-page__waiting-shape live-page__waiting-shape--3" />
+            </div>
+
+            <motion.div
+              className="live-page__waiting-content"
+              initial={{ scale: 0.8, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              transition={{ delay: 0.3, type: 'spring', stiffness: 200, damping: 25 }}
+            >
+              {/* Tournament Logo */}
+              {currentTheme.seasonLogo ? (
+                <motion.img
+                  src={currentTheme.seasonLogo}
+                  alt="Tournament"
+                  className="live-page__waiting-logo"
+                  animate={{ scale: [1, 1.05, 1] }}
+                  transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
+                />
+              ) : (
+                <div className="live-page__waiting-logo-fallback">
+                  {currentTheme.name?.split(' ').map(w => w[0]).join('').substring(0, 3) || 'EPL'}
+                </div>
+              )}
+
+              {/* Title */}
+              <h1 className="live-page__waiting-title">
+                {currentTheme.name || 'AUCTION'} <span className="live-page__waiting-title-accent">LIVE</span>
+              </h1>
+              <p className="live-page__waiting-subtitle">Auction will begin shortly</p>
+
+              {/* Pulsing indicator */}
+              <div className="live-page__waiting-pulse">
+                <span className="live-page__waiting-pulse-dot" />
+                <span>STANDBY</span>
+              </div>
+
+              {/* Sponsor logos */}
+              {liveSponsors.filter(s => s.active !== false && s.logoUrl).length > 0 && (
+                <div className="live-page__waiting-sponsors">
+                  {liveSponsors.filter(s => s.active !== false && s.isTitleSponsor && s.logoUrl).map(s => (
+                    <img key={s.id} src={s.logoUrl} alt={s.name} className="live-page__waiting-sponsor-logo live-page__waiting-sponsor-logo--title" />
+                  ))}
+                  {liveSponsors.filter(s => s.active !== false && !s.isTitleSponsor && s.logoUrl).slice(0, 6).map(s => (
+                    <img key={s.id} src={s.logoUrl} alt={s.name} className="live-page__waiting-sponsor-logo" />
+                  ))}
+                </div>
+              )}
+            </motion.div>
+
+            <div className="live-page__waiting-footer">
+              Press <kbd>N</kbd> to start auction
+              <span style={{ marginLeft: '1.5rem', opacity: 0.5 }}>powered by <b>NJS Creative Labs</b></span>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Player Overlay */}
       <AnimatePresence mode="wait">

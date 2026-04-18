@@ -396,6 +396,19 @@
   box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
 }
 
+.form-group input.input-error {
+  border-color: #ef4444;
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.15);
+}
+
+.form-error {
+  display: block;
+  margin-top: 0.25rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #ef4444;
+}
+
 .form-row {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -1070,13 +1083,19 @@
   top: 0;
   left: 0;
   right: 0;
-  height: 3px;
+  height: 28px;
   background: rgba(59, 130, 246, 0.15);
   z-index: 1100;
   overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .admin-saving-bar-fill {
+  position: absolute;
+  top: 0;
+  left: 0;
   height: 100%;
   background: linear-gradient(90deg, #3b82f6, #8b5cf6, #3b82f6);
   background-size: 200% 100%;
@@ -1085,15 +1104,14 @@
 }
 
 .admin-saving-bar-text {
-  position: absolute;
-  top: 6px;
-  left: 50%;
-  transform: translateX(-50%);
-  font-size: 0.65rem;
-  font-weight: 600;
-  color: #93c5fd;
-  letter-spacing: 0.1em;
+  position: relative;
+  z-index: 1;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: #e0e7ff;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
+  text-shadow: 0 1px 4px rgba(0,0,0,0.4);
 }
 
 @keyframes admin-saving-shimmer {
@@ -1107,11 +1125,12 @@
   top: 0;
   left: 0;
   right: 0;
-  padding: 0.45rem 1rem;
-  font-size: 0.75rem;
-  font-weight: 600;
+  padding: 0.6rem 1rem;
+  font-size: 0.85rem;
+  font-weight: 700;
   text-align: center;
   z-index: 1100;
+  letter-spacing: 0.03em;
 }
 
 .admin-save-toast--success {

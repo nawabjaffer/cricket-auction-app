@@ -395,6 +395,11 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
   const savePlayerDraft = async () => {
     if (!editingPlayerId || !playerDraft) return;
 
+    // Block save if duplicate ID
+    if (editingPlayers.some(p => p.id === playerDraft.id && p.id !== editingPlayerId)) return;
+    // Block save if ID is empty
+    if (!playerDraft.id.trim()) return;
+
     const updatedPlayers = editingPlayers.map((player) => (
       player.id === editingPlayerId
         ? { ...playerDraft }
@@ -402,12 +407,29 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
     ));
     setEditingPlayers(updatedPlayers);
 
-    // Persist to Firebase and update store
+    // If the ID was changed, update the image sources mapping
+    if (playerDraft.id !== editingPlayerId) {
+      setPlayerImageSources((prev) => {
+        const updated = { ...prev };
+        updated[playerDraft.id] = prev[editingPlayerId] || 'drive';
+        delete updated[editingPlayerId];
+        return updated;
+      });
+    }
+
+    // Persist to Firebase and update store with feedback
+    setIsSaving(true);
     try {
       setPlayers(updatedPlayers);
       await auctionPersistence.saveAdminPlayers(updatedPlayers);
+      setSaveStatus('success');
+      setTimeout(() => setSaveStatus('idle'), 2500);
     } catch (error) {
       console.error('[AdminPanel] Failed to save player draft:', error);
+      setSaveStatus('error');
+      setTimeout(() => setSaveStatus('idle'), 3000);
+    } finally {
+      setIsSaving(false);
     }
     closePlayerEditor();
   };
@@ -1916,7 +1938,15 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
                     <div className="form-row">
                       <div className="form-group">
                         <label>Player ID</label>
-                        <input type="text" value={playerDraft.id} disabled />
+                        <input
+                          type="text"
+                          value={playerDraft.id}
+                          onChange={(e) => setPlayerDraft({ ...playerDraft, id: e.target.value })}
+                          className={editingPlayers.some(p => p.id === playerDraft.id && p.id !== editingPlayerId) ? 'input-error' : ''}
+                        />
+                        {editingPlayers.some(p => p.id === playerDraft.id && p.id !== editingPlayerId) && (
+                          <span className="form-error">Duplicate ID — another player already uses this ID</span>
+                        )}
                       </div>
                       <div className="form-group">
                         <label>Name</label>
@@ -2098,7 +2128,14 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
 
                     <div className="admin-modal-actions">
                       <button className="admin-btn admin-btn-secondary" type="button" onClick={closePlayerEditor}>Cancel</button>
-                      <button className="admin-btn admin-btn-primary" type="button" onClick={savePlayerDraft}>Save Player</button>
+                      <button
+                        className="admin-btn admin-btn-primary"
+                        type="button"
+                        onClick={savePlayerDraft}
+                        disabled={!playerDraft.id.trim() || editingPlayers.some(p => p.id === playerDraft.id && p.id !== editingPlayerId)}
+                      >
+                        Save Player
+                      </button>
                     </div>
                   </div>
                 </div>
