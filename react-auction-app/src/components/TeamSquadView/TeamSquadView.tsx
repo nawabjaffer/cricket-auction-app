@@ -560,6 +560,7 @@ function CaptainImage({
   teamPlayers,
 }: CaptainImageProps) {
   if (captainData?.name) {
+    console.log("captainData:", captainData);
     return (
       <PlayerImage
         imageUrl={captainData.imageUrl}

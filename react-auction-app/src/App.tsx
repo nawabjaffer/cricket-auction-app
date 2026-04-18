@@ -133,10 +133,10 @@ function AuctionApp() {
   const [showBreakOverlay, setShowBreakOverlay] = useState(false);
   const breakDurationSeconds = 120; // 2 minutes default
   
-  // Image polling state
+  // Image loading state
   const [imageLoadingState, setImageLoadingState] = useState<'loading' | 'loaded' | 'error'>('loading');
   const [currentImageAttempt, setCurrentImageAttempt] = useState(0);
-  const imagePollingTimeoutRef = useRef<number | null>(null);
+  const [imgSrc, setImgSrc] = useState<string>('');
   const currentPlayerIdRef = useRef<string | null>(null);
 
   // Initialize theme and audio
@@ -548,7 +548,7 @@ function AuctionApp() {
   const imgRef = useRef<HTMLImageElement>(null);
   
   // Get all possible image URLs for retry
-  const getImageUrlVariants = (player: typeof currentPlayer) => {
+  const getImageUrlVariants = useCallback((player: typeof currentPlayer) => {
     if (!player?.imageUrl) return [];
     
     const fileId = extractDriveFileId(player.imageUrl);
@@ -556,114 +556,22 @@ function AuctionApp() {
     
     // Return all possible Drive URL variants in priority order
     return [
-      `https://drive.google.com/uc?export=view&id=${fileId}`,
-      `https://drive.google.com/thumbnail?id=${fileId}&sz=w800`,
       `https://lh3.googleusercontent.com/d/${fileId}=w800`,
-      `https://drive.google.com/uc?export=download&id=${fileId}`,
+      `https://drive.google.com/thumbnail?id=${fileId}&sz=w800`,
+      `https://drive.google.com/uc?export=view&id=${fileId}`,
       `https://drive.google.com/thumbnail?id=${fileId}&sz=w600`,
     ];
-  };
-  
-  // Test if image URL is accessible
-  const testImageUrl = (url: string): Promise<boolean> => {
-    return new Promise((resolve) => {
-      const testImg = new Image();
-      testImg.onload = () => resolve(true);
-      testImg.onerror = () => resolve(false);
-      testImg.src = url;
-      
-      // Timeout after 5 seconds
-      setTimeout(() => resolve(false), 5000);
-    });
-  };
+  }, []);
 
-  // Reset image state when player changes
+  // Reset image state when player changes — also set the first URL to try
   const currentPlayerId = currentPlayer?.id ?? null;
   useEffect(() => {
     if (!currentPlayerId) return;
-    
-    // Reset on player change
     currentPlayerIdRef.current = currentPlayerId;
     setCurrentImageAttempt(0);
     setImageLoadingState('loading');
-    
-    // Clear any existing polling timeout
-    if (imagePollingTimeoutRef.current) {
-      clearTimeout(imagePollingTimeoutRef.current);
-      imagePollingTimeoutRef.current = null;
-    }
-  }, [currentPlayerId]);
-  
-  // Async polling effect - retry loading actual images
-  useEffect(() => {
-    if (!currentPlayer?.id) {
-      return;
-    }
-    
-    // Only run if we're in loading state
-    if (imageLoadingState !== 'loading') {
-      return;
-    }
-    
-    // Start async polling
-    const pollImage = async () => {
-      const urlVariants = getImageUrlVariants(currentPlayer);
-      const maxAttempts = 15; // Try up to 15 times before giving up
-      
-      if (currentImageAttempt >= maxAttempts) {
-        console.warn('[App] Max polling attempts reached for', currentPlayer.name);
-        setImageLoadingState('error');
-        return;
-      }
-      
-      // Calculate which URL variant to try based on attempt
-      const variantIndex = currentImageAttempt % urlVariants.length;
-      const urlToTry = urlVariants[variantIndex];
-      
-      console.log(`[App] Polling attempt ${currentImageAttempt + 1}/${maxAttempts} for ${currentPlayer.name}`);
-      console.log(`[App] Testing URL variant ${variantIndex + 1}/${urlVariants.length}:`, urlToTry.substring(0, 80));
-      
-      const isAccessible = await testImageUrl(urlToTry);
-      
-      // Check if player changed during async operation
-      if (currentPlayerIdRef.current !== currentPlayer.id) {
-        console.log('[App] Player changed during polling, aborting');
-        return;
-      }
-      
-      if (isAccessible) {
-        console.log('[App] ✅ Image accessible! Setting as source');
-        if (imgRef.current) {
-          imgRef.current.src = urlToTry;
-        }
-        setImageLoadingState('loaded');
-      } else {
-        console.log('[App] ❌ Image not accessible, scheduling retry...');
-        setCurrentImageAttempt(prev => prev + 1);
-        
-        // Exponential backoff: 500ms, 1s, 2s, 4s, max 5s
-        const backoffDelay = Math.min(500 * Math.pow(2, Math.floor(currentImageAttempt / urlVariants.length)), 5000);
-        console.log(`[App] Next retry in ${backoffDelay}ms`);
-        
-        imagePollingTimeoutRef.current = setTimeout(() => {
-          pollImage();
-        }, backoffDelay);
-      }
-    };
-    
-    // Start polling if we're in loading state
-    if (imageLoadingState === 'loading') {
-      pollImage();
-    }
-    
-    // Cleanup
-    return () => {
-      if (imagePollingTimeoutRef.current) {
-        clearTimeout(imagePollingTimeoutRef.current);
-        imagePollingTimeoutRef.current = null;
-      }
-    };
-  }, [currentPlayer, currentImageAttempt, imageLoadingState, getImageUrlVariants, testImageUrl]);
+    setImgSrc(transformedImageUrl || '');
+  }, [currentPlayerId, transformedImageUrl]);
 
   // Loading state
   if (isLoading) {
@@ -999,21 +907,18 @@ function AuctionApp() {
                   {/* Actual Image */}
                   <img 
                     ref={imgRef}
-                    src={imageLoadingState === 'error' ? '/placeholder_player.png' : (transformedImageUrl || '/placeholder_player.png')} 
+                    src={imageLoadingState === 'error' ? '/placeholder_player.png' : (imgSrc || '/placeholder_player.png')} 
                     alt={currentPlayer.name}
                     className="placeholder-image"
                     loading="eager"
                     onLoad={(e) => {
                       const loadedUrl = (e.target as HTMLImageElement).src;
                       
-                      // Don't mark as loaded if it's placeholder (means polling failed)
                       if (loadedUrl.includes('placeholder_player.png')) {
-                        console.log('[App] Fallback image loaded for', currentPlayer.name);
                         onImageLoad();
                         return;
                       }
                       
-                      console.log('[App] ✅ Actual image loaded successfully for', currentPlayer.name);
                       imageCacheService.markAsLoaded(loadedUrl);
                       setImageLoadingState('loaded');
                       onImageLoad();
@@ -1022,15 +927,23 @@ function AuctionApp() {
                       const img = e.target as HTMLImageElement;
                       const failedUrl = img.src;
                       
-                      // If the async-selected URL failed, continue polling
-                      if (imageLoadingState === 'loaded' && !failedUrl.includes('placeholder')) {
-                        console.warn('[App] Image that passed polling test failed to load:', failedUrl.substring(0, 80));
-                        console.warn('[App] Resuming polling...');
-                        setImageLoadingState('loading');
-                        setCurrentImageAttempt(prev => prev + 1);
-                      }
+                      if (failedUrl.includes('placeholder_player.png')) return;
                       
                       imageCacheService.markAsFailed(failedUrl);
+                      
+                      // Cycle to next URL variant directly — no pre-testing
+                      const urlVariants = getImageUrlVariants(currentPlayer);
+                      const nextAttempt = currentImageAttempt + 1;
+                      const maxAttempts = Math.max(urlVariants.length * 2, 8);
+                      
+                      if (nextAttempt >= maxAttempts || urlVariants.length === 0) {
+                        setImageLoadingState('error');
+                        return;
+                      }
+                      
+                      const nextUrl = urlVariants[nextAttempt % urlVariants.length];
+                      setCurrentImageAttempt(nextAttempt);
+                      setImgSrc(nextUrl);
                     }}
                   />
                 </>

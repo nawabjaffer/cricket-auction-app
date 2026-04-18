@@ -112,11 +112,17 @@ export const PlayerImage: React.FC<PlayerImageProps> = ({
     };
   }, [currentUrl]);
 
-  if (!currentUrl || !resolvedSrc) return null;
+  if (!currentUrl) return null;
+
+  // For data/blob URLs, use them directly without waiting for the async cache effect cycle
+  const effectiveSrc = resolvedSrc ||
+    (currentUrl.startsWith('data:') || currentUrl.startsWith('blob:') ? currentUrl : '');
+
+  if (!effectiveSrc) return null;
 
   return (
     <img
-      src={resolvedSrc}
+      src={effectiveSrc}
       alt={playerName}
       className={className}
       onError={handleError}
