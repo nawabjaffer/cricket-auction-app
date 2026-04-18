@@ -819,6 +819,16 @@ function AuctionApp() {
                 transition={{ type: 'spring', damping: 25, stiffness: 300 }}
               >
                 <div className="team-bid-card">
+                  {/* Blurred team logo background */}
+                  {selectedTeam.logoUrl && (
+                    <img
+                      src={selectedTeam.logoUrl}
+                      alt=""
+                      className="team-bid-bg-logo"
+                      aria-hidden="true"
+                      onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                    />
+                  )}
                   <div className="team-bid-header-row">
                     {selectedTeam.logoUrl && (
                       <img

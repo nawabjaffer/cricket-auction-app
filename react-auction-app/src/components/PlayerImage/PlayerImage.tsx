@@ -120,13 +120,16 @@ export const PlayerImage: React.FC<PlayerImageProps> = ({
 
   if (!effectiveSrc) return null;
 
+  // For data/blob URLs, always load eagerly since they don't need network fetch
+  const isInlineUrl = currentUrl.startsWith('data:') || currentUrl.startsWith('blob:');
+
   return (
     <img
       src={effectiveSrc}
       alt={playerName}
       className={className}
       onError={handleError}
-      loading="lazy"
+      loading={isInlineUrl ? 'eager' : 'lazy'}
     />
   );
 };

@@ -113,22 +113,32 @@ export default function LiveAdminPage() {
     };
     await realtimeSync.setBroadcastControl(control);
     setLastSyncTime(Date.now());
-  }, [selectedTransition, selectedLayout]);
+  }, [selectedTransition, selectedLayout, sponsorDisplayDuration]);
 
-  // Mode change handler
+  // Mode change handler — break mode now requires explicit push
   const handleModeChange = useCallback((mode: BroadcastMode) => {
-    setCurrentMode(mode);
     if (mode === 'break') {
+      // Just preview break — don't push to live yet
+      setCurrentMode('break');
       setBreakTimeLeft(breakDuration);
-      setBreakRunning(true);
-      syncControl(mode, { breakDuration, breakStartedAt: Date.now() });
-    } else if (mode === 'ad' && activeSponsorId) {
+      setBreakRunning(false);
+      return;
+    }
+    setCurrentMode(mode);
+    setBreakRunning(false);
+    if (mode === 'ad' && activeSponsorId) {
       syncControl(mode, { activeSponsorId });
     } else {
-      setBreakRunning(false);
       syncControl(mode);
     }
   }, [breakDuration, activeSponsorId, syncControl]);
+
+  // Push break to live — actually syncs to Firebase and starts the timer
+  const pushBreakToLive = useCallback(() => {
+    setBreakTimeLeft(breakDuration);
+    setBreakRunning(true);
+    syncControl('break', { breakDuration, breakStartedAt: Date.now(), sponsorDisplayDuration });
+  }, [breakDuration, sponsorDisplayDuration, syncControl]);
 
   // Break timer countdown
   useEffect(() => {
@@ -377,7 +387,7 @@ export default function LiveAdminPage() {
               </div>
             </section>
 
-            {/* Break Timer Control */}
+            {/* Break Timer Control with Preview */}
             <AnimatePresence>
               {currentMode === 'break' && (
                 <motion.section
@@ -389,6 +399,29 @@ export default function LiveAdminPage() {
                   <h2 className="la-section-title">
                     <IoTime size={18} /> Break Timer
                   </h2>
+
+                  {/* Break Preview Frame */}
+                  <div className="la-break-preview">
+                    <div className="la-break-preview-frame">
+                      <div className="la-break-preview-bg">
+                        <div className="la-break-preview-timer">{formatTime(breakTimeLeft)}</div>
+                        <div className="la-break-preview-label">
+                          {breakRunning ? 'BREAK IN PROGRESS — LIVE' : 'BREAK PREVIEW'}
+                        </div>
+                        {sponsors.filter(s => s.active !== false && s.logoUrl).length > 0 && (
+                          <div className="la-break-preview-sponsors">
+                            {sponsors.filter(s => s.active !== false && s.logoUrl).slice(0, 4).map(s => (
+                              <img key={s.id} src={s.logoUrl} alt={s.name} className="la-break-preview-sponsor-logo" />
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                      <div className={`la-break-preview-status ${breakRunning ? 'live' : 'preview'}`}>
+                        {breakRunning ? '● LIVE' : '○ PREVIEW'}
+                      </div>
+                    </div>
+                  </div>
+
                   <div className="la-timer-panel">
                     <div className="la-timer-display">{formatTime(breakTimeLeft)}</div>
                     <div className="la-timer-controls">
@@ -415,22 +448,33 @@ export default function LiveAdminPage() {
                         />
                       </label>
                       <div className="la-timer-buttons">
-                        <button
-                          className="la-btn la-btn-success"
-                          onClick={() => {
-                            setBreakTimeLeft(breakDuration);
-                            setBreakRunning(true);
-                            syncControl('break', { breakDuration, breakStartedAt: Date.now() });
-                          }}
-                        >
-                          <IoRefresh size={16} /> Reset & Start
-                        </button>
-                        <button
-                          className="la-btn la-btn-danger"
-                          onClick={() => { setBreakRunning(false); handleModeChange('auction'); }}
-                        >
-                          <IoStop size={16} /> End Break
-                        </button>
+                        {!breakRunning ? (
+                          <button
+                            className="la-btn la-btn-success la-btn-push-live"
+                            onClick={pushBreakToLive}
+                          >
+                            <IoPlay size={16} /> Push to Live
+                          </button>
+                        ) : (
+                          <>
+                            <button
+                              className="la-btn la-btn-success"
+                              onClick={() => {
+                                setBreakTimeLeft(breakDuration);
+                                setBreakRunning(true);
+                                syncControl('break', { breakDuration, breakStartedAt: Date.now(), sponsorDisplayDuration });
+                              }}
+                            >
+                              <IoRefresh size={16} /> Reset & Restart
+                            </button>
+                            <button
+                              className="la-btn la-btn-danger"
+                              onClick={() => { setBreakRunning(false); handleModeChange('auction'); }}
+                            >
+                              <IoStop size={16} /> End Break
+                            </button>
+                          </>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -483,7 +527,7 @@ export default function LiveAdminPage() {
               <div className="la-quick-actions">
                 <button className="la-btn" onClick={() => handleModeChange('auction')}><IoPlay size={16} /> Resume Auction</button>
                 <button className="la-btn" onClick={() => handleModeChange('standings')}><IoTrophy size={16} /> Show Standings</button>
-                <button className="la-btn" onClick={() => { setBreakDuration(120); handleModeChange('break'); }}><IoPause size={16} /> Quick Break (2 min)</button>
+                <button className="la-btn" onClick={() => { setBreakDuration(120); handleModeChange('break'); }}><IoPause size={16} /> Preview Break (2 min)</button>
               </div>
             </section>
 

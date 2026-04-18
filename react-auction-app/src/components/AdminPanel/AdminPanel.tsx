@@ -855,6 +855,40 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
 
   const panelContent = (
     <div className={`admin-panel ${mode === 'page' ? 'admin-panel--page' : ''}`}>
+      {/* Global saving progress bar */}
+      <AnimatePresence>
+        {(isSaving || isSavingSponsors) && (
+          <motion.div
+            className="admin-saving-bar"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+          >
+            <motion.div
+              className="admin-saving-bar-fill"
+              initial={{ width: '0%' }}
+              animate={{ width: '90%' }}
+              transition={{ duration: 3, ease: 'easeOut' }}
+            />
+            <span className="admin-saving-bar-text">Saving...</span>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Save status toast */}
+      <AnimatePresence>
+        {saveStatus !== 'idle' && !isSaving && !isSavingSponsors && (
+          <motion.div
+            className={`admin-save-toast admin-save-toast--${saveStatus}`}
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+          >
+            {saveStatus === 'success' ? '✓ Saved successfully' : '✗ Save failed — please retry'}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Header */}
       <div className="admin-header">
         <h2>Admin Panel</h2>

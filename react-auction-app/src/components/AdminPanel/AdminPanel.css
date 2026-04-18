@@ -1064,6 +1064,66 @@
   box-shadow: 0 4px 20px rgba(0,0,0,0.3);
 }
 
+/* Global saving progress bar */
+.admin-saving-bar {
+  position: sticky;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: rgba(59, 130, 246, 0.15);
+  z-index: 1100;
+  overflow: hidden;
+}
+
+.admin-saving-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #3b82f6, #8b5cf6, #3b82f6);
+  background-size: 200% 100%;
+  animation: admin-saving-shimmer 1.2s ease-in-out infinite;
+  border-radius: 0 2px 2px 0;
+}
+
+.admin-saving-bar-text {
+  position: absolute;
+  top: 6px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 0.65rem;
+  font-weight: 600;
+  color: #93c5fd;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+@keyframes admin-saving-shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+/* Save status toast */
+.admin-save-toast {
+  position: sticky;
+  top: 0;
+  left: 0;
+  right: 0;
+  padding: 0.45rem 1rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-align: center;
+  z-index: 1100;
+}
+
+.admin-save-toast--success {
+  background: #065f46;
+  color: #6ee7b7;
+}
+
+.admin-save-toast--error {
+  background: #7f1d1d;
+  color: #fca5a5;
+}
+
 .admin-upload-toast--success {
   background: #065f46;
   color: #6ee7b7;

@@ -82,7 +82,7 @@ export default function LivePage() {
   const [_isStarted, setIsStarted] = useState(false);
   const [showHeader, setShowHeader] = useState(false);
   const [showCarousel, setShowCarousel] = useState(false);
-  const [showDebug, setShowDebug] = useState(true);
+  const [showDebug, setShowDebug] = useState(false);
   const [showConnectToTeamModal, setShowConnectToTeamModal] = useState(false);
   const [showConnectionStatus, setShowConnectionStatus] = useState(true);
   const [bidMultiplier, setBidMultiplier] = useState(1);
@@ -1098,7 +1098,15 @@ export default function LivePage() {
       {/* Break Overlay controlled by /live-admin */}
       <BreakOverlay
         isVisible={broadcastControl?.mode === 'break'}
-        durationSeconds={broadcastControl?.breakDuration || 120}
+        durationSeconds={(() => {
+          const total = broadcastControl?.breakDuration || 120;
+          const startedAt = broadcastControl?.breakStartedAt;
+          if (startedAt) {
+            const elapsed = Math.floor((Date.now() - startedAt) / 1000);
+            return Math.max(total - elapsed, 1);
+          }
+          return total;
+        })()}
         sponsorDisplayDuration={broadcastControl?.sponsorDisplayDuration || 15}
         sponsors={liveSponsors}
         organizerLogo={currentTheme.seasonLogo}
