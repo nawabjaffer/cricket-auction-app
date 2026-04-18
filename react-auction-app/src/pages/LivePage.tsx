@@ -1101,12 +1101,14 @@ export default function LivePage() {
         durationSeconds={(() => {
           const total = broadcastControl?.breakDuration || 120;
           const startedAt = broadcastControl?.breakStartedAt;
-          if (startedAt) {
-            const elapsed = Math.floor((Date.now() - startedAt) / 1000);
+          if (startedAt && broadcastControl?.lastUpdate) {
+            // Use lastUpdate to ensure recalc when Firebase pushes new value
+            const elapsed = Math.floor((broadcastControl.lastUpdate - startedAt) / 1000);
             return Math.max(total - elapsed, 1);
           }
           return total;
         })()}
+        key={broadcastControl?.breakStartedAt || 'break'}
         sponsorDisplayDuration={broadcastControl?.sponsorDisplayDuration || 15}
         sponsors={liveSponsors}
         organizerLogo={currentTheme.seasonLogo}

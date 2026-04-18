@@ -23,13 +23,16 @@ import {
 } from '../services/realtimeSync';
 import { auctionPersistence, type SponsorRecord } from '../services/auctionPersistence';
 import { useAdminAuth } from '../hooks/useAdminAuth';
+import { useTheme } from '../hooks/useTheme';
 import { AdminLogin } from '../components/AdminLogin';
+import { BreakOverlay } from '../components/Overlays/BreakOverlay';
 import './LiveAdminPage.css';
 
 type AdminTab = 'control' | 'cameras' | 'preview';
 
 export default function LiveAdminPage() {
   const { isAuthenticated } = useAdminAuth();
+  const { currentTheme } = useTheme();
   const [activeTab, setActiveTab] = useState<AdminTab>('control');
 
   // Broadcast control state
@@ -76,6 +79,21 @@ export default function LiveAdminPage() {
     });
     return unsub;
   }, []);
+
+  // Subscribe to broadcast control from Firebase — keeps admin in sync with /live
+  useEffect(() => {
+    const unsub = realtimeSync.subscribeBroadcastControl((control) => {
+      if (!control) return;
+      // If /live ended the break (timer expired), sync back to admin
+      if (control.mode !== currentMode) {
+        setCurrentMode(control.mode);
+        if (control.mode !== 'break') {
+          setBreakRunning(false);
+        }
+      }
+    });
+    return unsub;
+  }, [currentMode]);
 
   // Load existing camera config from Firebase
   useEffect(() => {
@@ -387,7 +405,7 @@ export default function LiveAdminPage() {
               </div>
             </section>
 
-            {/* Break Timer Control with Preview */}
+            {/* Break Timer Control with Live BreakOverlay Preview */}
             <AnimatePresence>
               {currentMode === 'break' && (
                 <motion.section
@@ -400,25 +418,24 @@ export default function LiveAdminPage() {
                     <IoTime size={18} /> Break Timer
                   </h2>
 
-                  {/* Break Preview Frame */}
-                  <div className="la-break-preview">
-                    <div className="la-break-preview-frame">
-                      <div className="la-break-preview-bg">
-                        <div className="la-break-preview-timer">{formatTime(breakTimeLeft)}</div>
-                        <div className="la-break-preview-label">
-                          {breakRunning ? 'BREAK IN PROGRESS — LIVE' : 'BREAK PREVIEW'}
-                        </div>
-                        {sponsors.filter(s => s.active !== false && s.logoUrl).length > 0 && (
-                          <div className="la-break-preview-sponsors">
-                            {sponsors.filter(s => s.active !== false && s.logoUrl).slice(0, 4).map(s => (
-                              <img key={s.id} src={s.logoUrl} alt={s.name} className="la-break-preview-sponsor-logo" />
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                      <div className={`la-break-preview-status ${breakRunning ? 'live' : 'preview'}`}>
-                        {breakRunning ? '● LIVE' : '○ PREVIEW'}
-                      </div>
+                  {/* Actual BreakOverlay preview — scaled inside a frame */}
+                  <div className="la-break-live-preview">
+                    <div className={`la-break-live-preview-status ${breakRunning ? 'live' : 'preview'}`}>
+                      {breakRunning ? '● LIVE ON AIR' : '○ PREVIEW — NOT LIVE YET'}
+                    </div>
+                    <div className="la-break-live-preview-frame">
+                      <BreakOverlay
+                        isVisible={true}
+                        durationSeconds={breakTimeLeft}
+                        sponsorDisplayDuration={sponsorDisplayDuration}
+                        sponsors={sponsors}
+                        organizerLogo={currentTheme.seasonLogo}
+                        auctionTitle={currentTheme.name ? `${currentTheme.name} AUCTION` : undefined}
+                        onClose={() => {
+                          setBreakRunning(false);
+                          handleModeChange('auction');
+                        }}
+                      />
                     </div>
                   </div>
 
