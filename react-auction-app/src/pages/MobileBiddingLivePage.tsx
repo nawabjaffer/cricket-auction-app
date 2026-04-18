@@ -8,7 +8,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { GiCricketBat } from 'react-icons/gi';
-import { IoWifi, IoWifiOutline, IoSwapVertical, IoRefresh, IoPeople, IoChevronDown } from 'react-icons/io5';
+import { IoWifi, IoWifiOutline, IoSwapVertical, IoRefresh, IoPeople, IoChevronDown, IoSearch, IoClose } from 'react-icons/io5';
 import { authService } from '../services';
 import type { AuthSession } from '../services';
 import { auctionPersistence, type SponsorRecord } from '../services/auctionPersistence';
@@ -18,6 +18,8 @@ import { useMotionSensor } from '../hooks/useMotionSensor';
 import { TeamLogo } from '../components/TeamLogo/TeamLogo';
 import { PlayerImage } from '../components/PlayerImage/PlayerImage';
 import { getRoleBasedStats, getRoleLabel, getRoleBadgeClass } from '../utils/playerStats';
+import { parseRoleDetails, getRoleBadgeColor } from '../utils/roleFormatter';
+import type { Player } from '../types';
 import '../components/MobileBidding/MobileBidding.css';
 
 interface BidFeedback {
@@ -27,6 +29,13 @@ interface BidFeedback {
 }
 
 type LoginScreen = 'access' | 'scout';
+type MainTab = 'live' | 'myteam' | 'players';
+type StatsView = 'batting' | 'bowling';
+
+interface ExpandedPlayerStats {
+  player: Player;
+  statsView: StatsView;
+}
 
 export function MobileBiddingLivePage() {
   const [session, setSession] = useState<AuthSession | null>(authService.getSession());
@@ -81,6 +90,15 @@ export function MobileBiddingLivePage() {
   const [winCelebrationData, setWinCelebrationData] = useState<{ player: string; amount: number } | null>(null);
   const lastCelebrationKeyRef = useRef<string | null>(null);
 
+  // New tab & data states
+  const [activeTab, setActiveTab] = useState<MainTab>('live');
+  const [allPlayers, setAllPlayers] = useState<Player[]>([]);
+  const [soldRecords, setSoldRecords] = useState<{ id: string; teamName: string; soldAmount: number }[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [roleFilter, setRoleFilter] = useState<string>('all');
+  const [expandedPlayer, setExpandedPlayer] = useState<ExpandedPlayerStats | null>(null);
+  const [playersLoaded, setPlayersLoaded] = useState(false);
+
   useEffect(() => {
     if (runtimeCredentials.length > 0) {
       authService.setTeamCredentials(runtimeCredentials);
@@ -110,6 +128,30 @@ export function MobileBiddingLivePage() {
     loadSponsors();
     return () => { isMounted = false; };
   }, []);
+
+  // Load all players & sold records for My Team / Players tabs
+  useEffect(() => {
+    if (!session || playersLoaded) return;
+    let isMounted = true;
+    const loadAllData = async () => {
+      try {
+        await realtimeSync.ensureInitialized();
+        const db = realtimeSync.getDatabase();
+        if (!db) return;
+        auctionPersistence.initialize(db);
+        const [players, sold] = await Promise.all([
+          auctionPersistence.getAdminPlayers(),
+          auctionPersistence.getSoldPlayers(),
+        ]);
+        if (!isMounted) return;
+        if (players) setAllPlayers(players);
+        if (sold) setSoldRecords(sold.map(s => ({ id: s.id, teamName: s.teamName, soldAmount: s.soldAmount })));
+        setPlayersLoaded(true);
+      } catch { /* silently fallback */ }
+    };
+    loadAllData();
+    return () => { isMounted = false; };
+  }, [session, playersLoaded]);
 
   // Auto-reconnect with exponential backoff
   useEffect(() => {
@@ -272,6 +314,108 @@ export function MobileBiddingLivePage() {
     if (!currentPlayer) return [];
     return getRoleBasedStats(currentPlayer, mobileBiddingConfig.maxStatsToShow);
   }, [currentPlayer, mobileBiddingConfig.maxStatsToShow]);
+
+  // My team's acquired squad
+  const mySquad = useMemo(() => {
+    if (!session || allPlayers.length === 0) return [];
+    return soldRecords
+      .filter(s => s.teamName === session.teamName)
+      .map(s => {
+        const player = allPlayers.find(p => p.id === s.id);
+        return player ? { ...player, soldAmount: s.soldAmount } : null;
+      })
+      .filter(Boolean) as (Player & { soldAmount: number })[];
+  }, [session, allPlayers, soldRecords]);
+
+  const spentAmount = useMemo(() => mySquad.reduce((sum, p) => sum + p.soldAmount, 0), [mySquad]);
+
+  // Filtered player list for search
+  const filteredPlayers = useMemo(() => {
+    if (allPlayers.length === 0) return [];
+    let filtered = allPlayers;
+    if (roleFilter !== 'all') {
+      filtered = filtered.filter(p => (p.role || '').toLowerCase().includes(roleFilter.toLowerCase()));
+    }
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      filtered = filtered.filter(p =>
+        p.name.toLowerCase().includes(q) || p.id.toLowerCase().includes(q)
+      );
+    }
+    return filtered;
+  }, [allPlayers, searchQuery, roleFilter]);
+
+  // Unique roles for filter
+  const availableRoles = useMemo(() => {
+    const roles = new Set(allPlayers.map(p => getRoleLabel(p.role)));
+    return ['all', ...Array.from(roles)];
+  }, [allPlayers]);
+
+  // Render full batting + bowling stats panel for a player
+  const renderFullStatsPanel = (player: Player, statsView: StatsView, setView: (v: StatsView) => void) => {
+    const bs = player.battingStats;
+    const bw = player.bowlingStats;
+
+    return (
+      <div className="cb-stats-panel">
+        <div className="cb-stats-toggle">
+          <button className={`cb-stats-toggle-btn ${statsView === 'batting' ? 'active' : ''}`} onClick={() => setView('batting')}>
+            Batting
+          </button>
+          <button className={`cb-stats-toggle-btn ${statsView === 'bowling' ? 'active' : ''}`} onClick={() => setView('bowling')}>
+            Bowling
+          </button>
+        </div>
+
+        {statsView === 'batting' ? (
+          <div className="cb-stats-table">
+            {[
+              ['Matches', bs?.matches || player.matches || '--'],
+              ['Innings', bs?.innings || '--'],
+              ['Not Out', bs?.notOut || '--'],
+              ['Runs', bs?.runs || player.runs || '--'],
+              ['Highest Score', bs?.highestScore || '--'],
+              ['Average', bs?.average || '--'],
+              ['Strike Rate', bs?.strikeRate || '--'],
+              ['30s', bs?.thirties || '--'],
+              ['50s', bs?.fifties || '--'],
+              ['100s', bs?.hundreds || '--'],
+              ['4s', bs?.fours || '--'],
+              ['6s', bs?.sixes || '--'],
+              ['Best', player.battingBestFigures || '--'],
+            ].map(([label, value]) => (
+              <div key={label} className="cb-stats-row">
+                <span className="cb-stats-row-label">{label}</span>
+                <span className="cb-stats-row-value">{value}</span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="cb-stats-table">
+            {[
+              ['Matches', bw?.matches || player.matches || '--'],
+              ['Innings', bw?.innings || '--'],
+              ['Overs', bw?.overs || '--'],
+              ['Maidens', bw?.maidens || '--'],
+              ['Runs', bw?.runs || '--'],
+              ['Wickets', bw?.wickets || player.wickets || '--'],
+              ['Best Bowling', bw?.bestBowling || player.bowlingBestFigures || '--'],
+              ['3W Hauls', bw?.threeWickets || '--'],
+              ['5W Hauls', bw?.fiveWickets || '--'],
+              ['Economy', bw?.economy || '--'],
+              ['Strike Rate', bw?.strikeRate || '--'],
+              ['Average', bw?.average || '--'],
+            ].map(([label, value]) => (
+              <div key={label} className="cb-stats-row">
+                <span className="cb-stats-row-label">{label}</span>
+                <span className="cb-stats-row-value">{value}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  };
 
   // ═══════════════ LOGIN SCREEN ═══════════════
   if (!session) {
@@ -525,160 +669,414 @@ export function MobileBiddingLivePage() {
         )}
       </AnimatePresence>
 
-      {/* ── Content area ── */}
-      <div className="cb-content">
-        {/* Team budget bar */}
-        {myTeam && (
-          <div className="cb-budget-strip">
-            <div className="cb-budget-item">
-              <span>Budget</span>
-              <strong>{formatLakhs(myTeam.remainingPurse)}</strong>
-            </div>
-            <div className="cb-budget-divider" />
-            <div className="cb-budget-item">
-              <span>Players</span>
-              <strong>{myTeam.playersBought || 0}/{myTeam.totalPlayerThreshold || 25}</strong>
-            </div>
-            <div className="cb-budget-divider" />
-            <div className="cb-budget-item">
-              <span>Max Bid</span>
-              <strong>{formatLakhs(maxAffordableBid)}</strong>
-            </div>
-          </div>
-        )}
-
-        {/* Player card */}
-        {currentPlayer ? (
-          <motion.div
-            className="cb-player-card"
-            key={currentPlayer.id}
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.3 }}
+      {/* ── Tab Navigation ── */}
+      <nav className="cb-tab-nav">
+        {(['live', 'myteam', 'players'] as MainTab[]).map((tab) => (
+          <button
+            key={tab}
+            className={`cb-tab-item ${activeTab === tab ? 'active' : ''}`}
+            onClick={() => setActiveTab(tab)}
           >
-            {/* Player image + basic info */}
-            <div className="cb-player-top">
-              <div className="cb-player-image-wrap">
-                <PlayerImage
-                  imageUrl={currentPlayer.imageUrl || ''}
-                  playerName={currentPlayer.name}
-                  size="lg"
-                  className="cb-player-img"
-                />
+            {tab === 'live' ? '🔴 Live' : tab === 'myteam' ? '🏏 My Team' : '🔍 Players'}
+            {tab === 'live' && currentPlayer && <span className="cb-tab-dot" />}
+          </button>
+        ))}
+      </nav>
+
+      {/* ═══════════════ LIVE TAB ═══════════════ */}
+      {activeTab === 'live' && (
+        <>
+          {/* ── Content area ── */}
+          <div className="cb-content">
+            {/* Team budget bar */}
+            {myTeam && (
+              <div className="cb-budget-strip">
+                <div className="cb-budget-item">
+                  <span>Budget</span>
+                  <strong>{formatLakhs(myTeam.remainingPurse)}</strong>
+                </div>
+                <div className="cb-budget-divider" />
+                <div className="cb-budget-item">
+                  <span>Players</span>
+                  <strong>{myTeam.playersBought || 0}/{myTeam.totalPlayerThreshold || 25}</strong>
+                </div>
+                <div className="cb-budget-divider" />
+                <div className="cb-budget-item">
+                  <span>Max Bid</span>
+                  <strong>{formatLakhs(maxAffordableBid)}</strong>
+                </div>
               </div>
-              <div className="cb-player-info">
-                <h2 className="cb-player-name">{currentPlayer.name}</h2>
-                <span className={`cb-role-badge ${getRoleBadgeClass(currentPlayer.role)}`}>
-                  {getRoleLabel(currentPlayer.role)}
-                </span>
-                <div className="cb-price-row">
-                  <div className="cb-price-item">
-                    <span>Base</span>
-                    <strong>{formatLakhs(currentPlayer.basePrice)}</strong>
+            )}
+
+            {/* Player card */}
+            {currentPlayer ? (
+              <motion.div
+                className="cb-player-card"
+                key={currentPlayer.id}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.3 }}
+              >
+                {/* Player image + basic info */}
+                <div className="cb-player-top">
+                  <div className="cb-player-image-wrap">
+                    <PlayerImage
+                      imageUrl={currentPlayer.imageUrl || ''}
+                      playerName={currentPlayer.name}
+                      size="lg"
+                      className="cb-player-img"
+                    />
                   </div>
-                  {currentPlayer.age && (
-                    <div className="cb-price-item">
-                      <span>Age</span>
-                      <strong>{currentPlayer.age}</strong>
+                  <div className="cb-player-info">
+                    <h2 className="cb-player-name">{currentPlayer.name}</h2>
+                    <span className={`cb-role-badge ${getRoleBadgeClass(currentPlayer.role)}`}>
+                      {getRoleLabel(currentPlayer.role)}
+                    </span>
+                    <div className="cb-price-row">
+                      <div className="cb-price-item">
+                        <span>Base</span>
+                        <strong>{formatLakhs(currentPlayer.basePrice)}</strong>
+                      </div>
+                      {currentPlayer.age && (
+                        <div className="cb-price-item">
+                          <span>Age</span>
+                          <strong>{currentPlayer.age}</strong>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Role-based stats grid */}
+                <div className="cb-stats-grid">
+                  {playerStats.map((stat) => (
+                    <div key={stat.label} className={`cb-stat-tile ${stat.category}`}>
+                      <span className="cb-stat-label">{stat.label}</span>
+                      <strong className="cb-stat-value">{stat.value || '--'}</strong>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Full stats toggle for current player */}
+                <button
+                  className="cb-view-full-stats"
+                  onClick={() => setExpandedPlayer(expandedPlayer?.player.id === currentPlayer.id ? null : { player: currentPlayer, statsView: 'batting' })}
+                >
+                  {expandedPlayer?.player.id === currentPlayer.id ? 'Hide Full Stats' : 'View Full Stats ▾'}
+                </button>
+                <AnimatePresence>
+                  {expandedPlayer?.player.id === currentPlayer.id && (
+                    <motion.div
+                      className="cb-full-stats-panel"
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: 'auto' }}
+                      exit={{ opacity: 0, height: 0 }}
+                    >
+                      {renderFullStatsPanel(expandedPlayer.player, expandedPlayer.statsView, (v) => setExpandedPlayer({ player: expandedPlayer.player, statsView: v }))}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+
+                {/* Current bid section */}
+                <div className="cb-bid-section">
+                  <div className="cb-current-bid">
+                    <span className="cb-bid-label">Current Bid</span>
+                    <motion.span
+                      className="cb-bid-amount"
+                      key={currentBid}
+                      initial={{ scale: 1.15 }}
+                      animate={{ scale: 1 }}
+                      transition={{ type: 'spring', stiffness: 300 }}
+                    >
+                      {formatLakhs(currentBid)}
+                    </motion.span>
+                  </div>
+                  {selectedTeam && (
+                    <div className={`cb-leading-team ${isMyBid ? 'mine' : ''}`}>
+                      {selectedTeam.logoUrl && <TeamLogo logoUrl={selectedTeam.logoUrl} teamName={selectedTeam.name} size="sm" />}
+                      <span>{selectedTeam.name}</span>
+                      {isMyBid && <span className="cb-my-bid-badge">YOUR BID</span>}
                     </div>
                   )}
                 </div>
+              </motion.div>
+            ) : lastSoldPlayer ? (
+              <motion.div
+                className={`cb-sold-card ${lastSoldPlayer.winnerTeam === session.teamName ? 'won' : 'lost'}`}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+              >
+                {lastSoldPlayer.winnerTeam === session.teamName ? (
+                  <>
+                    <div className="cb-sold-emoji">🎉</div>
+                    <h2>Congratulations!</h2>
+                    <p>You won <strong>{lastSoldPlayer.name}</strong></p>
+                    <div className="cb-sold-amount">{formatLakhs(lastSoldPlayer.amount)}</div>
+                  </>
+                ) : (
+                  <>
+                    <div className="cb-sold-emoji">🎯</div>
+                    <h2>Better Player Ahead</h2>
+                    <p><strong>{lastSoldPlayer.winnerTeam}</strong> won {lastSoldPlayer.name}</p>
+                    <p className="cb-motivation">Stay patient, bid smart, and win the right lot.</p>
+                  </>
+                )}
+                <p className="cb-waiting-hint">Waiting for next player...</p>
+              </motion.div>
+            ) : (
+              <div className="cb-empty-state">
+                <GiCricketBat size={56} color="rgba(255,255,255,0.25)" />
+                <p>Waiting for next player...</p>
+                <p className="cb-empty-hint">The auction master will start the bidding</p>
+              </div>
+            )}
+          </div>
+
+          {/* ── Action Buttons ── */}
+          <div className="cb-actions">
+            {mobileBiddingConfig.enableRaiseBid && (
+              <motion.button
+                className="cb-action-btn raise"
+                onClick={handleRaiseBid}
+                disabled={!currentPlayer || !isConnected}
+                whileTap={{ scale: 0.95 }}
+              >
+                <span className="cb-action-icon">⬆️</span>
+                <span className="cb-action-label">RAISE BID</span>
+                <span className="cb-action-sub">+₹100L</span>
+              </motion.button>
+            )}
+            {mobileBiddingConfig.enableStopBidding && (
+              <motion.button
+                className="cb-action-btn stop"
+                onClick={handleStopBidding}
+                disabled={!currentPlayer || !isMyBid}
+                whileTap={{ scale: 0.95 }}
+              >
+                <span className="cb-action-icon">✋</span>
+                <span className="cb-action-label">STOP</span>
+              </motion.button>
+            )}
+          </div>
+        </>
+      )}
+
+      {/* ═══════════════ MY TEAM TAB ═══════════════ */}
+      {activeTab === 'myteam' && myTeam && (
+        <div className="cb-content cb-team-tab">
+          {/* Team overview card */}
+          <div className="cb-team-overview">
+            <div className="cb-team-overview-header">
+              {myTeam.logoUrl && <TeamLogo logoUrl={myTeam.logoUrl} teamName={myTeam.name} size="md" />}
+              <div className="cb-team-overview-info">
+                <h2>{myTeam.name}</h2>
+                {myTeam.captain && <span className="cb-captain-badge">C: {myTeam.captain}</span>}
               </div>
             </div>
 
-            {/* Role-based stats grid */}
-            <div className="cb-stats-grid">
-              {playerStats.map((stat) => (
-                <div key={stat.label} className={`cb-stat-tile ${stat.category}`}>
-                  <span className="cb-stat-label">{stat.label}</span>
-                  <strong className="cb-stat-value">{stat.value || '--'}</strong>
+            <div className="cb-team-stats-grid">
+              <div className="cb-team-stat">
+                <span className="cb-tstat-value">{formatLakhs(myTeam.remainingPurse)}</span>
+                <span className="cb-tstat-label">Remaining</span>
+              </div>
+              <div className="cb-team-stat">
+                <span className="cb-tstat-value">{formatLakhs(spentAmount)}</span>
+                <span className="cb-tstat-label">Spent</span>
+              </div>
+              <div className="cb-team-stat">
+                <span className="cb-tstat-value">{myTeam.playersBought || 0}</span>
+                <span className="cb-tstat-label">Bought</span>
+              </div>
+              <div className="cb-team-stat">
+                <span className="cb-tstat-value">{(myTeam.totalPlayerThreshold || 25) - (myTeam.playersBought || 0)}</span>
+                <span className="cb-tstat-label">Slots Left</span>
+              </div>
+              <div className="cb-team-stat">
+                <span className="cb-tstat-value">{formatLakhs(maxAffordableBid)}</span>
+                <span className="cb-tstat-label">Max Bid</span>
+              </div>
+              <div className="cb-team-stat">
+                <span className="cb-tstat-value">{formatLakhs(myTeam.highestBid || 0)}</span>
+                <span className="cb-tstat-label">Highest Bid</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Squad roster */}
+          <div className="cb-squad-section">
+            <h3 className="cb-section-title">My Squad ({mySquad.length})</h3>
+            {mySquad.length > 0 ? (
+              <div className="cb-squad-list">
+                {mySquad.map((p) => {
+                  const parsed = parseRoleDetails(p.role);
+                  return (
+                    <motion.div
+                      key={p.id}
+                      className="cb-squad-card"
+                      initial={{ opacity: 0, x: -10 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      onClick={() => setExpandedPlayer(
+                        expandedPlayer?.player.id === p.id ? null : { player: p, statsView: 'batting' }
+                      )}
+                    >
+                      <div className="cb-squad-card-top">
+                        <div className="cb-squad-img-wrap">
+                          <PlayerImage imageUrl={p.imageUrl || ''} playerName={p.name} size="sm" className="cb-squad-img" />
+                        </div>
+                        <div className="cb-squad-info">
+                          <span className="cb-squad-name">{p.name}</span>
+                          <div className="cb-squad-meta">
+                            <span className="cb-squad-role-badge" style={{ background: getRoleBadgeColor(parsed.category) }}>
+                              {parsed.badge} {parsed.coreRole}
+                            </span>
+                            <span className="cb-squad-price">{formatLakhs(p.soldAmount)}</span>
+                          </div>
+                        </div>
+                      </div>
+                      <AnimatePresence>
+                        {expandedPlayer?.player.id === p.id && (
+                          <motion.div
+                            className="cb-full-stats-panel"
+                            initial={{ opacity: 0, height: 0 }}
+                            animate={{ opacity: 1, height: 'auto' }}
+                            exit={{ opacity: 0, height: 0 }}
+                          >
+                            {renderFullStatsPanel(expandedPlayer.player, expandedPlayer.statsView, (v) => setExpandedPlayer({ player: expandedPlayer.player, statsView: v }))}
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                    </motion.div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="cb-squad-empty">
+                <p>No players acquired yet</p>
+                <p className="cb-empty-hint">Players you win will appear here</p>
+              </div>
+            )}
+          </div>
+
+          {/* All teams leaderboard */}
+          <div className="cb-teams-leaderboard">
+            <h3 className="cb-section-title">All Teams</h3>
+            <div className="cb-leaderboard-list">
+              {[...teams].sort((a, b) => (b.playersBought || 0) - (a.playersBought || 0)).map((t) => (
+                <div key={t.id} className={`cb-leaderboard-row ${t.id === myTeam.id ? 'mine' : ''}`}>
+                  <div className="cb-lb-team">
+                    {t.logoUrl && <TeamLogo logoUrl={t.logoUrl} teamName={t.name} size="sm" />}
+                    <span>{t.name}</span>
+                  </div>
+                  <div className="cb-lb-stats">
+                    <span className="cb-lb-players">{t.playersBought || 0} players</span>
+                    <span className="cb-lb-purse">{formatLakhs(t.remainingPurse)}</span>
+                  </div>
                 </div>
               ))}
             </div>
-
-            {/* Current bid section */}
-            <div className="cb-bid-section">
-              <div className="cb-current-bid">
-                <span className="cb-bid-label">Current Bid</span>
-                <motion.span
-                  className="cb-bid-amount"
-                  key={currentBid}
-                  initial={{ scale: 1.15 }}
-                  animate={{ scale: 1 }}
-                  transition={{ type: 'spring', stiffness: 300 }}
-                >
-                  {formatLakhs(currentBid)}
-                </motion.span>
-              </div>
-              {selectedTeam && (
-                <div className={`cb-leading-team ${isMyBid ? 'mine' : ''}`}>
-                  {selectedTeam.logoUrl && <TeamLogo logoUrl={selectedTeam.logoUrl} teamName={selectedTeam.name} size="sm" />}
-                  <span>{selectedTeam.name}</span>
-                  {isMyBid && <span className="cb-my-bid-badge">YOUR BID</span>}
-                </div>
-              )}
-            </div>
-          </motion.div>
-        ) : lastSoldPlayer ? (
-          /* ── Sold / Waiting state ── */
-          <motion.div
-            className={`cb-sold-card ${lastSoldPlayer.winnerTeam === session.teamName ? 'won' : 'lost'}`}
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-          >
-            {lastSoldPlayer.winnerTeam === session.teamName ? (
-              <>
-                <div className="cb-sold-emoji">🎉</div>
-                <h2>Congratulations!</h2>
-                <p>You won <strong>{lastSoldPlayer.name}</strong></p>
-                <div className="cb-sold-amount">{formatLakhs(lastSoldPlayer.amount)}</div>
-              </>
-            ) : (
-              <>
-                <div className="cb-sold-emoji">🎯</div>
-                <h2>Better Player Ahead</h2>
-                <p><strong>{lastSoldPlayer.winnerTeam}</strong> won {lastSoldPlayer.name}</p>
-                <p className="cb-motivation">Stay patient, bid smart, and win the right lot.</p>
-              </>
-            )}
-            <p className="cb-waiting-hint">Waiting for next player...</p>
-          </motion.div>
-        ) : (
-          /* ── No player ── */
-          <div className="cb-empty-state">
-            <GiCricketBat size={56} color="rgba(255,255,255,0.25)" />
-            <p>Waiting for next player...</p>
-            <p className="cb-empty-hint">The auction master will start the bidding</p>
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
-      {/* ── Action Buttons ── */}
-      <div className="cb-actions">
-        {mobileBiddingConfig.enableRaiseBid && (
-          <motion.button
-            className="cb-action-btn raise"
-            onClick={handleRaiseBid}
-            disabled={!currentPlayer || !isConnected}
-            whileTap={{ scale: 0.95 }}
-          >
-            <span className="cb-action-icon">⬆️</span>
-            <span className="cb-action-label">RAISE BID</span>
-            <span className="cb-action-sub">+₹100L</span>
-          </motion.button>
-        )}
-        {mobileBiddingConfig.enableStopBidding && (
-          <motion.button
-            className="cb-action-btn stop"
-            onClick={handleStopBidding}
-            disabled={!currentPlayer || !isMyBid}
-            whileTap={{ scale: 0.95 }}
-          >
-            <span className="cb-action-icon">✋</span>
-            <span className="cb-action-label">STOP</span>
-          </motion.button>
-        )}
-      </div>
+      {/* ═══════════════ PLAYERS TAB ═══════════════ */}
+      {activeTab === 'players' && (
+        <div className="cb-content cb-players-tab">
+          {/* Search bar */}
+          <div className="cb-search-bar">
+            <IoSearch size={18} className="cb-search-icon" />
+            <input
+              type="text"
+              className="cb-search-input"
+              placeholder="Search player name or ID..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+            {searchQuery && (
+              <button className="cb-search-clear" onClick={() => setSearchQuery('')}>
+                <IoClose size={16} />
+              </button>
+            )}
+          </div>
+
+          {/* Role filter chips */}
+          <div className="cb-role-filters">
+            {availableRoles.map((role) => (
+              <button
+                key={role}
+                className={`cb-role-chip ${roleFilter === role ? 'active' : ''}`}
+                onClick={() => setRoleFilter(role)}
+              >
+                {role === 'all' ? 'All' : role}
+              </button>
+            ))}
+          </div>
+
+          <div className="cb-player-count">
+            <span>{filteredPlayers.length} player{filteredPlayers.length !== 1 ? 's' : ''}</span>
+          </div>
+
+          {/* Player list */}
+          {!playersLoaded ? (
+            <div className="cb-loading-state">
+              <span className="cb-spinner" /> Loading players...
+            </div>
+          ) : filteredPlayers.length === 0 ? (
+            <div className="cb-squad-empty">
+              <p>No players found</p>
+              <p className="cb-empty-hint">Try a different search or filter</p>
+            </div>
+          ) : (
+            <div className="cb-players-list">
+              {filteredPlayers.map((p) => {
+                const sold = soldRecords.find(s => s.id === p.id);
+                const parsed = parseRoleDetails(p.role);
+                const isExpanded = expandedPlayer?.player.id === p.id;
+                return (
+                  <motion.div
+                    key={p.id}
+                    className={`cb-player-row ${sold ? 'sold' : 'available'}`}
+                    layout
+                    onClick={() => setExpandedPlayer(isExpanded ? null : { player: p, statsView: 'batting' })}
+                  >
+                    <div className="cb-player-row-top">
+                      <div className="cb-player-row-img-wrap">
+                        <PlayerImage imageUrl={p.imageUrl || ''} playerName={p.name} size="sm" className="cb-player-row-img" />
+                      </div>
+                      <div className="cb-player-row-info">
+                        <span className="cb-player-row-name">{p.name}</span>
+                        <div className="cb-player-row-meta">
+                          <span className="cb-squad-role-badge" style={{ background: getRoleBadgeColor(parsed.category) }}>
+                            {parsed.badge} {parsed.coreRole}
+                          </span>
+                          {parsed.battingHand && <span className="cb-detail-chip">{parsed.battingHand}</span>}
+                          {parsed.bowlingStyle && <span className="cb-detail-chip">{parsed.bowlingStyle}</span>}
+                        </div>
+                      </div>
+                      <div className="cb-player-row-right">
+                        <span className="cb-player-row-base">{formatLakhs(p.basePrice)}</span>
+                        {sold && <span className="cb-player-row-sold-badge">{sold.teamName} — {formatLakhs(sold.soldAmount)}</span>}
+                      </div>
+                    </div>
+                    <AnimatePresence>
+                      {isExpanded && expandedPlayer && (
+                        <motion.div
+                          className="cb-full-stats-panel"
+                          initial={{ opacity: 0, height: 0 }}
+                          animate={{ opacity: 1, height: 'auto' }}
+                          exit={{ opacity: 0, height: 0 }}
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          {renderFullStatsPanel(expandedPlayer.player, expandedPlayer.statsView, (v) => setExpandedPlayer({ player: expandedPlayer.player, statsView: v }))}
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </motion.div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ── Feedback toast ── */}
       <AnimatePresence>
