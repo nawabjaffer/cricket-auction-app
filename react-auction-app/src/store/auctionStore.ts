@@ -59,6 +59,7 @@ interface AuctionStore {
   // Player pools
   availablePlayers: Player[];
   originalPlayers: Player[]; // Track original list for jump-to-player functionality
+  _adminPlayerOverrides: Player[] | null; // Admin-edited players from Firebase
   soldPlayers: SoldPlayer[];
   unsoldPlayers: UnsoldPlayer[];
   
@@ -96,6 +97,7 @@ interface AuctionStore {
   // === Actions ===
   // Data loading
   setPlayers: (players: Player[]) => void;
+  setAdminPlayerOverrides: (overrides: Player[]) => void;
   setTeams: (teams: Team[]) => void;
   setSoldPlayers: (players: SoldPlayer[]) => void;
   setUnsoldPlayers: (players: UnsoldPlayer[]) => void;
@@ -177,6 +179,7 @@ export const useAuctionStore = create<AuctionStore>()(
         // === Initial State ===
         availablePlayers: [],
         originalPlayers: [],
+        _adminPlayerOverrides: null,
         soldPlayers: [],
         unsoldPlayers: [],
         teams: [],
@@ -199,7 +202,28 @@ export const useAuctionStore = create<AuctionStore>()(
 
         // === Data Loading Actions ===
         setPlayers: (players) => {
-          const { soldPlayers, unsoldPlayers, teams, auctionRoleOrder } = get();
+          const { _adminPlayerOverrides, soldPlayers, unsoldPlayers, teams, auctionRoleOrder } = get();
+
+          // Merge admin overrides on top of incoming players (e.g. Google Sheets)
+          // Admin overrides contain the full edited list including manually-added players
+          let mergedPlayers = players;
+          if (_adminPlayerOverrides && _adminPlayerOverrides.length > 0) {
+            const baseMap = new Map(players.map(p => [p.id, p]));
+            const result: Player[] = [];
+            for (const op of _adminPlayerOverrides) {
+              const base = baseMap.get(op.id);
+              // Admin data wins, but fill in images from base if admin has empty
+              const imageUrl = op.imageUrl || base?.imageUrl || '';
+              result.push({ ...op, imageUrl });
+              baseMap.delete(op.id);
+            }
+            // Add any base players not in overrides
+            for (const bp of baseMap.values()) {
+              result.push(bp);
+            }
+            mergedPlayers = result;
+          }
+
           const blockedIds = new Set([
             ...soldPlayers.map(p => p.id),
             ...unsoldPlayers.map(p => p.id),
@@ -209,7 +233,7 @@ export const useAuctionStore = create<AuctionStore>()(
               .map(t => (t.captain || '').trim().toLowerCase())
               .filter(Boolean)
           );
-          const filtered = players.filter(
+          const filtered = mergedPlayers.filter(
             p => !blockedIds.has(p.id) && !captainNames.has(p.name.trim().toLowerCase())
           );
 
@@ -222,7 +246,20 @@ export const useAuctionStore = create<AuctionStore>()(
             return aIdx - bIdx;
           });
 
-          set({ availablePlayers: sorted, originalPlayers: players });
+          set({ availablePlayers: sorted, originalPlayers: mergedPlayers });
+        },
+
+        setAdminPlayerOverrides: (overrides) => {
+          set({ _adminPlayerOverrides: overrides });
+          // Re-apply merge with current base players
+          const { originalPlayers } = get();
+          if (originalPlayers.length > 0) {
+            // Trigger a setPlayers with the current base to re-merge
+            // Use the base players (strip out old admin overrides to get clean base)
+            get().setPlayers(originalPlayers);
+          } else {
+            get().setPlayers(overrides);
+          }
         },
         
         setTeams: (teams) => set({ teams }),
@@ -994,6 +1031,7 @@ export const useAuctionStore = create<AuctionStore>()(
           set({
             availablePlayers: [],
             originalPlayers: [],
+            _adminPlayerOverrides: null,
             soldPlayers: [],
             unsoldPlayers: [],
             currentPlayer: null,

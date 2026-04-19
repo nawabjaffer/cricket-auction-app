@@ -1,138 +1,19 @@
 // ============================================================================
-// USE DATA HOOK - Data Fetching with React Query
-// Handles all data fetching and caching operations
+// USE DATA HOOK - Data Loading (Firebase-first, manual Sheets sync)
+// Automatic Google Sheets fetching is disabled. Use manual import in Admin Panel.
 // ============================================================================
 
-import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
 import { googleSheetsService, imagePreloaderService } from '../services';
 import { auctionPersistence } from '../services/auctionPersistence';
 import { localImageCacheService } from '../services/localImageCache';
 import { realtimeSync } from '../services/realtimeSync';
 import { useAuctionStore } from '../store';
-import type { Player, Team, SoldPlayer, UnsoldPlayer } from '../types';
-
-// Query Keys
-const QUERY_KEYS = {
-  players: ['players'] as const,
-  teams: ['teams'] as const,
-  soldPlayers: ['soldPlayers'] as const,
-  unsoldPlayers: ['unsoldPlayers'] as const,
-};
+import type { Player, Team } from '../types';
 
 /**
- * Fetch teams data
- */
-export function useTeamsQuery() {
-  const setTeams = useAuctionStore((state) => state.setTeams);
-
-  const query = useQuery<Team[]>({
-    queryKey: QUERY_KEYS.teams,
-    queryFn: async () => {
-      // Prefer admin-saved teams from Firebase so renamed teams persist.
-      try {
-        await realtimeSync.ensureInitialized();
-        const db = realtimeSync.getDatabase();
-        if (db) {
-          auctionPersistence.initialize(db);
-          const persistedTeams = await auctionPersistence.getTeams();
-          if (persistedTeams && persistedTeams.length > 0) {
-            return persistedTeams;
-          }
-        }
-      } catch (error) {
-        console.warn('[useTeamsQuery] Could not load persisted teams, falling back to sheets:', error);
-      }
-
-      return googleSheetsService.fetchTeams();
-    },
-    staleTime: 60000, // 1 minute
-    refetchInterval: 60000, // Refetch every minute
-  });
-
-  useEffect(() => {
-    if (query.data) {
-      setTeams(query.data);
-    }
-  }, [query.data, setTeams]);
-
-  return query;
-}
-
-/**
- * Fetch sold players data
- */
-export function useSoldPlayersQuery() {
-  const setSoldPlayers = useAuctionStore((state) => state.setSoldPlayers);
-
-  const query = useQuery<{ ids: string[]; players: SoldPlayer[] }>({
-    queryKey: QUERY_KEYS.soldPlayers,
-    queryFn: () => googleSheetsService.fetchSoldPlayers(),
-    staleTime: 30000, // 30 seconds
-  });
-
-  useEffect(() => {
-    if (query.data) {
-      setSoldPlayers(query.data.players);
-    }
-  }, [query.data, setSoldPlayers]);
-
-  return query;
-}
-
-/**
- * Fetch unsold players data
- */
-export function useUnsoldPlayersQuery() {
-  const setUnsoldPlayers = useAuctionStore((state) => state.setUnsoldPlayers);
-
-  const query = useQuery<{ ids: string[]; players: UnsoldPlayer[] }>({
-    queryKey: QUERY_KEYS.unsoldPlayers,
-    queryFn: () => googleSheetsService.fetchUnsoldPlayers(),
-    staleTime: 30000,
-  });
-
-  useEffect(() => {
-    if (query.data) {
-      setUnsoldPlayers(query.data.players);
-    }
-  }, [query.data, setUnsoldPlayers]);
-
-  return query;
-}
-
-/**
- * Fetch available players data
- */
-export function usePlayersQuery() {
-  const setPlayers = useAuctionStore((state) => state.setPlayers);
-  const soldPlayersQuery = useSoldPlayersQuery();
-  const unsoldPlayersQuery = useUnsoldPlayersQuery();
-
-  const excludeIds = [
-    ...(soldPlayersQuery.data?.ids || []),
-    ...(unsoldPlayersQuery.data?.ids || []),
-  ];
-
-  const query = useQuery<Player[]>({
-    queryKey: [...QUERY_KEYS.players, excludeIds],
-    queryFn: () => googleSheetsService.fetchPlayers(excludeIds),
-    staleTime: 30000,
-    enabled: soldPlayersQuery.isSuccess && unsoldPlayersQuery.isSuccess,
-  });
-
-  useEffect(() => {
-    if (query.data) {
-      setPlayers(query.data);
-    }
-  }, [query.data, setPlayers]);
-
-  return query;
-}
-
-/**
- * Combined hook for all initial data loading with image preloading
- * Waits for BOTH data AND images to be preloaded before marking as ready
+ * Combined hook for initial data loading (Firebase-only, no auto Sheets sync).
+ * Loads admin players + teams from Firebase, then preloads images.
  */
 
 // Module-level flag: once images have been preloaded in this session,
@@ -158,55 +39,85 @@ function markPreloadComplete(): void {
 }
 
 export function useInitialData() {
-  const teamsQuery = useTeamsQuery();
-  const playersQuery = usePlayersQuery();
-  const soldPlayersQuery = useSoldPlayersQuery();
-  const unsoldPlayersQuery = useUnsoldPlayersQuery();
-
-  // Track preload state — initialize from global flag or localStorage cache to skip if already done
+  const [isLoading, setIsLoading] = useState(true);
+  const [isError, setIsError] = useState(false);
+  const [error, setError] = useState<Error | null>(null);
+  const [dataReady, setDataReady] = useState(false);
   const [isPreloadingComplete, setIsPreloadingComplete] = useState(
     _globalPreloadComplete || isPreloadCachedLocally()
   );
 
+  // Load data from Firebase only — no auto Google Sheets fetch
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadFromFirebase = async () => {
+      try {
+        await realtimeSync.ensureInitialized();
+        const db = realtimeSync.getDatabase();
+        if (!db) {
+          console.warn('[useInitialData] Database not ready');
+          if (!cancelled) { setIsLoading(false); setDataReady(true); }
+          return;
+        }
+
+        auctionPersistence.initialize(db);
+
+        // Load teams from Firebase
+        const persistedTeams = await auctionPersistence.getTeams();
+        if (persistedTeams && persistedTeams.length > 0) {
+          useAuctionStore.getState().setTeams(persistedTeams);
+        }
+
+        // Load admin players from Firebase
+        const adminPlayers = await auctionPersistence.getAdminPlayers();
+        if (adminPlayers && adminPlayers.length > 0) {
+          useAuctionStore.getState().setAdminPlayerOverrides(adminPlayers);
+        }
+
+        if (!cancelled) { setDataReady(true); setIsLoading(false); }
+      } catch (err) {
+        console.error('[useInitialData] Failed to load from Firebase:', err);
+        if (!cancelled) {
+          setError(err instanceof Error ? err : new Error(String(err)));
+          setIsError(true);
+          setIsLoading(false);
+          setDataReady(true);
+        }
+      }
+    };
+
+    loadFromFirebase();
+    return () => { cancelled = true; };
+  }, []);
+
   // Collect all player images for preloading
+  const originalPlayers = useAuctionStore((state) => state.originalPlayers);
+  const soldPlayers = useAuctionStore((state) => state.soldPlayers);
+
   const allPlayerImages = useMemo(() => {
     const images = new Set<string>();
-
-    // Available players
-    playersQuery.data?.forEach(player => {
-      if (player.imageUrl) images.add(player.imageUrl);
-    });
-
-    // Sold players
-    soldPlayersQuery.data?.players.forEach(player => {
-      if (player.imageUrl) images.add(player.imageUrl);
-    });
-
-    // Unsold players
-    unsoldPlayersQuery.data?.players.forEach(player => {
-      if (player.imageUrl) images.add(player.imageUrl);
-    });
-
+    originalPlayers.forEach(p => { if (p.imageUrl) images.add(p.imageUrl); });
+    soldPlayers.forEach(p => { if (p.imageUrl) images.add(p.imageUrl); });
     return Array.from(images);
-  }, [playersQuery.data, soldPlayersQuery.data?.players, unsoldPlayersQuery.data?.players]);
+  }, [originalPlayers, soldPlayers]);
 
-  // Trigger image preloading when all data is available
-  // IMPORTANT: This now waits for preload to complete before allowing app to render
+  // Trigger image preloading when data is ready
   useEffect(() => {
-    // Skip if already preloaded globally (e.g. returning from /live) or cached in localStorage
+    if (!dataReady) return;
+
     if (_globalPreloadComplete || isPreloadCachedLocally()) {
       if (!isPreloadingComplete) setIsPreloadingComplete(true);
       return;
     }
 
     if (allPlayerImages.length > 0 && !imagePreloaderService.isCurrentlyPreloading()) {
-      setIsPreloadingComplete(false); // Mark preload as in-progress
+      setIsPreloadingComplete(false);
 
-      // Warm local Cache Storage for supported URLs.
-      localImageCacheService.warmCache(allPlayerImages).catch((error) => {
-        console.warn('[useInitialData] Local image cache warm-up failed:', error);
+      localImageCacheService.warmCache(allPlayerImages).catch((err) => {
+        console.warn('[useInitialData] Local image cache warm-up failed:', err);
       });
-      
+
       console.log('[useInitialData] Starting image preload for', allPlayerImages.length, 'images');
       imagePreloaderService.preloadImages(allPlayerImages, {
         maxConcurrent: 6,
@@ -218,88 +129,59 @@ export function useInitialData() {
             failed: result.failed.length,
             successRate: `${result.successRate.toFixed(1)}%`,
           });
-          // Mark preload as complete - app can now render
           markPreloadComplete();
           setIsPreloadingComplete(true);
         })
-        .catch(error => {
-          console.error('[useInitialData] Image preload error:', error);
-          // Even if preload fails, allow app to render with cached/fallback images
+        .catch(err => {
+          console.error('[useInitialData] Image preload error:', err);
           markPreloadComplete();
           setIsPreloadingComplete(true);
         });
+    } else {
+      // No images to preload
+      if (!isPreloadingComplete) setIsPreloadingComplete(true);
     }
-  }, [allPlayerImages.length]); // Only trigger when count changes
-
-  // Data loading state
-  const isDataLoading = 
-    teamsQuery.isLoading || 
-    playersQuery.isLoading || 
-    soldPlayersQuery.isLoading || 
-    unsoldPlayersQuery.isLoading;
-
-  // Combined loading state: Show loading until BOTH data is ready AND images are preloaded
-  const isLoading = isDataLoading || (allPlayerImages.length > 0 && !isPreloadingComplete);
-
-  const isError = 
-    teamsQuery.isError || 
-    playersQuery.isError || 
-    soldPlayersQuery.isError || 
-    unsoldPlayersQuery.isError;
-
-  const error = 
-    teamsQuery.error || 
-    playersQuery.error || 
-    soldPlayersQuery.error || 
-    unsoldPlayersQuery.error;
+  }, [dataReady, allPlayerImages.length]);
 
   return {
-    isLoading,
+    isLoading: isLoading || (dataReady && allPlayerImages.length > 0 && !isPreloadingComplete),
     isError,
-    error: error as Error | null,
-    teams: teamsQuery.data || [],
-    players: playersQuery.data || [],
-    soldPlayers: soldPlayersQuery.data?.players || [],
-    unsoldPlayers: unsoldPlayersQuery.data?.players || [],
-    refetch: {
-      teams: teamsQuery.refetch,
-      players: playersQuery.refetch,
-      soldPlayers: soldPlayersQuery.refetch,
-      unsoldPlayers: unsoldPlayersQuery.refetch,
-    },
+    error,
   };
 }
 
 /**
- * Hook for refreshing all data
+ * Hook for manually syncing players from Google Sheets.
+ * Returns a function that fetches fresh data from sheets and applies as admin overrides.
+ */
+export function useSyncFromSheets() {
+  const [isSyncing, setIsSyncing] = useState(false);
+
+  const syncPlayers = async (): Promise<{ players: Player[]; teams: Team[] }> => {
+    setIsSyncing(true);
+    try {
+      googleSheetsService.clearCache();
+      const [players, teams] = await Promise.all([
+        googleSheetsService.fetchPlayers([]),
+        googleSheetsService.fetchTeams(),
+      ]);
+      return { players, teams };
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  return { syncPlayers, isSyncing };
+}
+
+/**
+ * Hook for refreshing data (kept for backward compatibility)
  */
 export function useRefreshData() {
-  const queryClient = useQueryClient();
-
   const refreshAll = () => {
-    // Clear the Google Sheets service cache
-    googleSheetsService.clearCache();
-    
-    // Invalidate all queries
-    queryClient.invalidateQueries({ queryKey: QUERY_KEYS.teams });
-    queryClient.invalidateQueries({ queryKey: QUERY_KEYS.players });
-    queryClient.invalidateQueries({ queryKey: QUERY_KEYS.soldPlayers });
-    queryClient.invalidateQueries({ queryKey: QUERY_KEYS.unsoldPlayers });
+    // With Firebase-first loading, refresh means reload page
+    globalThis.location.reload();
   };
 
-  const refreshTeams = () => {
-    googleSheetsService.clearCache('teams');
-    queryClient.invalidateQueries({ queryKey: QUERY_KEYS.teams });
-  };
-
-  const refreshPlayers = () => {
-    googleSheetsService.clearCache('players');
-    queryClient.invalidateQueries({ queryKey: QUERY_KEYS.players });
-  };
-
-  return {
-    refreshAll,
-    refreshTeams,
-    refreshPlayers,
-  };
+  return { refreshAll };
 }

@@ -133,6 +133,10 @@ function AuctionApp() {
   const [showBreakOverlay, setShowBreakOverlay] = useState(false);
   const breakDurationSeconds = 120; // 2 minutes default
   
+  // Top 3 Buys carousel state
+  const [showTopBuysOverlay, setShowTopBuysOverlay] = useState(false);
+  const [topBuysIndex, setTopBuysIndex] = useState(0);
+  
   // Image loading state
   const [imageLoadingState, setImageLoadingState] = useState<'loading' | 'loaded' | 'error'>('loading');
   const [currentImageAttempt, setCurrentImageAttempt] = useState(0);
@@ -294,6 +298,34 @@ function AuctionApp() {
     return () => window.removeEventListener('keydown', handleLiveKey);
   }, [showAdminPanel, showJumpModal, showCoinJar, showBreakOverlay, navigate]);
 
+  // Top 3 Buys carousel keyboard shortcut ("/" key)
+  useEffect(() => {
+    const handleTopBuysKey = (e: KeyboardEvent) => {
+      if (e.key === '/') {
+        const target = e.target as HTMLElement;
+        if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) return;
+        if (showAdminPanel || showJumpModal || showCoinJar) return;
+
+        e.preventDefault();
+        setShowTopBuysOverlay(prev => {
+          if (!prev) {
+            setTopBuysIndex(0);
+          }
+          return !prev;
+        });
+      }
+      // Navigate within top buys carousel
+      if (showTopBuysOverlay) {
+        if (e.key === 'ArrowRight') { e.preventDefault(); setTopBuysIndex(i => Math.min(i + 1, 2)); }
+        if (e.key === 'ArrowLeft') { e.preventDefault(); setTopBuysIndex(i => Math.max(i - 1, 0)); }
+        if (e.key === 'Escape') { e.preventDefault(); setShowTopBuysOverlay(false); }
+      }
+    };
+
+    window.addEventListener('keydown', handleTopBuysKey);
+    return () => window.removeEventListener('keydown', handleTopBuysKey);
+  }, [showAdminPanel, showJumpModal, showCoinJar, showTopBuysOverlay]);
+
   const handleJumpSubmit = () => {
     if (auction.selectionMode !== 'sequential') {
       setJumpError('Sequential mode only');
@@ -446,6 +478,17 @@ function AuctionApp() {
     () => selectedTeamPlayers.reduce((sum, player) => sum + player.soldAmount, 0),
     [selectedTeamPlayers],
   );
+
+  // Top 3 most expensive buys across ALL teams
+  const globalTopBuys = useMemo(() => {
+    return [...soldPlayers]
+      .sort((a, b) => b.soldAmount - a.soldAmount)
+      .slice(0, 3)
+      .map((p) => {
+        const team = allTeams.find(t => t.name === p.teamName);
+        return { ...p, team };
+      });
+  }, [soldPlayers, allTeams]);
 
   const teamRoleBalance = useMemo(() => {
     const roleCount = {
@@ -1344,6 +1387,180 @@ function AuctionApp() {
         sponsors={sponsors}
         onClose={() => setShowBreakOverlay(false)}
       />
+
+      {/* ═══════ TOP 3 BUYS CAROUSEL (press "/") ═══════ */}
+      <AnimatePresence>
+        {showTopBuysOverlay && globalTopBuys.length > 0 && (
+          <motion.div
+            className="top3-overlay"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.3 }}
+            onClick={() => setShowTopBuysOverlay(false)}
+          >
+            <motion.div
+              className="top3-container"
+              initial={{ scale: 0.3, opacity: 0, borderRadius: '50%' }}
+              animate={{ scale: 1, opacity: 1, borderRadius: '24px' }}
+              exit={{ scale: 0.5, opacity: 0, borderRadius: '50%' }}
+              transition={{ type: 'spring', damping: 20, stiffness: 180, duration: 0.6 }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Header */}
+              <div className="top3-header">
+                <motion.div
+                  className="top3-crown"
+                  initial={{ scale: 0, rotate: -30 }}
+                  animate={{ scale: 1, rotate: 0 }}
+                  transition={{ delay: 0.3, type: 'spring', stiffness: 300 }}
+                >
+                  <IoStar size={28} color="#fbbf24" />
+                </motion.div>
+                <motion.h2
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.35 }}
+                >
+                  Top 3 Buys
+                </motion.h2>
+                <button className="top3-close" onClick={() => setShowTopBuysOverlay(false)}>
+                  <IoClose size={22} />
+                </button>
+              </div>
+
+              {/* Carousel */}
+              <div className="top3-carousel">
+                <AnimatePresence mode="wait">
+                  {globalTopBuys.map((buy, i) => i === topBuysIndex && (
+                    <motion.div
+                      key={buy.id}
+                      className={`top3-card rank-${i + 1}`}
+                      initial={{ opacity: 0, x: 120, scale: 0.85 }}
+                      animate={{ opacity: 1, x: 0, scale: 1 }}
+                      exit={{ opacity: 0, x: -120, scale: 0.85 }}
+                      transition={{ type: 'spring', damping: 22, stiffness: 200 }}
+                    >
+                      {/* Brand reveal section */}
+                      <motion.div
+                        className="top3-brand"
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: 'auto', opacity: 1 }}
+                        transition={{ delay: 0.15, duration: 0.5, ease: 'easeOut' }}
+                      >
+                        <div
+                          className="top3-brand-bg"
+                          style={{
+                            background: `linear-gradient(135deg, ${buy.team?.secondaryColor || '#1e40af'}, ${buy.team?.primaryColor || '#3b82f6'})`,
+                          }}
+                        >
+                          {buy.team?.logoUrl && (
+                            <motion.img
+                              className="top3-brand-logo"
+                              src={buy.team.logoUrl}
+                              alt={buy.team.name}
+                              initial={{ scale: 0, rotate: -25 }}
+                              animate={{ scale: 1, rotate: 0 }}
+                              transition={{ delay: 0.4, type: 'spring', stiffness: 220 }}
+                              onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                            />
+                          )}
+                          <motion.span
+                            className="top3-brand-name"
+                            initial={{ opacity: 0, y: 8 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: 0.55 }}
+                          >
+                            {buy.team?.ownerCompany || buy.teamName}
+                          </motion.span>
+                          <motion.span
+                            className="top3-brand-tagline"
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 0.7 }}
+                            transition={{ delay: 0.65 }}
+                          >
+                            {buy.team?.brandTagline || buy.teamName}
+                          </motion.span>
+                        </div>
+                      </motion.div>
+
+                      {/* Rank badge */}
+                      <motion.div
+                        className={`top3-rank rank-${i + 1}`}
+                        initial={{ scale: 0 }}
+                        animate={{ scale: 1 }}
+                        transition={{ delay: 0.3, type: 'spring', stiffness: 300 }}
+                      >
+                        #{i + 1}
+                      </motion.div>
+
+                      {/* Player details */}
+                      <motion.div
+                        className="top3-player"
+                        initial={{ opacity: 0, y: 30 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.4, duration: 0.5 }}
+                      >
+                        <div className="top3-player-img-wrap">
+                          {buy.imageUrl && (
+                            <img
+                              src={buy.imageUrl}
+                              alt={buy.name}
+                              className="top3-player-img"
+                              onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                            />
+                          )}
+                        </div>
+                        <h3 className="top3-player-name">{buy.name}</h3>
+                        <span className="top3-player-role">
+                          {formatRoleDisplay(buy.role)}
+                        </span>
+
+                        {/* Price reveal */}
+                        <motion.div
+                          className="top3-amount"
+                          initial={{ scale: 0.3, opacity: 0 }}
+                          animate={{ scale: 1, opacity: 1 }}
+                          transition={{ delay: 0.6, type: 'spring', stiffness: 200 }}
+                        >
+                          ₹{buy.soldAmount}L
+                        </motion.div>
+
+                        {/* Player stats */}
+                        <div className="top3-stats">
+                          {buy.matches && <div className="top3-stat"><span>Matches</span><strong>{buy.matches}</strong></div>}
+                          {buy.runs && <div className="top3-stat"><span>Runs</span><strong>{buy.runs}</strong></div>}
+                          {buy.wickets && <div className="top3-stat"><span>Wickets</span><strong>{buy.wickets}</strong></div>}
+                          {buy.battingBestFigures && <div className="top3-stat"><span>Best</span><strong>{buy.battingBestFigures}</strong></div>}
+                        </div>
+                      </motion.div>
+                    </motion.div>
+                  ))}
+                </AnimatePresence>
+              </div>
+
+              {/* Navigation dots + arrows */}
+              <div className="top3-nav">
+                <button className="top3-arrow" disabled={topBuysIndex === 0} onClick={() => setTopBuysIndex(i => i - 1)}>&lsaquo;</button>
+                <div className="top3-dots">
+                  {globalTopBuys.map((_, i) => (
+                    <button
+                      key={i}
+                      className={`top3-dot ${i === topBuysIndex ? 'active' : ''}`}
+                      onClick={() => setTopBuysIndex(i)}
+                    />
+                  ))}
+                </div>
+                <button className="top3-arrow" disabled={topBuysIndex === globalTopBuys.length - 1} onClick={() => setTopBuysIndex(i => i + 1)}>&rsaquo;</button>
+              </div>
+
+              <div className="top3-hint">
+                Press <kbd>/</kbd> to toggle &middot; <kbd>←→</kbd> to navigate &middot; <kbd>Esc</kbd> to close
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Live Transition Animation */}
       <AnimatePresence>

@@ -4,7 +4,8 @@ import { realtimeSync } from '../services/realtimeSync';
 import { useAuctionStore } from '../store/auctionStore';
 
 /**
- * Apply admin-edited player list overrides from Firebase
+ * Apply admin-edited player list overrides from Firebase.
+ * Uses setAdminPlayerOverrides so admin data persists across Google Sheets reloads.
  */
 export function useAdminPlayersOverrides() {
   useEffect(() => {
@@ -18,8 +19,8 @@ export function useAdminPlayersOverrides() {
         const adminPlayers = await auctionPersistence.getAdminPlayers();
         if (!adminPlayers || adminPlayers.length === 0) return;
 
-        // Apply to store (filters sold/unsold automatically)
-        useAuctionStore.getState().setPlayers(adminPlayers);
+        // Store as admin overrides — these survive Google Sheets reloads
+        useAuctionStore.getState().setAdminPlayerOverrides(adminPlayers);
       } catch (error) {
         console.error('[AdminPlayers] Failed to apply admin player overrides:', error);
       }

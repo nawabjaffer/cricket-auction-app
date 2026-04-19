@@ -23,6 +23,46 @@ const DB_PATHS = {
   SPONSORS: 'auction/sponsors',
 } as const;
 
+// ── Image compression for Firebase RTDB ──
+// Compresses data: URLs to small JPEG thumbnails (~15-30KB) to fit RTDB write limits
+const MAX_THUMB_SIZE = 300;
+const THUMB_QUALITY = 0.6;
+
+function compressDataUrl(dataUrl: string): Promise<string> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      try {
+        const { naturalWidth: w, naturalHeight: h } = img;
+        const scale = Math.min(MAX_THUMB_SIZE / w, MAX_THUMB_SIZE / h, 1);
+        const cw = Math.round(w * scale);
+        const ch = Math.round(h * scale);
+
+        const canvas = document.createElement('canvas');
+        canvas.width = cw;
+        canvas.height = ch;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) { resolve(''); return; }
+
+        ctx.drawImage(img, 0, 0, cw, ch);
+        const compressed = canvas.toDataURL('image/jpeg', THUMB_QUALITY);
+        // If still too large (>100KB encoded), drop it
+        resolve(compressed.length > 100_000 ? '' : compressed);
+      } catch {
+        resolve('');
+      }
+    };
+    img.onerror = () => resolve('');
+    img.src = dataUrl;
+  });
+}
+
+async function compressImageUrl(imageUrl: string): Promise<string> {
+  if (!imageUrl) return '';
+  if (!imageUrl.startsWith('data:')) return imageUrl; // keep remote URLs as-is
+  return compressDataUrl(imageUrl);
+}
+
 export interface SponsorRecord {
   id: string;
   name: string;
@@ -266,8 +306,18 @@ class AuctionPersistenceService {
   async saveInitialSnapshot(players: Player[], teams: Team[]): Promise<void> {
     if (!this.db) throw new Error('Database not initialized');
 
+    // Compress base64 data URLs to small thumbnails
+    const compressedUrls = await Promise.all(
+      players.map(p => compressImageUrl(p.imageUrl ?? ''))
+    );
+
+    const cleanPlayers = players.map((p, i) => ({
+      ...p,
+      imageUrl: compressedUrls[i],
+    }));
+
     const snapshot: InitialSnapshot = {
-      players,
+      players: cleanPlayers,
       teams,
       capturedAt: Date.now(),
       source: 'google-sheets',
@@ -375,17 +425,21 @@ class AuctionPersistenceService {
 
   /**
    * Save admin-edited player list
-   * Strips undefined values to avoid Firebase RTDB rejection
+   * Compresses base64 data URLs to small JPEG thumbnails to fit Firebase RTDB write limits
    */
   async saveAdminPlayers(players: Player[]): Promise<void> {
     if (!this.db) throw new Error('Database not initialized');
 
-    // Firebase RTDB rejects undefined values — strip them
-    const cleaned = players.map(p => {
+    // Compress all data: URLs in parallel, then build clean records
+    const compressedUrls = await Promise.all(
+      players.map(p => compressImageUrl(p.imageUrl ?? ''))
+    );
+
+    const cleaned = players.map((p, i) => {
       const record: Record<string, unknown> = {
         id: p.id,
         name: p.name,
-        imageUrl: p.imageUrl ?? '',
+        imageUrl: compressedUrls[i],
         role: p.role,
         age: p.age ?? null,
         matches: p.matches ?? '',

@@ -14,12 +14,9 @@ export {
 
 // Data fetching hooks
 export { 
-  useTeamsQuery, 
-  usePlayersQuery, 
-  useSoldPlayersQuery, 
-  useUnsoldPlayersQuery,
   useInitialData,
   useRefreshData,
+  useSyncFromSheets,
 } from './useData';
 
 // Keyboard and UI hooks

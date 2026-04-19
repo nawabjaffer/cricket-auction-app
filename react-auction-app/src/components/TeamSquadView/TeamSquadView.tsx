@@ -209,6 +209,11 @@ export function TeamSquadView({
     const name = fromAll?.name || fromSold?.name || activeTeam.captain;
     const role = fromAll?.role || fromSold?.role || '';
 
+    console.log('[TSV Captain]', activeTeam.name, '→ captain:', activeTeam.captain,
+      '| fromAll:', fromAll ? { name: fromAll.name, hasImage: !!fromAll.imageUrl, urlPrefix: (fromAll.imageUrl || '').slice(0, 40) } : null,
+      '| fromSold:', fromSold ? { name: fromSold.name, hasImage: !!fromSold.imageUrl } : null,
+      '| finalUrl:', imageUrl ? imageUrl.slice(0, 60) + '...' : '(empty)');
+
     return { name, imageUrl, role };
   }, [activeTeam, allPlayers, teamPlayers]);
 

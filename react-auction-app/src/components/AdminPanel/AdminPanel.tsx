@@ -5,8 +5,8 @@
 
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useQueryClient } from '@tanstack/react-query';
-import { IoClose, IoSave, IoRefresh, IoDownload, IoVideocam, IoAdd, IoTrash, IoArrowUp, IoArrowDown } from 'react-icons/io5';
+
+import { IoClose, IoSave, IoRefresh, IoDownload, IoVideocam, IoAdd, IoTrash, IoArrowUp, IoArrowDown, IoSearch, IoStatsChart } from 'react-icons/io5';
 import { auctionPersistence, type AdminSettings, type SponsorRecord } from '../../services/auctionPersistence';
 import { googleSheetsService, imagePreloaderService } from '../../services';
 import { useAuctionStore } from '../../store/auctionStore';
@@ -29,7 +29,7 @@ interface AdminPanelProps {
 
 export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps) {
   const PAGE_SIZE_OPTIONS = [10, 20, 50, 100] as const;
-  const queryClient = useQueryClient();
+
   const [activeTab, setActiveTab] = useState<'theme' | 'teams' | 'sponsors' | 'players' | 'export' | 'features' | 'streaming' | 'reset'>('theme');
   const [isSaving, setIsSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'success' | 'error'>('idle');
@@ -49,7 +49,7 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
   const [underAgeThreshold, setUnderAgeThreshold] = useState(18);
 
   // Store
-  const { teams, setTeams, soldPlayers, originalPlayers, setPlayers, reconcilePlayerPools } = useAuctionStore();
+  const { teams, setTeams, soldPlayers, originalPlayers, setAdminPlayerOverrides, reconcilePlayerPools } = useAuctionStore();
   const [editingTeams, setEditingTeams] = useState<Team[]>([]);
   const [editingSponsors, setEditingSponsors] = useState<SponsorRecord[]>([]);
   const [teamLogoSources, setTeamLogoSources] = useState<Record<string, LogoSourceMode>>({});
@@ -68,9 +68,27 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
   const [teamDraft, setTeamDraft] = useState<Team | null>(null);
   const [editingPlayerId, setEditingPlayerId] = useState<string | null>(null);
   const [playerDraft, setPlayerDraft] = useState<Player | null>(null);
+  // Icon player state for the player editor
+  const [isIconPlayer, setIsIconPlayer] = useState(false);
+  const [iconTeamId, setIconTeamId] = useState<string>('');
   const [isSavingSponsors, setIsSavingSponsors] = useState(false);
   const csvFileInputRef = useRef<HTMLInputElement | null>(null);
+  const statsCsvInputRef = useRef<HTMLInputElement | null>(null);
   const [uploadFeedback, setUploadFeedback] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+
+  // Stats CSV import state
+  type StatsImportMatch = { csvRow: Record<string, string>; player: Player; status: 'matched' };
+  type StatsImportMismatch = { csvRow: Record<string, string>; reason: string; status: 'mismatch' | 'missing' };
+  const [statsImportResult, setStatsImportResult] = useState<{
+    matched: StatsImportMatch[];
+    mismatched: StatsImportMismatch[];
+  } | null>(null);
+  const [showStatsReview, setShowStatsReview] = useState(false);
+
+  // Icon player searchable picker state
+  const [iconPlayerSearch, setIconPlayerSearch] = useState('');
+  const [showIconPlayerPicker, setShowIconPlayerPicker] = useState(false);
+  const iconPickerRef = useRef<HTMLDivElement>(null);
 
   const showUploadFeedback = (message: string, type: 'success' | 'error' = 'success') => {
     setUploadFeedback({ message, type });
@@ -81,6 +99,47 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
     () => editingPlayers.filter((player) => player.name.toLowerCase().includes(playerSearch.toLowerCase())),
     [editingPlayers, playerSearch],
   );
+
+  // All players available for icon player selection (editingPlayers + originalPlayers, deduplicated)
+  const allPlayersForIconPicker = useMemo(() => {
+    const seen = new Set<string>();
+    const merged: Player[] = [];
+    // Prefer editingPlayers (includes manually added), then fill from originalPlayers
+    for (const p of editingPlayers) {
+      if (!seen.has(p.id)) { seen.add(p.id); merged.push(p); }
+    }
+    for (const p of originalPlayers) {
+      if (!seen.has(p.id)) { seen.add(p.id); merged.push(p); }
+    }
+    return merged;
+  }, [editingPlayers, originalPlayers]);
+
+  // Filtered icon player list for the search picker
+  const filteredIconPlayers = useMemo(() => {
+    if (!iconPlayerSearch.trim()) return allPlayersForIconPicker;
+    const q = iconPlayerSearch.toLowerCase();
+    return allPlayersForIconPicker.filter(p =>
+      p.name.toLowerCase().includes(q) || p.role.toLowerCase().includes(q) || p.id.toLowerCase().includes(q)
+    );
+  }, [allPlayersForIconPicker, iconPlayerSearch]);
+
+  // Map of team IDs that already have icon players assigned (for 1:1 enforcement)
+  const teamsWithIconPlayers = useMemo(() => {
+    const map = new Map<string, string>(); // teamId -> playerName
+    for (const t of editingTeams) {
+      if (t.captain?.trim()) map.set(t.id, t.captain.trim());
+    }
+    return map;
+  }, [editingTeams]);
+
+  // Available teams for icon player assignment (teams that don't already have an icon player, or the current player's team)
+  const availableTeamsForIcon = useMemo(() => {
+    return editingTeams.filter(t => {
+      const assigned = teamsWithIconPlayers.get(t.id);
+      // Allow if no icon player, or if it's the current player being edited
+      return !assigned || (playerDraft && assigned.toLowerCase() === playerDraft.name.trim().toLowerCase());
+    });
+  }, [editingTeams, teamsWithIconPlayers, playerDraft]);
 
   const totalTeamPages = Math.max(1, Math.ceil(editingTeams.length / teamPageSize));
   const totalPlayerPages = Math.max(1, Math.ceil(filteredPlayers.length / playerPageSize));
@@ -215,6 +274,18 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
     setSponsorPage((current) => Math.min(current, totalSponsorPages));
   }, [totalSponsorPages]);
 
+  // Close icon player picker on click outside
+  useEffect(() => {
+    if (!showIconPlayerPicker) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (iconPickerRef.current && !iconPickerRef.current.contains(e.target as Node)) {
+        setShowIconPlayerPicker(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showIconPlayerPicker]);
+
   // Handle save theme settings
   const handleSaveTheme = async () => {
     setIsSaving(true);
@@ -261,8 +332,8 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
     try {
       await auctionPersistence.saveTeams(editingTeams);
       setTeams(editingTeams);
-      // Invalidate the teams query cache so fresh data is fetched
-      queryClient.invalidateQueries({ queryKey: ['teams'] });
+      reconcilePlayerPools();
+
       setSaveStatus('success');
       setTimeout(() => setSaveStatus('idle'), 2000);
     } catch (error) {
@@ -349,11 +420,14 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
 
     setEditingTeamId(teamId);
     setTeamDraft({ ...targetTeam });
+    setIconPlayerSearch('');
+    setShowIconPlayerPicker(false);
   };
 
   const closeTeamEditor = () => {
     setEditingTeamId(null);
     setTeamDraft(null);
+    setShowIconPlayerPicker(false);
   };
 
   const saveTeamDraft = async () => {
@@ -370,7 +444,7 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
     try {
       await auctionPersistence.saveTeams(updatedTeams);
       setTeams(updatedTeams);
-      queryClient.invalidateQueries({ queryKey: ['teams'] });
+      reconcilePlayerPools();
       showUploadFeedback(`Team "${teamDraft.name}" saved successfully`);
     } catch (error) {
       console.error('[AdminPanel] Failed to save team draft:', error);
@@ -385,11 +459,23 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
 
     setEditingPlayerId(playerId);
     setPlayerDraft({ ...targetPlayer });
+
+    // Check if this player is currently an icon player for any team
+    const assignedTeam = editingTeams.find(t => t.captain?.trim().toLowerCase() === targetPlayer.name.trim().toLowerCase());
+    if (assignedTeam) {
+      setIsIconPlayer(true);
+      setIconTeamId(assignedTeam.id);
+    } else {
+      setIsIconPlayer(false);
+      setIconTeamId('');
+    }
   };
 
   const closePlayerEditor = () => {
     setEditingPlayerId(null);
     setPlayerDraft(null);
+    setIsIconPlayer(false);
+    setIconTeamId('');
   };
 
   const savePlayerDraft = async () => {
@@ -399,6 +485,8 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
     if (editingPlayers.some(p => p.id === playerDraft.id && p.id !== editingPlayerId)) return;
     // Block save if ID is empty
     if (!playerDraft.id.trim()) return;
+    // Block save if icon player toggled on but no team selected
+    if (isIconPlayer && !iconTeamId) return;
 
     const updatedPlayers = editingPlayers.map((player) => (
       player.id === editingPlayerId
@@ -417,11 +505,34 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
       });
     }
 
+    // Update teams for icon player assignment
+    // First, find old name of this player (before edit) to clear from any team
+    const oldPlayer = editingPlayers.find(p => p.id === editingPlayerId);
+    const oldName = oldPlayer?.name?.trim().toLowerCase() || '';
+    let updatedTeams = editingTeams.map(t => {
+      // Clear this player from any team they were previously icon for
+      if (t.captain?.trim().toLowerCase() === oldName) {
+        return { ...t, captain: '' };
+      }
+      return t;
+    });
+    // Now assign to the selected team if icon player is enabled
+    if (isIconPlayer && iconTeamId) {
+      updatedTeams = updatedTeams.map(t =>
+        t.id === iconTeamId ? { ...t, captain: playerDraft.name } : t
+      );
+    }
+    setEditingTeams(updatedTeams);
+
     // Persist to Firebase and update store with feedback
     setIsSaving(true);
     try {
-      setPlayers(updatedPlayers);
+      setAdminPlayerOverrides(updatedPlayers);
       await auctionPersistence.saveAdminPlayers(updatedPlayers);
+      // Also persist team changes (icon player assignment)
+      setTeams(updatedTeams);
+      await auctionPersistence.saveTeams(updatedTeams);
+      reconcilePlayerPools();
       setSaveStatus('success');
       setTimeout(() => setSaveStatus('idle'), 2500);
     } catch (error) {
@@ -542,6 +653,8 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
     setPlayerPage(Math.max(1, Math.ceil((editingPlayers.length + 1) / playerPageSize)));
     setEditingPlayerId(newPlayerId);
     setPlayerDraft({ ...newPlayer });
+    setIsIconPlayer(false);
+    setIconTeamId('');
   };
 
   const updateSponsorLogo = async (index: number, source: LogoSourceMode, value?: string) => {
@@ -605,7 +718,7 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
     setIsSaving(true);
     try {
       // Update store (filters sold/unsold automatically)
-      setPlayers(editingPlayers);
+      setAdminPlayerOverrides(editingPlayers);
 
       // Persist admin overrides to Firebase
       await auctionPersistence.saveAdminPlayers(editingPlayers);
@@ -778,7 +891,7 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
     }
 
     setEditingPlayers(players);
-    setPlayers(players);
+    setAdminPlayerOverrides(players);
     reconcilePlayerPools();
     await auctionPersistence.saveAdminPlayers(players);
   };
@@ -819,6 +932,219 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
     } finally {
       setIsSaving(false);
     }
+  };
+
+  // ── Stats CSV Import ──
+  // Format: Id, Full Name, Phone Number, Cricket Role, CricHeroes Link,
+  //   Batting: Matches Played, INNS, NOT OUT, Runs, Highest Score, Average, Strike Rate, 30s, 50s, 100s, 4s, 6s
+  //   Bowling: Matches played, Innings, Overs, Maidens, Runs, Wickets, BB, 3WKTS, 5WKTS, ECO, SR, AVG
+  const parseStatsCsv = (text: string): Record<string, string>[] => {
+    const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+    if (lines.length < 2) return [];
+
+    const headers = parseCsvLine(lines[0]).map(h => h.toLowerCase().trim());
+    const rows: Record<string, string>[] = [];
+
+    lines.slice(1).forEach(line => {
+      const cells = parseCsvLine(line);
+      const row: Record<string, string> = {};
+      headers.forEach((h, i) => { row[h] = (cells[i] ?? '').trim(); });
+      rows.push(row);
+    });
+
+    return rows;
+  };
+
+  const getStatsCsvField = (row: Record<string, string>, ...candidates: string[]): string => {
+    for (const c of candidates) {
+      const val = row[c];
+      if (val !== undefined && val !== '') return val;
+    }
+    return '';
+  };
+
+  const matchStatsToPlayers = (csvRows: Record<string, string>[]) => {
+    const matched: StatsImportMatch[] = [];
+    const mismatched: StatsImportMismatch[] = [];
+
+    // Build lookup maps from editing players
+    const byId = new Map(editingPlayers.map(p => [p.id.trim().toLowerCase(), p]));
+    const byName = new Map(editingPlayers.map(p => [p.name.trim().toLowerCase(), p]));
+
+    for (const row of csvRows) {
+      const csvId = getStatsCsvField(row, 'id').trim();
+      const csvName = getStatsCsvField(row, 'full name:', 'full name', 'name', 'playername').trim();
+
+      if (!csvName && !csvId) {
+        mismatched.push({ csvRow: row, reason: 'No ID or Name in CSV row', status: 'missing' });
+        continue;
+      }
+
+      // Try matching by ID first, then by name
+      let player: Player | undefined;
+      let matchMethod = '';
+
+      if (csvId && byId.has(csvId.toLowerCase())) {
+        player = byId.get(csvId.toLowerCase());
+        matchMethod = 'id';
+      }
+
+      if (!player && csvName && byName.has(csvName.toLowerCase())) {
+        player = byName.get(csvName.toLowerCase());
+        matchMethod = 'name';
+      }
+
+      if (!player) {
+        mismatched.push({
+          csvRow: row,
+          reason: `No matching player found (ID: "${csvId}", Name: "${csvName}")`,
+          status: 'mismatch',
+        });
+        continue;
+      }
+
+      // Safety check: if matched by ID, verify name matches too
+      if (matchMethod === 'id' && csvName) {
+        const normalizedPlayerName = player.name.trim().toLowerCase();
+        const normalizedCsvName = csvName.toLowerCase();
+        if (normalizedPlayerName !== normalizedCsvName) {
+          mismatched.push({
+            csvRow: row,
+            reason: `ID matched "${player.name}" but CSV name is "${csvName}" — possible mismatch`,
+            status: 'mismatch',
+          });
+          continue;
+        }
+      }
+
+      matched.push({ csvRow: row, player, status: 'matched' });
+    }
+
+    return { matched, mismatched };
+  };
+
+  const applyStatsToPlayers = async (matches: StatsImportMatch[]) => {
+    const updateMap = new Map<string, { battingStats: BattingStats; bowlingStats: BowlingStats; role: string; matches: string; runs: string; wickets: string; battingBestFigures: string; bowlingBestFigures: string }>();
+
+    for (const { csvRow, player } of matches) {
+      const g = (...cs: string[]) => getStatsCsvField(csvRow, ...cs);
+
+      const battingStats: BattingStats = {
+        matches: g('batting matches played', 'batting matches', 'matches played') || g('matches') || '0',
+        innings: g('inns', 'innings', 'bat_innings') || '0',
+        notOut: g('not out', 'notout', 'no') || '0',
+        runs: g('runs') || '0',
+        highestScore: g('highest score', 'highestscore', 'hs') || '0',
+        average: g('average', 'bat_average', 'batting average') || '0.00',
+        strikeRate: g('strike rate', 'strikerate', 'sr') || '0.00',
+        thirties: g('30s', 'thirties') || '0',
+        fifties: g('50s', 'fifties') || '0',
+        hundreds: g('100s', 'hundreds', 'centuries') || '0',
+        fours: g('4s', 'fours') || '0',
+        sixes: g('6s', 'sixes') || '0',
+      };
+
+      const bowlingStats: BowlingStats = {
+        matches: g('bowling matches played', 'bowling matches') || g('matches') || '0',
+        innings: g('bowling innings', 'bowl_innings') || '0',
+        overs: g('overs') || '0',
+        maidens: g('maidens') || '0',
+        runs: g('bowling runs', 'bowl_runs', 'runs_conceded') || '0',
+        wickets: g('wickets') || '0',
+        bestBowling: g('bb', 'best bowling') || 'N/A',
+        threeWickets: g('3wkts', '3_wickets', 'three_wickets') || '0',
+        fiveWickets: g('5wkts', '5_wickets', 'five_wickets') || '0',
+        economy: g('eco', 'economy') || '0.00',
+        strikeRate: g('bowling sr', 'bowl_sr') || '0.00',
+        average: g('bowling avg', 'bowl_avg', 'avg') || '0.00',
+      };
+
+      const role = g('cricket role', 'role') || player.role;
+
+      updateMap.set(player.id, {
+        battingStats,
+        bowlingStats,
+        role,
+        matches: battingStats.matches,
+        runs: battingStats.runs,
+        wickets: bowlingStats.wickets,
+        battingBestFigures: battingStats.highestScore !== '0' ? battingStats.highestScore : player.battingBestFigures,
+        bowlingBestFigures: bowlingStats.bestBowling !== 'N/A' ? bowlingStats.bestBowling : player.bowlingBestFigures,
+      });
+    }
+
+    const updatedPlayers = editingPlayers.map(p => {
+      const stats = updateMap.get(p.id);
+      if (!stats) return p;
+      return {
+        ...p,
+        role: (stats.role || p.role) as Player['role'],
+        matches: stats.matches,
+        runs: stats.runs,
+        wickets: stats.wickets,
+        battingBestFigures: stats.battingBestFigures,
+        bowlingBestFigures: stats.bowlingBestFigures,
+        battingStats: stats.battingStats,
+        bowlingStats: stats.bowlingStats,
+      };
+    });
+
+    setEditingPlayers(updatedPlayers);
+    setAdminPlayerOverrides(updatedPlayers);
+    reconcilePlayerPools();
+    try {
+      await auctionPersistence.saveAdminPlayers(updatedPlayers);
+      setSaveStatus('success');
+      setTimeout(() => setSaveStatus('idle'), 2000);
+    } catch (err) {
+      console.error('[AdminPanel] Failed saving stats:', err);
+      setSaveStatus('error');
+      setTimeout(() => setSaveStatus('idle'), 2000);
+    }
+  };
+
+  const handleImportStatsCsv = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+
+    try {
+      const text = await file.text();
+      const csvRows = parseStatsCsv(text);
+
+      if (csvRows.length === 0) {
+        showUploadFeedback('CSV file is empty or has no data rows.', 'error');
+        return;
+      }
+
+      const result = matchStatsToPlayers(csvRows);
+      setStatsImportResult(result);
+
+      if (result.mismatched.length > 0) {
+        // Show review overlay so user can see and fix mismatches
+        setShowStatsReview(true);
+      } else {
+        // All matched — apply immediately
+        setIsSaving(true);
+        await applyStatsToPlayers(result.matched);
+        showUploadFeedback(`Stats imported for ${result.matched.length} player(s).`);
+        setStatsImportResult(null);
+        setIsSaving(false);
+      }
+    } catch (err) {
+      console.error('[AdminPanel] Stats CSV import failed:', err);
+      showUploadFeedback('Failed to parse stats CSV. Check format.', 'error');
+    }
+  };
+
+  const handleApplyMatchedStats = async () => {
+    if (!statsImportResult) return;
+    setIsSaving(true);
+    await applyStatsToPlayers(statsImportResult.matched);
+    showUploadFeedback(`Stats applied for ${statsImportResult.matched.length} player(s). ${statsImportResult.mismatched.length} row(s) skipped.`);
+    setShowStatsReview(false);
+    setStatsImportResult(null);
+    setIsSaving(false);
   };
 
   const handleResetImageCache = async () => {
@@ -1302,12 +1628,6 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
                   >
                     <IoSave size={18} /> Bulk Save All Teams
                   </button>
-
-                  <datalist id="admin-captain-list">
-                    {originalPlayers.map((player) => (
-                      <option key={player.id} value={player.name} />
-                    ))}
-                  </datalist>
                 </div>
               )}
 
@@ -1605,6 +1925,13 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
                     >
                       <IoDownload size={18} /> Import CSV
                     </button>
+                    <button
+                      className="admin-btn admin-btn-accent"
+                      onClick={() => statsCsvInputRef.current?.click()}
+                      disabled={isSaving}
+                    >
+                      <IoStatsChart size={18} /> Import Scores
+                    </button>
                     <label className="admin-page-size">
                       <span>Rows per page</span>
                       <select
@@ -1624,6 +1951,13 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
                       type="file"
                       accept=".csv,text/csv"
                       onChange={handleImportPlayersFromCsv}
+                      style={{ display: 'none' }}
+                    />
+                    <input
+                      ref={statsCsvInputRef}
+                      type="file"
+                      accept=".csv,text/csv"
+                      onChange={handleImportStatsCsv}
                       style={{ display: 'none' }}
                     />
                   </div>
@@ -1845,14 +2179,74 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
                     </div>
 
                     <div className="form-row">
-                      <div className="form-group">
+                      <div className="form-group" ref={iconPickerRef}>
                         <label>Icon Player</label>
-                        <input
-                          type="text"
-                          list="admin-captain-list"
-                          value={teamDraft.captain || ''}
-                          onChange={(e) => setTeamDraft({ ...teamDraft, captain: e.target.value })}
-                        />
+                        <div className="icon-player-picker">
+                          <div
+                            className={`icon-player-selected ${showIconPlayerPicker ? 'open' : ''}`}
+                            onClick={() => setShowIconPlayerPicker(prev => !prev)}
+                          >
+                            <span className={teamDraft.captain ? 'has-value' : 'placeholder'}>
+                              {teamDraft.captain || '— Select iconic player —'}
+                            </span>
+                            {teamDraft.captain && (
+                              <button
+                                type="button"
+                                className="icon-player-clear"
+                                onClick={(e) => { e.stopPropagation(); setTeamDraft({ ...teamDraft, captain: '' }); }}
+                              >
+                                <IoClose size={14} />
+                              </button>
+                            )}
+                          </div>
+
+                          {showIconPlayerPicker && (
+                            <div className="icon-player-dropdown">
+                              <div className="icon-player-search">
+                                <IoSearch size={14} />
+                                <input
+                                  type="text"
+                                  placeholder="Search by name, role, or ID..."
+                                  value={iconPlayerSearch}
+                                  onChange={(e) => setIconPlayerSearch(e.target.value)}
+                                  autoFocus
+                                  onClick={(e) => e.stopPropagation()}
+                                />
+                                {iconPlayerSearch && (
+                                  <button className="icon-search-clear" onClick={() => setIconPlayerSearch('')}>
+                                    <IoClose size={12} />
+                                  </button>
+                                )}
+                              </div>
+                              <div className="icon-player-list">
+                                {filteredIconPlayers.length === 0 ? (
+                                  <div className="icon-player-empty">No players found</div>
+                                ) : (
+                                  filteredIconPlayers.slice(0, 50).map((p) => (
+                                    <button
+                                      key={p.id}
+                                      type="button"
+                                      className={`icon-player-option ${p.name === teamDraft.captain ? 'selected' : ''}`}
+                                      onClick={() => {
+                                        setTeamDraft({ ...teamDraft, captain: p.name });
+                                        setShowIconPlayerPicker(false);
+                                        setIconPlayerSearch('');
+                                      }}
+                                    >
+                                      <span className="icon-player-name">{p.name}</span>
+                                      <span className="icon-player-role" style={{ background: getRoleBadgeColor(getRoleCategory(p.role)) }}>
+                                        {formatRoleDisplay(p.role)}
+                                      </span>
+                                    </button>
+                                  ))
+                                )}
+                                {filteredIconPlayers.length > 50 && (
+                                  <div className="icon-player-more">+{filteredIconPlayers.length - 50} more — refine search</div>
+                                )}
+                              </div>
+                            </div>
+                          )}
+                        </div>
                       </div>
                       <div className="form-group">
                         <label>Owner Name</label>
@@ -2053,6 +2447,48 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
                       </div>
                     </div>
 
+                    {/* Icon Player Assignment */}
+                    <div className="icon-player-assignment">
+                      <label className="icon-toggle-row">
+                        <input
+                          type="checkbox"
+                          checked={isIconPlayer}
+                          onChange={(e) => {
+                            setIsIconPlayer(e.target.checked);
+                            if (!e.target.checked) setIconTeamId('');
+                          }}
+                        />
+                        <span className="icon-toggle-label">Icon Player</span>
+                        <span className="icon-toggle-hint">(excluded from auction, assigned directly to team)</span>
+                      </label>
+
+                      {isIconPlayer && (
+                        <div className="icon-team-select">
+                          <label>Assign to Team <span className="required">*</span></label>
+                          <select
+                            value={iconTeamId}
+                            onChange={(e) => setIconTeamId(e.target.value)}
+                            className={`admin-select ${isIconPlayer && !iconTeamId ? 'input-error' : ''}`}
+                          >
+                            <option value="">— Select team —</option>
+                            {availableTeamsForIcon.map((t) => (
+                              <option key={t.id} value={t.id}>
+                                {t.name}{teamsWithIconPlayers.has(t.id) ? ` (current: ${teamsWithIconPlayers.get(t.id)})` : ''}
+                              </option>
+                            ))}
+                          </select>
+                          {isIconPlayer && !iconTeamId && (
+                            <span className="form-error">Team is required for icon players</span>
+                          )}
+                          {editingTeams.length > availableTeamsForIcon.length && (
+                            <span className="icon-team-note">
+                              {editingTeams.length - availableTeamsForIcon.length} team(s) already have icon players assigned
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
                     <div className="form-row">
                       <div className="form-group">
                         <label>Age</label>
@@ -2208,7 +2644,7 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
                         className="admin-btn admin-btn-primary"
                         type="button"
                         onClick={savePlayerDraft}
-                        disabled={!playerDraft.id.trim() || editingPlayers.some(p => p.id === playerDraft.id && p.id !== editingPlayerId)}
+                        disabled={!playerDraft.id.trim() || editingPlayers.some(p => p.id === playerDraft.id && p.id !== editingPlayerId) || (isIconPlayer && !iconTeamId)}
                       >
                         Save Player
                       </button>
@@ -2242,32 +2678,182 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
     </div>
   );
 
+  const statsReviewContent = statsImportResult ? (
+    <motion.div
+      className="stats-review-panel"
+      initial={{ y: 40, opacity: 0 }}
+      animate={{ y: 0, opacity: 1 }}
+      exit={{ y: 40, opacity: 0 }}
+    >
+      <div className="stats-review-header">
+        <h2>Scores Import Review</h2>
+        <button className="stats-review-close" onClick={() => { setShowStatsReview(false); setStatsImportResult(null); }}>
+          <IoClose size={22} />
+        </button>
+      </div>
+
+      <div className="stats-review-summary">
+        <div className="stats-summary-card stats-summary-success">
+          <span className="stats-summary-count">{statsImportResult.matched.length}</span>
+          <span className="stats-summary-label">Matched</span>
+        </div>
+        <div className="stats-summary-card stats-summary-error">
+          <span className="stats-summary-count">{statsImportResult.mismatched.length}</span>
+          <span className="stats-summary-label">Mismatched / Missing</span>
+        </div>
+        <div className="stats-summary-card stats-summary-total">
+          <span className="stats-summary-count">{statsImportResult.matched.length + statsImportResult.mismatched.length}</span>
+          <span className="stats-summary-label">Total Rows</span>
+        </div>
+      </div>
+
+      {statsImportResult.matched.length > 0 && (
+        <div className="stats-review-section">
+          <h3 className="stats-section-title stats-section-success">Matched Players ({statsImportResult.matched.length})</h3>
+          <div className="stats-review-table-wrap">
+            <table className="stats-review-table">
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Player Name</th>
+                  <th>Role</th>
+                  <th>Bat M</th>
+                  <th>Runs</th>
+                  <th>HS</th>
+                  <th>Avg</th>
+                  <th>SR</th>
+                  <th>Bowl M</th>
+                  <th>Wkts</th>
+                  <th>BB</th>
+                  <th>Eco</th>
+                </tr>
+              </thead>
+              <tbody>
+                {statsImportResult.matched.map(({ csvRow, player }) => (
+                  <tr key={player.id}>
+                    <td>{player.id}</td>
+                    <td><strong>{player.name}</strong></td>
+                    <td>{getStatsCsvField(csvRow, 'cricket role', 'role') || player.role}</td>
+                    <td>{getStatsCsvField(csvRow, 'batting matches played', 'matches played', 'matches')}</td>
+                    <td>{getStatsCsvField(csvRow, 'runs')}</td>
+                    <td>{getStatsCsvField(csvRow, 'highest score', 'hs')}</td>
+                    <td>{getStatsCsvField(csvRow, 'average')}</td>
+                    <td>{getStatsCsvField(csvRow, 'strike rate', 'sr')}</td>
+                    <td>{getStatsCsvField(csvRow, 'bowling matches played', 'bowling matches')}</td>
+                    <td>{getStatsCsvField(csvRow, 'wickets')}</td>
+                    <td>{getStatsCsvField(csvRow, 'bb')}</td>
+                    <td>{getStatsCsvField(csvRow, 'eco', 'economy')}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {statsImportResult.mismatched.length > 0 && (
+        <div className="stats-review-section">
+          <h3 className="stats-section-title stats-section-error">Mismatched / Missing ({statsImportResult.mismatched.length})</h3>
+          <div className="stats-review-table-wrap">
+            <table className="stats-review-table stats-review-table-error">
+              <thead>
+                <tr>
+                  <th>CSV ID</th>
+                  <th>CSV Name</th>
+                  <th>Reason</th>
+                </tr>
+              </thead>
+              <tbody>
+                {statsImportResult.mismatched.map((item, i) => (
+                  <tr key={i}>
+                    <td>{getStatsCsvField(item.csvRow, 'id')}</td>
+                    <td>{getStatsCsvField(item.csvRow, 'full name:', 'full name', 'name')}</td>
+                    <td className="stats-mismatch-reason">{item.reason}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      <div className="stats-review-actions">
+        <button
+          className="admin-btn admin-btn-primary"
+          onClick={handleApplyMatchedStats}
+          disabled={isSaving || statsImportResult.matched.length === 0}
+        >
+          <IoSave size={18} /> Apply {statsImportResult.matched.length} Matched Scores
+        </button>
+        <button
+          className="admin-btn admin-btn-secondary"
+          onClick={() => { setShowStatsReview(false); setStatsImportResult(null); }}
+        >
+          Cancel
+        </button>
+      </div>
+    </motion.div>
+  ) : null;
+
   if (!isOpen) return null;
 
   if (mode === 'page') {
-    return <div className="admin-panel-page">{panelContent}</div>;
+    return (
+      <>
+        <div className="admin-panel-page">{panelContent}</div>
+        {/* Stats Import Review Overlay (page mode) */}
+        <AnimatePresence>
+          {showStatsReview && statsImportResult && (
+            <motion.div
+              className="stats-review-overlay"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+            >
+              {statsReviewContent}
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </>
+    );
   }
 
   return (
-    <AnimatePresence>
-      {isOpen && (
-        <motion.div
-          className="admin-panel-overlay"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          onClick={onClose}
-        >
+    <>
+      <AnimatePresence>
+        {isOpen && (
           <motion.div
-            initial={{ x: 400 }}
-            animate={{ x: 0 }}
-            exit={{ x: 400 }}
-            onClick={(e) => e.stopPropagation()}
+            className="admin-panel-overlay"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={onClose}
           >
-            {panelContent}
+            <motion.div
+              initial={{ x: 400 }}
+              animate={{ x: 0 }}
+              exit={{ x: 400 }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {panelContent}
+            </motion.div>
           </motion.div>
-        </motion.div>
-      )}
-    </AnimatePresence>
+        )}
+      </AnimatePresence>
+
+      {/* Stats Import Review Overlay (drawer mode) */}
+      <AnimatePresence>
+        {showStatsReview && statsImportResult && (
+          <motion.div
+            className="stats-review-overlay"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+          >
+            {statsReviewContent}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </>
   );
 }
