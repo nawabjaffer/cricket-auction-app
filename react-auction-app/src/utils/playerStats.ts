@@ -6,6 +6,13 @@ export interface StatItem {
   category: 'batting' | 'bowling' | 'general';
 }
 
+function toStatText(value: unknown): string {
+  if (value === null || value === undefined) return '';
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  return '';
+}
+
 /**
  * Returns role-appropriate stats for a player.
  * - Batsman / Wicket-Keeper: batting stats
@@ -37,7 +44,12 @@ export function getRoleBasedStats(player: Player, maxStats: number = 6): StatIte
     stats = getGeneralStats(player);
   }
 
-  return stats.slice(0, maxStats);
+  return stats
+    .slice(0, maxStats)
+    .map((stat) => ({
+      ...stat,
+      value: toStatText(stat.value),
+    }));
 }
 
 function getBattingStats(player: Player): StatItem[] {

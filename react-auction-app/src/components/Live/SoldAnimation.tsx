@@ -20,9 +20,10 @@ interface SoldAnimationProps {
 }
 
 const formatCurrency = (amount: number): string => {
-  if (amount >= 10000000) return `₹${(amount / 10000000).toFixed(2)} Cr`;
-  if (amount >= 100000) return `₹${(amount / 100000).toFixed(2)} L`;
-  return `₹${amount.toLocaleString('en-IN')}`;
+  const safeAmount = Number.isFinite(Number(amount)) ? Number(amount) : 0;
+  if (safeAmount >= 10000000) return `₹${(safeAmount / 10000000).toFixed(2)} Cr`;
+  if (safeAmount >= 100000) return `₹${(safeAmount / 100000).toFixed(2)} L`;
+  return `₹${safeAmount.toLocaleString('en-IN')}`;
 };
 
 export default function SoldAnimation({ 
@@ -35,10 +36,14 @@ export default function SoldAnimation({
   duration = 3000 
 }: SoldAnimationProps) {
   const isSold = type === 'sold';
+  const safePlayerName = typeof player?.name === 'string' && player.name.trim() ? player.name.trim() : 'Unknown Player';
+  const safeTeamName = typeof team?.name === 'string' && team.name.trim() ? team.name.trim() : 'Unknown Team';
+  const safePlayerRole = typeof player?.role === 'string' ? player.role : 'Player';
   const fallbackAvatar = player
-    ? `https://ui-avatars.com/api/?name=${encodeURIComponent(player.name)}&background=0D1117&color=FFFFFF&size=256`
+    ? `https://ui-avatars.com/api/?name=${encodeURIComponent(safePlayerName)}&background=0D1117&color=FFFFFF&size=256`
     : '';
-  const imageSrc = player?.imageUrl?.trim() ? player.imageUrl : fallbackAvatar;
+  const safeImageUrl = typeof player?.imageUrl === 'string' ? player.imageUrl : '';
+  const imageSrc = safeImageUrl.trim() ? safeImageUrl : fallbackAvatar;
 
   // Auto-dismiss after duration
   useEffect(() => {
@@ -90,15 +95,15 @@ export default function SoldAnimation({
               <div className="live-sold-animation__avatar">
                 <img
                   src={imageSrc}
-                  alt={player.name}
+                  alt={safePlayerName}
                   onError={(e) => {
                     (e.target as HTMLImageElement).src = fallbackAvatar;
                   }}
                 />
               </div>
               <div className="live-sold-animation__info">
-                <h3 className="live-sold-animation__name">{player.name}</h3>
-                <p className="live-sold-animation__role">{formatRoleDisplay(player.role)}</p>
+                <h3 className="live-sold-animation__name">{safePlayerName}</h3>
+                <p className="live-sold-animation__role">{formatRoleDisplay(safePlayerRole)}</p>
               </div>
             </div>
 
@@ -113,14 +118,14 @@ export default function SoldAnimation({
                   {team.logoUrl && (
                     <img
                       src={team.logoUrl}
-                      alt={team.name}
+                      alt={safeTeamName}
                       className="live-sold-animation__team-logo"
                       onError={(e) => {
-                        (e.target as HTMLImageElement).src = `https://ui-avatars.com/api/?name=${encodeURIComponent(team.name)}&background=1a1a2e&color=fff&size=64`;
+                        (e.target as HTMLImageElement).src = `https://ui-avatars.com/api/?name=${encodeURIComponent(safeTeamName)}&background=1a1a2e&color=fff&size=64`;
                       }}
                     />
                   )}
-                  <span className="live-sold-animation__team-name">{team.name}</span>
+                  <span className="live-sold-animation__team-name">{safeTeamName}</span>
                 </div>
                 <div className="live-sold-animation__amount">
                   {formatCurrency(amount)}

@@ -26,9 +26,21 @@ import './LivePage.css';
 
 // Utility to format currency
 const formatCurrency = (amount: number): string => {
-  if (amount >= 10000000) return `₹${(amount / 10000000).toFixed(2)} Cr`;
-  if (amount >= 100000) return `₹${(amount / 100000).toFixed(2)} L`;
-  return `₹${amount.toLocaleString('en-IN')}`;
+  const safeAmount = Number.isFinite(Number(amount)) ? Number(amount) : 0;
+  if (safeAmount >= 10000000) return `₹${(safeAmount / 10000000).toFixed(2)} Cr`;
+  if (safeAmount >= 100000) return `₹${(safeAmount / 100000).toFixed(2)} L`;
+  return `₹${safeAmount.toLocaleString('en-IN')}`;
+};
+
+const toSafeNumber = (value: unknown, fallback = 0): number => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+};
+
+const toSafeText = (value: unknown, fallback = ''): string => {
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  return fallback;
 };
 
 export default function LivePage() {
@@ -689,6 +701,12 @@ export default function LivePage() {
   }
 
   const displayTeam = currentTeam || syncTeamState || auctionStore.selectedTeam;
+  const displayTeamName = toSafeText(displayTeam?.name, 'TEAM');
+  const selectedTeam = teams[selectedTeamIndex];
+  const selectedTeamName = toSafeText(selectedTeam?.name, 'Team');
+  const selectedTeamRemainingPurse = toSafeNumber(selectedTeam?.remainingPurse);
+  const selectedTeamHighestBid = toSafeNumber(selectedTeam?.highestBid);
+  const selectedTeamAllocated = toSafeNumber(selectedTeam?.allocatedAmount);
 
   // Main broadcast view
   return (
@@ -865,12 +883,12 @@ export default function LivePage() {
           exit={{ x: 100, opacity: 0 }}
           transition={{ type: 'spring', damping: 25, stiffness: 300 }}
         >
-          {currentBid > 0 ? (
+          {toSafeNumber(currentBid) > 0 ? (
             <>
               <div className="live-page__current-bid">
                 <div className="live-page__current-bid-label">Current Bid</div>
                 <div className="live-page__current-bid-amount">
-                  {formatCurrency(currentBid)}
+                  {formatCurrency(toSafeNumber(currentBid))}
                 </div>
               </div>
 
@@ -880,24 +898,24 @@ export default function LivePage() {
                     {displayTeam.logoUrl ? (
                       <img
                         src={displayTeam.logoUrl}
-                        alt={displayTeam.name}
+                        alt={displayTeamName}
                         loading="eager"
                         crossOrigin="anonymous"
                         onError={(e) => {
                           const img = e.target as HTMLImageElement;
                           // Try Google Drive thumbnail format if available
                           if (!img.src.includes('thumbnail')) {
-                            img.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(displayTeam.name)}&background=random`;
+                            img.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(displayTeamName)}&background=random`;
                           }
                         }}
                       />
                     ) : (
                       <div className="team-logo-fallback">
-                        {displayTeam.name.split(' ').map(w => w[0]).join('').substring(0, 2)}
+                        {displayTeamName.split(' ').map(w => w[0]).join('').substring(0, 2)}
                       </div>
                     )}
                   </div>
-                  <div className="live-page__team-name">{displayTeam.name}</div>
+                  <div className="live-page__team-name">{displayTeamName}</div>
                 </div>
               )}
 
@@ -905,9 +923,9 @@ export default function LivePage() {
                 <div className="live-page__bid-history">
                   {bidHistory.slice(0, overlay.bid.historyCount).map((bid, index) => (
                     <div key={index} className="live-page__bid-history-item">
-                      <span className="live-page__bid-history-team">{bid.teamName}</span>
+                      <span className="live-page__bid-history-team">{toSafeText(bid.teamName, 'Team')}</span>
                       <span className="live-page__bid-history-amount">
-                        {formatCurrency(bid.amount)}
+                        {formatCurrency(toSafeNumber(bid.amount))}
                       </span>
                     </div>
                   ))}
@@ -1036,13 +1054,13 @@ export default function LivePage() {
               {teams[selectedTeamIndex]?.logoUrl && (
                 <img 
                   src={teams[selectedTeamIndex].logoUrl} 
-                  alt={teams[selectedTeamIndex].name}
+                  alt={selectedTeamName}
                   style={{ width: '48px', height: '48px', borderRadius: '8px', objectFit: 'contain' }}
                 />
               )}
               <div>
                 <h3 style={{ margin: 0, color: teams[selectedTeamIndex]?.primaryColor || '#fff', fontSize: '1.25rem' }}>
-                  {teams[selectedTeamIndex]?.name || 'Team'}
+                  {selectedTeamName}
                 </h3>
                 <p style={{ margin: 0, fontSize: '0.8rem', opacity: 0.7 }}>
                   Team {selectedTeamIndex + 1} of {teams.length}
@@ -1086,7 +1104,7 @@ export default function LivePage() {
                 textAlign: 'center'
               }}>
                 <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#fbbf24' }}>
-                  ₹{((teams[selectedTeamIndex]?.remainingPurse || 0) / 100000).toFixed(1)}L
+                  ₹{(selectedTeamRemainingPurse / 100000).toFixed(1)}L
                 </div>
                 <div style={{ fontSize: '0.75rem', opacity: 0.7 }}>Remaining Purse</div>
               </div>
@@ -1123,7 +1141,7 @@ export default function LivePage() {
                 textAlign: 'center'
               }}>
                 <div style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#a78bfa' }}>
-                  ₹{((teams[selectedTeamIndex]?.highestBid || 0) / 100000).toFixed(1)}L
+                  ₹{(selectedTeamHighestBid / 100000).toFixed(1)}L
                 </div>
                 <div style={{ fontSize: '0.75rem', opacity: 0.7 }}>Highest Bid</div>
               </div>
@@ -1144,7 +1162,7 @@ export default function LivePage() {
             <div style={{ marginTop: '16px', padding: '12px', background: 'rgba(255,255,255,0.05)', borderRadius: '8px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', marginBottom: '8px' }}>
                 <span style={{ opacity: 0.7 }}>Allocated Amount:</span>
-                <span style={{ color: '#60a5fa' }}>₹{((teams[selectedTeamIndex]?.allocatedAmount || 0) / 100000).toFixed(1)}L</span>
+                <span style={{ color: '#60a5fa' }}>₹{(selectedTeamAllocated / 100000).toFixed(1)}L</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem' }}>
                 <span style={{ opacity: 0.7 }}>Under-age Players:</span>
