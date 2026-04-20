@@ -16,6 +16,7 @@ interface KeyboardShortcutOptions {
   onCarouselToggle?: () => void;
   onBidMultiplierChange?: (multiplier: number) => void;
   onTeamSquadView?: (teamId: string) => void;
+  onTeamDisplayToggle?: () => void;
 }
 
 // Global bid multiplier state (1 = 100, 2 = 200, etc.)
@@ -25,7 +26,7 @@ let bidMultiplier = 1;
  * Hook for managing keyboard shortcuts
  */
 export function useKeyboardShortcuts(options: KeyboardShortcutOptions = {}) {
-  const { enabled = true, onCustomAction, onViewToggle, onEscape, onHeaderToggle, onCarouselToggle, onBidMultiplierChange, onTeamSquadView } = options;
+  const { enabled = true, onCustomAction, onViewToggle, onEscape, onHeaderToggle, onCarouselToggle, onBidMultiplierChange, onTeamSquadView, onTeamDisplayToggle } = options;
   const [currentMultiplier, setCurrentMultiplier] = useState(1);
   const lastSlashPressTime = useRef<number>(0);
   
@@ -201,8 +202,17 @@ export function useKeyboardShortcuts(options: KeyboardShortcutOptions = {}) {
       return;
     }
 
-    // T or P key - Toggle between player and team view
-    if (key === 't' || key === 'p') {
+    // P key - Toggle team squad display
+    if (key === 'p') {
+      event.preventDefault();
+      if (onTeamDisplayToggle) {
+        onTeamDisplayToggle();
+      }
+      return;
+    }
+
+    // T key - Toggle between player and team view
+    if (key === 't') {
       event.preventDefault();
       if (onViewToggle) {
         onViewToggle();
@@ -232,7 +242,7 @@ export function useKeyboardShortcuts(options: KeyboardShortcutOptions = {}) {
     if (onCustomAction) {
       onCustomAction(key);
     }
-  }, [auction, hotkeys, onCustomAction, onViewToggle, onEscape, onHeaderToggle, onCarouselToggle, onBidMultiplierChange]);
+  }, [auction, hotkeys, onCustomAction, onViewToggle, onEscape, onHeaderToggle, onCarouselToggle, onBidMultiplierChange, onTeamDisplayToggle]);
 
   useEffect(() => {
     if (!enabled) return;

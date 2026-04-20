@@ -215,6 +215,13 @@ function AuctionApp() {
     onCarouselToggle: () => setShowCarousel(prev => !prev),
     onBidMultiplierChange: (multiplier) => setBidMultiplier(multiplier),
     onTeamSquadView: handleTeamSquadView,
+    onTeamDisplayToggle: () => {
+      if (showTeamSquadView) {
+        setShowTeamSquadView(false);
+      } else {
+        handleOpenTeamDisplay();
+      }
+    },
     onCustomAction: (action) => {
       console.log('[App] onCustomAction called with:', action);
       if (action === 'jumpToPlayer') {
@@ -559,6 +566,12 @@ function AuctionApp() {
       const target = event.target as HTMLElement;
       if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) return;
       if (event.metaKey || event.ctrlKey || event.altKey) return;
+      
+      if (event.key === 'p') {
+        console.log('[App] "P" key pressed - opening team display');
+        event.preventDefault();
+        handleOpenTeamDisplay();
+      }
 
       if (event.key === '[') {
         event.preventDefault();
