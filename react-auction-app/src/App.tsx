@@ -1001,7 +1001,7 @@ function AuctionApp() {
                     animate={{ scale: 1, color: '#ffffff' }}
                     transition={{ type: 'spring', stiffness: 300, damping: 15 }}
                   >
-                    ₹{auction.currentBid.toFixed(2)}L
+                    ₹{Number(auction.currentBid).toFixed(2)}L
                   </motion.div>
                   <div className="team-bid-max">Max: ₹{auction.getMaxBidForTeam(selectedTeam)?.toFixed(1)}L</div>
                 </div>

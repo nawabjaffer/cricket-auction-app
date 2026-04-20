@@ -29,7 +29,8 @@ const ROLE_TO_CATEGORY: Record<string, AuctionRoleCategory> = {
 /**
  * Map any raw role string to a canonical AuctionRoleCategory.
  */
-export function getRoleCategory(role: string): AuctionRoleCategory {
+export function getRoleCategory(role: string | undefined | null): AuctionRoleCategory {
+  if (!role || typeof role !== 'string') return 'Uncategorized';
   const key = role.trim().toLowerCase();
 
   // Direct match
@@ -93,8 +94,8 @@ function normalizeBowlingStyle(raw: string): string | null {
  *   "Right-Arm Fast Bowler"                      → "Bowler · Right-Arm Fast"
  *   "All- Rounder (RHB)"                         → "All-Rounder · Right-Hand Bat"
  */
-export function formatRoleDisplay(rawRole: string | PlayerRole | undefined): string {
-  if (!rawRole) return 'Player';
+export function formatRoleDisplay(rawRole: string | PlayerRole | undefined | null): string {
+  if (!rawRole || typeof rawRole !== 'string') return 'Player';
 
   const input = rawRole.trim();
   if (!input) return 'Player';
@@ -151,7 +152,7 @@ export function formatRoleDisplay(rawRole: string | PlayerRole | undefined): str
 /**
  * Get a short badge label (1-3 chars) for compact role display.
  */
-export function getRoleBadge(role: string): string {
+export function getRoleBadge(role: string | undefined | null): string {
   const category = getRoleCategory(role);
   switch (category) {
     case 'Wicket Keeper Batsman': return 'WK';
@@ -178,7 +179,7 @@ export interface ParsedRole {
  * Parse a raw role string into structured parts for rich display.
  */
 export function parseRoleDetails(rawRole: string | PlayerRole | undefined): ParsedRole {
-  if (!rawRole || !rawRole.trim()) {
+  if (!rawRole || typeof rawRole !== 'string' || !rawRole.trim()) {
     return { coreRole: 'Player', category: 'Uncategorized', battingHand: null, bowlingStyle: null, badge: 'PLR' };
   }
 
@@ -231,7 +232,7 @@ export function parseRoleDetails(rawRole: string | PlayerRole | undefined): Pars
 /**
  * Get theme color class for role badge.
  */
-export function getRoleBadgeColor(role: string): string {
+export function getRoleBadgeColor(role: string | undefined | null): string {
   const category = getRoleCategory(role);
   switch (category) {
     case 'Wicket Keeper Batsman': return '#8b5cf6';

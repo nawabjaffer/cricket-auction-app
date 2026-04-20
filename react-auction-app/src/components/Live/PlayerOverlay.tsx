@@ -25,8 +25,8 @@ const MAX_RETRY_ATTEMPTS = 20;
  * "Bowler · Right-Arm Fast"     → { coreRole: "Bowler", details: "Right-Arm Fast" }
  * "All-Rounder · Right-Hand Bat · Right-Arm Fast" → { coreRole: "All-Rounder", details: "Right-Hand Bat · Right-Arm Fast" }
  */
-function splitRoleDisplay(rawRole: string): { coreRole: string; details: string } {
-  if (!rawRole) return { coreRole: 'Player', details: '' };
+function splitRoleDisplay(rawRole: string | undefined | null): { coreRole: string; details: string } {
+  if (!rawRole || typeof rawRole !== 'string') return { coreRole: 'Player', details: '' };
 
   const input = rawRole.trim();
 
