@@ -52,10 +52,10 @@ export function useRealtimeDesktopSync(): void {
       isInitialized.current = true;
       
       initPromiseRef.current = realtimeSyncService.initAsDesktop().then(() => {
-        console.log('[useRealtimeDesktopSync] ✅ Desktop sync initialized and ready');
+        if (import.meta.env.DEV) console.log('[useRealtimeDesktopSync] ✅ Desktop sync initialized and ready');
         
         // Force an immediate state broadcast after initialization
-        console.log('[useRealtimeDesktopSync] 📡 Broadcasting initial state...');
+        if (import.meta.env.DEV) console.log('[useRealtimeDesktopSync] 📡 Broadcasting initial state...');
         realtimeSyncService.broadcastState(
           currentPlayer,
           currentBid,
@@ -70,12 +70,12 @@ export function useRealtimeDesktopSync(): void {
 
     // Subscribe to mobile bids
     const unsubscribe = realtimeSyncService.onMobileBid((bid: RealtimeMobileBid) => {
-      console.log('[useRealtimeDesktopSync] 📱 Mobile bid received:', bid);
+      if (import.meta.env.DEV) console.log('[useRealtimeDesktopSync] 📱 Mobile bid received:', bid);
       
       if (bid.type === 'raise') {
         const team = teamsRef.current.find(t => t.id === bid.teamId);
         if (team) {
-          console.log('[useRealtimeDesktopSync] ✅ Applying bid from team:', team.name);
+          if (import.meta.env.DEV) console.log('[useRealtimeDesktopSync] ✅ Applying bid from team:', team.name);
           raiseBidForTeam(team);
         }
       }
@@ -90,16 +90,18 @@ export function useRealtimeDesktopSync(): void {
   useEffect(() => {
     if (!isInitialized.current) return;
     if (!realtimeSyncService.isReady()) {
-      console.log('[useRealtimeDesktopSync] ⏳ Service not ready yet, waiting...');
+      if (import.meta.env.DEV) console.log('[useRealtimeDesktopSync] ⏳ Service not ready yet, waiting...');
       return;
     }
 
-    console.log('[useRealtimeDesktopSync] 📡 Broadcasting state update...', {
-      player: currentPlayer?.name,
-      bid: currentBid,
-      team: selectedTeam?.name,
-      active: auctionState.isAuctionActive,
-    });
+    if (import.meta.env.DEV) {
+      console.log('[useRealtimeDesktopSync] 📡 Broadcasting state update...', {
+        player: currentPlayer?.name,
+        bid: currentBid,
+        team: selectedTeam?.name,
+        active: auctionState.isAuctionActive,
+      });
+    }
 
     realtimeSyncService.broadcastState(
       currentPlayer,
@@ -127,7 +129,7 @@ export function useRealtimeDesktopSync(): void {
         teamsRef.current,
         auctionActiveRef.current
       );
-    }, 800);
+    }, 2000);
 
     return () => clearInterval(interval);
   }, []);
@@ -183,18 +185,20 @@ export function useRealtimeMobileSync(): RealtimeMobileSyncState {
       isInitialized.current = true;
       
       realtimeSyncService.initAsMobile().then(() => {
-        console.log('[useRealtimeMobileSync] Mobile sync initialized');
+        if (import.meta.env.DEV) console.log('[useRealtimeMobileSync] Mobile sync initialized');
       });
     }
 
     // Subscribe to state updates
     const unsubscribe = realtimeSyncService.onStateChange((state) => {
-      console.log('[useRealtimeMobileSync] State update received:', {
-        player: state.currentPlayer?.name,
-        bid: state.currentBid,
-        team: state.selectedTeam?.name,
-        active: state.auctionActive,
-      });
+      if (import.meta.env.DEV) {
+        console.log('[useRealtimeMobileSync] State update received:', {
+          player: state.currentPlayer?.name,
+          bid: state.currentBid,
+          team: state.selectedTeam?.name,
+          active: state.auctionActive,
+        });
+      }
       setSyncState(state);
       setIsConnected(true);
     });
@@ -202,7 +206,7 @@ export function useRealtimeMobileSync(): RealtimeMobileSyncState {
     // Check connection status periodically
     const connectionCheck = setInterval(() => {
       setIsConnected(realtimeSyncService.isDesktopConnected());
-    }, 800);
+    }, 2000);
 
     // Subscribe to session reset events
     const unsubscribeReset = realtimeSyncService.onSessionReset((reset) => {

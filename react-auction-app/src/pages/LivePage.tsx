@@ -13,7 +13,7 @@ import { useAuctionStore } from '../store/auctionStore';
 import { cameraManager } from '../services/cameraManager';
 import { premiumService } from '../services/premiumService';
 import { useAdminAuth } from '../hooks/useAdminAuth';
-import { useAuction, useInitialData, useRealtimeMobileSync, useRealtimeDesktopSync, useTheme } from '../hooks';
+import { useAuction, useInitialData, useRealtimeMobileSync, useTheme } from '../hooks';
 import type { CameraSource } from '../types/streaming';
 import type { Player, Team } from '../types';
 import { realtimeSync, type BroadcastControlState, type PersistedCameraConfig } from '../services/realtimeSync';
@@ -73,9 +73,6 @@ export default function LivePage() {
 
   // Use auction hook for bidding functionality (reuse existing business logic)
   const auction = useAuction();
-
-  // Enable desktop sync for Firebase broadcasting (allows mobile bidding to work)
-  useRealtimeDesktopSync();
 
   // Ensure data is loaded for full player details (matches, runs, etc.)
   useInitialData();
