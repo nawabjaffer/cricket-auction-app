@@ -201,8 +201,8 @@ export function useKeyboardShortcuts(options: KeyboardShortcutOptions = {}) {
       return;
     }
 
-    // T key - Toggle between player and team view
-    if (key === 't') {
+    // T or P key - Toggle between player and team view
+    if (key === 't' || key === 'p') {
       event.preventDefault();
       if (onViewToggle) {
         onViewToggle();
