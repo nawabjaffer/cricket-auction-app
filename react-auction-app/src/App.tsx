@@ -560,7 +560,7 @@ function AuctionApp() {
   }, [selectedTeam, auction.currentBid]);
 
   useEffect(() => {
-    if (!showTeamOverlay) return;
+    if (!showTeamOverlay && !showTeamSquadView) return;
 
     const handleOverlayTeamNavigation = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement;
@@ -573,18 +573,27 @@ function AuctionApp() {
         handleOpenTeamDisplay();
       }
 
-      if (event.key === '[') {
+      if (event.key === '[' || event.key === ']') {
         event.preventDefault();
-        selectAdjacentOverlayTeam('prev');
-      } else if (event.key === ']') {
-        event.preventDefault();
-        selectAdjacentOverlayTeam('next');
+        const direction = event.key === '[' ? 'prev' : 'next';
+
+        if (showTeamSquadView && allTeams.length > 0) {
+          // Navigate teams in Team Squad View
+          const currentIndex = allTeams.findIndex((t) => t.id === selectedTeamForSquad);
+          const safeIndex = currentIndex >= 0 ? currentIndex : 0;
+          const delta = direction === 'next' ? 1 : -1;
+          const nextIndex = (safeIndex + delta + allTeams.length) % allTeams.length;
+          setSelectedTeamForSquad(allTeams[nextIndex].id);
+        } else if (showTeamOverlay) {
+          // Navigate teams in Team Overlay
+          selectAdjacentOverlayTeam(direction);
+        }
       }
     };
 
     window.addEventListener('keydown', handleOverlayTeamNavigation);
     return () => window.removeEventListener('keydown', handleOverlayTeamNavigation);
-  }, [selectAdjacentOverlayTeam, showTeamOverlay]);
+  }, [selectAdjacentOverlayTeam, showTeamOverlay, showTeamSquadView, allTeams, selectedTeamForSquad]);
 
   // Play sounds when overlay changes
   useEffect(() => {
