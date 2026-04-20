@@ -469,6 +469,20 @@ function AuctionApp() {
     [soldPlayers, selectedTeam?.name],
   );
 
+  const selectAdjacentOverlayTeam = useCallback((direction: 'prev' | 'next') => {
+    if (!showTeamOverlay || allTeams.length === 0) return;
+
+    const currentIndex = selectedTeam
+      ? allTeams.findIndex((team) => team.id === selectedTeam.id)
+      : 0;
+
+    const safeIndex = currentIndex >= 0 ? currentIndex : 0;
+    const delta = direction === 'next' ? 1 : -1;
+    const nextIndex = (safeIndex + delta + allTeams.length) % allTeams.length;
+
+    auction.selectTeam(allTeams[nextIndex]);
+  }, [allTeams, auction, selectedTeam, showTeamOverlay]);
+
   const teamTopBids = useMemo(
     () => [...selectedTeamPlayers].sort((a, b) => b.soldAmount - a.soldAmount).slice(0, 3),
     [selectedTeamPlayers],
@@ -537,6 +551,27 @@ function AuctionApp() {
       warning: validation.valid && validation.isWarning ? validation.message : '',
     };
   }, [selectedTeam, auction.currentBid]);
+
+  useEffect(() => {
+    if (!showTeamOverlay) return;
+
+    const handleOverlayTeamNavigation = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement;
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) return;
+      if (event.metaKey || event.ctrlKey || event.altKey) return;
+
+      if (event.key === '[') {
+        event.preventDefault();
+        selectAdjacentOverlayTeam('prev');
+      } else if (event.key === ']') {
+        event.preventDefault();
+        selectAdjacentOverlayTeam('next');
+      }
+    };
+
+    window.addEventListener('keydown', handleOverlayTeamNavigation);
+    return () => window.removeEventListener('keydown', handleOverlayTeamNavigation);
+  }, [selectAdjacentOverlayTeam, showTeamOverlay]);
 
   // Play sounds when overlay changes
   useEffect(() => {
@@ -1221,20 +1256,49 @@ function AuctionApp() {
 
               {/* Selected Team Info */}
               {selectedTeam && (
-                <div className="team-info-header">
-                  <div className="team-name-large">{selectedTeam.name}</div>
-                  <div className="team-meta">
-                    <span className="meta-item">
-                      <span className="meta-label">Budget</span>
-                      <span className="meta-value">₹{selectedTeam.remainingPurse?.toFixed(1)}L</span>
-                    </span>
-                    <span className="meta-divider">•</span>
-                    <span className="meta-item">
-                      <span className="meta-label">Players</span>
-                      <span className="meta-value">{selectedTeam.playersBought}/{selectedTeam.totalPlayerThreshold}</span>
-                    </span>
+                <motion.div
+                  className="team-info-header"
+                  key={selectedTeam.id}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.28, ease: [0.22, 0.61, 0.36, 1] }}
+                >
+                  <motion.div
+                    className="team-info-logo-shell"
+                    initial={{ opacity: 0, scale: 0.9, rotate: -6 }}
+                    animate={{ opacity: 1, scale: 1, rotate: 0 }}
+                    transition={{ duration: 0.32, delay: 0.06, ease: [0.22, 0.61, 0.36, 1] }}
+                  >
+                    {selectedTeam.logoUrl ? (
+                      <img
+                        src={selectedTeam.logoUrl}
+                        alt={`${selectedTeam.name} logo`}
+                        className="team-info-logo"
+                        loading="lazy"
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).style.display = 'none';
+                        }}
+                      />
+                    ) : (
+                      <span className="team-info-logo-fallback">{selectedTeam.name.slice(0, 2).toUpperCase()}</span>
+                    )}
+                  </motion.div>
+
+                  <div className="team-info-details">
+                    <div className="team-name-large">{selectedTeam.name}</div>
+                    <div className="team-meta">
+                      <span className="meta-item">
+                        <span className="meta-label">Budget</span>
+                        <span className="meta-value">₹{selectedTeam.remainingPurse?.toFixed(1)}L</span>
+                      </span>
+                      <span className="meta-divider">•</span>
+                      <span className="meta-item">
+                        <span className="meta-label">Players</span>
+                        <span className="meta-value">{selectedTeam.playersBought}/{selectedTeam.totalPlayerThreshold}</span>
+                      </span>
+                    </div>
                   </div>
-                </div>
+                </motion.div>
               )}
 
               {/* Sold Players Grid */}
@@ -1356,7 +1420,7 @@ function AuctionApp() {
               </div>
 
               <div className="panel-hint">
-                Press <kbd>1-{allTeams.length}</kbd> to switch teams • <kbd>ESC</kbd> to close
+                Press <kbd>[</kbd> previous team • <kbd>]</kbd> next team • <kbd>ESC</kbd> to close
               </div>
             </motion.div>
           </motion.div>

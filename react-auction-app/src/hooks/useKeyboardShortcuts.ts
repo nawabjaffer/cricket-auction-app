@@ -70,33 +70,6 @@ export function useKeyboardShortcuts(options: KeyboardShortcutOptions = {}) {
       return;
     }
 
-    // Direct team shortcuts: ], [, p, o for teams 1, 2, 3, 4
-    const teamShortcuts: Record<string, number> = {
-      ']': 0, // Team 1
-      '[': 1, // Team 2
-      'p': 2, // Team 3
-      'o': 3, // Team 4
-    };
-
-    if (teamShortcuts.hasOwnProperty(key)) {
-      event.preventDefault();
-      const teamIndex = teamShortcuts[key];
-      const teams = auction.getEligibleTeams();
-      
-      if (teamIndex < teams.length) {
-        console.log(`[V1 Shortcut] Direct team shortcut: opening ${teams[teamIndex].name} (key: ${key})`);
-        console.log('[V1 Shortcut] Calling onTeamSquadView with teamId:', teams[teamIndex].id);
-        if (onTeamSquadView) {
-          onTeamSquadView(teams[teamIndex].id);
-        } else {
-          console.log('[V1 Shortcut] onTeamSquadView is not defined!');
-        }
-      } else {
-        console.log('[V1 Shortcut] teamIndex', teamIndex, 'out of range, teams.length:', teams.length);
-      }
-      return;
-    }
-
     // Handle '/' for Team Squad Mode (/ + 1..8)
     if (key === '/' || key === 'slash' || event.code === 'Slash') {
       event.preventDefault();

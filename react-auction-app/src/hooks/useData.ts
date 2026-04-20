@@ -20,6 +20,10 @@ import type { Player, Team } from '../types';
 // skip the loading screen on subsequent mounts (e.g. returning from /live).
 let _globalPreloadComplete = false;
 
+// Module-level flag: once Firebase data has been loaded in this session,
+// skip the Firebase fetch on subsequent mounts (e.g. returning from /live).
+let _globalDataLoaded = false;
+
 // localStorage-based preload cache: skip preload on page reload if recently completed
 const PRELOAD_LS_KEY = 'epl_preload_done_v1';
 const PRELOAD_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
@@ -39,16 +43,24 @@ function markPreloadComplete(): void {
 }
 
 export function useInitialData() {
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(!_globalDataLoaded);
   const [isError, setIsError] = useState(false);
   const [error, setError] = useState<Error | null>(null);
-  const [dataReady, setDataReady] = useState(false);
+  const [dataReady, setDataReady] = useState(_globalDataLoaded);
   const [isPreloadingComplete, setIsPreloadingComplete] = useState(
     _globalPreloadComplete || isPreloadCachedLocally()
   );
 
   // Load data from Firebase only — no auto Google Sheets fetch
+  // Skipped on subsequent mounts within the same SPA session.
   useEffect(() => {
+    if (_globalDataLoaded) {
+      // Data already loaded in this session — resolve immediately
+      setDataReady(true);
+      setIsLoading(false);
+      return;
+    }
+
     let cancelled = false;
 
     const loadFromFirebase = async () => {
@@ -75,6 +87,7 @@ export function useInitialData() {
           useAuctionStore.getState().setAdminPlayerOverrides(adminPlayers);
         }
 
+        _globalDataLoaded = true;
         if (!cancelled) { setDataReady(true); setIsLoading(false); }
       } catch (err) {
         console.error('[useInitialData] Failed to load from Firebase:', err);

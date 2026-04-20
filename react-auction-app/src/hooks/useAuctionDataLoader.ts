@@ -9,9 +9,13 @@ import { realtimeSync } from '../services/realtimeSync';
 import { useAuctionStore } from '../store/auctionStore';
 import type { SoldPlayer } from '../types';
 
+// Module-level flag: once data has been restored in this session,
+// skip the Firebase restore on subsequent mounts (e.g. returning from /live).
+let _globalRestoreComplete = false;
+
 export function useAuctionDataLoader() {
   const [isRestoring, setIsRestoring] = useState(false);
-  const [hasRestoredData, setHasRestoredData] = useState(false);
+  const [hasRestoredData, setHasRestoredData] = useState(_globalRestoreComplete);
 
   const { 
     setTeams, 
@@ -109,6 +113,7 @@ export function useAuctionDataLoader() {
         useAuctionStore.getState().reconcilePlayerPools();
 
         setHasRestoredData(true);
+        _globalRestoreComplete = true;
         console.log('[DataLoader] ✅ Data restored from Firebase:', {
           soldPlayers: restoredSoldPlayers.length,
           unsoldPlayers: restoredUnsoldPlayers.length,
