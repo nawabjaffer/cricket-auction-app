@@ -116,31 +116,7 @@ class CameraManagerService {
     }
 
     try {
-      let stream: MediaStream;
-      try {
-        // Try exact device match first
-        stream = await navigator.mediaDevices.getUserMedia({
-          video: {
-            deviceId: { exact: deviceId },
-            width: { ideal: 1920 },
-            height: { ideal: 1080 },
-            frameRate: { ideal: 30 },
-          },
-          audio: false,
-        });
-      } catch {
-        // Exact match failed — try preferred (allows browser to pick closest match)
-        console.warn('[CameraManager] Exact device not found, trying preferred:', deviceId);
-        stream = await navigator.mediaDevices.getUserMedia({
-          video: {
-            deviceId: { ideal: deviceId },
-            width: { ideal: 1920 },
-            height: { ideal: 1080 },
-            frameRate: { ideal: 30 },
-          },
-          audio: false,
-        });
-      }
+      const stream = await this.createBestEffortStream(deviceId);
 
       const device = this.availableDevices.find(d => d.deviceId === deviceId);
       const sourceIndex = this.config.sources.length;
@@ -155,6 +131,14 @@ class CameraManagerService {
         zIndex: 10 - sourceIndex,
       };
 
+      // OBS virtual cameras or external capture devices can end tracks unexpectedly.
+      // Auto-recover by reopening the same device and swapping stream in-place.
+      stream.getVideoTracks().forEach((track) => {
+        track.addEventListener('ended', () => {
+          void this.recoverCameraStream(source.id, deviceId);
+        });
+      });
+
       this.config.sources.push(source);
       
       // Set as primary if first camera
@@ -168,6 +152,76 @@ class CameraManagerService {
     } catch (error) {
       console.error('[CameraManager] Failed to add camera:', error);
       return null;
+    }
+  }
+
+  private async createBestEffortStream(deviceId: string): Promise<MediaStream> {
+    const constraintsList: MediaStreamConstraints[] = [
+      {
+        video: {
+          deviceId: { exact: deviceId },
+          width: { ideal: 1920 },
+          height: { ideal: 1080 },
+          frameRate: { ideal: 30 },
+        },
+        audio: false,
+      },
+      {
+        video: {
+          deviceId: { exact: deviceId },
+        },
+        audio: false,
+      },
+      {
+        video: {
+          deviceId: { ideal: deviceId },
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+        },
+        audio: false,
+      },
+      {
+        video: true,
+        audio: false,
+      },
+    ];
+
+    let lastError: unknown;
+    for (const constraints of constraintsList) {
+      try {
+        return await navigator.mediaDevices.getUserMedia(constraints);
+      } catch (error) {
+        lastError = error;
+      }
+    }
+
+    throw lastError instanceof Error ? lastError : new Error('Failed to open camera stream');
+  }
+
+  private async recoverCameraStream(sourceId: string, deviceId: string): Promise<void> {
+    try {
+      const nextStream = await this.createBestEffortStream(deviceId);
+      const source = this.config.sources.find((s) => s.id === sourceId);
+      if (!source) {
+        nextStream.getTracks().forEach((track) => track.stop());
+        return;
+      }
+
+      if (source.stream) {
+        source.stream.getTracks().forEach((track) => track.stop());
+      }
+
+      source.stream = nextStream;
+      nextStream.getVideoTracks().forEach((track) => {
+        track.addEventListener('ended', () => {
+          void this.recoverCameraStream(sourceId, deviceId);
+        });
+      });
+
+      this.notifyListeners();
+      console.log('[CameraManager] Recovered camera stream for device:', deviceId);
+    } catch (error) {
+      console.error('[CameraManager] Failed to recover camera stream:', error);
     }
   }
 

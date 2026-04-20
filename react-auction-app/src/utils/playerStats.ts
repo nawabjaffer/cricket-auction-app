@@ -14,7 +14,7 @@ export interface StatItem {
  * - Player / unknown: general stats
  */
 export function getRoleBasedStats(player: Player, maxStats: number = 6): StatItem[] {
-  const role = (player.role || '').toLowerCase();
+  const role = typeof player.role === 'string' ? player.role.toLowerCase() : '';
   const isBatsman = role.includes('batsman') || role.includes('bat') || role.includes('wicket');
   const isBowler = role.includes('bowler') || role.includes('bowl');
   const isAllRounder = role.includes('all-rounder') || role.includes('all rounder') || role.includes('allrounder');
@@ -118,7 +118,7 @@ function getGeneralStats(player: Player): StatItem[] {
  * Get a short role label with icon hint
  */
 export function getRoleLabel(role: string): string {
-  const r = (role || '').toLowerCase();
+  const r = typeof role === 'string' ? role.toLowerCase() : '';
   if (r.includes('all-rounder') || r.includes('all rounder')) return 'All-Rounder';
   if (r.includes('wicket') && r.includes('bat')) return 'WK-Batsman';
   if (r.includes('wicket')) return 'Wicket-Keeper';
@@ -131,7 +131,7 @@ export function getRoleLabel(role: string): string {
  * Get role badge color class
  */
 export function getRoleBadgeClass(role: string): string {
-  const r = (role || '').toLowerCase();
+  const r = typeof role === 'string' ? role.toLowerCase() : '';
   if (r.includes('all-rounder') || r.includes('all rounder')) return 'role-allrounder';
   if (r.includes('wicket')) return 'role-keeper';
   if (r.includes('bat')) return 'role-batsman';

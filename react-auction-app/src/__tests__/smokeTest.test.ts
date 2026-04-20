@@ -241,6 +241,29 @@ describe('Smoke Test: Full Auction Simulation', () => {
     expect(useAuctionStore.getState().soldPlayers).toHaveLength(1);
   });
 
+  it('handles malformed role/imageUrl payloads without crashing live flow', () => {
+    const players: Player[] = [
+      {
+        id: 'P099',
+        name: 'Malformed Payload Player',
+        imageUrl: 123 as unknown as string,
+        role: { invalid: true } as unknown as Player['role'],
+        age: 24,
+        matches: '8',
+        runs: '120',
+        wickets: '3',
+        battingBestFigures: '42',
+        bowlingBestFigures: '2/18',
+        basePrice: 100,
+      },
+    ];
+
+    useAuctionStore.getState().setTeams(makeTeams());
+    expect(() => useAuctionStore.getState().setPlayers(players)).not.toThrow();
+    expect(() => useAuctionStore.getState().selectNextPlayer()).not.toThrow();
+    expect(useAuctionStore.getState().currentPlayer?.id).toBe('P099');
+  });
+
   it('handles players with missing/invalid basePrice', () => {
     const players: Player[] = [
       {

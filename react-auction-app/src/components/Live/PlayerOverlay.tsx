@@ -87,26 +87,43 @@ export default function PlayerOverlay({ player, maxStats = 6 }: PlayerOverlayPro
   const [currentUrlIndex, setCurrentUrlIndex] = useState(0);
   const [usePlaceholder, setUsePlaceholder] = useState(false);
 
+  const safePlayer = useMemo(() => {
+    const safeId = player?.id ? String(player.id) : 'unknown-player';
+    const safeName = typeof player?.name === 'string' && player.name.trim() ? player.name.trim() : 'Unknown Player';
+    const safeImageUrl = typeof player?.imageUrl === 'string' ? player.imageUrl : '';
+    const safeRole = typeof player?.role === 'string' ? player.role : 'Player';
+    const safeBasePrice = Number.isFinite(Number(player?.basePrice)) ? Number(player.basePrice) : 0;
+
+    return {
+      ...player,
+      id: safeId,
+      name: safeName,
+      imageUrl: safeImageUrl,
+      role: safeRole,
+      basePrice: safeBasePrice,
+    };
+  }, [player]);
+
   const imageUrls = useMemo(() => {
-    if (!player.imageUrl?.trim()) return [];
+    if (!safePlayer.imageUrl?.trim()) return [];
     const urls: string[] = [];
-    const fileId = extractDriveFileId(player.imageUrl);
+    const fileId = extractDriveFileId(safePlayer.imageUrl);
     if (fileId) {
       urls.push(`https://lh3.googleusercontent.com/d/${fileId}=s512`);
       urls.push(`https://drive.google.com/thumbnail?id=${fileId}&sz=w512`);
       urls.push(`https://drive.google.com/uc?export=view&id=${fileId}`);
       urls.push(`https://lh3.googleusercontent.com/d/${fileId}`);
     } else {
-      urls.push(player.imageUrl);
+      urls.push(safePlayer.imageUrl);
     }
     return urls;
-  }, [player.imageUrl]);
+  }, [safePlayer.imageUrl]);
 
   useEffect(() => {
     setAttemptCount(0);
     setCurrentUrlIndex(0);
     setUsePlaceholder(false);
-  }, [player.id]);
+  }, [safePlayer.id]);
 
   const handleImageError = useCallback(() => {
     const newAttempt = attemptCount + 1;
@@ -126,9 +143,9 @@ export default function PlayerOverlay({ player, maxStats = 6 }: PlayerOverlayPro
   }, [usePlaceholder, imageUrls, currentUrlIndex]);
 
   // Role-based stats
-  const roleStats = useMemo(() => getRoleBasedStats(player, maxStats), [player, maxStats]);
-  const { coreRole, details: roleDetails } = useMemo(() => splitRoleDisplay(player.role), [player.role]);
-  const roleCat = useMemo(() => getRoleCategory(player.role), [player.role]);
+  const roleStats = useMemo(() => getRoleBasedStats(safePlayer, maxStats), [safePlayer, maxStats]);
+  const { coreRole, details: roleDetails } = useMemo(() => splitRoleDisplay(safePlayer.role), [safePlayer.role]);
+  const roleCat = useMemo(() => getRoleCategory(safePlayer.role), [safePlayer.role]);
   // For bowlers, show bowling style inline with role; for others, show hand on separate line
   const isBowlerRole = roleCat === 'Bowler';
   const displayRole = isBowlerRole && roleDetails ? `${coreRole} · ${roleDetails}` : coreRole;
@@ -136,7 +153,7 @@ export default function PlayerOverlay({ player, maxStats = 6 }: PlayerOverlayPro
 
   return (
     <motion.div
-      key={player.id}
+      key={safePlayer.id}
       className="live-page__player-overlay"
       initial={{ y: 100, opacity: 0 }}
       animate={{ y: 0, opacity: 1 }}
@@ -148,13 +165,13 @@ export default function PlayerOverlay({ player, maxStats = 6 }: PlayerOverlayPro
         <div className="live-page__player-image live-page__player-image--center">
           <img
             src={currentImageSrc}
-            alt={player.name}
+            alt={safePlayer.name}
             onError={handleImageError}
             style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }}
           />
         </div>
-        <h2 className="live-page__player-name">{player.name}</h2>
-        <p className="live-page__player-role" style={{ color: getRoleBadgeColor(player.role) }}>
+        <h2 className="live-page__player-name">{safePlayer.name}</h2>
+        <p className="live-page__player-role" style={{ color: getRoleBadgeColor(safePlayer.role) }}>
           {displayRole}
         </p>
         {displayDetails && (
@@ -172,7 +189,7 @@ export default function PlayerOverlay({ player, maxStats = 6 }: PlayerOverlayPro
           </div>
         ))}
         <div className="live-page__player-stat-card live-page__player-stat-card--price">
-          <div className="live-page__player-stat-value">₹{player.basePrice}L</div>
+          <div className="live-page__player-stat-value">₹{safePlayer.basePrice}L</div>
           <div className="live-page__player-stat-label">Base Price</div>
         </div>
       </div>

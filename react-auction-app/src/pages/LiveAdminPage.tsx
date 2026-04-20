@@ -22,6 +22,7 @@ import {
   type MobileBiddingConfig,
 } from '../services/realtimeSync';
 import { auctionPersistence, type SponsorRecord } from '../services/auctionPersistence';
+import { obsIntegrationPlugin } from '../services/obsIntegrationPlugin';
 import { useAdminAuth } from '../hooks/useAdminAuth';
 import { useTheme } from '../hooks/useTheme';
 import { AdminLogin } from '../components/AdminLogin';
@@ -61,6 +62,16 @@ export default function LiveAdminPage() {
   const [mbEnableRaise, setMbEnableRaise] = useState(true);
   const [mbEnableStop, setMbEnableStop] = useState(true);
   const [savedMbConfig, setSavedMbConfig] = useState(false);
+
+  // OBS integration state
+  const [obsHost, setObsHost] = useState('localhost');
+  const [obsPort, setObsPort] = useState(4455);
+  const [obsPassword, setObsPassword] = useState('');
+  const [obsConnectionState, setObsConnectionState] = useState<'disconnected' | 'connecting' | 'connected' | 'error'>('disconnected');
+  const [obsScenes, setObsScenes] = useState<string[]>([]);
+  const [obsCurrentScene, setObsCurrentScene] = useState('');
+  const [obsAutoModeSync, setObsAutoModeSync] = useState(true);
+  const [obsModeSceneMap, setObsModeSceneMap] = useState(obsIntegrationPlugin.getSceneMap());
 
   // Load sponsors (wait for DB initialization)
   useEffect(() => {
@@ -153,14 +164,69 @@ export default function LiveAdminPage() {
     } else {
       syncControl(mode);
     }
-  }, [breakDuration, activeSponsorId, syncControl]);
+
+    if (obsAutoModeSync) {
+      void obsIntegrationPlugin.syncModeToScene(mode);
+    }
+  }, [breakDuration, activeSponsorId, syncControl, obsAutoModeSync]);
+
+  useEffect(() => {
+    const unsub = obsIntegrationPlugin.onConnectionChange((state) => {
+      setObsConnectionState(state);
+      if (state === 'connected') {
+        const scenes = obsIntegrationPlugin.getScenes();
+        setObsScenes(scenes);
+        setObsCurrentScene(obsIntegrationPlugin.getCurrentScene() || scenes[0] || '');
+      }
+    });
+    return unsub;
+  }, []);
+
+  const connectOBS = useCallback(async () => {
+    const ok = await obsIntegrationPlugin.connect({
+      host: obsHost.trim() || 'localhost',
+      port: Number.isFinite(Number(obsPort)) ? Number(obsPort) : 4455,
+      password: obsPassword || undefined,
+    });
+    if (ok) {
+      const scenes = await obsIntegrationPlugin.refreshScenes();
+      setObsScenes(scenes);
+      setObsCurrentScene(obsIntegrationPlugin.getCurrentScene() || scenes[0] || '');
+    }
+  }, [obsHost, obsPort, obsPassword]);
+
+  const disconnectOBS = useCallback(() => {
+    obsIntegrationPlugin.disconnect();
+    setObsScenes([]);
+    setObsCurrentScene('');
+  }, []);
+
+  const applyOBSScene = useCallback(async () => {
+    if (!obsCurrentScene) return;
+    await obsIntegrationPlugin.setScene(obsCurrentScene);
+  }, [obsCurrentScene]);
+
+  const refreshOBSScenes = useCallback(async () => {
+    const scenes = await obsIntegrationPlugin.refreshScenes();
+    setObsScenes(scenes);
+    const current = obsIntegrationPlugin.getCurrentScene() || scenes[0] || '';
+    setObsCurrentScene(current);
+  }, []);
+
+  const updateModeSceneMap = useCallback((mode: BroadcastMode, scene: string) => {
+    const next = obsIntegrationPlugin.updateSceneMap({ [mode]: scene });
+    setObsModeSceneMap(next);
+  }, []);
 
   // Push break to live — actually syncs to Firebase and starts the timer
   const pushBreakToLive = useCallback(() => {
     setBreakTimeLeft(breakDuration);
     setBreakRunning(true);
     syncControl('break', { breakDuration, breakStartedAt: Date.now(), sponsorDisplayDuration });
-  }, [breakDuration, sponsorDisplayDuration, syncControl]);
+    if (obsAutoModeSync) {
+      void obsIntegrationPlugin.syncModeToScene('break');
+    }
+  }, [breakDuration, sponsorDisplayDuration, syncControl, obsAutoModeSync]);
 
   // Break timer countdown
   useEffect(() => {
@@ -405,6 +471,119 @@ export default function LiveAdminPage() {
                     <span className="la-transition-label">{label}</span>
                     <span className="la-transition-desc">{desc}</span>
                   </button>
+                ))}
+              </div>
+            </section>
+
+            {/* OBS Studio Integration Plugin */}
+            <section className="la-section">
+              <h2 className="la-section-title">
+                <IoVideocam size={18} /> OBS Studio Integration
+              </h2>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr 1fr auto auto', gap: 12, alignItems: 'end' }}>
+                <div>
+                  <label style={{ display: 'block', marginBottom: 6, fontSize: '0.8rem', opacity: 0.8 }}>Host</label>
+                  <input
+                    className="la-input"
+                    type="text"
+                    value={obsHost}
+                    onChange={(e) => setObsHost(e.target.value)}
+                    placeholder="localhost"
+                    style={{ width: '100%' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', marginBottom: 6, fontSize: '0.8rem', opacity: 0.8 }}>Port</label>
+                  <input
+                    className="la-input"
+                    type="number"
+                    value={obsPort}
+                    onChange={(e) => setObsPort(Number(e.target.value || 4455))}
+                    placeholder="4455"
+                    style={{ width: '100%' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', marginBottom: 6, fontSize: '0.8rem', opacity: 0.8 }}>Password</label>
+                  <input
+                    className="la-input"
+                    type="password"
+                    value={obsPassword}
+                    onChange={(e) => setObsPassword(e.target.value)}
+                    placeholder="Optional"
+                    style={{ width: '100%' }}
+                  />
+                </div>
+                <button className="la-btn" style={{ background: '#2563eb' }} onClick={connectOBS} disabled={obsConnectionState === 'connecting'}>
+                  {obsConnectionState === 'connected' ? 'Reconnect' : 'Connect'}
+                </button>
+                <button className="la-btn" onClick={disconnectOBS}>
+                  Disconnect
+                </button>
+              </div>
+
+              <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                <span style={{
+                  padding: '4px 10px',
+                  borderRadius: 999,
+                  fontSize: '0.78rem',
+                  border: '1px solid rgba(255,255,255,0.18)',
+                  background: obsConnectionState === 'connected' ? 'rgba(34,197,94,0.25)' : 'rgba(255,255,255,0.08)',
+                }}>
+                  OBS: {obsConnectionState}
+                </span>
+                <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                  <input
+                    type="checkbox"
+                    checked={obsAutoModeSync}
+                    onChange={(e) => {
+                      const enabled = e.target.checked;
+                      setObsAutoModeSync(enabled);
+                      obsIntegrationPlugin.setAutoModeSync(enabled);
+                    }}
+                  />
+                  Auto switch scene on mode change
+                </label>
+              </div>
+
+              <div style={{ marginTop: 12, display: 'grid', gridTemplateColumns: '1fr auto auto', gap: 12, alignItems: 'end' }}>
+                <div>
+                  <label style={{ display: 'block', marginBottom: 6, fontSize: '0.8rem', opacity: 0.8 }}>Current Scene</label>
+                  <select
+                    className="la-input"
+                    value={obsCurrentScene}
+                    onChange={(e) => setObsCurrentScene(e.target.value)}
+                    disabled={obsScenes.length === 0}
+                    style={{ width: '100%' }}
+                  >
+                    {obsScenes.length === 0 ? <option value="">No scenes loaded</option> : null}
+                    {obsScenes.map((scene) => (
+                      <option key={scene} value={scene}>{scene}</option>
+                    ))}
+                  </select>
+                </div>
+                <button className="la-btn" onClick={refreshOBSScenes} disabled={obsConnectionState !== 'connected'}>
+                  Refresh Scenes
+                </button>
+                <button className="la-btn" style={{ background: '#2563eb' }} onClick={applyOBSScene} disabled={obsConnectionState !== 'connected' || !obsCurrentScene}>
+                  Apply Scene
+                </button>
+              </div>
+
+              <div style={{ marginTop: 12, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                {(['auction', 'break', 'ad', 'standings'] as BroadcastMode[]).map((mode) => (
+                  <div key={mode}>
+                    <label style={{ display: 'block', marginBottom: 6, fontSize: '0.8rem', opacity: 0.8 }}>{mode.toUpperCase()} Scene</label>
+                    <input
+                      className="la-input"
+                      type="text"
+                      value={obsModeSceneMap[mode] || ''}
+                      onChange={(e) => updateModeSceneMap(mode, e.target.value)}
+                      placeholder={`OBS scene for ${mode}`}
+                      style={{ width: '100%' }}
+                    />
+                  </div>
                 ))}
               </div>
             </section>
