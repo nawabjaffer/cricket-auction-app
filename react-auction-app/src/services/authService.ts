@@ -1,5 +1,6 @@
 import { ref, get, set, update } from 'firebase/database';
 import { realtimeSync } from './realtimeSync';
+import { tenantPath } from './tenantPath';
 
 export interface AdminAccount {
   email: string;
@@ -17,7 +18,7 @@ export interface AdminSession {
   isAuthenticated: boolean;
 }
 
-const ADMIN_ACCOUNTS_PATH = 'admin/accounts';
+const ADMIN_ACCOUNTS_PATH = () => tenantPath('admin/accounts');
 // const ADMIN_SESSIONS_PATH = 'admin/sessions'; // Reserved for future use
 const SESSION_STORAGE_KEY = 'adminSession';
 const SESSION_DURATION = 24 * 60 * 60 * 1000; // 24 hours
@@ -107,7 +108,7 @@ class AuthService {
     };
 
     try {
-      await set(ref(this.db, `${ADMIN_ACCOUNTS_PATH}/${emailKey}`), account);
+      await set(ref(this.db, `${ADMIN_ACCOUNTS_PATH()}/${emailKey}`), account);
       console.log(`[AuthService] Added admin account: ${email}`);
     } catch (error) {
       console.error('[AuthService] Error adding admin account:', error);
@@ -125,11 +126,11 @@ class AuthService {
 
     try {
       // Check if account exists
-      let snapshot = await get(ref(this.db, `${ADMIN_ACCOUNTS_PATH}/${emailKey}`));
+      let snapshot = await get(ref(this.db, `${ADMIN_ACCOUNTS_PATH()}/${emailKey}`));
 
       if (!snapshot.exists() && email.toLowerCase() === DEFAULT_ADMIN_EMAIL.toLowerCase()) {
         await this.addAdminAccount(DEFAULT_ADMIN_EMAIL, DEFAULT_ADMIN_NAME, 'super-admin');
-        snapshot = await get(ref(this.db, `${ADMIN_ACCOUNTS_PATH}/${emailKey}`));
+        snapshot = await get(ref(this.db, `${ADMIN_ACCOUNTS_PATH()}/${emailKey}`));
       }
 
       if (!snapshot.exists()) {
@@ -154,7 +155,7 @@ class AuthService {
       };
 
       // Update last login timestamp
-      await update(ref(this.db, `${ADMIN_ACCOUNTS_PATH}/${emailKey}`), {
+      await update(ref(this.db, `${ADMIN_ACCOUNTS_PATH()}/${emailKey}`), {
         lastLogin: Date.now()
       });
 
@@ -206,7 +207,7 @@ class AuthService {
     await this.ensureDbReady();
 
     try {
-      const snapshot = await get(ref(this.db, ADMIN_ACCOUNTS_PATH));
+      const snapshot = await get(ref(this.db, ADMIN_ACCOUNTS_PATH()));
       if (!snapshot.exists()) {
         return [];
       }
@@ -235,7 +236,7 @@ class AuthService {
     const emailKey = email.replace(/[.#$[\]]/g, '_');
 
     try {
-      await update(ref(this.db, `${ADMIN_ACCOUNTS_PATH}/${emailKey}`), updates);
+      await update(ref(this.db, `${ADMIN_ACCOUNTS_PATH()}/${emailKey}`), updates);
       console.log(`[AuthService] Updated admin account: ${email}`);
     } catch (error) {
       console.error('[AuthService] Error updating admin account:', error);

@@ -15,6 +15,8 @@ import LivePage from './pages/LivePage'
 import LiveAdminPage from './pages/LiveAdminPage'
 import OBSOverlayPage from './pages/OBSOverlayPage'
 import OBSDockPage from './pages/OBSDockPage'
+import PlatformAdminPage from './pages/PlatformAdminPage'
+import { TenantGate } from './components/TenantGate/TenantGate'
 import './index.css'
 
 setupDebugConsole();
@@ -61,6 +63,7 @@ createRoot(document.getElementById('root')!).render(
       <QueryClientProvider client={queryClient}>
         <BrowserRouter>
           <Routes>
+            {/* Legacy top-level routes — all fall back to the default tenant (epl_2026) */}
             <Route path="/" element={<App />} />
             <Route path="/connect-bididng" element={<MobileBiddingLivePage />} />
             <Route path="/diagnostics" element={<FirebaseDiagnostics />} />
@@ -71,6 +74,22 @@ createRoot(document.getElementById('root')!).render(
             <Route path="/live-admin" element={<LiveAdminPage />} />
             <Route path="/obs-overlay" element={<OBSOverlayPage />} />
             <Route path="/obs-dock" element={<OBSDockPage />} />
+
+            {/* Super-admin portal — manage tournaments (tenants) */}
+            <Route path="/platform-admin" element={<PlatformAdminPage />} />
+
+            {/* Tenant-scoped routes — /:tenantSlug/... */}
+            <Route path="/:tenantSlug" element={<TenantGate><App /></TenantGate>} />
+            <Route path="/:tenantSlug/connect-bididng" element={<TenantGate><MobileBiddingLivePage /></TenantGate>} />
+            <Route path="/:tenantSlug/connect-bidding" element={<TenantGate><MobileBiddingLivePage /></TenantGate>} />
+            <Route path="/:tenantSlug/diagnostics" element={<TenantGate><FirebaseDiagnostics /></TenantGate>} />
+            <Route path="/:tenantSlug/admin/login" element={<TenantGate><AdminLogin /></TenantGate>} />
+            <Route path="/:tenantSlug/admin" element={<TenantGate><AdminPage /></TenantGate>} />
+            <Route path="/:tenantSlug/camera" element={<TenantGate><CameraPage /></TenantGate>} />
+            <Route path="/:tenantSlug/live" element={<TenantGate><LivePage /></TenantGate>} />
+            <Route path="/:tenantSlug/live-admin" element={<TenantGate><LiveAdminPage /></TenantGate>} />
+            <Route path="/:tenantSlug/obs-overlay" element={<TenantGate><OBSOverlayPage /></TenantGate>} />
+            <Route path="/:tenantSlug/obs-dock" element={<TenantGate><OBSDockPage /></TenantGate>} />
           </Routes>
         </BrowserRouter>
       </QueryClientProvider>

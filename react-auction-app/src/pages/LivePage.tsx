@@ -952,6 +952,7 @@ export default function LivePage() {
         {soldAnimationData && (
           <LiveErrorBoundary>
             <SoldAnimation
+              key={`${soldAnimationData.type}-${soldAnimationData.player?.id ?? soldAnimationData.player?.name ?? 'x'}`}
               type={soldAnimationData.type}
               player={soldAnimationData.player}
               team={soldAnimationData.team}

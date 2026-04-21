@@ -11,17 +11,31 @@ import {
   type Database 
 } from 'firebase/database';
 import type { Player, Team, SoldPlayer, AuctionRoleCategory } from '../types';
+import { tenantPath } from './tenantPath';
 
-// Database paths
-const DB_PATHS = {
-  SOLD_PLAYERS: 'auction/soldPlayers',
-  UNSOLD_PLAYERS: 'auction/unsoldPlayers',
+// Database paths. Each value is resolved through `tenantPath()` at access time,
+// so the same literal `DB_PATHS.SOLD_PLAYERS` returns
+// `tenants/{activeTenantId}/auction/soldPlayers` — no call sites to change.
+const DB_PATH_KEYS = {
+  SOLD_PLAYERS:     'auction/soldPlayers',
+  UNSOLD_PLAYERS:   'auction/unsoldPlayers',
   INITIAL_SNAPSHOT: 'auction/initialSnapshot',
-  ADMIN_SETTINGS: 'auction/adminSettings',
-  TEAMS: 'auction/teams',
-  ADMIN_PLAYERS: 'auction/adminPlayers',
-  SPONSORS: 'auction/sponsors',
+  ADMIN_SETTINGS:   'auction/adminSettings',
+  TEAMS:            'auction/teams',
+  ADMIN_PLAYERS:    'auction/adminPlayers',
+  SPONSORS:         'auction/sponsors',
 } as const;
+
+type DbPathKey = keyof typeof DB_PATH_KEYS;
+
+const DB_PATHS = new Proxy({} as Record<DbPathKey, string>, {
+  get(_t, prop: string) {
+    if (prop in DB_PATH_KEYS) {
+      return tenantPath(DB_PATH_KEYS[prop as DbPathKey]);
+    }
+    return undefined;
+  },
+});
 
 // ── Image compression for Firebase RTDB ──
 // Compresses data: URLs to small JPEG thumbnails (~15-30KB) to fit RTDB write limits

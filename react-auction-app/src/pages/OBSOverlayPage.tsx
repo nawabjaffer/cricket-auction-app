@@ -15,6 +15,7 @@ import { getCachedStorageUrl, resolveImageAsync } from '../services/firebaseStor
 import { extractDriveFileId } from '../utils/driveImage';
 import SoldAnimation from '../components/Live/SoldAnimation';
 import type { Player, Team } from '../types';
+import { tenantPath, setActiveTenant, DEFAULT_TENANT_ID } from '../services/tenantPath';
 import './OBSOverlayPage.css';
 
 // ── Firebase: module-level synchronous init ──────────────────────────────────
@@ -29,8 +30,24 @@ const FB_CONFIG = {
 const OBS_APP_NAME = 'obs-overlay';
 const obsApp = getApps().find((a) => a.name === OBS_APP_NAME) ?? initializeApp(FB_CONFIG, OBS_APP_NAME);
 const obsDb  = getDatabase(obsApp);
-const PATH_STATE   = 'auction/currentState';
-const PATH_CONTROL = 'auction/broadcastControl';
+// Resolve tenant from URL (?tenant=xyz or /:tenantSlug/obs-overlay) so OBS
+// can point at any tournament. Falls back to the default tenant.
+(function resolveObsTenant() {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const qp = params.get('tenant') || params.get('tenantId') || params.get('tournament');
+    if (qp) { setActiveTenant(qp); return; }
+    const segments = window.location.pathname.split('/').filter(Boolean);
+    // Treat first segment as tenant if it looks like a tenant id/slug.
+    if (segments.length >= 2 && /^[a-zA-Z0-9_-]+$/.test(segments[0])) {
+      setActiveTenant(segments[0]);
+      return;
+    }
+  } catch { /* ignore */ }
+  setActiveTenant(DEFAULT_TENANT_ID);
+})();
+const PATH_STATE   = tenantPath('auction/currentState');
+const PATH_CONTROL = tenantPath('auction/broadcastControl');
 
 // ── Types matching RealtimeAuctionState (includes stats + bid history) ────────
 interface OverlayPlayer {
@@ -358,6 +375,7 @@ export default function OBSOverlayPage() {
       <AnimatePresence>
         {activeOverlay && soldPlayer && (
           <SoldAnimation
+            key={`${activeOverlay}-${soldPlayer.id ?? soldPlayer.name}`}
             type={activeOverlay}
             player={soldPlayer}
             team={soldTeam}

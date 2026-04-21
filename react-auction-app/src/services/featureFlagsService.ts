@@ -1,5 +1,6 @@
 import { ref, get, set, update } from 'firebase/database';
 import { realtimeSync } from './realtimeSync';
+import { tenantPath } from './tenantPath';
 
 export interface FeatureFlag {
   name: string;
@@ -14,7 +15,7 @@ export interface FeatureFlags {
   [key: string]: FeatureFlag;
 }
 
-const FEATURE_FLAGS_PATH = 'admin/featureFlags';
+const FEATURE_FLAGS_PATH = () => tenantPath('admin/featureFlags');
 
 // Default feature flags
 const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
@@ -156,7 +157,7 @@ class FeatureFlagsService {
     }
 
     try {
-      const snapshot = await get(ref(this.db, FEATURE_FLAGS_PATH));
+      const snapshot = await get(ref(this.db, FEATURE_FLAGS_PATH()));
       
       if (snapshot.exists()) {
         this.flags = snapshot.val();
@@ -230,7 +231,7 @@ class FeatureFlagsService {
 
     if (this.db) {
       try {
-        await update(ref(this.db, `${FEATURE_FLAGS_PATH}/${featureKey}`), {
+        await update(ref(this.db, `${FEATURE_FLAGS_PATH()}/${featureKey}`), {
           enabled,
           updatedAt: Date.now(),
           ...(updatedBy && { updatedBy })
@@ -263,7 +264,7 @@ class FeatureFlagsService {
         this.flags[key].updatedBy = updatedBy;
       }
 
-      updateData[`${FEATURE_FLAGS_PATH}/${key}`] = {
+      updateData[`${FEATURE_FLAGS_PATH()}/${key}`] = {
         enabled,
         updatedAt: Date.now(),
         ...(updatedBy && { updatedBy })
@@ -291,7 +292,7 @@ class FeatureFlagsService {
 
     if (this.db) {
       try {
-        await set(ref(this.db, FEATURE_FLAGS_PATH), this.flags);
+        await set(ref(this.db, FEATURE_FLAGS_PATH()), this.flags);
         console.log('[FeatureFlagsService] Reset to default flags');
       } catch (error) {
         console.error('[FeatureFlagsService] Error resetting flags:', error);
@@ -317,7 +318,7 @@ class FeatureFlagsService {
 
     if (this.db) {
       try {
-        await set(ref(this.db, `${FEATURE_FLAGS_PATH}/${key}`), flag);
+        await set(ref(this.db, `${FEATURE_FLAGS_PATH()}/${key}`), flag);
         console.log(`[FeatureFlagsService] Added new flag: ${key}`);
       } catch (error) {
         console.error('[FeatureFlagsService] Error adding flag:', error);
@@ -354,7 +355,7 @@ class FeatureFlagsService {
     if (!this.db) return;
 
     try {
-      await set(ref(this.db, FEATURE_FLAGS_PATH), this.flags);
+      await set(ref(this.db, FEATURE_FLAGS_PATH()), this.flags);
     } catch (error) {
       console.error('[FeatureFlagsService] Error saving flags:', error);
       throw error;

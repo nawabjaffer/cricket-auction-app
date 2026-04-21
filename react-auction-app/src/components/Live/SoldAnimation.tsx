@@ -67,18 +67,26 @@ export default function SoldAnimation({
   const safePlayerRole = typeof player?.role === 'string' ? player.role : 'Player';
 
   const rawImageSrc = useMemo(() => getPlayerImageSrc(player?.imageUrl), [player?.imageUrl]);
+  const playerKey = player?.id ?? player?.name ?? '';
   const [imageSrc, setImageSrc] = useState(() => {
     if (!player?.imageUrl) return '';
     return getCachedStorageUrl(player.imageUrl) || rawImageSrc;
   });
   useEffect(() => {
     if (!player?.imageUrl) { setImageSrc(''); return; }
+    let cancelled = false;
     const cached = getCachedStorageUrl(player.imageUrl);
-    if (cached) { setImageSrc(cached); return; }
-    setImageSrc(rawImageSrc);
-    const storagePath = `images/players/${safePlayerName.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
-    resolveImageAsync(player.imageUrl, storagePath, (url) => setImageSrc(url));
-  }, [player?.imageUrl, rawImageSrc, safePlayerName]);
+    if (cached) { setImageSrc(cached); }
+    else {
+      setImageSrc(rawImageSrc);
+      const storagePath = `images/players/${safePlayerName.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
+      resolveImageAsync(player.imageUrl, storagePath, (url) => {
+        if (!cancelled) setImageSrc(url);
+      });
+    }
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [playerKey, player?.imageUrl, rawImageSrc, safePlayerName]);
   const fallbackAvatar = useMemo(
     () =>
       player

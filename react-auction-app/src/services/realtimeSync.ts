@@ -15,6 +15,7 @@ import {
   type Unsubscribe,
 } from 'firebase/database';
 import type { Player, Team } from '../types';
+import { tenantPath } from './tenantPath';
 
 const IS_DEV = import.meta.env.DEV;
 
@@ -31,13 +32,15 @@ const firebaseConfig = {
   measurementId: 'G-FER452EYST',
 };
 
-// Database paths
-const AUCTION_STATE_PATH = 'auction/currentState';
-const MOBILE_BIDS_PATH = 'auction/mobileBids';
-const SESSION_RESET_PATH = 'auction/sessionReset';
-const BROADCAST_CONTROL_PATH = 'auction/broadcastControl';
-const CAMERA_CONFIG_PATH = 'auction/cameraConfig';
-const MOBILE_BIDDING_CONFIG_PATH = 'auction/mobileBiddingConfig';
+// Tenant-scoped database paths. All paths are resolved lazily so that switching
+// the active tenant at runtime immediately reroutes reads/writes to the new
+// tournament namespace.
+const AUCTION_STATE_PATH          = () => tenantPath('auction/currentState');
+const MOBILE_BIDS_PATH            = () => tenantPath('auction/mobileBids');
+const SESSION_RESET_PATH          = () => tenantPath('auction/sessionReset');
+const BROADCAST_CONTROL_PATH      = () => tenantPath('auction/broadcastControl');
+const CAMERA_CONFIG_PATH          = () => tenantPath('auction/cameraConfig');
+const MOBILE_BIDDING_CONFIG_PATH  = () => tenantPath('auction/mobileBiddingConfig');
 
 // Broadcast control state (synced from /live-admin to /live)
 export type BroadcastMode = 'auction' | 'break' | 'ad' | 'standings';
@@ -333,7 +336,7 @@ class RealtimeSyncService {
     };
 
     try {
-      await set(ref(this.db, AUCTION_STATE_PATH), state);
+      await set(ref(this.db, AUCTION_STATE_PATH()), state);
       this.currentState = state;
     } catch (error) {
       console.error('[RealtimeSync] Failed to broadcast state:', error);
@@ -348,7 +351,7 @@ class RealtimeSyncService {
 
     if (IS_DEV) console.log('[RealtimeSync] Starting state listener...');
     
-    const stateRef = ref(this.db, AUCTION_STATE_PATH);
+    const stateRef = ref(this.db, AUCTION_STATE_PATH());
     const unsubscribe = onValue(
       stateRef,
       (snapshot) => {
@@ -384,7 +387,7 @@ class RealtimeSyncService {
 
     if (IS_DEV) console.log('[RealtimeSync] Starting bid listener...');
     
-    const bidsRef = ref(this.db, MOBILE_BIDS_PATH);
+    const bidsRef = ref(this.db, MOBILE_BIDS_PATH());
     const unsubscribe = onValue(
       bidsRef,
       (snapshot) => {
@@ -403,7 +406,7 @@ class RealtimeSyncService {
               
               // Mark as processed
               if (bid.id) {
-                set(ref(this.db!, `${MOBILE_BIDS_PATH}/${bid.id}/processed`), true)
+                set(ref(this.db!, `${MOBILE_BIDS_PATH()}/${bid.id}/processed`), true)
                   .catch(err => console.warn('[RealtimeSync] Failed to mark bid processed:', err));
               }
             }
@@ -431,7 +434,7 @@ class RealtimeSyncService {
   private listenForSessionReset(): void {
     if (!this.db) return;
 
-    const resetRef = ref(this.db, SESSION_RESET_PATH);
+    const resetRef = ref(this.db, SESSION_RESET_PATH());
     const unsubscribe = onValue(
       resetRef,
       (snapshot) => {
@@ -477,7 +480,7 @@ class RealtimeSyncService {
     };
 
     try {
-      const newBidRef = push(ref(this.db, MOBILE_BIDS_PATH));
+      const newBidRef = push(ref(this.db, MOBILE_BIDS_PATH()));
       await set(newBidRef, bid);
       if (IS_DEV) console.log('[RealtimeSync] Bid submitted:', newBidRef.key);
       return true;
@@ -502,7 +505,7 @@ class RealtimeSyncService {
     };
 
     try {
-      await set(ref(this.db, SESSION_RESET_PATH), reset);
+      await set(ref(this.db, SESSION_RESET_PATH()), reset);
       this.lastSessionReset = reset.timestamp;
     } catch (error) {
       console.error('[RealtimeSync] Failed to broadcast session reset:', error);
@@ -650,7 +653,7 @@ class RealtimeSyncService {
     if (!this.db) return;
 
     try {
-      await set(ref(this.db, BROADCAST_CONTROL_PATH), control);
+      await set(ref(this.db, BROADCAST_CONTROL_PATH()), control);
     } catch (error) {
       console.error('[RealtimeSync] Failed to set broadcast control:', error);
     }
@@ -669,7 +672,7 @@ class RealtimeSyncService {
       }
       if (!this.db || cancelled) return;
 
-      const controlRef = ref(this.db, BROADCAST_CONTROL_PATH);
+      const controlRef = ref(this.db, BROADCAST_CONTROL_PATH());
       unsubRef = onValue(controlRef, (snapshot) => {
         callback(snapshot.exists() ? snapshot.val() as BroadcastControlState : null);
       });
@@ -700,7 +703,7 @@ class RealtimeSyncService {
       }
       if (!this.db || cancelled) return;
 
-      const stateRef = ref(this.db, AUCTION_STATE_PATH);
+      const stateRef = ref(this.db, AUCTION_STATE_PATH());
       unsubRef = onValue(stateRef, (snapshot) => {
         callback(snapshot.exists() ? snapshot.val() as RealtimeAuctionState : null);
       });
@@ -725,7 +728,7 @@ class RealtimeSyncService {
     if (!this.db) return;
 
     try {
-      await set(ref(this.db, CAMERA_CONFIG_PATH), config);
+      await set(ref(this.db, CAMERA_CONFIG_PATH()), config);
     } catch (error) {
       console.error('[RealtimeSync] Failed to save camera config:', error);
     }
@@ -744,7 +747,7 @@ class RealtimeSyncService {
       }
       if (!this.db || cancelled) return;
 
-      const configRef = ref(this.db, CAMERA_CONFIG_PATH);
+      const configRef = ref(this.db, CAMERA_CONFIG_PATH());
       unsubRef = onValue(configRef, (snapshot) => {
         callback(snapshot.exists() ? snapshot.val() as PersistedCameraConfig : null);
       });
@@ -769,7 +772,7 @@ class RealtimeSyncService {
     if (!this.db) return;
 
     try {
-      await set(ref(this.db, MOBILE_BIDDING_CONFIG_PATH), config);
+      await set(ref(this.db, MOBILE_BIDDING_CONFIG_PATH()), config);
     } catch (error) {
       console.error('[RealtimeSync] Failed to save mobile bidding config:', error);
     }
@@ -788,7 +791,7 @@ class RealtimeSyncService {
       }
       if (!this.db || cancelled) return;
 
-      const configRef = ref(this.db, MOBILE_BIDDING_CONFIG_PATH);
+      const configRef = ref(this.db, MOBILE_BIDDING_CONFIG_PATH());
       unsubRef = onValue(configRef, (snapshot) => {
         callback(snapshot.exists() ? snapshot.val() as MobileBiddingConfig : null);
       });

@@ -36,23 +36,28 @@ export function SoldOverlay({ isVisible, onClose }: Readonly<SoldOverlayProps>) 
     return teams.find(t => t.id === lastSoldPlayer.teamId || t.name === lastSoldPlayer.teamName) || null;
   }, [lastSoldPlayer, teams]);
 
-  // Firebase Storage image resolution
+  // Firebase Storage image resolution (guarded against stale async callbacks)
   const playerImageUrl = lastSoldPlayer?.imageUrl ?? '';
+  const playerId = lastSoldPlayer?.id ?? '';
   const [resolvedImageUrl, setResolvedImageUrl] = useState('');
 
   useEffect(() => {
+    // Always reset synchronously when the player changes so we never flash the previous image.
     if (!playerImageUrl) { setResolvedImageUrl(''); return; }
-    // Instant: check Firebase Storage cache
+    let cancelled = false;
     const cached = getCachedStorageUrl(playerImageUrl);
-    if (cached) { setResolvedImageUrl(cached); return; }
-    // Sync fallback: Google Drive lh3
-    const fileId = extractDriveFileId(playerImageUrl);
-    if (fileId) setResolvedImageUrl(`https://lh3.googleusercontent.com/d/${fileId}=s800`);
-    else setResolvedImageUrl(playerImageUrl);
-    // Background: resolve to Firebase Storage CDN
-    const storagePath = `images/players/${(lastSoldPlayer?.name || 'unknown').toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
-    resolveImageAsync(playerImageUrl, storagePath, (url) => setResolvedImageUrl(url));
-  }, [playerImageUrl, lastSoldPlayer?.name]);
+    if (cached) { setResolvedImageUrl(cached); }
+    else {
+      const fileId = extractDriveFileId(playerImageUrl);
+      setResolvedImageUrl(fileId ? `https://lh3.googleusercontent.com/d/${fileId}=s800` : playerImageUrl);
+      const storagePath = `images/players/${(lastSoldPlayer?.name || 'unknown').toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
+      resolveImageAsync(playerImageUrl, storagePath, (url) => {
+        if (!cancelled) setResolvedImageUrl(url);
+      });
+    }
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [playerId, playerImageUrl]);
 
   // Reset state when player changes
   useEffect(() => {

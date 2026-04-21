@@ -30,20 +30,27 @@ export function UnsoldOverlay({ isVisible, onClose }: Readonly<UnsoldOverlayProp
   const lastUnsoldPlayer = unsoldPlayers.at(-1);
   const [imageError, setImageError] = useState(false);
 
-  // Firebase Storage image resolution
+  // Firebase Storage image resolution (guarded against stale async callbacks)
   const unsoldImageUrl = lastUnsoldPlayer?.imageUrl ?? '';
+  const playerId = lastUnsoldPlayer?.id ?? '';
   const [resolvedImageUrl, setResolvedImageUrl] = useState('');
 
   useEffect(() => {
     if (!unsoldImageUrl) { setResolvedImageUrl(''); return; }
+    let cancelled = false;
     const cached = getCachedStorageUrl(unsoldImageUrl);
-    if (cached) { setResolvedImageUrl(cached); return; }
-    const fileId = extractDriveFileId(unsoldImageUrl);
-    if (fileId) setResolvedImageUrl(`https://lh3.googleusercontent.com/d/${fileId}=s800`);
-    else setResolvedImageUrl(unsoldImageUrl);
-    const storagePath = `images/players/${(lastUnsoldPlayer?.name || 'unknown').toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
-    resolveImageAsync(unsoldImageUrl, storagePath, (url) => setResolvedImageUrl(url));
-  }, [unsoldImageUrl, lastUnsoldPlayer?.name]);
+    if (cached) { setResolvedImageUrl(cached); }
+    else {
+      const fileId = extractDriveFileId(unsoldImageUrl);
+      setResolvedImageUrl(fileId ? `https://lh3.googleusercontent.com/d/${fileId}=s800` : unsoldImageUrl);
+      const storagePath = `images/players/${(lastUnsoldPlayer?.name || 'unknown').toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
+      resolveImageAsync(unsoldImageUrl, storagePath, (url) => {
+        if (!cancelled) setResolvedImageUrl(url);
+      });
+    }
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [playerId, unsoldImageUrl]);
 
   // Reset state when player changes
   useEffect(() => {
