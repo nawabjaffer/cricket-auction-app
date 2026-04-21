@@ -80,6 +80,8 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
   const [isMigratingMedia, setIsMigratingMedia] = useState(false);
   const csvFileInputRef = useRef<HTMLInputElement | null>(null);
   const statsCsvInputRef = useRef<HTMLInputElement | null>(null);
+  const organizerLogoFileRef = useRef<HTMLInputElement | null>(null);
+  const [organizerLogoUploading, setOrganizerLogoUploading] = useState(false);
   const [uploadFeedback, setUploadFeedback] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
   // Stats CSV import state
@@ -533,6 +535,31 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
       setIsSaving(false);
     }
     closePlayerEditor();
+  };
+
+  const handleOrganizerLogoFileChange = async (file?: File | null) => {
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      showUploadFeedback('Invalid file type. Please select an image file.', 'error');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      showUploadFeedback('Image too large. Max 5MB allowed.', 'error');
+      return;
+    }
+    try {
+      setOrganizerLogoUploading(true);
+      const storageUrl = await uploadFileToStorage(
+        file,
+        `media/organizer/logo-${Date.now()}`
+      );
+      setOrganizerLogo(storageUrl);
+      showUploadFeedback(`Organizer logo uploaded: ${file.name}`);
+    } catch {
+      showUploadFeedback('Failed to upload organizer logo.', 'error');
+    } finally {
+      setOrganizerLogoUploading(false);
+    }
   };
 
   const handleTeamDraftLogoFileChange = async (file?: File | null) => {
@@ -1486,13 +1513,46 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
                   </div>
 
                   <div className="form-group">
-                    <label>Organizer Logo URL</label>
+                    <label>Organizer Logo</label>
+                    <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                      <input
+                        type="text"
+                        value={organizerLogo}
+                        onChange={(e) => setOrganizerLogo(e.target.value)}
+                        placeholder="https://example.com/logo.png or upload →"
+                        style={{ flex: 1 }}
+                      />
+                      <button
+                        type="button"
+                        className="admin-btn admin-btn-ghost admin-btn-sm"
+                        title="Upload logo from device"
+                        disabled={organizerLogoUploading}
+                        onClick={() => organizerLogoFileRef.current?.click()}
+                        style={{ whiteSpace: 'nowrap', flexShrink: 0 }}
+                      >
+                        {organizerLogoUploading ? 'Uploading…' : '⬆ Upload'}
+                      </button>
+                    </div>
                     <input
-                      type="text"
-                      value={organizerLogo}
-                      onChange={(e) => setOrganizerLogo(e.target.value)}
-                      placeholder="https://example.com/logo.png"
+                      ref={organizerLogoFileRef}
+                      type="file"
+                      accept="image/*"
+                      style={{ display: 'none' }}
+                      onChange={(e) => {
+                        void handleOrganizerLogoFileChange(e.target.files?.[0]);
+                        e.target.value = '';
+                      }}
                     />
+                    {organizerLogo && (
+                      <div className="admin-upload-preview" style={{ marginTop: '0.5rem' }}>
+                        <img
+                          src={organizerLogo}
+                          alt="Organizer logo preview"
+                          onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                        />
+                        <span>Logo set</span>
+                      </div>
+                    )}
                   </div>
 
                   <h3 style={{ marginTop: '2rem' }}>Auction Role Order</h3>
