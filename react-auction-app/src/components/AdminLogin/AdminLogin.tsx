@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useTenantNavigate as useNavigate } from '../../hooks/useTenantNavigate';
 import { authService } from '../../services/authService';
 import './AdminLogin.css';
 

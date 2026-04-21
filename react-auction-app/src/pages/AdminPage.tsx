@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useTenantNavigate as useNavigate } from '../hooks/useTenantNavigate';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useAdminAuth } from '../hooks/useAdminAuth';
 import { useAdminPlayersOverrides, useInitialData, useAuctionDataLoader } from '../hooks';

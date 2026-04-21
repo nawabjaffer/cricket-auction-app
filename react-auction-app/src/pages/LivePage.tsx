@@ -6,7 +6,7 @@
 
 import { useEffect, useRef, useState, useCallback, Component, type ErrorInfo, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
-import { useNavigate } from 'react-router-dom';
+import { useTenantNavigate as useNavigate } from '../hooks/useTenantNavigate';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useLiveStreamingStore } from '../store/liveStreamingStore';
 import { useAuctionStore } from '../store/auctionStore';

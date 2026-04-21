@@ -4,7 +4,7 @@
 // ============================================================================
 
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useTenantNavigate as useNavigate } from '../../hooks/useTenantNavigate';
 import { IoVideocam, IoRadio, IoSettings, IoPlay, IoStop } from 'react-icons/io5';
 import { useLiveStreamingStore } from '../../store/liveStreamingStore';
 import { obsService } from '../../services/obsService';
