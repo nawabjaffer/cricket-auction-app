@@ -127,7 +127,9 @@ export function useInitialData() {
         // Load admin players from Firebase AND (optionally) raw players from
         // Google Sheets in parallel. Sheets data is used as the base when the
         // tenant has its own sheet; otherwise admin players are the only source.
-        const [adminPlayers, sheetPlayers] = await Promise.all([
+        // Also load adminSettings here so organizerLogo is always available
+        // even on fresh tenants with no sold players (hasExistingData = false).
+        const [adminPlayers, sheetPlayers, adminSettings] = await Promise.all([
           auctionPersistence.getAdminPlayers().catch(() => null),
           sheetIdOverride
             ? googleSheetsService.fetchPlayers([], sheetIdOverride).catch((err) => {
@@ -135,7 +137,14 @@ export function useInitialData() {
                 return [] as Player[];
               })
             : Promise.resolve([] as Player[]),
+          auctionPersistence.getAdminSettings().catch(() => null),
         ]);
+
+        // Push branding settings into store immediately — before the preload
+        // phase — so the organizer logo renders on the first frame.
+        if (adminSettings?.organizerLogo) {
+          useAuctionStore.getState().setOrganizerLogo(adminSettings.organizerLogo);
+        }
 
         // Seed the base (originalPlayers) with sheet data first so the
         // subsequent override merge can fall back to sheet imageUrl when
