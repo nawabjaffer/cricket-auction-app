@@ -28,7 +28,6 @@ interface UnsoldOverlayProps {
 export function UnsoldOverlay({ isVisible, onClose }: Readonly<UnsoldOverlayProps>) {
   const unsoldPlayers = useUnsoldPlayers();
   const lastUnsoldPlayer = unsoldPlayers.at(-1);
-  const [currentUrlIndex, setCurrentUrlIndex] = useState(0);
   const [imageError, setImageError] = useState(false);
 
   // Firebase Storage image resolution
@@ -48,7 +47,6 @@ export function UnsoldOverlay({ isVisible, onClose }: Readonly<UnsoldOverlayProp
 
   // Reset state when player changes
   useEffect(() => {
-    setCurrentUrlIndex(0);
     setImageError(false);
   }, [lastUnsoldPlayer?.id]);
 

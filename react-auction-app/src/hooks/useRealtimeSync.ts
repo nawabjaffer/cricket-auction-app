@@ -76,7 +76,6 @@ export function useRealtimeDesktopSync(): void {
           teams,
           auctionState.isAuctionActive,
           activeOverlayRef.current,
-          bidHistory,
           bidHistory
         );
       }).catch((err: unknown) => {
@@ -187,6 +186,7 @@ export function useRealtimeMobileSync(): RealtimeMobileSyncState {
     teams: [],
     auctionActive: false,
     activeOverlay: null,
+    bidHistory: [],
     lastUpdate: 0,
     sessionId: '',
   });

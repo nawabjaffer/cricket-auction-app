@@ -182,7 +182,6 @@ class RealtimeSyncService {
   // Local state cache
   private currentState: RealtimeAuctionState | null = null;
   private readonly processedBidIds = new Set<string>();
-  private lastStateUpdate = 0;
   private lastSessionReset = 0;
 
   constructor() {

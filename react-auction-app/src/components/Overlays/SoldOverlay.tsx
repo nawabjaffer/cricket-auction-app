@@ -28,7 +28,6 @@ export function SoldOverlay({ isVisible, onClose }: Readonly<SoldOverlayProps>) 
   const soldPlayers = useSoldPlayers();
   const teams = useTeams();
   const lastSoldPlayer = soldPlayers.at(-1);
-  const [currentUrlIndex, setCurrentUrlIndex] = useState(0);
   const [imageError, setImageError] = useState(false);
 
   // Find the team logo for the sold player's team
@@ -57,7 +56,6 @@ export function SoldOverlay({ isVisible, onClose }: Readonly<SoldOverlayProps>) 
 
   // Reset state when player changes
   useEffect(() => {
-    setCurrentUrlIndex(0);
     setImageError(false);
   }, [lastSoldPlayer?.id]);
 
