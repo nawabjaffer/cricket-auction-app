@@ -122,6 +122,10 @@ export function useAuctionDataLoader() {
           useAuctionStore.getState().setMaxUnsoldRounds(adminSettings.maxUnsoldRounds);
         }
 
+        if (adminSettings?.organizerLogo) {
+          useAuctionStore.getState().setOrganizerLogo(adminSettings.organizerLogo);
+        }
+
         // Reconcile available players to exclude sold/unsold
         useAuctionStore.getState().reconcilePlayerPools();
 

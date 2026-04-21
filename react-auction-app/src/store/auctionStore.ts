@@ -90,6 +90,9 @@ interface AuctionStore {
   
   // Auction role ordering
   auctionRoleOrder: AuctionRoleCategory[];
+
+  // Organizer branding
+  organizerLogo: string;
   
   // Auction state
   auctionState: AuctionState;
@@ -144,6 +147,7 @@ interface AuctionStore {
   startNextRound: () => void;
   setMaxUnsoldRounds: (value: number) => void;
   setAuctionRoleOrder: (order: AuctionRoleCategory[]) => void;
+  setOrganizerLogo: (url: string) => void;
   
   // State management
   setAuctionState: (state: Partial<AuctionState>) => void;
@@ -198,6 +202,7 @@ export const useAuctionStore = create<AuctionStore>()(
         isRound2Active: false,
         maxUnsoldRounds: 1,
         auctionRoleOrder: [...DEFAULT_AUCTION_ROLE_ORDER],
+        organizerLogo: '',
         auctionState: initialAuctionState,
 
         // === Data Loading Actions ===
@@ -953,6 +958,10 @@ export const useAuctionStore = create<AuctionStore>()(
           set({ auctionRoleOrder: order });
         },
 
+        setOrganizerLogo: (url) => {
+          set({ organizerLogo: url });
+        },
+
         startNextRound: () => {
           const { unsoldPlayers, currentRound, maxUnsoldRounds } = get();
           const maxRound = 1 + maxUnsoldRounds;
@@ -1198,6 +1207,7 @@ export const useAuctionStore = create<AuctionStore>()(
           isRound2Active: state.isRound2Active,
           maxUnsoldRounds: state.maxUnsoldRounds,
           auctionRoleOrder: state.auctionRoleOrder,
+          organizerLogo: state.organizerLogo,
         }),
       }
     ),
@@ -1220,3 +1230,4 @@ export const useSelectionMode = () => useAuctionStore((state) => state.selection
 export const useIsLoading = () => useAuctionStore((state) => state.isLoading);
 export const useCurrentRound = () => useAuctionStore((state) => state.currentRound);
 export const useMaxUnsoldRounds = () => useAuctionStore((state) => state.maxUnsoldRounds);
+export const useOrganizerLogo = () => useAuctionStore((state) => state.organizerLogo);

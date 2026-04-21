@@ -62,7 +62,7 @@ import { auctionPersistence, type SponsorRecord } from './services/auctionPersis
 import { auctionRules } from './services/auctionRules';
 import { realtimeSync } from './services/realtimeSync';
 import { getCachedStorageUrl, resolveImageAsync } from './services/firebaseStorageService';
-import { useActiveOverlay, useNotification, useCurrentPlayer, useSoldPlayers, useAvailablePlayers, useOriginalPlayers, useTeams } from './store';
+import { useActiveOverlay, useNotification, useCurrentPlayer, useSoldPlayers, useAvailablePlayers, useOriginalPlayers, useTeams, useOrganizerLogo } from './store';
 import { extractDriveFileId } from './utils/driveImage';
 import { formatRoleDisplay, getRoleCategory, parseRoleDetails, getRoleBadgeColor } from './utils/roleFormatter';
 import './index.css';
@@ -189,6 +189,7 @@ function AuctionApp() {
   const availablePlayers = useAvailablePlayers();
   const allPlayers = useOriginalPlayers();
   const allTeams = useTeams();
+  const organizerLogo = useOrganizerLogo();
 
   // Handle team squad view
   const handleTeamSquadView = (teamId: string) => {
@@ -909,7 +910,7 @@ function AuctionApp() {
 
                 <div className="empty-epl-logo-wrap" title="Eruvai Premier League">
                   <img
-                    src="/assets/BCC Season 6.png"
+                    src={organizerLogo || '/assets/BCC Season 6.png'}
                     alt="EPL event logo"
                     className="empty-epl-logo"
                     onError={(e) => {
