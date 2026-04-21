@@ -6,6 +6,8 @@
 import { useEffect, useState, useCallback } from 'react';
 import { imageCacheService } from '../services/imageCache';
 
+const IS_DEV = import.meta.env.DEV;
+
 interface UseImagePreloadOptions {
   timeout?: number;
 }
@@ -44,7 +46,7 @@ export function useImagePreload(
     
     if (cachedImage && cachedImage.status === 'success') {
       // Image is in cache and was successfully loaded before
-      console.log('[useImagePreload] Using cached image (successful):', imageUrl);
+      if (IS_DEV) console.log('[useImagePreload] Using cached image (successful):', imageUrl);
       setLoadedUrl(imageUrl);
       setIsLoading(false);
       return;
@@ -57,7 +59,7 @@ export function useImagePreload(
     // This gives React time to render and allows browser to handle image loading
     timeoutId = setTimeout(() => {
       if (isMounted) {
-        console.log('[useImagePreload] Setting image URL:', imageUrl);
+        if (IS_DEV) console.log('[useImagePreload] Setting image URL:', imageUrl);
         setLoadedUrl(imageUrl);
       }
     }, timeout);

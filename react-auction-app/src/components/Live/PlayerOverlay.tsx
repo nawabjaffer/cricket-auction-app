@@ -4,7 +4,7 @@
 // Role-based stats with configurable display
 // ============================================================================
 
-import { useState, useCallback, useEffect, useMemo } from 'react';
+import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import type { Player } from '../../types';
 import { extractDriveFileId } from '../../utils/driveImage';
@@ -17,7 +17,22 @@ interface PlayerOverlayProps {
 }
 
 const PLACEHOLDER_IMAGE = '/placeholder_player.png';
-const MAX_RETRY_ATTEMPTS = 20;
+const MAX_RETRY_ATTEMPTS = 8;
+const MAX_IMAGE_URL_LENGTH = 2048;
+
+function sanitizeImageUrl(url: unknown): string {
+  if (typeof url !== 'string') return '';
+  const trimmed = url.trim();
+  if (!trimmed || trimmed.length > MAX_IMAGE_URL_LENGTH) return '';
+
+  const lowered = trimmed.toLowerCase();
+  // Data/blob/file URLs can be very memory-heavy or unstable in live rotation.
+  if (lowered.startsWith('data:') || lowered.startsWith('blob:') || lowered.startsWith('file:')) {
+    return '';
+  }
+
+  return trimmed;
+}
 
 /**
  * Split a raw role string into { coreRole, details }.
@@ -83,14 +98,14 @@ function splitRoleDisplay(rawRole: string | undefined | null): { coreRole: strin
 }
 
 export default function PlayerOverlay({ player, maxStats = 6 }: PlayerOverlayProps) {
-  const [attemptCount, setAttemptCount] = useState(0);
+  const attemptCountRef = useRef(0);
   const [currentUrlIndex, setCurrentUrlIndex] = useState(0);
   const [usePlaceholder, setUsePlaceholder] = useState(false);
 
   const safePlayer = useMemo(() => {
     const safeId = player?.id ? String(player.id) : 'unknown-player';
     const safeName = typeof player?.name === 'string' && player.name.trim() ? player.name.trim() : 'Unknown Player';
-    const safeImageUrl = typeof player?.imageUrl === 'string' ? player.imageUrl : '';
+    const safeImageUrl = sanitizeImageUrl(player?.imageUrl);
     const safeRole = typeof player?.role === 'string' ? player.role : 'Player';
     const safeBasePrice = Number.isFinite(Number(player?.basePrice)) ? Number(player.basePrice) : 0;
 
@@ -112,7 +127,6 @@ export default function PlayerOverlay({ player, maxStats = 6 }: PlayerOverlayPro
       urls.push(`https://lh3.googleusercontent.com/d/${fileId}=s512`);
       urls.push(`https://drive.google.com/thumbnail?id=${fileId}&sz=w512`);
       urls.push(`https://drive.google.com/uc?export=view&id=${fileId}`);
-      urls.push(`https://lh3.googleusercontent.com/d/${fileId}`);
     } else {
       urls.push(safePlayer.imageUrl);
     }
@@ -120,22 +134,32 @@ export default function PlayerOverlay({ player, maxStats = 6 }: PlayerOverlayPro
   }, [safePlayer.imageUrl]);
 
   useEffect(() => {
-    setAttemptCount(0);
+    attemptCountRef.current = 0;
     setCurrentUrlIndex(0);
     setUsePlaceholder(false);
   }, [safePlayer.id]);
 
   const handleImageError = useCallback(() => {
-    const newAttempt = attemptCount + 1;
-    setAttemptCount(newAttempt);
-    if (currentUrlIndex < imageUrls.length - 1) {
-      setCurrentUrlIndex(prev => prev + 1);
-    } else if (newAttempt >= MAX_RETRY_ATTEMPTS || imageUrls.length === 0) {
+    if (usePlaceholder) return;
+
+    const nextAttempt = attemptCountRef.current + 1;
+    attemptCountRef.current = nextAttempt;
+
+    if (imageUrls.length === 0 || nextAttempt >= MAX_RETRY_ATTEMPTS) {
       setUsePlaceholder(true);
-    } else {
-      setCurrentUrlIndex(0);
+      return;
     }
-  }, [attemptCount, currentUrlIndex, imageUrls.length]);
+
+    setCurrentUrlIndex((prevIndex) => {
+      if (prevIndex < imageUrls.length - 1) return prevIndex + 1;
+      return 0;
+    });
+
+    // Avoid unbounded memory growth on long sessions.
+    if (attemptCountRef.current > MAX_RETRY_ATTEMPTS * 2) {
+      attemptCountRef.current = MAX_RETRY_ATTEMPTS;
+    }
+  }, [imageUrls.length, usePlaceholder]);
 
   const currentImageSrc = useMemo(() => {
     if (usePlaceholder || imageUrls.length === 0) return PLACEHOLDER_IMAGE;

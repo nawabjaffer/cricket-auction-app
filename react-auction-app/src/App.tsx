@@ -60,6 +60,7 @@ import { audioService, imageCacheService } from './services';
 import { auctionPersistence, type SponsorRecord } from './services/auctionPersistence';
 import { auctionRules } from './services/auctionRules';
 import { realtimeSync } from './services/realtimeSync';
+import { getCachedStorageUrl, resolveImageAsync } from './services/firebaseStorageService';
 import { useActiveOverlay, useNotification, useCurrentPlayer, useSoldPlayers, useAvailablePlayers, useOriginalPlayers, useTeams } from './store';
 import { extractDriveFileId } from './utils/driveImage';
 import { formatRoleDisplay, getRoleCategory, parseRoleDetails, getRoleBadgeColor } from './utils/roleFormatter';
@@ -626,20 +627,35 @@ function AuctionApp() {
   // Get current player image URL
   const playerImageUrl = currentPlayer?.imageUrl ?? null;
 
-  // Transform Drive URL to use most reliable endpoint first
+  // Firebase Storage image resolution (replaces manual Drive URL cycling)
   const transformedImageUrl = useMemo(() => {
     if (!playerImageUrl) return null;
-    
-    // Check if it's a Drive URL and use export view (most reliable)
+    // Instant: check Firebase Storage cache
+    const cached = getCachedStorageUrl(playerImageUrl);
+    if (cached) return cached;
+    // Sync fallback: Google Drive lh3
     const fileId = extractDriveFileId(playerImageUrl);
-    if (fileId) {
-      const exportUrl = `https://drive.google.com/uc?export=view&id=${fileId}`;
-      console.log('[App] Using Drive export URL:', exportUrl);
-      return exportUrl;
-    }
-    
+    if (fileId) return `https://lh3.googleusercontent.com/d/${fileId}=w800`;
     return playerImageUrl;
   }, [playerImageUrl]);
+
+  // Background: resolve to Firebase Storage CDN
+  useEffect(() => {
+    if (!playerImageUrl || !currentPlayer?.name) return;
+    const cached = getCachedStorageUrl(playerImageUrl);
+    if (cached) {
+      setImgSrc(cached);
+      setImageLoadingState('loaded');
+      return;
+    }
+    const storagePath = `images/players/${currentPlayer.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
+    resolveImageAsync(playerImageUrl, storagePath, (url) => {
+      // Only update if we're still looking at the same player
+      if (currentPlayerIdRef.current === currentPlayer.id) {
+        setImgSrc(url);
+      }
+    });
+  }, [playerImageUrl, currentPlayer?.name, currentPlayer?.id]);
 
   // Preload player image - simple URL tracking
   const { onImageLoad } = useImagePreload(transformedImageUrl);
@@ -654,12 +670,10 @@ function AuctionApp() {
     const fileId = extractDriveFileId(player.imageUrl);
     if (!fileId) return [player.imageUrl];
     
-    // Return all possible Drive URL variants in priority order
     return [
       `https://lh3.googleusercontent.com/d/${fileId}=w800`,
       `https://drive.google.com/thumbnail?id=${fileId}&sz=w800`,
       `https://drive.google.com/uc?export=view&id=${fileId}`,
-      `https://drive.google.com/thumbnail?id=${fileId}&sz=w600`,
     ];
   }, []);
 

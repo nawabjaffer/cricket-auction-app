@@ -48,3 +48,11 @@ export type { FeatureFlag, FeatureFlags } from './featureFlagsService';
 export { premiumService } from './premiumService';
 export { cameraManager } from './cameraManager';
 export { obsService } from './obsService';
+
+// Firebase Storage image caching
+export {
+  getCachedStorageUrl,
+  resolveImageAsync,
+  preloadImage,
+  batchPreloadImages,
+} from './firebaseStorageService';

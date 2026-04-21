@@ -19,6 +19,7 @@ const CACHE_VERSION = 1;
 const CACHE_KEY = 'bcc_auction_image_cache';
 const CACHE_EXPIRY_MS = 24 * 60 * 60 * 1000; // 24 hours
 const SESSION_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes of inactivity
+const IS_DEV = import.meta.env.DEV;
 
 /**
  * Image Cache Service
@@ -48,14 +49,14 @@ class ImageCacheService {
 
       // Validate cache version and expiry
       if (data.version !== CACHE_VERSION) {
-        console.log('[ImageCache] Cache version mismatch, clearing old cache');
+        if (IS_DEV) console.log('[ImageCache] Cache version mismatch, clearing old cache');
         localStorage.removeItem(CACHE_KEY);
         return;
       }
 
       const now = Date.now();
       if (now - data.timestamp > CACHE_EXPIRY_MS) {
-        console.log('[ImageCache] Cache expired, clearing');
+        if (IS_DEV) console.log('[ImageCache] Cache expired, clearing');
         localStorage.removeItem(CACHE_KEY);
         return;
       }
@@ -65,7 +66,7 @@ class ImageCacheService {
         this.sessionCache.set(key, image);
       });
 
-      console.log('[ImageCache] Initialized with', this.sessionCache.size, 'cached images');
+      if (IS_DEV) console.log('[ImageCache] Initialized with', this.sessionCache.size, 'cached images');
     } catch (error) {
       console.error('[ImageCache] Error initializing cache:', error);
       localStorage.removeItem(CACHE_KEY);
@@ -95,7 +96,7 @@ class ImageCacheService {
     // Check session cache first (fastest)
     if (this.sessionCache.has(imageUrl)) {
       const cached = this.sessionCache.get(imageUrl);
-      console.log('[ImageCache] Hit:', imageUrl, '- Status:', cached?.status);
+      if (IS_DEV) console.log('[ImageCache] Hit:', imageUrl, '- Status:', cached?.status);
       return cached || null;
     }
 
@@ -120,7 +121,7 @@ class ImageCacheService {
     // Persist to localStorage
     this.persistToLocalStorage();
 
-    console.log('[ImageCache] Cached:', imageUrl, '- Status:', status);
+    if (IS_DEV) console.log('[ImageCache] Cached:', imageUrl, '- Status:', status);
   }
 
   /**
@@ -156,7 +157,7 @@ class ImageCacheService {
       }
     });
 
-    console.log('[ImageCache] Added', imageUrls.length, 'images to preload queue. Queue size:', this.preloadQueue.size);
+    if (IS_DEV) console.log('[ImageCache] Added', imageUrls.length, 'images to preload queue. Queue size:', this.preloadQueue.size);
   }
 
   /**
@@ -258,7 +259,7 @@ class ImageCacheService {
     this.sessionCache.clear();
     this.preloadQueue.clear();
     localStorage.removeItem(CACHE_KEY);
-    console.log('[ImageCache] All cache cleared');
+    if (IS_DEV) console.log('[ImageCache] All cache cleared');
   }
 
   /**
@@ -277,7 +278,7 @@ class ImageCacheService {
 
     if (cleanedCount > 0) {
       this.persistToLocalStorage();
-      console.log('[ImageCache] Cleaned up', cleanedCount, 'stale entries');
+      if (IS_DEV) console.log('[ImageCache] Cleaned up', cleanedCount, 'stale entries');
     }
   }
 }

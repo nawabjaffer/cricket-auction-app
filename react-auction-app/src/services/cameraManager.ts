@@ -18,6 +18,7 @@ class CameraManagerService {
   private listeners: Set<CameraEventCallback> = new Set();
   private deviceListeners: Set<(devices: MediaDeviceInfo[]) => void> = new Set();
   private availableDevices: MediaDeviceInfo[] = [];
+  private initPromise: Promise<void> | null = null;
 
   constructor() {
     // Listen for device changes
@@ -55,12 +56,15 @@ class CameraManagerService {
   }
 
   /**
-   * Initialize camera manager
+   * Initialize camera manager (idempotent — only runs once)
    */
   async initialize(maxCameras: number = 4): Promise<void> {
     this.config.maxSources = maxCameras;
-    await this.refreshDevices();
-    console.log('[CameraManager] Initialized with max cameras:', maxCameras);
+    if (this.initPromise) return this.initPromise;
+    this.initPromise = this.refreshDevices().then(() => {
+      console.log('[CameraManager] Initialized with max cameras:', maxCameras);
+    });
+    return this.initPromise;
   }
 
   /**

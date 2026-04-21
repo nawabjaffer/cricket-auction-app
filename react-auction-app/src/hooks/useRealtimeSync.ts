@@ -22,15 +22,19 @@ export function useRealtimeDesktopSync(): void {
   const currentBid = useAuctionStore(state => state.currentBid);
   const selectedTeam = useAuctionStore(state => state.selectedTeam);
   const teams = useAuctionStore(state => state.teams);
+  const bidHistory = useAuctionStore(state => state.bidHistory);
   const raiseBidForTeam = useAuctionStore(state => state.raiseBidForTeam);
   const auctionState = useAuctionStore(state => state.auctionState);
+  const storeActiveOverlay = useAuctionStore(state => state.activeOverlay);
   
   const isInitialized = useRef(false);
   const teamsRef = useRef(teams);
   const currentPlayerRef = useRef(currentPlayer);
   const currentBidRef = useRef(currentBid);
   const selectedTeamRef = useRef(selectedTeam);
+  const bidHistoryRef = useRef(bidHistory);
   const auctionActiveRef = useRef(auctionState.isAuctionActive);
+  const activeOverlayRef = useRef<'sold' | 'unsold' | null>(null);
   const initPromiseRef = useRef<Promise<void> | null>(null);
   
   // Keep teams ref updated
@@ -38,13 +42,22 @@ export function useRealtimeDesktopSync(): void {
     teamsRef.current = teams;
   }, [teams]);
 
+  // Keep bidHistory ref updated
+  useEffect(() => {
+    bidHistoryRef.current = bidHistory;
+  }, [bidHistory]);
+
   // Keep state refs updated for heartbeat broadcasts
   useEffect(() => {
     currentPlayerRef.current = currentPlayer;
     currentBidRef.current = currentBid;
     selectedTeamRef.current = selectedTeam;
     auctionActiveRef.current = auctionState.isAuctionActive;
-  }, [currentPlayer, currentBid, selectedTeam, auctionState.isAuctionActive]);
+    // Only broadcast sold/unsold — other overlay types (end, team) are UI-only
+    activeOverlayRef.current = (storeActiveOverlay === 'sold' || storeActiveOverlay === 'unsold')
+      ? storeActiveOverlay
+      : null;
+  }, [currentPlayer, currentBid, selectedTeam, auctionState.isAuctionActive, storeActiveOverlay]);
 
   // Initialize as desktop on mount - ensure it completes
   useEffect(() => {
@@ -61,10 +74,13 @@ export function useRealtimeDesktopSync(): void {
           currentBid,
           selectedTeam,
           teams,
-          auctionState.isAuctionActive
+          auctionState.isAuctionActive,
+          activeOverlayRef.current,
+          bidHistory,
+          bidHistory
         );
-      }).catch(error => {
-        console.error('[useRealtimeDesktopSync] ❌ Failed to initialize:', error);
+      }).catch((err: unknown) => {
+        console.error('[useRealtimeDesktopSync] ❌ Failed to initialize:', err);
       });
     }
 
@@ -108,9 +124,11 @@ export function useRealtimeDesktopSync(): void {
       currentBid,
       selectedTeam,
       teams,
-      auctionState.isAuctionActive
+      auctionState.isAuctionActive,
+      (storeActiveOverlay === 'sold' || storeActiveOverlay === 'unsold') ? storeActiveOverlay : null,
+      bidHistory
     );
-  }, [currentPlayer, currentBid, selectedTeam, teams, auctionState.isAuctionActive]);
+  }, [currentPlayer, currentBid, selectedTeam, teams, auctionState.isAuctionActive, storeActiveOverlay, bidHistory]);
 
   // Heartbeat broadcast to ensure mobile receives state even if no changes
   useEffect(() => {
@@ -127,7 +145,9 @@ export function useRealtimeDesktopSync(): void {
         currentBidRef.current,
         selectedTeamRef.current,
         teamsRef.current,
-        auctionActiveRef.current
+        auctionActiveRef.current,
+        activeOverlayRef.current,
+        bidHistoryRef.current
       );
     }, 2000);
 
@@ -144,6 +164,7 @@ export interface RealtimeMobileSyncState {
   selectedTeam: Team | null;
   teams: Team[];
   auctionActive: boolean;
+  activeOverlay: 'sold' | 'unsold' | null;
   isConnected: boolean;
   lastUpdate: number;
   lastSessionReset: number;
@@ -165,6 +186,7 @@ export function useRealtimeMobileSync(): RealtimeMobileSyncState {
     selectedTeam: null,
     teams: [],
     auctionActive: false,
+    activeOverlay: null,
     lastUpdate: 0,
     sessionId: '',
   });
@@ -315,6 +337,9 @@ export function useRealtimeMobileSync(): RealtimeMobileSyncState {
     selectedTeam,
     teams,
     auctionActive: syncState.auctionActive,
+    activeOverlay: (syncState.activeOverlay === 'sold' || syncState.activeOverlay === 'unsold')
+      ? syncState.activeOverlay
+      : null,
     isConnected,
     lastUpdate: syncState.lastUpdate,
     lastSessionReset,

@@ -3,12 +3,15 @@
 // Displays player information with stats and image
 // ============================================================================
 
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { GiCricketBat, GiBaseballGlove } from 'react-icons/gi';
 import { IoBaseball, IoStar } from 'react-icons/io5';
 import type { Player } from '../../types';
 import { activeConfig } from '../../config';
 import { formatRoleDisplay, getRoleCategory, getRoleBadgeColor as getRoleBadgeHex } from '../../utils/roleFormatter';
+import { getCachedStorageUrl, resolveImageAsync } from '../../services/firebaseStorageService';
+import { extractDriveFileId } from '../../utils/driveImage';
 
 interface PlayerCardProps {
   player: Player;
@@ -37,6 +40,23 @@ export function PlayerCard({
       default: return <GiCricketBat className="inline-block" />;
     }
   };
+
+  // Firebase Storage image resolution
+  const [resolvedImg, setResolvedImg] = useState(() => {
+    if (!player.imageUrl) return '/assets/man.jpg';
+    const cached = getCachedStorageUrl(player.imageUrl);
+    if (cached) return cached;
+    const fileId = extractDriveFileId(player.imageUrl);
+    if (fileId) return `https://lh3.googleusercontent.com/d/${fileId}=s512`;
+    return player.imageUrl;
+  });
+  useEffect(() => {
+    if (!player.imageUrl) return;
+    const cached = getCachedStorageUrl(player.imageUrl);
+    if (cached) { setResolvedImg(cached); return; }
+    const storagePath = `images/players/${player.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
+    resolveImageAsync(player.imageUrl, storagePath, (url) => setResolvedImg(url));
+  }, [player.imageUrl, player.name]);
 
   const isUnderAge = player.age !== null && player.age < activeConfig.auction.rules.underAgeLimit;
 
@@ -74,12 +94,11 @@ export function PlayerCard({
       {/* Player Image Section */}
       <div className={`relative ${imageSizeClasses[size]} bg-gradient-to-b from-[var(--theme-gradient-start)] to-[var(--theme-gradient-end)]`}>
         <img
-          src={player.imageUrl || '/assets/man.jpg'}
+          src={resolvedImg}
           alt={player.name}
           className="w-full h-full object-cover object-top"
           loading="lazy"
           onError={(e) => {
-            console.error('[PlayerCard] Image failed, using placeholder for', player.name);
             (e.target as HTMLImageElement).src = '/assets/man.jpg';
           }}
         />

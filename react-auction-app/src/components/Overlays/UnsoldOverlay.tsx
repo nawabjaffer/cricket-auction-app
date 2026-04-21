@@ -3,12 +3,13 @@
 // Apple-style reveal animation when a player goes unsold
 // ============================================================================
 
-import { useState, useMemo, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { IoCloseCircle } from 'react-icons/io5';
 import { useUnsoldPlayers } from '../../store';
 import { extractDriveFileId } from '../../utils/driveImage';
 import { formatRoleDisplay } from '../../utils/roleFormatter';
+import { getCachedStorageUrl, resolveImageAsync } from '../../services/firebaseStorageService';
 
 // Pre-generated particles (deterministic, outside component)
 const FALLING_PARTICLES = Array.from({ length: 20 }, (_, i) => ({
@@ -30,31 +31,20 @@ export function UnsoldOverlay({ isVisible, onClose }: Readonly<UnsoldOverlayProp
   const [currentUrlIndex, setCurrentUrlIndex] = useState(0);
   const [imageError, setImageError] = useState(false);
 
-  // Generate multiple URL formats to try for player image
-  const imageUrls = useMemo(() => {
-    if (!lastUnsoldPlayer?.imageUrl) return [];
-    
-    const urls: string[] = [];
-    const fileId = extractDriveFileId(lastUnsoldPlayer.imageUrl);
-    
-    if (fileId) {
-      // Try lh3 first (best CORS support)
-      urls.push(`https://lh3.googleusercontent.com/d/${fileId}=s800`);
-      // Try thumbnail endpoint
-      urls.push(`https://drive.google.com/thumbnail?id=${fileId}&sz=w800`);
-      // Try direct export
-      urls.push(`https://drive.google.com/uc?export=view&id=${fileId}`);
-    } else {
-      urls.push(lastUnsoldPlayer.imageUrl);
-    }
-    
-    return urls;
-  }, [lastUnsoldPlayer?.imageUrl]);
+  // Firebase Storage image resolution
+  const unsoldImageUrl = lastUnsoldPlayer?.imageUrl ?? '';
+  const [resolvedImageUrl, setResolvedImageUrl] = useState('');
 
-  // Generate fallback - use placeholder instead of avatar letters
-  const getFallbackImage = useCallback(() => {
-    return '/placeholder_player.png';
-  }, []);
+  useEffect(() => {
+    if (!unsoldImageUrl) { setResolvedImageUrl(''); return; }
+    const cached = getCachedStorageUrl(unsoldImageUrl);
+    if (cached) { setResolvedImageUrl(cached); return; }
+    const fileId = extractDriveFileId(unsoldImageUrl);
+    if (fileId) setResolvedImageUrl(`https://lh3.googleusercontent.com/d/${fileId}=s800`);
+    else setResolvedImageUrl(unsoldImageUrl);
+    const storagePath = `images/players/${(lastUnsoldPlayer?.name || 'unknown').toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
+    resolveImageAsync(unsoldImageUrl, storagePath, (url) => setResolvedImageUrl(url));
+  }, [unsoldImageUrl, lastUnsoldPlayer?.name]);
 
   // Reset state when player changes
   useEffect(() => {
@@ -62,20 +52,16 @@ export function UnsoldOverlay({ isVisible, onClose }: Readonly<UnsoldOverlayProp
     setImageError(false);
   }, [lastUnsoldPlayer?.id]);
 
-  // Handle image error - try next URL
+  // Handle image error
   const handleImageError = useCallback(() => {
-    if (currentUrlIndex < imageUrls.length - 1) {
-      setCurrentUrlIndex(prev => prev + 1);
-    } else {
-      setImageError(true);
-    }
-  }, [currentUrlIndex, imageUrls.length]);
+    setImageError(true);
+  }, []);
 
   if (!lastUnsoldPlayer) return null;
 
-  const displayImageUrl = imageError || imageUrls.length === 0
-    ? getFallbackImage() 
-    : imageUrls[currentUrlIndex];
+  const displayImageUrl = imageError || !resolvedImageUrl
+    ? '/placeholder_player.png'
+    : resolvedImageUrl;
 
   return (
     <AnimatePresence>

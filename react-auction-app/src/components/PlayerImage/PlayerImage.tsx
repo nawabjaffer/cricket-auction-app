@@ -1,11 +1,17 @@
 // ============================================================================
 // PLAYER IMAGE COMPONENT
-// Handles Google Drive URLs with proper fallback for player images
+// Handles Google Drive URLs with proper fallback for player images.
+// Firebase Storage is used as a CDN proxy: images are uploaded once and served
+// from a fast CDN URL on every subsequent load with zero delay.
 // ============================================================================
 
 import React, { useState, useMemo } from 'react';
 import { extractDriveFileId } from '../../utils/driveImage';
 import { localImageCacheService } from '../../services/localImageCache';
+import {
+  getCachedStorageUrl,
+  resolveImageAsync,
+} from '../../services/firebaseStorageService';
 
 interface PlayerImageProps {
   imageUrl: string | undefined;
@@ -36,12 +42,26 @@ export const PlayerImage: React.FC<PlayerImageProps> = ({
   const [imageError, setImageError] = useState(false);
   const [resolvedSrc, setResolvedSrc] = useState('');
 
-  // Generate multiple URL formats to try
+  // Derive a stable storage path from the player name
+  const storagePath = useMemo(
+    () => `images/players/${playerName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}`,
+    [playerName]
+  );
+
+  // Generate multiple URL formats to try.
+  // If Firebase Storage already has this image, skip Drive URL juggling entirely.
   const imageUrls = useMemo(() => {
     if (!imageUrl) return [];
 
-    const fileId = extractDriveFileId(imageUrl);
+    // 1. Firebase Storage cache hit — fastest path, zero network
+    const storageUrl = getCachedStorageUrl(imageUrl);
+    if (storageUrl) return [storageUrl];
 
+    // 2. Already a Storage URL
+    if (imageUrl.includes('firebasestorage')) return [imageUrl];
+
+    // 3. Google Drive — try CDN-friendly variants
+    const fileId = extractDriveFileId(imageUrl);
     if (fileId) {
       return [
         `https://lh3.googleusercontent.com/d/${fileId}=s${SIZE_MAP[size] * 2}`,
@@ -51,7 +71,7 @@ export const PlayerImage: React.FC<PlayerImageProps> = ({
     }
 
     return [imageUrl];
-  }, [imageUrl, size]);
+  }, [imageUrl, size, storagePath]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Generate fallback - use placeholder instead of avatar letters
   const fallbackUrl = useMemo(() => {
@@ -73,35 +93,53 @@ export const PlayerImage: React.FC<PlayerImageProps> = ({
     setResolvedSrc('');
   }, [imageUrl]);
 
+  // Kick off Firebase Storage upload/resolution in the background.
+  // When the CDN URL is ready it triggers a re-render via setResolvedSrc.
+  React.useEffect(() => {
+    if (!imageUrl || imageUrl.startsWith('data:') || imageUrl.startsWith('blob:')) return;
+    if (imageUrl.includes('firebasestorage')) return;
+    resolveImageAsync(imageUrl, storagePath, (storageUrl) => {
+      setResolvedSrc(storageUrl);
+    });
+  }, [imageUrl, storagePath]);
+
   let currentUrl = imageUrls[currentUrlIndex] || '';
   if (imageError || imageUrls.length === 0) {
     currentUrl = showFallback ? fallbackUrl : '';
   }
+  // If Firebase Storage has delivered a CDN URL, use it unconditionally
+  const effectiveUrl = (resolvedSrc && !imageError) ? resolvedSrc : currentUrl;
 
   React.useEffect(() => {
     let isActive = true;
     let revoke: (() => void) | undefined;
 
     const resolveSource = async () => {
-      if (!currentUrl) {
+      if (!effectiveUrl) {
         setResolvedSrc('');
         return;
       }
 
       // Data/blob URLs are already fully resolved — use them directly without async fetch
-      if (currentUrl.startsWith('data:') || currentUrl.startsWith('blob:')) {
-        setResolvedSrc(currentUrl);
+      if (effectiveUrl.startsWith('data:') || effectiveUrl.startsWith('blob:')) {
+        setResolvedSrc(effectiveUrl);
         return;
       }
 
-      const result = await localImageCacheService.resolveImageSrc(currentUrl);
+      // Firebase Storage URLs are CDN-backed — use directly, no extra fetch needed
+      if (effectiveUrl.includes('firebasestorage')) {
+        setResolvedSrc(effectiveUrl);
+        return;
+      }
+
+      const result = await localImageCacheService.resolveImageSrc(effectiveUrl);
       if (!isActive) {
         result.revoke?.();
         return;
       }
 
       revoke = result.revoke;
-      setResolvedSrc(result.src || currentUrl);
+      setResolvedSrc(result.src || effectiveUrl);
     };
 
     resolveSource();
@@ -110,26 +148,29 @@ export const PlayerImage: React.FC<PlayerImageProps> = ({
       isActive = false;
       revoke?.();
     };
-  }, [currentUrl]);
+  }, [effectiveUrl]);
 
-  if (!currentUrl) return null;
+  if (!effectiveUrl) return null;
 
-  // For data/blob URLs, use them directly without waiting for the async cache effect cycle
-  const effectiveSrc = resolvedSrc ||
-    (currentUrl.startsWith('data:') || currentUrl.startsWith('blob:') ? currentUrl : '');
+  // For data/blob/storage URLs, use them directly without waiting for the async cache effect cycle
+  const displaySrc = resolvedSrc ||
+    (effectiveUrl.startsWith('data:') || effectiveUrl.startsWith('blob:') || effectiveUrl.includes('firebasestorage')
+      ? effectiveUrl
+      : '');
 
-  if (!effectiveSrc) return null;
+  if (!displaySrc) return null;
 
   // For data/blob URLs, always load eagerly since they don't need network fetch
-  const isInlineUrl = currentUrl.startsWith('data:') || currentUrl.startsWith('blob:');
+  const isInlineUrl = effectiveUrl.startsWith('data:') || effectiveUrl.startsWith('blob:');
+  const isStorageUrl = effectiveUrl.includes('firebasestorage');
 
   return (
     <img
-      src={effectiveSrc}
+      src={displaySrc}
       alt={playerName}
       className={className}
       onError={handleError}
-      loading={isInlineUrl ? 'eager' : 'lazy'}
+      loading={isInlineUrl || isStorageUrl ? 'eager' : 'lazy'}
     />
   );
 };

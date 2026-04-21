@@ -1,9 +1,15 @@
 // ============================================================================
 // TEAM LOGO COMPONENT
-// Handles Google Drive URLs with proper fallback
+// Handles Google Drive URLs with proper fallback.
+// Firebase Storage is used as a CDN proxy for instant repeat loads.
 // ============================================================================
 
 import React, { useState, useMemo } from 'react';
+import { extractDriveFileId } from '../../utils/driveImage';
+import {
+  getCachedStorageUrl,
+  resolveImageAsync,
+} from '../../services/firebaseStorageService';
 
 interface TeamLogoProps {
   logoUrl: string | undefined;
@@ -27,25 +33,46 @@ export const TeamLogo: React.FC<TeamLogoProps> = ({
 }) => {
   const [imageError, setImageError] = useState(false);
   const [currentUrlIndex, setCurrentUrlIndex] = useState(0);
+  const [storageUrl, setStorageUrl] = useState<string | null>(null);
 
-  // Team logos are now direct-upload first. Drive-hosted URLs are deprecated.
+  // Stable storage path for this team
+  const storagePath = useMemo(
+    () => `images/teams/${teamName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}`,
+    [teamName]
+  );
+
+  // Kick off Firebase Storage resolution in the background
+  React.useEffect(() => {
+    if (!logoUrl) return;
+    if (logoUrl.startsWith('data:') || logoUrl.startsWith('blob:')) return;
+    if (logoUrl.includes('firebasestorage')) return;
+    // Instant check first
+    const cached = getCachedStorageUrl(logoUrl);
+    if (cached) { setStorageUrl(cached); return; }
+    // Background upload / RTDB lookup
+    resolveImageAsync(logoUrl, storagePath, (url) => setStorageUrl(url));
+  }, [logoUrl, storagePath]);
+
   const imageUrls = useMemo(() => {
     if (!logoUrl || logoUrl.includes('placeholder_player.png')) return [];
-
     const trimmed = logoUrl.trim();
     if (!trimmed) return [];
 
-    const lower = trimmed.toLowerCase();
-    if (
-      lower.includes('drive.google.com')
-      || lower.includes('docs.google.com')
-      || lower.includes('googleusercontent.com')
-    ) {
-      return [];
+    // Firebase Storage hit — use directly
+    if (storageUrl) return [storageUrl];
+    if (trimmed.includes('firebasestorage')) return [trimmed];
+
+    // Google Drive — try CDN-friendly thumbnail
+    const fileId = extractDriveFileId(trimmed);
+    if (fileId) {
+      return [
+        `https://drive.google.com/thumbnail?id=${fileId}&sz=w128`,
+        `https://drive.google.com/uc?export=view&id=${fileId}`,
+      ];
     }
 
     return [trimmed];
-  }, [logoUrl]);
+  }, [logoUrl, storageUrl]);
 
   // Generate team initials for fallback
   const teamInitials = useMemo(() => {
@@ -90,7 +117,7 @@ export const TeamLogo: React.FC<TeamLogoProps> = ({
         alt={`${teamName} logo`}
         className="w-full h-full object-contain p-1"
         onError={handleError}
-        loading={currentUrl?.startsWith('data:') ? 'eager' : 'lazy'}
+        loading={currentUrl?.startsWith('data:') || currentUrl?.includes('firebasestorage') ? 'eager' : 'lazy'}
       />
     </div>
   );

@@ -6,6 +6,8 @@
 import { imageCacheService } from './imageCache';
 import { getDriveImageUrl, extractDriveFileId } from '../utils/driveImage';
 
+const IS_DEV = import.meta.env.DEV;
+
 interface PreloadOptions {
   maxConcurrent?: number;
   timeout?: number;
@@ -44,7 +46,7 @@ class ImagePreloaderService {
     // Check cache first
     const cached = imageCacheService.getFromCache(imageUrl);
     if (cached) {
-      console.log('[ImagePreloader] Using cached:', imageUrl);
+      if (IS_DEV) console.log('[ImagePreloader] Using cached:', imageUrl);
       return cached.status === 'success';
     }
 
@@ -64,7 +66,7 @@ class ImagePreloaderService {
       img.onload = () => {
         cleanup();
         imageCacheService.markAsLoaded(imageUrl);
-        console.log('[ImagePreloader] Successfully preloaded:', imageUrl);
+        if (IS_DEV) console.log('[ImagePreloader] Successfully preloaded:', imageUrl);
         resolve(true);
       };
 
@@ -74,7 +76,7 @@ class ImagePreloaderService {
         // Try fallback URLs for Drive images
         const fileId = extractDriveFileId(imageUrl);
         if (fileId) {
-          console.log('[ImagePreloader] Primary load failed, trying fallbacks for:', imageUrl);
+          if (IS_DEV) console.log('[ImagePreloader] Primary load failed, trying fallbacks for:', imageUrl);
 
           const fallbackUrls = [
             `https://drive.google.com/thumbnail?id=${fileId}&sz=w400`,
@@ -96,7 +98,7 @@ class ImagePreloaderService {
 
               fallbackImg.onload = () => {
                 fallbackCleanup();
-                console.log('[ImagePreloader] Fallback successful:', fallbackUrl);
+                if (IS_DEV) console.log('[ImagePreloader] Fallback successful:', fallbackUrl);
                 res(true);
               };
 
@@ -123,7 +125,7 @@ class ImagePreloaderService {
 
         // All fallbacks failed
         imageCacheService.markAsFailed(imageUrl);
-        console.log('[ImagePreloader] All attempts failed for:', imageUrl);
+        if (IS_DEV) console.log('[ImagePreloader] All attempts failed for:', imageUrl);
         resolve(false);
       };
 
@@ -131,7 +133,7 @@ class ImagePreloaderService {
         cleanup();
         img.onerror = null; // Prevent double-handling
         imageCacheService.markAsFailed(imageUrl);
-        console.log('[ImagePreloader] Timeout for:', imageUrl);
+        if (IS_DEV) console.log('[ImagePreloader] Timeout for:', imageUrl);
         resolve(false);
       }, timeout);
 
@@ -167,13 +169,15 @@ class ImagePreloaderService {
     const successful: string[] = [];
     const failed: string[] = [];
 
-    console.log('[ImagePreloader] Starting preload of', unique.length, 'images (max concurrent:', maxConcurrent, ')');
+    if (IS_DEV) {
+      console.log('[ImagePreloader] Starting preload of', unique.length, 'images (max concurrent:', maxConcurrent, ')');
+    }
 
     // Process in batches
     for (let i = 0; i < unique.length; i += maxConcurrent) {
       // Check if preload was aborted
       if (this.preloadAbortController.signal.aborted) {
-        console.log('[ImagePreloader] Preloading aborted');
+        if (IS_DEV) console.log('[ImagePreloader] Preloading aborted');
         break;
       }
 
@@ -194,13 +198,15 @@ class ImagePreloaderService {
       const current = Math.min(i + maxConcurrent, unique.length);
       onProgress?.(current, unique.length);
 
-      console.log(
-        '[ImagePreloader] Batch complete:',
-        current,
-        '/',
-        unique.length,
-        `(${successful.length} success, ${failed.length} failed)`
-      );
+      if (IS_DEV) {
+        console.log(
+          '[ImagePreloader] Batch complete:',
+          current,
+          '/',
+          unique.length,
+          `(${successful.length} success, ${failed.length} failed)`
+        );
+      }
     }
 
     const duration = Date.now() - startTime;
@@ -213,13 +219,15 @@ class ImagePreloaderService {
     };
 
     this.isPreloading = false;
-    console.log(
-      '[ImagePreloader] Preload complete:',
-      result.successful.length,
-      '/',
-      result.total,
-      `in ${result.duration}ms (${result.successRate.toFixed(1)}% success rate)`
-    );
+    if (IS_DEV) {
+      console.log(
+        '[ImagePreloader] Preload complete:',
+        result.successful.length,
+        '/',
+        result.total,
+        `in ${result.duration}ms (${result.successRate.toFixed(1)}% success rate)`
+      );
+    }
 
     return result;
   }
@@ -231,7 +239,7 @@ class ImagePreloaderService {
     if (this.preloadAbortController) {
       this.preloadAbortController.abort();
       this.isPreloading = false;
-      console.log('[ImagePreloader] Preload aborted');
+      if (IS_DEV) console.log('[ImagePreloader] Preload aborted');
     }
   }
 

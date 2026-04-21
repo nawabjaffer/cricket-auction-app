@@ -4,7 +4,7 @@
 // Reuses existing auction business logic with broadcast-optimized design
 // ============================================================================
 
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback, Component, type ErrorInfo, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -23,6 +23,30 @@ import PlayerOverlay from '../components/Live/PlayerOverlay';
 import SoldAnimation from '../components/Live/SoldAnimation';
 import PlayerTransitionOverlay from '../components/Live/PlayerTransitionOverlay';
 import './LivePage.css';
+
+const IS_DEV = import.meta.env.DEV;
+
+// ---------------------------------------------------------------------------
+// Lightweight error boundary to prevent child render errors from killing
+// the entire live broadcast page (tab "Aw, Snap!" crash).
+// ---------------------------------------------------------------------------
+class LiveErrorBoundary extends Component<{ fallback?: ReactNode; children: ReactNode }, { hasError: boolean }> {
+  state = { hasError: false };
+  static getDerivedStateFromError() { return { hasError: true }; }
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    console.error('[LiveErrorBoundary] Caught render error:', error, info.componentStack);
+  }
+  componentDidUpdate(_: unknown, prevState: { hasError: boolean }) {
+    // Auto-recover after 2 s so overlay can re-attempt
+    if (this.state.hasError && !prevState.hasError) {
+      setTimeout(() => this.setState({ hasError: false }), 2000);
+    }
+  }
+  render() {
+    if (this.state.hasError) return (this.props.fallback ?? null);
+    return this.props.children;
+  }
+}
 
 // Utility to format currency
 const formatCurrency = (amount: number): string => {
@@ -178,11 +202,11 @@ export default function LivePage() {
     loadPremium();
   }, [isAuthenticated, navigate, setPremiumStatus]);
 
-  // Subscribe to camera changes
+  // Subscribe to camera changes (spread sources to create new array ref for React)
   useEffect(() => {
     const unsubscribe = cameraManager.subscribe((sources) => {
-      setCameras(sources);
-      setCameraSources(sources);
+      setCameras([...sources]);
+      setCameraSources([...sources]);
     });
 
     const unsubDevices = cameraManager.subscribeToDevices(setDevices);
@@ -208,11 +232,10 @@ export default function LivePage() {
       if (config.lastUpdate <= lastAppliedConfigRef.current) return;
 
       try {
-        // Request camera permission (quick probe, then release)
-        const tempStream = await navigator.mediaDevices.getUserMedia({ video: true });
-        tempStream.getTracks().forEach(t => t.stop());
-
         if (cancelled) return;
+
+        // Ensure camera manager is initialized before applying config
+        await cameraManager.initialize();
 
         // Stop existing cameras before applying new config
         cameraManager.stopAll();
@@ -265,12 +288,14 @@ export default function LivePage() {
     const teamChanged = teamId !== lastSyncedTeamIdRef.current;
     
     if (playerChanged || bidChanged || teamChanged) {
-      console.log('[LivePage] Local auction sync (values changed):', {
-        playerId,
-        playerName: auctionStore.currentPlayer?.name,
-        bid,
-        teamId,
-      });
+      if (IS_DEV) {
+        console.log('[LivePage] Local auction sync (values changed):', {
+          playerId,
+          playerName: auctionStore.currentPlayer?.name,
+          bid,
+          teamId,
+        });
+      }
       
       if (playerChanged) {
         lastSyncedPlayerIdRef.current = playerId;
@@ -307,12 +332,14 @@ export default function LivePage() {
 
     if (!playerChanged && !bidChanged && !teamChanged) return;
 
-    console.log('[LivePage] Realtime sync (values changed):', {
-      playerId,
-      playerName: syncPlayerState.name,
-      bid: syncBidValue,
-      teamId,
-    });
+    if (IS_DEV) {
+      console.log('[LivePage] Realtime sync (values changed):', {
+        playerId,
+        playerName: syncPlayerState.name,
+        bid: syncBidValue,
+        teamId,
+      });
+    }
 
     // Prefer full player details from loaded players
     const fullPlayer: Player | null = auctionStore.originalPlayers.find(p => p.id === syncPlayerState.id) || syncPlayerState;
@@ -389,48 +416,25 @@ export default function LivePage() {
     }
   }, [cameras.length, activeCamera]);
 
-  // Attach active stream to main video - use callback ref for reliable binding
+  // Stable callback ref — only stores the element; stream binding is handled by the effect below.
   const setMainVideoRef = useCallback((el: HTMLVideoElement | null) => {
     mainVideoRef.current = el;
-    
-    if (el) {
-      const activeStream = cameras[activeCamera - 1]?.stream || cameras[0]?.stream;
-      
-      console.log('[LivePage] Video ref callback:', {
-        hasEl: !!el,
-        hasStream: !!activeStream,
-        camerasCount: cameras.length,
-        activeCamera,
-      });
-      
-      if (activeStream && el.srcObject !== activeStream) {
-        el.srcObject = activeStream;
-        el.play().catch((err) => {
-          console.error('[LivePage] Video play failed:', err);
-        });
-      }
-    }
-  }, [cameras, activeCamera]);
+  }, []);
 
-  // Re-attach stream when camera changes
+  // Re-attach stream when camera changes (guarded play to avoid rapid-fire crash)
   useEffect(() => {
     const activeStream = cameras[activeCamera - 1]?.stream || cameras[0]?.stream;
     const videoEl = mainVideoRef.current;
     
-    console.log('[LivePage] Video binding effect:', {
-      hasVideoEl: !!videoEl,
-      hasStream: !!activeStream,
-      camerasCount: cameras.length,
-      activeCamera,
-    });
-    
-    if (videoEl && activeStream) {
-      if (videoEl.srcObject !== activeStream) {
-        videoEl.srcObject = activeStream;
-      }
-      // Always try to play
+    if (!videoEl || !activeStream) return;
+
+    if (videoEl.srcObject !== activeStream) {
+      videoEl.srcObject = activeStream;
+    }
+    // Only call play() when actually paused to avoid crashing the media pipeline
+    if (videoEl.paused) {
       videoEl.play().catch((err) => {
-        console.error('[LivePage] Video play failed:', err);
+        console.warn('[LivePage] Video play failed:', err);
       });
     }
   }, [cameras, activeCamera]);
@@ -443,7 +447,9 @@ export default function LivePage() {
       if (videoEl && camera.stream) {
         if (videoEl.srcObject !== camera.stream) {
           videoEl.srcObject = camera.stream;
-          videoEl.play().catch(console.error);
+        }
+        if (videoEl.paused) {
+          videoEl.play().catch(console.warn);
         }
       }
     });
@@ -862,7 +868,9 @@ export default function LivePage() {
       {/* Player Overlay */}
       <AnimatePresence mode="wait">
         {overlay.player.visible && currentPlayer && !playerTransitionActive && (
-          <PlayerOverlay player={currentPlayer} />
+          <LiveErrorBoundary>
+            <PlayerOverlay player={currentPlayer} />
+          </LiveErrorBoundary>
         )}
       </AnimatePresence>
 
@@ -900,6 +908,8 @@ export default function LivePage() {
                         crossOrigin="anonymous"
                         onError={(e) => {
                           const img = e.target as HTMLImageElement;
+                          if (img.dataset.fallbackApplied === '1') return;
+                          img.dataset.fallbackApplied = '1';
                           // Try Google Drive thumbnail format if available
                           if (!img.src.includes('thumbnail')) {
                             img.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(displayTeamName)}&background=random`;
@@ -940,15 +950,27 @@ export default function LivePage() {
       {/* Enhanced Sold/Unsold Animation with Player Details */}
       <AnimatePresence>
         {soldAnimationData && (
-          <SoldAnimation
-            type={soldAnimationData.type}
-            player={soldAnimationData.player}
-            team={soldAnimationData.team}
-            amount={soldAnimationData.amount}
-            stampColor={soldAnimationData.type === 'sold' ? '#E4BE75' : '#ef4444'}
-            onComplete={() => setSoldAnimationData(null)}
-            duration={3500}
-          />
+          <LiveErrorBoundary>
+            <SoldAnimation
+              type={soldAnimationData.type}
+              player={soldAnimationData.player}
+              team={soldAnimationData.team}
+              amount={soldAnimationData.amount}
+              stampColor={soldAnimationData.type === 'sold' ? '#E4BE75' : '#ef4444'}
+              onComplete={() => {
+                setSoldAnimationData(null);
+                // Auto-advance to next player after sold/unsold animation
+                auction.closeOverlay();
+                auction.clearBidState();
+                setPlayerTransitionActive(true);
+                setTimeout(() => {
+                  auction.selectNextPlayer();
+                  setPlayerTransitionActive(false);
+                }, 400);
+              }}
+              duration={3500}
+            />
+          </LiveErrorBoundary>
         )}
       </AnimatePresence>
 

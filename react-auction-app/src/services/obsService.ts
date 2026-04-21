@@ -61,11 +61,34 @@ class OBSService {
       return true;
     }
 
+    // Cancel any pending auto-reconnect before a manual connect
+    if (this.reconnectTimeout) {
+      clearTimeout(this.reconnectTimeout);
+      this.reconnectTimeout = null;
+    }
+
     this.config.host = host;
     this.config.port = port;
     this.config.password = password;
+    // Reset reconnect counter for a fresh manual connect
+    this.reconnectAttempts = 0;
 
     return new Promise((resolve) => {
+      let settled = false;
+      const settle = (success: boolean) => {
+        if (settled) return;
+        settled = true;
+        resolve(success);
+      };
+
+      // 10-second connection timeout
+      const timeoutId = setTimeout(() => {
+        console.warn('[OBS] Connection timed out');
+        this.notifyConnectionState('error');
+        this.ws?.close();
+        settle(false);
+      }, 10_000);
+
       try {
         this.notifyConnectionState('connecting');
         const wsUrl = `ws://${host}:${port}`;
@@ -81,7 +104,11 @@ class OBSService {
         this.ws.onmessage = async (event) => {
           try {
             const message: OBSMessage = JSON.parse(event.data);
-            await this.handleMessage(message, resolve);
+            // On successful identification, clear timeout and settle
+            await this.handleMessage(message, (success) => {
+              clearTimeout(timeoutId);
+              settle(success);
+            });
           } catch (error) {
             console.error('[OBS] Failed to parse message:', error);
           }
@@ -89,20 +116,28 @@ class OBSService {
 
         this.ws.onerror = (error) => {
           console.error('[OBS] WebSocket error:', error);
+          clearTimeout(timeoutId);
           this.notifyConnectionState('error');
-          resolve(false);
+          settle(false);
         };
 
-        this.ws.onclose = () => {
-          console.log('[OBS] WebSocket closed');
+        this.ws.onclose = (event) => {
+          clearTimeout(timeoutId);
+          console.log('[OBS] WebSocket closed', event.code, event.reason);
+          // Settle as failed if not yet resolved (e.g. auth rejected → close code 4009)
+          settle(false);
           this.notifyConnectionState('disconnected');
           this.ws = null;
-          this.attemptReconnect();
+          // Only auto-reconnect if this was an established connection (not a failed first attempt)
+          if (this.config.enabled) {
+            this.attemptReconnect();
+          }
         };
       } catch (error) {
+        clearTimeout(timeoutId);
         console.error('[OBS] Connection failed:', error);
         this.notifyConnectionState('error');
-        resolve(false);
+        settle(false);
       }
     });
   }

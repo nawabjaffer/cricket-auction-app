@@ -6,6 +6,7 @@
 import { useEffect, useState } from 'react';
 import { auctionPersistence } from '../services/auctionPersistence';
 import { realtimeSync } from '../services/realtimeSync';
+import { batchPreloadImages } from '../services/firebaseStorageService';
 import { useAuctionStore } from '../store/auctionStore';
 import type { SoldPlayer } from '../types';
 
@@ -120,6 +121,29 @@ export function useAuctionDataLoader() {
           teams: savedTeams?.length || 0,
         });
 
+        // ── Background: upload all images to Firebase Storage (fire-and-forget)
+        // This makes every subsequent render instant — CDN URLs from localStorage.
+        const allPlayers = [
+          ...restoredSoldPlayers,
+          ...restoredUnsoldPlayers,
+          ...useAuctionStore.getState().availablePlayers,
+        ];
+        const imageItems = [
+          ...allPlayers
+            .filter((p) => p.imageUrl && !p.imageUrl.startsWith('data:'))
+            .map((p) => ({
+              url: p.imageUrl!,
+              storagePath: `images/players/${p.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}`,
+            })),
+          ...(savedTeams ?? [])
+            .filter((t) => t.logoUrl && !t.logoUrl.startsWith('data:'))
+            .map((t) => ({
+              url: t.logoUrl!,
+              storagePath: `images/teams/${t.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}`,
+            })),
+        ];
+        batchPreloadImages(imageItems, { maxConcurrent: 3 }).catch(() => {});
+
       } catch (error) {
         console.error('[DataLoader] Failed to restore data from Firebase:', error);
       } finally {
@@ -167,6 +191,24 @@ export function useSaveInitialSnapshot() {
         await auctionPersistence.saveInitialSnapshot(availablePlayers, teams);
         setSnapshotSaved(true);
         console.log('[Snapshot] ✅ Initial snapshot saved');
+
+        // Upload all images to Firebase Storage in the background
+        const { availablePlayers: latestPlayers, teams: latestTeams } = useAuctionStore.getState();
+        const imageItems = [
+          ...latestPlayers
+            .filter((p) => p.imageUrl && !p.imageUrl.startsWith('data:'))
+            .map((p) => ({
+              url: p.imageUrl!,
+              storagePath: `images/players/${p.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}`,
+            })),
+          ...latestTeams
+            .filter((t) => t.logoUrl && !t.logoUrl.startsWith('data:'))
+            .map((t) => ({
+              url: t.logoUrl!,
+              storagePath: `images/teams/${t.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}`,
+            })),
+        ];
+        batchPreloadImages(imageItems, { maxConcurrent: 3 }).catch(() => {});
 
       } catch (error) {
         console.error('[Snapshot] Failed to save initial snapshot:', error);
