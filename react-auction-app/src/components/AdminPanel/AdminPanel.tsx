@@ -8,7 +8,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 
 import { IoClose, IoSave, IoRefresh, IoDownload, IoVideocam, IoAdd, IoTrash, IoArrowUp, IoArrowDown, IoSearch, IoStatsChart } from 'react-icons/io5';
 import { auctionPersistence, type AdminSettings, type SponsorRecord } from '../../services/auctionPersistence';
-import { googleSheetsService, imagePreloaderService } from '../../services';
+import { googleSheetsService, imagePreloaderService, resolveMediaToStorage, uploadFileToStorage } from '../../services';
 import { useAuctionStore } from '../../store/auctionStore';
 import { exportSoldPlayers } from '../../utils/exportData';
 import FeatureFlagsTab from './FeatureFlagsTab';
@@ -29,6 +29,11 @@ interface AdminPanelProps {
 
 export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps) {
   const PAGE_SIZE_OPTIONS = [10, 20, 50, 100] as const;
+  const slugify = (value: string) => value.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+  const isDriveLikeUrl = (value?: string) => {
+    const url = (value ?? '').trim().toLowerCase();
+    return url.includes('drive.google.com') || url.includes('docs.google.com') || url.includes('googleusercontent.com');
+  };
 
   const [activeTab, setActiveTab] = useState<'theme' | 'teams' | 'sponsors' | 'players' | 'export' | 'features' | 'streaming' | 'reset'>('theme');
   const [isSaving, setIsSaving] = useState(false);
@@ -72,6 +77,7 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
   const [isIconPlayer, setIsIconPlayer] = useState(false);
   const [iconTeamId, setIconTeamId] = useState<string>('');
   const [isSavingSponsors, setIsSavingSponsors] = useState(false);
+  const [isMigratingMedia, setIsMigratingMedia] = useState(false);
   const csvFileInputRef = useRef<HTMLInputElement | null>(null);
   const statsCsvInputRef = useRef<HTMLInputElement | null>(null);
   const [uploadFeedback, setUploadFeedback] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
@@ -159,22 +165,6 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
     () => editingSponsors.slice((sponsorPage - 1) * sponsorPageSize, sponsorPage * sponsorPageSize),
     [editingSponsors, sponsorPage, sponsorPageSize],
   );
-
-  const readFileAsDataUrl = (file: File): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => {
-        const result = reader.result;
-        if (typeof result === 'string') {
-          resolve(result);
-          return;
-        }
-        reject(new Error('Unable to read image file'));
-      };
-      reader.onerror = () => reject(new Error('Unable to read image file'));
-      reader.readAsDataURL(file);
-    });
-  };
 
   const getLogoSourceMode = (logoUrl: string | undefined): LogoSourceMode => (
     logoUrl?.startsWith('data:') ? 'upload' : 'drive'
@@ -556,12 +546,15 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
       return;
     }
     try {
-      const dataUrl = await readFileAsDataUrl(file);
-      setTeamDraft({ ...teamDraft, logoUrl: dataUrl });
+      const storageUrl = await uploadFileToStorage(
+        file,
+        `media/teams/${slugify(teamDraft.name || editingTeamId)}-logo-${Date.now()}`
+      );
+      setTeamDraft({ ...teamDraft, logoUrl: storageUrl });
       setTeamLogoSources((prev) => ({ ...prev, [editingTeamId]: 'upload' }));
-      showUploadFeedback(`Team logo uploaded: ${file.name}`);
+      showUploadFeedback(`Team logo uploaded to Firebase Storage: ${file.name}`);
     } catch {
-      showUploadFeedback('Failed to read image file.', 'error');
+      showUploadFeedback('Failed to upload team logo to Firebase Storage.', 'error');
     }
   };
 
@@ -576,12 +569,15 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
       return;
     }
     try {
-      const dataUrl = await readFileAsDataUrl(file);
-      setTeamDraft({ ...teamDraft, brandLogoUrl: dataUrl });
+      const storageUrl = await uploadFileToStorage(
+        file,
+        `media/teams/${slugify(teamDraft.name || editingTeamId)}-owner-logo-${Date.now()}`
+      );
+      setTeamDraft({ ...teamDraft, brandLogoUrl: storageUrl });
       setTeamOwnerLogoSources((prev) => ({ ...prev, [editingTeamId]: 'upload' }));
-      showUploadFeedback(`Owner logo uploaded: ${file.name}`);
+      showUploadFeedback(`Owner logo uploaded to Firebase Storage: ${file.name}`);
     } catch {
-      showUploadFeedback('Failed to read image file.', 'error');
+      showUploadFeedback('Failed to upload owner logo to Firebase Storage.', 'error');
     }
   };
 
@@ -596,12 +592,15 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
       return;
     }
     try {
-      const dataUrl = await readFileAsDataUrl(file);
-      setPlayerDraft({ ...playerDraft, imageUrl: dataUrl });
+      const storageUrl = await uploadFileToStorage(
+        file,
+        `media/players/${slugify(playerDraft.name || editingPlayerId)}-${Date.now()}`
+      );
+      setPlayerDraft({ ...playerDraft, imageUrl: storageUrl });
       setPlayerImageSources((prev) => ({ ...prev, [editingPlayerId]: 'upload' }));
-      showUploadFeedback(`Player image uploaded: ${file.name}`);
+      showUploadFeedback(`Player image uploaded to Firebase Storage: ${file.name}`);
     } catch {
-      showUploadFeedback('Failed to read image file.', 'error');
+      showUploadFeedback('Failed to upload player image to Firebase Storage.', 'error');
     }
   };
 
@@ -672,17 +671,98 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
 
   const handleSponsorLogoFileChange = async (index: number, file?: File | null) => {
     if (!file) return;
-    const dataUrl = await readFileAsDataUrl(file);
-    await updateSponsorLogo(index, 'upload', dataUrl);
+    const sponsor = editingSponsors[index];
+    if (!sponsor) return;
+    try {
+      const storageUrl = await uploadFileToStorage(
+        file,
+        `media/sponsors/${slugify(sponsor.name || sponsor.id)}-logo-${Date.now()}`
+      );
+      await updateSponsorLogo(index, 'upload', storageUrl);
+      showUploadFeedback(`Sponsor logo uploaded to Firebase Storage: ${file.name}`);
+    } catch {
+      showUploadFeedback('Failed to upload sponsor logo to Firebase Storage.', 'error');
+    }
   };
 
   const handleSponsorVideoFileChange = async (index: number, file?: File | null) => {
     if (!file) return;
-    const dataUrl = await readFileAsDataUrl(file);
+    const sponsor = editingSponsors[index];
+    if (!sponsor) return;
+    try {
+      const storageUrl = await uploadFileToStorage(
+        file,
+        `media/sponsors/${slugify(sponsor.name || sponsor.id)}-video-${Date.now()}`
+      );
     const updated = [...editingSponsors];
     if (updated[index]) {
-      updated[index] = { ...updated[index], videoUrl: dataUrl };
+      updated[index] = { ...updated[index], videoUrl: storageUrl };
       setEditingSponsors(updated);
+    }
+      showUploadFeedback(`Sponsor video uploaded to Firebase Storage: ${file.name}`);
+    } catch {
+      showUploadFeedback('Failed to upload sponsor video to Firebase Storage.', 'error');
+    }
+  };
+
+  const handleMigrateDriveMediaToStorage = async () => {
+    if (isMigratingMedia) return;
+    setIsMigratingMedia(true);
+    setIsSaving(true);
+    try {
+      let migratedCount = 0;
+      const toStorage = async (url: string | undefined, storagePath: string): Promise<string> => {
+        const raw = (url ?? '').trim();
+        if (!raw) return raw;
+        if (raw.includes('firebasestorage.googleapis.com') || raw.includes('firebasestorage.app')) return raw;
+        if (!isDriveLikeUrl(raw)) return raw;
+        const resolved = await resolveMediaToStorage(raw, storagePath);
+        if (resolved !== raw) migratedCount += 1;
+        return resolved;
+      };
+
+      const nextPlayers = await Promise.all(editingPlayers.map(async (player) => ({
+        ...player,
+        imageUrl: await toStorage(player.imageUrl, `media/players/${slugify(player.name || player.id)}`),
+      })));
+
+      const nextTeams = await Promise.all(editingTeams.map(async (team) => ({
+        ...team,
+        logoUrl: await toStorage(team.logoUrl, `media/teams/${slugify(team.name || team.id)}-logo`),
+        brandLogoUrl: await toStorage(team.brandLogoUrl, `media/teams/${slugify(team.name || team.id)}-owner-logo`),
+      })));
+
+      const nextSponsors = await Promise.all(editingSponsors.map(async (sponsor) => ({
+        ...sponsor,
+        logoUrl: await toStorage(sponsor.logoUrl, `media/sponsors/${slugify(sponsor.name || sponsor.id)}-logo`),
+        videoUrl: await toStorage(sponsor.videoUrl, `media/sponsors/${slugify(sponsor.name || sponsor.id)}-video`),
+      })));
+
+      setEditingPlayers(nextPlayers);
+      setEditingTeams(nextTeams);
+      setEditingSponsors(nextSponsors);
+
+      setAdminPlayerOverrides(nextPlayers);
+      setTeams(nextTeams);
+      reconcilePlayerPools();
+
+      await Promise.all([
+        auctionPersistence.saveAdminPlayers(nextPlayers),
+        auctionPersistence.saveTeams(nextTeams),
+        auctionPersistence.saveSponsors(nextSponsors),
+      ]);
+
+      showUploadFeedback(`Migration complete: ${migratedCount} Drive media URL(s) moved to Firebase Storage.`);
+      setSaveStatus('success');
+      setTimeout(() => setSaveStatus('idle'), 2000);
+    } catch (error) {
+      console.error('[AdminPanel] Failed to migrate Drive media:', error);
+      showUploadFeedback('Drive media migration failed. Check console for details.', 'error');
+      setSaveStatus('error');
+      setTimeout(() => setSaveStatus('idle'), 3000);
+    } finally {
+      setIsMigratingMedia(false);
+      setIsSaving(false);
     }
   };
 
@@ -890,10 +970,27 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
       throw new Error('No valid players found to import.');
     }
 
-    setEditingPlayers(players);
-    setAdminPlayerOverrides(players);
+    // Auto-migrate any Drive / external image URLs to Firebase Storage so
+    // imports never leave the app depending on slow / blocked sources.
+    const migrated = await Promise.all(players.map(async (p) => {
+      if (!p.imageUrl || typeof p.imageUrl !== 'string') return p;
+      const url = p.imageUrl.trim();
+      if (!url) return p;
+      if (url.startsWith('data:') || url.startsWith('blob:')) return p;
+      if (url.includes('firebasestorage')) return p;
+      try {
+        const storagePath = `media/players/${p.id ?? p.name ?? 'unknown'}`;
+        const storageUrl = await resolveMediaToStorage(url, storagePath);
+        return storageUrl && storageUrl !== url ? { ...p, imageUrl: storageUrl } : p;
+      } catch {
+        return p;
+      }
+    }));
+
+    setEditingPlayers(migrated);
+    setAdminPlayerOverrides(migrated);
     reconcilePlayerPools();
-    await auctionPersistence.saveAdminPlayers(players);
+    await auctionPersistence.saveAdminPlayers(migrated);
   };
 
   const handleImportPlayersFromCsv = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -1910,6 +2007,13 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
                       disabled={isSaving || editingPlayers.length === 0}
                     >
                       <IoSave size={18} /> Bulk Save All Players
+                    </button>
+                    <button
+                      className="admin-btn admin-btn-warning"
+                      onClick={handleMigrateDriveMediaToStorage}
+                      disabled={isSaving || isMigratingMedia}
+                    >
+                      <IoRefresh size={18} /> {isMigratingMedia ? 'Migrating Media...' : 'Migrate Drive Media to Storage'}
                     </button>
                     <button
                       className="admin-btn admin-btn-warning"

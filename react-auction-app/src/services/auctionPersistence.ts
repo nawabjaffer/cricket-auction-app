@@ -470,7 +470,13 @@ class AuctionPersistenceService {
 
     if (!snapshot.exists()) return null;
 
-    return snapshot.val() as Player[];
+    const raw = snapshot.val();
+    // Firebase may return objects with numeric keys or arrays with null gaps
+    const arr: unknown[] = Array.isArray(raw) ? raw : Object.values(raw ?? {});
+    // Filter out null/undefined entries and ensure each has at least an id
+    return arr.filter(
+      (p): p is Player => p != null && typeof p === 'object' && 'id' in (p as Record<string, unknown>)
+    );
   }
 
   /**

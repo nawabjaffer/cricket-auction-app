@@ -305,16 +305,17 @@ export const useAuctionStore = create<AuctionStore>()(
 
         // === Player Selection Actions ===
         selectPlayer: (player) => {
+          const safeBasePrice = Number(player.basePrice) || activeConfig.auction.basePrice;
           console.log('[Auction] Player Selected:', {
             id: player.id,
             name: player.name,
             role: player.role,
             imageUrl: player.imageUrl,
-            basePrice: player.basePrice,
+            basePrice: safeBasePrice,
           });
           set({
             currentPlayer: player,
-            currentBid: player.basePrice,
+            currentBid: safeBasePrice,
             previousBid: 0,
             selectedTeam: null,
             bidHistory: [],
@@ -322,7 +323,7 @@ export const useAuctionStore = create<AuctionStore>()(
             auctionState: {
               ...get().auctionState,
               currentPlayer: player,
-              currentBid: player.basePrice,
+              currentBid: safeBasePrice,
               selectedTeam: null,
               bidHistory: [],
               isAuctionActive: true,

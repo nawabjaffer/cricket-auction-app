@@ -22,15 +22,19 @@ export function useRealtimeDesktopSync(): void {
   const currentBid = useAuctionStore(state => state.currentBid);
   const selectedTeam = useAuctionStore(state => state.selectedTeam);
   const teams = useAuctionStore(state => state.teams);
+  const bidHistory = useAuctionStore(state => state.bidHistory);
   const raiseBidForTeam = useAuctionStore(state => state.raiseBidForTeam);
   const auctionState = useAuctionStore(state => state.auctionState);
+  const storeActiveOverlay = useAuctionStore(state => state.activeOverlay);
   
   const isInitialized = useRef(false);
   const teamsRef = useRef(teams);
   const currentPlayerRef = useRef(currentPlayer);
   const currentBidRef = useRef(currentBid);
   const selectedTeamRef = useRef(selectedTeam);
+  const bidHistoryRef = useRef(bidHistory);
   const auctionActiveRef = useRef(auctionState.isAuctionActive);
+  const activeOverlayRef = useRef<'sold' | 'unsold' | null>(null);
   const initPromiseRef = useRef<Promise<void> | null>(null);
   
   // Keep teams ref updated
@@ -38,13 +42,22 @@ export function useRealtimeDesktopSync(): void {
     teamsRef.current = teams;
   }, [teams]);
 
+  // Keep bidHistory ref updated
+  useEffect(() => {
+    bidHistoryRef.current = bidHistory;
+  }, [bidHistory]);
+
   // Keep state refs updated for heartbeat broadcasts
   useEffect(() => {
     currentPlayerRef.current = currentPlayer;
     currentBidRef.current = currentBid;
     selectedTeamRef.current = selectedTeam;
     auctionActiveRef.current = auctionState.isAuctionActive;
-  }, [currentPlayer, currentBid, selectedTeam, auctionState.isAuctionActive]);
+    // Only broadcast sold/unsold — other overlay types (end, team) are UI-only
+    activeOverlayRef.current = (storeActiveOverlay === 'sold' || storeActiveOverlay === 'unsold')
+      ? storeActiveOverlay
+      : null;
+  }, [currentPlayer, currentBid, selectedTeam, auctionState.isAuctionActive, storeActiveOverlay]);
 
   // Initialize as desktop on mount - ensure it completes
   useEffect(() => {
@@ -52,30 +65,32 @@ export function useRealtimeDesktopSync(): void {
       isInitialized.current = true;
       
       initPromiseRef.current = realtimeSyncService.initAsDesktop().then(() => {
-        console.log('[useRealtimeDesktopSync] ✅ Desktop sync initialized and ready');
+        if (import.meta.env.DEV) console.log('[useRealtimeDesktopSync] ✅ Desktop sync initialized and ready');
         
         // Force an immediate state broadcast after initialization
-        console.log('[useRealtimeDesktopSync] 📡 Broadcasting initial state...');
+        if (import.meta.env.DEV) console.log('[useRealtimeDesktopSync] 📡 Broadcasting initial state...');
         realtimeSyncService.broadcastState(
           currentPlayer,
           currentBid,
           selectedTeam,
           teams,
-          auctionState.isAuctionActive
+          auctionState.isAuctionActive,
+          activeOverlayRef.current,
+          bidHistory
         );
-      }).catch(error => {
-        console.error('[useRealtimeDesktopSync] ❌ Failed to initialize:', error);
+      }).catch((err: unknown) => {
+        console.error('[useRealtimeDesktopSync] ❌ Failed to initialize:', err);
       });
     }
 
     // Subscribe to mobile bids
     const unsubscribe = realtimeSyncService.onMobileBid((bid: RealtimeMobileBid) => {
-      console.log('[useRealtimeDesktopSync] 📱 Mobile bid received:', bid);
+      if (import.meta.env.DEV) console.log('[useRealtimeDesktopSync] 📱 Mobile bid received:', bid);
       
       if (bid.type === 'raise') {
         const team = teamsRef.current.find(t => t.id === bid.teamId);
         if (team) {
-          console.log('[useRealtimeDesktopSync] ✅ Applying bid from team:', team.name);
+          if (import.meta.env.DEV) console.log('[useRealtimeDesktopSync] ✅ Applying bid from team:', team.name);
           raiseBidForTeam(team);
         }
       }
@@ -90,25 +105,29 @@ export function useRealtimeDesktopSync(): void {
   useEffect(() => {
     if (!isInitialized.current) return;
     if (!realtimeSyncService.isReady()) {
-      console.log('[useRealtimeDesktopSync] ⏳ Service not ready yet, waiting...');
+      if (import.meta.env.DEV) console.log('[useRealtimeDesktopSync] ⏳ Service not ready yet, waiting...');
       return;
     }
 
-    console.log('[useRealtimeDesktopSync] 📡 Broadcasting state update...', {
-      player: currentPlayer?.name,
-      bid: currentBid,
-      team: selectedTeam?.name,
-      active: auctionState.isAuctionActive,
-    });
+    if (import.meta.env.DEV) {
+      console.log('[useRealtimeDesktopSync] 📡 Broadcasting state update...', {
+        player: currentPlayer?.name,
+        bid: currentBid,
+        team: selectedTeam?.name,
+        active: auctionState.isAuctionActive,
+      });
+    }
 
     realtimeSyncService.broadcastState(
       currentPlayer,
       currentBid,
       selectedTeam,
       teams,
-      auctionState.isAuctionActive
+      auctionState.isAuctionActive,
+      (storeActiveOverlay === 'sold' || storeActiveOverlay === 'unsold') ? storeActiveOverlay : null,
+      bidHistory
     );
-  }, [currentPlayer, currentBid, selectedTeam, teams, auctionState.isAuctionActive]);
+  }, [currentPlayer, currentBid, selectedTeam, teams, auctionState.isAuctionActive, storeActiveOverlay, bidHistory]);
 
   // Heartbeat broadcast to ensure mobile receives state even if no changes
   useEffect(() => {
@@ -125,9 +144,11 @@ export function useRealtimeDesktopSync(): void {
         currentBidRef.current,
         selectedTeamRef.current,
         teamsRef.current,
-        auctionActiveRef.current
+        auctionActiveRef.current,
+        activeOverlayRef.current,
+        bidHistoryRef.current
       );
-    }, 800);
+    }, 2000);
 
     return () => clearInterval(interval);
   }, []);
@@ -142,6 +163,7 @@ export interface RealtimeMobileSyncState {
   selectedTeam: Team | null;
   teams: Team[];
   auctionActive: boolean;
+  activeOverlay: 'sold' | 'unsold' | null;
   isConnected: boolean;
   lastUpdate: number;
   lastSessionReset: number;
@@ -163,6 +185,8 @@ export function useRealtimeMobileSync(): RealtimeMobileSyncState {
     selectedTeam: null,
     teams: [],
     auctionActive: false,
+    activeOverlay: null,
+    bidHistory: [],
     lastUpdate: 0,
     sessionId: '',
   });
@@ -183,18 +207,20 @@ export function useRealtimeMobileSync(): RealtimeMobileSyncState {
       isInitialized.current = true;
       
       realtimeSyncService.initAsMobile().then(() => {
-        console.log('[useRealtimeMobileSync] Mobile sync initialized');
+        if (import.meta.env.DEV) console.log('[useRealtimeMobileSync] Mobile sync initialized');
       });
     }
 
     // Subscribe to state updates
     const unsubscribe = realtimeSyncService.onStateChange((state) => {
-      console.log('[useRealtimeMobileSync] State update received:', {
-        player: state.currentPlayer?.name,
-        bid: state.currentBid,
-        team: state.selectedTeam?.name,
-        active: state.auctionActive,
-      });
+      if (import.meta.env.DEV) {
+        console.log('[useRealtimeMobileSync] State update received:', {
+          player: state.currentPlayer?.name,
+          bid: state.currentBid,
+          team: state.selectedTeam?.name,
+          active: state.auctionActive,
+        });
+      }
       setSyncState(state);
       setIsConnected(true);
     });
@@ -202,7 +228,7 @@ export function useRealtimeMobileSync(): RealtimeMobileSyncState {
     // Check connection status periodically
     const connectionCheck = setInterval(() => {
       setIsConnected(realtimeSyncService.isDesktopConnected());
-    }, 800);
+    }, 2000);
 
     // Subscribe to session reset events
     const unsubscribeReset = realtimeSyncService.onSessionReset((reset) => {
@@ -311,6 +337,9 @@ export function useRealtimeMobileSync(): RealtimeMobileSyncState {
     selectedTeam,
     teams,
     auctionActive: syncState.auctionActive,
+    activeOverlay: (syncState.activeOverlay === 'sold' || syncState.activeOverlay === 'unsold')
+      ? syncState.activeOverlay
+      : null,
     isConnected,
     lastUpdate: syncState.lastUpdate,
     lastSessionReset,

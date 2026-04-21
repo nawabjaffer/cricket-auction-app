@@ -306,6 +306,209 @@ export default function StreamingTab({ onClose }: StreamingTabProps) {
         </div>
       </div>
 
+      {/* OBS Integration Guide */}
+      <div className="admin-panel__section">
+        <h3 className="admin-panel__section-title">
+          <IoSettings /> OBS Setup Guide
+        </h3>
+        <div style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '1rem',
+          fontSize: '0.85rem',
+          color: 'rgba(255, 255, 255, 0.8)',
+        }}>
+          {/* Step 1 */}
+          <div style={{ display: 'flex', gap: '0.75rem' }}>
+            <span style={{
+              flexShrink: 0,
+              width: 24,
+              height: 24,
+              borderRadius: '50%',
+              background: '#3b82f6',
+              color: '#fff',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: '0.75rem',
+              fontWeight: 700,
+            }}>1</span>
+            <div>
+              <strong style={{ color: '#fff' }}>Enable OBS WebSocket</strong>
+              <p style={{ margin: '0.25rem 0 0', fontSize: '0.78rem', color: 'rgba(255, 255, 255, 0.6)', lineHeight: 1.5 }}>
+                In OBS Studio, go to <strong>Tools → WebSocket Server Settings</strong>. Enable the server, set the port to <code style={{ background: 'rgba(255,255,255,0.08)', padding: '1px 5px', borderRadius: 4, fontSize: '0.75rem' }}>4455</code> (default), and optionally set a password. Click <em>Apply</em>.
+              </p>
+            </div>
+          </div>
+
+          {/* Step 2 */}
+          <div style={{ display: 'flex', gap: '0.75rem' }}>
+            <span style={{
+              flexShrink: 0,
+              width: 24,
+              height: 24,
+              borderRadius: '50%',
+              background: '#3b82f6',
+              color: '#fff',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: '0.75rem',
+              fontWeight: 700,
+            }}>2</span>
+            <div>
+              <strong style={{ color: '#fff' }}>Connect from This App</strong>
+              <p style={{ margin: '0.25rem 0 0', fontSize: '0.78rem', color: 'rgba(255, 255, 255, 0.6)', lineHeight: 1.5 }}>
+                Enter the host, port, and password above, then click <em>Connect</em>. The status dot turns green when connected.
+              </p>
+            </div>
+          </div>
+
+          {/* Step 3 */}
+          <div style={{ display: 'flex', gap: '0.75rem' }}>
+            <span style={{
+              flexShrink: 0,
+              width: 24,
+              height: 24,
+              borderRadius: '50%',
+              background: '#3b82f6',
+              color: '#fff',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: '0.75rem',
+              fontWeight: 700,
+            }}>3</span>
+            <div>
+              <strong style={{ color: '#fff' }}>Add Browser Source for Live View</strong>
+              <p style={{ margin: '0.25rem 0 0', fontSize: '0.78rem', color: 'rgba(255, 255, 255, 0.6)', lineHeight: 1.5 }}>
+                In OBS, click <strong>Sources → + → Browser</strong>. Set the URL to:
+              </p>
+              <code style={{
+                display: 'block',
+                marginTop: '0.35rem',
+                padding: '0.35rem 0.6rem',
+                background: 'rgba(59, 130, 246, 0.1)',
+                border: '1px solid rgba(59, 130, 246, 0.25)',
+                borderRadius: 6,
+                fontSize: '0.78rem',
+                color: '#60a5fa',
+                wordBreak: 'break-all',
+                userSelect: 'all',
+              }}>{window.location.origin}/live</code>
+              <p style={{ margin: '0.25rem 0 0', fontSize: '0.78rem', color: 'rgba(255, 255, 255, 0.6)', lineHeight: 1.5 }}>
+                Set resolution to <strong>1920 × 1080</strong>. This captures the full broadcast view (camera + overlays).
+              </p>
+            </div>
+          </div>
+
+          {/* Step 4 */}
+          <div style={{ display: 'flex', gap: '0.75rem' }}>
+            <span style={{
+              flexShrink: 0,
+              width: 24,
+              height: 24,
+              borderRadius: '50%',
+              background: '#8b5cf6',
+              color: '#fff',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: '0.75rem',
+              fontWeight: 700,
+            }}>4</span>
+            <div>
+              <strong style={{ color: '#fff' }}>Add Transparent Overlay (Optional)</strong>
+              <p style={{ margin: '0.25rem 0 0', fontSize: '0.78rem', color: 'rgba(255, 255, 255, 0.6)', lineHeight: 1.5 }}>
+                For compositing over your own camera in OBS, add a <strong>second Browser Source</strong> with:
+              </p>
+              <code style={{
+                display: 'block',
+                marginTop: '0.35rem',
+                padding: '0.35rem 0.6rem',
+                background: 'rgba(139, 92, 246, 0.1)',
+                border: '1px solid rgba(139, 92, 246, 0.25)',
+                borderRadius: 6,
+                fontSize: '0.78rem',
+                color: '#a78bfa',
+                wordBreak: 'break-all',
+                userSelect: 'all',
+              }}>{window.location.origin}/obs-overlay</code>
+              <p style={{ margin: '0.25rem 0 0', fontSize: '0.78rem', color: 'rgba(255, 255, 255, 0.6)', lineHeight: 1.5 }}>
+                This shows only player info, bid ticker, and sold animation on a transparent background — perfect for layering over your camera feed.
+              </p>
+            </div>
+          </div>
+
+          {/* Step 5 */}
+          <div style={{ display: 'flex', gap: '0.75rem' }}>
+            <span style={{
+              flexShrink: 0,
+              width: 24,
+              height: 24,
+              borderRadius: '50%',
+              background: '#8b5cf6',
+              color: '#fff',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: '0.75rem',
+              fontWeight: 700,
+            }}>5</span>
+            <div>
+              <strong style={{ color: '#fff' }}>Add Control Dock (Optional)</strong>
+              <p style={{ margin: '0.25rem 0 0', fontSize: '0.78rem', color: 'rgba(255, 255, 255, 0.6)', lineHeight: 1.5 }}>
+                In OBS, go to <strong>Docks → Custom Browser Docks</strong>. Add a new dock with URL:
+              </p>
+              <code style={{
+                display: 'block',
+                marginTop: '0.35rem',
+                padding: '0.35rem 0.6rem',
+                background: 'rgba(139, 92, 246, 0.1)',
+                border: '1px solid rgba(139, 92, 246, 0.25)',
+                borderRadius: 6,
+                fontSize: '0.78rem',
+                color: '#a78bfa',
+                wordBreak: 'break-all',
+                userSelect: 'all',
+              }}>{window.location.origin}/obs-dock</code>
+              <p style={{ margin: '0.25rem 0 0', fontSize: '0.78rem', color: 'rgba(255, 255, 255, 0.6)', lineHeight: 1.5 }}>
+                This adds a dockable panel inside OBS for switching scenes, controlling streams, and monitoring auction state — all without leaving OBS.
+              </p>
+            </div>
+          </div>
+
+          {/* Quick reference card */}
+          <div style={{
+            marginTop: '0.25rem',
+            padding: '0.75rem',
+            background: 'rgba(255, 255, 255, 0.03)',
+            border: '1px solid rgba(255, 255, 255, 0.08)',
+            borderRadius: '0.5rem',
+          }}>
+            <div style={{ fontWeight: 700, fontSize: '0.78rem', color: '#fff', marginBottom: '0.5rem' }}>Quick Reference URLs</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', fontSize: '0.75rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ color: 'rgba(255,255,255,0.5)' }}>Full broadcast:</span>
+                <code style={{ color: '#60a5fa' }}>/live</code>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ color: 'rgba(255,255,255,0.5)' }}>Transparent overlay:</span>
+                <code style={{ color: '#a78bfa' }}>/obs-overlay</code>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ color: 'rgba(255,255,255,0.5)' }}>OBS dock panel:</span>
+                <code style={{ color: '#a78bfa' }}>/obs-dock</code>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ color: 'rgba(255,255,255,0.5)' }}>Admin controls:</span>
+                <code style={{ color: '#60a5fa' }}>/live-admin</code>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* RTMP Settings */}
       <div className="admin-panel__section">
         <h3 className="admin-panel__section-title">

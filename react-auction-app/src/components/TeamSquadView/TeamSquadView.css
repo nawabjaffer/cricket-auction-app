@@ -270,8 +270,8 @@
 /* Players Grid - 5 Column Layout */
 .tsv-players-grid {
   display: grid;
-  grid-template-columns: repeat(9, minmax(0, 1fr));
-  gap: 1.2rem;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 0.8rem;
   width: 100%;
 }
 

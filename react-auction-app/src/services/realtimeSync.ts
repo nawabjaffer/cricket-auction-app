@@ -16,6 +16,8 @@ import {
 } from 'firebase/database';
 import type { Player, Team } from '../types';
 
+const IS_DEV = import.meta.env.DEV;
+
 // Firebase configuration
 const firebaseConfig = {
   apiKey: 'AIzaSyBazxXTsWddS3r_i-0VhUaC2QqknheEzpQ',
@@ -117,6 +119,14 @@ export interface RealtimeAuctionState {
     underAgePlayers?: number;
   }>;
   auctionActive: boolean;
+  activeOverlay: 'sold' | 'unsold' | null;
+  bidHistory: Array<{
+    teamId: string;
+    teamName: string;
+    teamLogoUrl?: string;
+    amount: number;
+    timestamp: string;
+  }>;
   lastUpdate: number;
   sessionId: string;
   // Mobile bidding configuration
@@ -172,7 +182,6 @@ class RealtimeSyncService {
   // Local state cache
   private currentState: RealtimeAuctionState | null = null;
   private readonly processedBidIds = new Set<string>();
-  private lastStateUpdate = 0;
   private lastSessionReset = 0;
 
   constructor() {
@@ -186,11 +195,11 @@ class RealtimeSyncService {
     if (this.isInitialized) return true;
 
     try {
-      console.log('[RealtimeSync] Initializing Firebase...');
+      if (IS_DEV) console.log('[RealtimeSync] Initializing Firebase...');
       this.app = initializeApp(firebaseConfig, 'realtime-sync');
       this.db = getDatabase(this.app);
       this.isInitialized = true;
-      console.log('[RealtimeSync] Firebase initialized successfully');
+      if (IS_DEV) console.log('[RealtimeSync] Firebase initialized successfully');
       return true;
     } catch (error) {
       // App might already be initialized
@@ -199,7 +208,7 @@ class RealtimeSyncService {
         this.app = getApp('realtime-sync');
         this.db = getDatabase(this.app);
         this.isInitialized = true;
-        console.log('[RealtimeSync] Using existing Firebase app');
+        if (IS_DEV) console.log('[RealtimeSync] Using existing Firebase app');
         return true;
       } catch {
         console.error('[RealtimeSync] Initialization failed:', error);
@@ -227,7 +236,7 @@ class RealtimeSyncService {
     }
     
     this.role = 'desktop';
-    console.log('[RealtimeSync] Initialized as DESKTOP');
+    if (IS_DEV) console.log('[RealtimeSync] Initialized as DESKTOP');
     
     // Listen for mobile bids
     this.listenForMobileBids();
@@ -245,7 +254,7 @@ class RealtimeSyncService {
     }
     
     this.role = 'mobile';
-    console.log('[RealtimeSync] Initialized as MOBILE');
+    if (IS_DEV) console.log('[RealtimeSync] Initialized as MOBILE');
     
     // Listen for state changes
     this.listenForStateChanges();
@@ -262,18 +271,15 @@ class RealtimeSyncService {
     currentBid: number,
     selectedTeam: Team | null,
     teams: Team[],
-    auctionActive: boolean
+    auctionActive: boolean,
+    activeOverlay?: 'sold' | 'unsold' | null,
+    bidHistory?: Array<{ teamId: string; teamName: string; teamLogoUrl?: string; amount: number; timestamp: string }>
   ): Promise<void> {
     if (!this.db || this.role !== 'desktop') {
       return;
     }
 
-    // Throttle updates to prevent excessive writes
     const now = Date.now();
-    if (now - this.lastStateUpdate < 100) {
-      return;
-    }
-    this.lastStateUpdate = now;
 
     const state: RealtimeAuctionState = {
       currentPlayer: currentPlayer ? {
@@ -314,6 +320,14 @@ class RealtimeSyncService {
         underAgePlayers: t.underAgePlayers,
       })),
       auctionActive,
+      activeOverlay: activeOverlay ?? null,
+      bidHistory: (bidHistory ?? []).map(b => ({
+        teamId: b.teamId,
+        teamName: b.teamName,
+        teamLogoUrl: b.teamLogoUrl ?? '',
+        amount: b.amount,
+        timestamp: b.timestamp,
+      })),
       lastUpdate: now,
       sessionId: this.sessionId,
     };
@@ -332,7 +346,7 @@ class RealtimeSyncService {
   private listenForStateChanges(): void {
     if (!this.db) return;
 
-    console.log('[RealtimeSync] Starting state listener...');
+    if (IS_DEV) console.log('[RealtimeSync] Starting state listener...');
     
     const stateRef = ref(this.db, AUCTION_STATE_PATH);
     const unsubscribe = onValue(
@@ -341,15 +355,17 @@ class RealtimeSyncService {
         if (snapshot.exists()) {
           const state = snapshot.val() as RealtimeAuctionState;
           this.currentState = state;
-          console.log('[RealtimeSync] State received:', {
-            player: state.currentPlayer?.name,
-            bid: state.currentBid,
-            team: state.selectedTeam?.name,
-            active: state.auctionActive,
-          });
+          if (IS_DEV) {
+            console.log('[RealtimeSync] State received:', {
+              player: state.currentPlayer?.name,
+              bid: state.currentBid,
+              team: state.selectedTeam?.name,
+              active: state.auctionActive,
+            });
+          }
           this.notifyStateListeners(state);
         } else {
-          console.log('[RealtimeSync] No auction state found');
+          if (IS_DEV) console.log('[RealtimeSync] No auction state found');
         }
       },
       (error) => {
@@ -366,7 +382,7 @@ class RealtimeSyncService {
   private listenForMobileBids(): void {
     if (!this.db) return;
 
-    console.log('[RealtimeSync] Starting bid listener...');
+    if (IS_DEV) console.log('[RealtimeSync] Starting bid listener...');
     
     const bidsRef = ref(this.db, MOBILE_BIDS_PATH);
     const unsubscribe = onValue(
@@ -382,7 +398,7 @@ class RealtimeSyncService {
             // Only process unprocessed bids that we haven't seen
             if (!bid.processed && bid.id && !this.processedBidIds.has(bid.id)) {
               this.processedBidIds.add(bid.id);
-              console.log('[RealtimeSync] Mobile bid received:', bid);
+              if (IS_DEV) console.log('[RealtimeSync] Mobile bid received:', bid);
               this.notifyBidListeners(bid);
               
               // Mark as processed
@@ -463,7 +479,7 @@ class RealtimeSyncService {
     try {
       const newBidRef = push(ref(this.db, MOBILE_BIDS_PATH));
       await set(newBidRef, bid);
-      console.log('[RealtimeSync] Bid submitted:', newBidRef.key);
+      if (IS_DEV) console.log('[RealtimeSync] Bid submitted:', newBidRef.key);
       return true;
     } catch (error) {
       console.error('[RealtimeSync] Failed to submit bid:', error);
@@ -656,6 +672,37 @@ class RealtimeSyncService {
       const controlRef = ref(this.db, BROADCAST_CONTROL_PATH);
       unsubRef = onValue(controlRef, (snapshot) => {
         callback(snapshot.exists() ? snapshot.val() as BroadcastControlState : null);
+      });
+      this.unsubscribers.push(unsubRef);
+    };
+
+    setup();
+
+    return () => {
+      cancelled = true;
+      unsubRef?.();
+    };
+  }
+
+  /**
+   * Subscribe to auction state changes directly from RTDB.
+   * Unlike onStateChange(), this creates its own Firebase listener on
+   * `auction/currentState` — safe for any page/role without calling
+   * initAsMobile() or initAsDesktop().
+   */
+  subscribeAuctionState(callback: (state: RealtimeAuctionState | null) => void): () => void {
+    let unsubRef: (() => void) | null = null;
+    let cancelled = false;
+
+    const setup = async () => {
+      if (!this.db) {
+        await this.ensureInitialized();
+      }
+      if (!this.db || cancelled) return;
+
+      const stateRef = ref(this.db, AUCTION_STATE_PATH);
+      unsubRef = onValue(stateRef, (snapshot) => {
+        callback(snapshot.exists() ? snapshot.val() as RealtimeAuctionState : null);
       });
       this.unsubscribers.push(unsubRef);
     };

@@ -4,10 +4,11 @@
 // Role-based stats with configurable display
 // ============================================================================
 
-import { useState, useCallback, useEffect, useMemo } from 'react';
+import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import type { Player } from '../../types';
 import { extractDriveFileId } from '../../utils/driveImage';
+import { getCachedStorageUrl, resolveImageAsync } from '../../services/firebaseStorageService';
 import { getRoleBadgeColor, getRoleCategory } from '../../utils/roleFormatter';
 import { getRoleBasedStats } from '../../utils/playerStats';
 
@@ -17,7 +18,22 @@ interface PlayerOverlayProps {
 }
 
 const PLACEHOLDER_IMAGE = '/placeholder_player.png';
-const MAX_RETRY_ATTEMPTS = 20;
+const MAX_RETRY_ATTEMPTS = 8;
+const MAX_IMAGE_URL_LENGTH = 2048;
+
+function sanitizeImageUrl(url: unknown): string {
+  if (typeof url !== 'string') return '';
+  const trimmed = url.trim();
+  if (!trimmed || trimmed.length > MAX_IMAGE_URL_LENGTH) return '';
+
+  const lowered = trimmed.toLowerCase();
+  // Data/blob/file URLs can be very memory-heavy or unstable in live rotation.
+  if (lowered.startsWith('data:') || lowered.startsWith('blob:') || lowered.startsWith('file:')) {
+    return '';
+  }
+
+  return trimmed;
+}
 
 /**
  * Split a raw role string into { coreRole, details }.
@@ -25,8 +41,8 @@ const MAX_RETRY_ATTEMPTS = 20;
  * "Bowler · Right-Arm Fast"     → { coreRole: "Bowler", details: "Right-Arm Fast" }
  * "All-Rounder · Right-Hand Bat · Right-Arm Fast" → { coreRole: "All-Rounder", details: "Right-Hand Bat · Right-Arm Fast" }
  */
-function splitRoleDisplay(rawRole: string): { coreRole: string; details: string } {
-  if (!rawRole) return { coreRole: 'Player', details: '' };
+function splitRoleDisplay(rawRole: string | undefined | null): { coreRole: string; details: string } {
+  if (!rawRole || typeof rawRole !== 'string') return { coreRole: 'Player', details: '' };
 
   const input = rawRole.trim();
 
@@ -83,52 +99,100 @@ function splitRoleDisplay(rawRole: string): { coreRole: string; details: string 
 }
 
 export default function PlayerOverlay({ player, maxStats = 6 }: PlayerOverlayProps) {
-  const [attemptCount, setAttemptCount] = useState(0);
+  const attemptCountRef = useRef(0);
   const [currentUrlIndex, setCurrentUrlIndex] = useState(0);
   const [usePlaceholder, setUsePlaceholder] = useState(false);
+  const [resolvedStorageUrl, setResolvedStorageUrl] = useState('');
+
+  const safePlayer = useMemo(() => {
+    const safeId = player?.id ? String(player.id) : 'unknown-player';
+    const safeName = typeof player?.name === 'string' && player.name.trim() ? player.name.trim() : 'Unknown Player';
+    const safeImageUrl = sanitizeImageUrl(player?.imageUrl);
+    const safeRole = typeof player?.role === 'string' ? player.role : 'Player';
+    const safeBasePrice = Number.isFinite(Number(player?.basePrice)) ? Number(player.basePrice) : 0;
+
+    return {
+      ...player,
+      id: safeId,
+      name: safeName,
+      imageUrl: safeImageUrl,
+      role: safeRole,
+      basePrice: safeBasePrice,
+    };
+  }, [player]);
 
   const imageUrls = useMemo(() => {
-    if (!player.imageUrl?.trim()) return [];
+    if (!safePlayer.imageUrl?.trim()) return [];
     const urls: string[] = [];
-    const fileId = extractDriveFileId(player.imageUrl);
+    const fileId = extractDriveFileId(safePlayer.imageUrl);
     if (fileId) {
       urls.push(`https://lh3.googleusercontent.com/d/${fileId}=s512`);
       urls.push(`https://drive.google.com/thumbnail?id=${fileId}&sz=w512`);
       urls.push(`https://drive.google.com/uc?export=view&id=${fileId}`);
-      urls.push(`https://lh3.googleusercontent.com/d/${fileId}`);
     } else {
-      urls.push(player.imageUrl);
+      urls.push(safePlayer.imageUrl);
     }
     return urls;
-  }, [player.imageUrl]);
+  }, [safePlayer.imageUrl]);
 
   useEffect(() => {
-    setAttemptCount(0);
+    attemptCountRef.current = 0;
     setCurrentUrlIndex(0);
     setUsePlaceholder(false);
-  }, [player.id]);
+  }, [safePlayer.id]);
+
+  useEffect(() => {
+    if (!safePlayer.imageUrl) {
+      setResolvedStorageUrl('');
+      return;
+    }
+
+    const cached = getCachedStorageUrl(safePlayer.imageUrl);
+    if (cached) {
+      setResolvedStorageUrl(cached);
+      return;
+    }
+
+    const fileId = extractDriveFileId(safePlayer.imageUrl);
+    if (fileId) setResolvedStorageUrl(`https://lh3.googleusercontent.com/d/${fileId}=s512`);
+    else setResolvedStorageUrl(safePlayer.imageUrl);
+
+    const storagePath = `images/players/${safePlayer.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
+    resolveImageAsync(safePlayer.imageUrl, storagePath, (url) => setResolvedStorageUrl(url));
+  }, [safePlayer.imageUrl, safePlayer.name]);
 
   const handleImageError = useCallback(() => {
-    const newAttempt = attemptCount + 1;
-    setAttemptCount(newAttempt);
-    if (currentUrlIndex < imageUrls.length - 1) {
-      setCurrentUrlIndex(prev => prev + 1);
-    } else if (newAttempt >= MAX_RETRY_ATTEMPTS || imageUrls.length === 0) {
+    if (usePlaceholder) return;
+
+    const nextAttempt = attemptCountRef.current + 1;
+    attemptCountRef.current = nextAttempt;
+
+    if (imageUrls.length === 0 || nextAttempt >= MAX_RETRY_ATTEMPTS) {
       setUsePlaceholder(true);
-    } else {
-      setCurrentUrlIndex(0);
+      return;
     }
-  }, [attemptCount, currentUrlIndex, imageUrls.length]);
+
+    setCurrentUrlIndex((prevIndex) => {
+      if (prevIndex < imageUrls.length - 1) return prevIndex + 1;
+      return 0;
+    });
+
+    // Avoid unbounded memory growth on long sessions.
+    if (attemptCountRef.current > MAX_RETRY_ATTEMPTS * 2) {
+      attemptCountRef.current = MAX_RETRY_ATTEMPTS;
+    }
+  }, [imageUrls.length, usePlaceholder]);
 
   const currentImageSrc = useMemo(() => {
     if (usePlaceholder || imageUrls.length === 0) return PLACEHOLDER_IMAGE;
+    if (resolvedStorageUrl) return resolvedStorageUrl;
     return imageUrls[currentUrlIndex];
-  }, [usePlaceholder, imageUrls, currentUrlIndex]);
+  }, [usePlaceholder, imageUrls, currentUrlIndex, resolvedStorageUrl]);
 
   // Role-based stats
-  const roleStats = useMemo(() => getRoleBasedStats(player, maxStats), [player, maxStats]);
-  const { coreRole, details: roleDetails } = useMemo(() => splitRoleDisplay(player.role), [player.role]);
-  const roleCat = useMemo(() => getRoleCategory(player.role), [player.role]);
+  const roleStats = useMemo(() => getRoleBasedStats(safePlayer, maxStats), [safePlayer, maxStats]);
+  const { coreRole, details: roleDetails } = useMemo(() => splitRoleDisplay(safePlayer.role), [safePlayer.role]);
+  const roleCat = useMemo(() => getRoleCategory(safePlayer.role), [safePlayer.role]);
   // For bowlers, show bowling style inline with role; for others, show hand on separate line
   const isBowlerRole = roleCat === 'Bowler';
   const displayRole = isBowlerRole && roleDetails ? `${coreRole} · ${roleDetails}` : coreRole;
@@ -136,7 +200,7 @@ export default function PlayerOverlay({ player, maxStats = 6 }: PlayerOverlayPro
 
   return (
     <motion.div
-      key={player.id}
+      key={safePlayer.id}
       className="live-page__player-overlay"
       initial={{ y: 100, opacity: 0 }}
       animate={{ y: 0, opacity: 1 }}
@@ -148,13 +212,13 @@ export default function PlayerOverlay({ player, maxStats = 6 }: PlayerOverlayPro
         <div className="live-page__player-image live-page__player-image--center">
           <img
             src={currentImageSrc}
-            alt={player.name}
+            alt={safePlayer.name}
             onError={handleImageError}
             style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }}
           />
         </div>
-        <h2 className="live-page__player-name">{player.name}</h2>
-        <p className="live-page__player-role" style={{ color: getRoleBadgeColor(player.role) }}>
+        <h2 className="live-page__player-name">{safePlayer.name}</h2>
+        <p className="live-page__player-role" style={{ color: getRoleBadgeColor(safePlayer.role) }}>
           {displayRole}
         </p>
         {displayDetails && (
@@ -172,7 +236,7 @@ export default function PlayerOverlay({ player, maxStats = 6 }: PlayerOverlayPro
           </div>
         ))}
         <div className="live-page__player-stat-card live-page__player-stat-card--price">
-          <div className="live-page__player-stat-value">₹{player.basePrice}L</div>
+          <div className="live-page__player-stat-value">₹{safePlayer.basePrice}L</div>
           <div className="live-page__player-stat-label">Base Price</div>
         </div>
       </div>

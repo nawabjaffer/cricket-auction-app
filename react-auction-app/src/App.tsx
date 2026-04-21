@@ -54,12 +54,14 @@ import {
   useAuctionDataLoader,
   useSaveInitialSnapshot,
   useAdminPlayersOverrides,
+  useBootPreload,
 } from './hooks';
 import { useRealtimeDesktopSync } from './hooks/useRealtimeSync';
 import { audioService, imageCacheService } from './services';
 import { auctionPersistence, type SponsorRecord } from './services/auctionPersistence';
 import { auctionRules } from './services/auctionRules';
 import { realtimeSync } from './services/realtimeSync';
+import { getCachedStorageUrl, resolveImageAsync } from './services/firebaseStorageService';
 import { useActiveOverlay, useNotification, useCurrentPlayer, useSoldPlayers, useAvailablePlayers, useOriginalPlayers, useTeams } from './store';
 import { extractDriveFileId } from './utils/driveImage';
 import { formatRoleDisplay, getRoleCategory, parseRoleDetails, getRoleBadgeColor } from './utils/roleFormatter';
@@ -139,7 +141,6 @@ function AuctionApp() {
   
   // Image loading state
   const [imageLoadingState, setImageLoadingState] = useState<'loading' | 'loaded' | 'error'>('loading');
-  const [currentImageAttempt, setCurrentImageAttempt] = useState(0);
   const [imgSrc, setImgSrc] = useState<string>('');
   const currentPlayerIdRef = useRef<string | null>(null);
 
@@ -167,6 +168,10 @@ function AuctionApp() {
   // Load initial data
   const { isLoading, isError, error } = useInitialData();
   const { refreshAll } = useRefreshData();
+
+  // Boot-time media preload — caches all player/team/sponsor images before
+  // showing the main UI so subsequent transitions are instant.
+  const bootPreload = useBootPreload(!isLoading && !isError);
 
   // Auction state
   const auction = useAuction();
@@ -215,6 +220,13 @@ function AuctionApp() {
     onCarouselToggle: () => setShowCarousel(prev => !prev),
     onBidMultiplierChange: (multiplier) => setBidMultiplier(multiplier),
     onTeamSquadView: handleTeamSquadView,
+    onTeamDisplayToggle: () => {
+      if (showTeamSquadView) {
+        setShowTeamSquadView(false);
+      } else {
+        handleOpenTeamDisplay();
+      }
+    },
     onCustomAction: (action) => {
       console.log('[App] onCustomAction called with:', action);
       if (action === 'jumpToPlayer') {
@@ -553,25 +565,40 @@ function AuctionApp() {
   }, [selectedTeam, auction.currentBid]);
 
   useEffect(() => {
-    if (!showTeamOverlay) return;
+    if (!showTeamOverlay && !showTeamSquadView) return;
 
     const handleOverlayTeamNavigation = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement;
       if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) return;
       if (event.metaKey || event.ctrlKey || event.altKey) return;
+      
+      if (event.key === 'p') {
+        console.log('[App] "P" key pressed - opening team display');
+        event.preventDefault();
+        handleOpenTeamDisplay();
+      }
 
-      if (event.key === '[') {
+      if (event.key === '[' || event.key === ']') {
         event.preventDefault();
-        selectAdjacentOverlayTeam('prev');
-      } else if (event.key === ']') {
-        event.preventDefault();
-        selectAdjacentOverlayTeam('next');
+        const direction = event.key === '[' ? 'prev' : 'next';
+
+        if (showTeamSquadView && allTeams.length > 0) {
+          // Navigate teams in Team Squad View
+          const currentIndex = allTeams.findIndex((t) => t.id === selectedTeamForSquad);
+          const safeIndex = currentIndex >= 0 ? currentIndex : 0;
+          const delta = direction === 'next' ? 1 : -1;
+          const nextIndex = (safeIndex + delta + allTeams.length) % allTeams.length;
+          setSelectedTeamForSquad(allTeams[nextIndex].id);
+        } else if (showTeamOverlay) {
+          // Navigate teams in Team Overlay
+          selectAdjacentOverlayTeam(direction);
+        }
       }
     };
 
     window.addEventListener('keydown', handleOverlayTeamNavigation);
     return () => window.removeEventListener('keydown', handleOverlayTeamNavigation);
-  }, [selectAdjacentOverlayTeam, showTeamOverlay]);
+  }, [selectAdjacentOverlayTeam, showTeamOverlay, showTeamSquadView, allTeams, selectedTeamForSquad]);
 
   // Play sounds when overlay changes
   useEffect(() => {
@@ -604,51 +631,49 @@ function AuctionApp() {
   // Get current player image URL
   const playerImageUrl = currentPlayer?.imageUrl ?? null;
 
-  // Transform Drive URL to use most reliable endpoint first
+  // Firebase Storage image resolution (replaces manual Drive URL cycling)
   const transformedImageUrl = useMemo(() => {
     if (!playerImageUrl) return null;
-    
-    // Check if it's a Drive URL and use export view (most reliable)
+    // Instant: check Firebase Storage cache
+    const cached = getCachedStorageUrl(playerImageUrl);
+    if (cached) return cached;
+    // Sync fallback: Google Drive lh3
     const fileId = extractDriveFileId(playerImageUrl);
-    if (fileId) {
-      const exportUrl = `https://drive.google.com/uc?export=view&id=${fileId}`;
-      console.log('[App] Using Drive export URL:', exportUrl);
-      return exportUrl;
-    }
-    
+    if (fileId) return `https://lh3.googleusercontent.com/d/${fileId}=w800`;
     return playerImageUrl;
   }, [playerImageUrl]);
+
+  // Background: resolve to Firebase Storage CDN
+  useEffect(() => {
+    if (!playerImageUrl || !currentPlayer?.name) return;
+    const cached = getCachedStorageUrl(playerImageUrl);
+    if (cached) {
+      setImgSrc(cached);
+      setImageLoadingState('loaded');
+      return;
+    }
+    const storagePath = `images/players/${currentPlayer.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
+    resolveImageAsync(playerImageUrl, storagePath, (url) => {
+      // Only update if we're still looking at the same player
+      if (currentPlayerIdRef.current === currentPlayer.id) {
+        setImgSrc(url);
+      }
+    });
+  }, [playerImageUrl, currentPlayer?.name, currentPlayer?.id]);
 
   // Preload player image - simple URL tracking
   const { onImageLoad } = useImagePreload(transformedImageUrl);
 
-  // Async image polling with exponential backoff
+  // Image element ref for load/error handling
   const imgRef = useRef<HTMLImageElement>(null);
-  
-  // Get all possible image URLs for retry
-  const getImageUrlVariants = useCallback((player: typeof currentPlayer) => {
-    if (!player?.imageUrl) return [];
-    
-    const fileId = extractDriveFileId(player.imageUrl);
-    if (!fileId) return [player.imageUrl];
-    
-    // Return all possible Drive URL variants in priority order
-    return [
-      `https://lh3.googleusercontent.com/d/${fileId}=w800`,
-      `https://drive.google.com/thumbnail?id=${fileId}&sz=w800`,
-      `https://drive.google.com/uc?export=view&id=${fileId}`,
-      `https://drive.google.com/thumbnail?id=${fileId}&sz=w600`,
-    ];
-  }, []);
 
   // Reset image state when player changes — also set the first URL to try
   const currentPlayerId = currentPlayer?.id ?? null;
   useEffect(() => {
     if (!currentPlayerId) return;
     currentPlayerIdRef.current = currentPlayerId;
-    setCurrentImageAttempt(0);
     setImageLoadingState('loading');
-    setImgSrc(transformedImageUrl || '');
+    setImgSrc(transformedImageUrl || '/placeholder_player.png');
   }, [currentPlayerId, transformedImageUrl]);
 
   // Loading state
@@ -659,6 +684,11 @@ function AuctionApp() {
   // Error state
   if (isError) {
     return <ErrorScreen error={error} onRetry={refreshAll} />;
+  }
+
+  // Block main UI until media is warmed in local cache for smooth live auction
+  if (!bootPreload.done) {
+    return <LoadingScreen progress={bootPreload.progress} loaded={bootPreload.loaded} total={bootPreload.total} />;
   }
 
   return (
@@ -979,7 +1009,7 @@ function AuctionApp() {
                     animate={{ scale: 1, color: '#ffffff' }}
                     transition={{ type: 'spring', stiffness: 300, damping: 15 }}
                   >
-                    ₹{auction.currentBid.toFixed(2)}L
+                    ₹{Number(auction.currentBid).toFixed(2)}L
                   </motion.div>
                   <div className="team-bid-max">Max: ₹{auction.getMaxBidForTeam(selectedTeam)?.toFixed(1)}L</div>
                 </div>
@@ -1055,9 +1085,7 @@ function AuctionApp() {
                           animate={{ opacity: [0.5, 1, 0.5] }}
                           transition={{ duration: 1.5, repeat: Infinity }}
                         >
-                          {imageLoadingState === 'loading' && currentImageAttempt > 0 
-                            ? `Loading image... (attempt ${currentImageAttempt})`
-                            : 'Loading player...'}
+                          Loading player...
                         </motion.p>
                       </motion.div>
                     )}
@@ -1089,20 +1117,8 @@ function AuctionApp() {
                       if (failedUrl.includes('placeholder_player.png')) return;
                       
                       imageCacheService.markAsFailed(failedUrl);
-                      
-                      // Cycle to next URL variant directly — no pre-testing
-                      const urlVariants = getImageUrlVariants(currentPlayer);
-                      const nextAttempt = currentImageAttempt + 1;
-                      const maxAttempts = Math.max(urlVariants.length * 2, 8);
-                      
-                      if (nextAttempt >= maxAttempts || urlVariants.length === 0) {
-                        setImageLoadingState('error');
-                        return;
-                      }
-                      
-                      const nextUrl = urlVariants[nextAttempt % urlVariants.length];
-                      setCurrentImageAttempt(nextAttempt);
-                      setImgSrc(nextUrl);
+                      setImageLoadingState('error');
+                      setImgSrc('/placeholder_player.png');
                     }}
                   />
                 </>
@@ -1847,7 +1863,9 @@ function AuctionApp() {
 }
 
 // Loading Screen — cinematic broadcast-style transition
-function LoadingScreen() {
+function LoadingScreen({ progress, loaded, total }: { readonly progress?: number; readonly loaded?: number; readonly total?: number } = {}) {
+  const hasProgress = typeof progress === 'number' && typeof total === 'number' && total > 0;
+  const pct = hasProgress ? Math.min(100, Math.round((progress as number) * 100)) : 0;
   return (
     <div className="loading-transition">
       {/* Animated background */}
@@ -1886,6 +1904,16 @@ function LoadingScreen() {
         />
         <div className="loading-transition__title">AUCTION</div>
         <div className="loading-transition__subtitle">LIVE</div>
+        {hasProgress && (
+          <div style={{ marginTop: 24, textAlign: 'center', color: 'rgba(255,255,255,0.9)' }}>
+            <div style={{ width: 260, height: 6, background: 'rgba(255,255,255,0.18)', borderRadius: 999, overflow: 'hidden', margin: '0 auto' }}>
+              <div style={{ width: `${pct}%`, height: '100%', background: 'linear-gradient(90deg,#fbbf24,#f97316)', transition: 'width 180ms ease-out' }} />
+            </div>
+            <div style={{ marginTop: 10, fontSize: 13, letterSpacing: 2 }}>
+              PRELOADING MEDIA · {loaded}/{total}
+            </div>
+          </div>
+        )}
       </motion.div>
 
       {/* Bottom branding */}

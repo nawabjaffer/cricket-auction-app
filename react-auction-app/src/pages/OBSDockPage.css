@@ -1,0 +1,361 @@
+/* ============================================================================
+   OBS DOCK PAGE - Custom Browser Dock Panel Styles
+   Compact dark UI designed for OBS's narrow dock panels
+   ============================================================================ */
+
+.obs-dock {
+  min-height: 100vh;
+  background: #18181b;
+  color: #e4e4e7;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  font-size: 13px;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+
+/* ── Header ── */
+.obs-dock__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  background: #09090b;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+.obs-dock__title {
+  font-weight: 700;
+  font-size: 14px;
+  letter-spacing: -0.01em;
+}
+.obs-dock__header-status {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.obs-dock__status {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.obs-dock__status-text {
+  font-size: 11px;
+  font-weight: 600;
+}
+
+/* ── Sections ── */
+.obs-dock__section {
+  padding: 10px 14px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+.obs-dock__section-title {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #a1a1aa;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+/* ── Inputs ── */
+.obs-dock__conn-fields {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+.obs-dock__input {
+  width: 100%;
+  padding: 7px 10px;
+  background: #27272a;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  color: #e4e4e7;
+  font-size: 12px;
+  outline: none;
+  transition: border-color 0.15s;
+}
+.obs-dock__input:focus {
+  border-color: #3b82f6;
+}
+.obs-dock__input--port {
+  max-width: 70px;
+}
+.obs-dock__select {
+  width: 100%;
+  padding: 5px 8px;
+  background: #27272a;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  color: #e4e4e7;
+  font-size: 12px;
+  outline: none;
+}
+
+/* ── Buttons ── */
+.obs-dock__btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border: none;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, opacity 0.15s;
+  width: 100%;
+}
+.obs-dock__btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.obs-dock__btn--connect {
+  background: #3b82f6;
+  color: #fff;
+  margin-top: 8px;
+}
+.obs-dock__btn--connect:hover:not(:disabled) {
+  background: #2563eb;
+}
+.obs-dock__btn--sm {
+  padding: 4px 10px;
+  width: auto;
+  font-size: 11px;
+}
+.obs-dock__btn--ghost {
+  background: transparent;
+  color: #a1a1aa;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+.obs-dock__btn--ghost:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: #e4e4e7;
+}
+.obs-dock__btn--stream {
+  background: #22c55e;
+  color: #fff;
+}
+.obs-dock__btn--stream:hover {
+  background: #16a34a;
+}
+.obs-dock__btn--stream.live {
+  background: #ef4444;
+}
+.obs-dock__btn--stream.live:hover {
+  background: #dc2626;
+}
+
+/* ── Scene Grid ── */
+.obs-dock__scene-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+}
+.obs-dock__scene-btn {
+  padding: 7px 8px;
+  background: #27272a;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  color: #a1a1aa;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.obs-dock__scene-btn:hover {
+  background: #3f3f46;
+  color: #e4e4e7;
+}
+.obs-dock__scene-btn.active {
+  background: #3b82f6;
+  color: #fff;
+  border-color: #3b82f6;
+}
+
+/* ── Scene Mapping ── */
+.obs-dock__map-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.obs-dock__map-row {
+  display: grid;
+  grid-template-columns: 72px 1fr;
+  align-items: center;
+  gap: 8px;
+}
+.obs-dock__map-mode {
+  font-size: 11px;
+  font-weight: 600;
+  color: #a1a1aa;
+  text-transform: capitalize;
+}
+
+/* ── Toggle ── */
+.obs-dock__toggle-label {
+  position: relative;
+  display: inline-flex;
+  cursor: pointer;
+}
+.obs-dock__toggle-label input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+.obs-dock__toggle-track {
+  width: 28px;
+  height: 16px;
+  border-radius: 999px;
+  background: #3f3f46;
+  transition: background 0.2s;
+  position: relative;
+}
+.obs-dock__toggle-label input:checked + .obs-dock__toggle-track {
+  background: #3b82f6;
+}
+.obs-dock__toggle-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform 0.2s;
+}
+.obs-dock__toggle-label input:checked + .obs-dock__toggle-track .obs-dock__toggle-thumb {
+  transform: translateX(12px);
+}
+
+/* ── Status Bar ── */
+.obs-dock__status-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+/* ── Auction Preview ── */
+.obs-dock__auction-preview {
+  flex: 1;
+}
+.obs-dock__player-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 0;
+}
+.obs-dock__player-info {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.obs-dock__player-info strong {
+  font-size: 12px;
+  color: #fff;
+}
+.obs-dock__player-info span {
+  font-size: 10px;
+  color: #71717a;
+}
+.obs-dock__bid-badge {
+  padding: 3px 8px;
+  background: rgba(167, 240, 45, 0.15);
+  color: #a7f02d;
+  border-radius: 6px;
+  font-weight: 700;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.obs-dock__team-badge {
+  margin-top: 4px;
+  padding: 3px 8px;
+  background: rgba(59, 130, 246, 0.15);
+  color: #60a5fa;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  width: fit-content;
+}
+
+/* ── Footer ── */
+.obs-dock__footer {
+  padding: 10px 14px;
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.obs-dock__url {
+  font-size: 11px;
+  color: #60a5fa;
+  background: #27272a;
+  padding: 4px 8px;
+  border-radius: 4px;
+  word-break: break-all;
+  user-select: all;
+}
+
+/* ── Utilities ── */
+.obs-dock__muted {
+  font-size: 11px;
+  color: #71717a;
+}
+.obs-dock__label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #22c55e;
+}
+
+/* ── Connection help text ── */
+.obs-dock__conn-help {
+  font-size: 11px;
+  color: #71717a;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 6px;
+  padding: 6px 10px;
+  margin-bottom: 8px;
+  line-height: 1.4;
+}
+
+/* ── Error box ── */
+.obs-dock__error {
+  margin: 6px 0;
+  padding: 7px 10px;
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  border-radius: 6px;
+  font-size: 11px;
+  color: #fca5a5;
+  line-height: 1.4;
+}
+
+/* ── Spinner ── */
+.obs-dock__spinner {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border: 2px solid rgba(255,255,255,0.3);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: obs-spin 0.7s linear infinite;
+  margin-right: 4px;
+  vertical-align: middle;
+}
+@keyframes obs-spin {
+  to { transform: rotate(360deg); }
+}

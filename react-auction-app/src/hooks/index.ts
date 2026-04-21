@@ -38,6 +38,8 @@ export type { RealtimeMobileSyncState } from './useRealtimeSync';
 // Admin and data management hooks
 export { useAuctionDataLoader, useSaveInitialSnapshot } from './useAuctionDataLoader';
 export { useFeatureFlags } from './useFeatureFlags';
+export { useBootPreload } from './useBootPreload';
+export type { BootPreloadState } from './useBootPreload';
 export { useFeatureFlagsInit } from './useFeatureFlagsInit';
 export { useAdminAuth } from './useAdminAuth';
 export { useAdminPlayersOverrides } from './useAdminPlayersOverrides';

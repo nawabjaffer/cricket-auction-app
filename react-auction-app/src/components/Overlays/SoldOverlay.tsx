@@ -8,6 +8,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useSoldPlayers, useTeams } from '../../store';
 import { extractDriveFileId } from '../../utils/driveImage';
 import { formatRoleDisplay } from '../../utils/roleFormatter';
+import { getCachedStorageUrl, resolveImageAsync } from '../../services/firebaseStorageService';
 
 // Pre-generated particles (deterministic, outside component)
 const CELEBRATION_PARTICLES = Array.from({ length: 30 }, (_, i) => ({
@@ -27,7 +28,6 @@ export function SoldOverlay({ isVisible, onClose }: Readonly<SoldOverlayProps>) 
   const soldPlayers = useSoldPlayers();
   const teams = useTeams();
   const lastSoldPlayer = soldPlayers.at(-1);
-  const [currentUrlIndex, setCurrentUrlIndex] = useState(0);
   const [imageError, setImageError] = useState(false);
 
   // Find the team logo for the sold player's team
@@ -36,55 +36,39 @@ export function SoldOverlay({ isVisible, onClose }: Readonly<SoldOverlayProps>) 
     return teams.find(t => t.id === lastSoldPlayer.teamId || t.name === lastSoldPlayer.teamName) || null;
   }, [lastSoldPlayer, teams]);
 
-  // Get image URL from last sold player
+  // Firebase Storage image resolution
   const playerImageUrl = lastSoldPlayer?.imageUrl ?? '';
+  const [resolvedImageUrl, setResolvedImageUrl] = useState('');
 
-  // Generate multiple URL formats to try for player image
-  const imageUrls = useMemo(() => {
-    if (!playerImageUrl) return [];
-    
-    const urls: string[] = [];
+  useEffect(() => {
+    if (!playerImageUrl) { setResolvedImageUrl(''); return; }
+    // Instant: check Firebase Storage cache
+    const cached = getCachedStorageUrl(playerImageUrl);
+    if (cached) { setResolvedImageUrl(cached); return; }
+    // Sync fallback: Google Drive lh3
     const fileId = extractDriveFileId(playerImageUrl);
-    
-    if (fileId) {
-      // Try lh3 first (best CORS support), then thumbnail, then direct export
-      urls.push(
-        `https://lh3.googleusercontent.com/d/${fileId}=s800`,
-        `https://drive.google.com/thumbnail?id=${fileId}&sz=w800`,
-        `https://drive.google.com/uc?export=view&id=${fileId}`
-      );
-    } else {
-      urls.push(playerImageUrl);
-    }
-    
-    return urls;
-  }, [playerImageUrl]);
-
-  // Generate fallback - use placeholder instead of avatar letters
-  const getFallbackImage = useCallback(() => {
-    return '/placeholder_player.png';
-  }, []);
+    if (fileId) setResolvedImageUrl(`https://lh3.googleusercontent.com/d/${fileId}=s800`);
+    else setResolvedImageUrl(playerImageUrl);
+    // Background: resolve to Firebase Storage CDN
+    const storagePath = `images/players/${(lastSoldPlayer?.name || 'unknown').toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
+    resolveImageAsync(playerImageUrl, storagePath, (url) => setResolvedImageUrl(url));
+  }, [playerImageUrl, lastSoldPlayer?.name]);
 
   // Reset state when player changes
   useEffect(() => {
-    setCurrentUrlIndex(0);
     setImageError(false);
   }, [lastSoldPlayer?.id]);
 
-  // Handle image error - try next URL
+  // Handle image error
   const handleImageError = useCallback(() => {
-    if (currentUrlIndex < imageUrls.length - 1) {
-      setCurrentUrlIndex(prev => prev + 1);
-    } else {
-      setImageError(true);
-    }
-  }, [currentUrlIndex, imageUrls.length]);
+    setImageError(true);
+  }, []);
 
   if (!lastSoldPlayer) return null;
 
-  const displayImageUrl = imageError || imageUrls.length === 0
-    ? getFallbackImage() 
-    : imageUrls[currentUrlIndex];
+  const displayImageUrl = imageError || !resolvedImageUrl
+    ? '/placeholder_player.png'
+    : resolvedImageUrl;
 
   return (
     <AnimatePresence>

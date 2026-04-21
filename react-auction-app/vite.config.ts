@@ -1,9 +1,22 @@
+/// <reference types="vitest/config" />
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react()],
+  test: {
+    globals: true,
+    environment: 'jsdom',
+    setupFiles: ['./src/__tests__/setup.ts'],
+    include: ['src/**/*.test.{ts,tsx}'],
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'text-summary', 'lcov'],
+      include: ['src/utils/**', 'src/services/auctionRules.ts', 'src/store/auctionStore.ts'],
+      exclude: ['src/**/*.test.{ts,tsx}', 'src/__tests__/**'],
+    },
+  },
   build: {
     chunkSizeWarningLimit: 2000,
     rollupOptions: {

@@ -367,6 +367,47 @@ export function MobileBiddingLivePage() {
     return total > 0 ? Math.round((spentAmount / total) * 100) : 0;
   }, [myTeam, spentAmount]);
 
+  // ── Team Analytics (for My Team tab) ──
+  const myTeamRoleBalance = useMemo(() => {
+    const roleCount = { batting: 0, bowling: 0, fielding: 0 };
+    mySquad.forEach((player) => {
+      const r = (player.role || '').toLowerCase().trim();
+      if (r.includes('bat')) roleCount.batting += 1;
+      if (r.includes('bowl')) roleCount.bowling += 1;
+      if (r.includes('all')) { roleCount.batting += 1; roleCount.bowling += 1; }
+      if (r.includes('wicket')) roleCount.fielding += 2;
+      else roleCount.fielding += 1;
+    });
+    const total = Math.max(roleCount.batting + roleCount.bowling + roleCount.fielding, 1);
+    return {
+      batting: Math.round((roleCount.batting / total) * 100),
+      bowling: Math.round((roleCount.bowling / total) * 100),
+      fielding: Math.round((roleCount.fielding / total) * 100),
+    };
+  }, [mySquad]);
+
+  const myTeamTopPicks = useMemo(
+    () => [...mySquad].sort((a, b) => b.soldAmount - a.soldAmount).slice(0, 3),
+    [mySquad],
+  );
+
+  const myTeamMaxBid = useMemo(() => {
+    if (!myTeam) return 0;
+    const slotsLeft = (myTeam.totalPlayerThreshold || 25) - (myTeam.playersBought || 0);
+    if (slotsLeft <= 0) return 0;
+    // Reserve 0.5L per remaining slot (except current)
+    const reserved = Math.max(slotsLeft - 1, 0) * 0.5;
+    return Math.max((myTeam.remainingPurse || 0) - reserved, 0);
+  }, [myTeam]);
+
+  const myTeamBudgetStatus = useMemo(() => {
+    if (!myTeam) return 'safe' as const;
+    const pct = budgetPct;
+    if (pct >= 85) return 'danger' as const;
+    if (pct >= 65) return 'warning' as const;
+    return 'safe' as const;
+  }, [myTeam, budgetPct]);
+
   // Filtered player list for search
   const filteredPlayers = useMemo(() => {
     if (allPlayers.length === 0) return [];
@@ -1274,6 +1315,63 @@ export function MobileBiddingLivePage() {
               <div className="cb-team-stat">
                 <span className="cb-tstat-value">{formatLakhs(myTeam.highestBid || 0)}</span>
                 <span className="cb-tstat-label">Top Buy</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Team Analytics */}
+          <div className="cb-analytics-section">
+            <h3 className="cb-section-title">Team Analytics</h3>
+            <div className="cb-analytics-grid">
+              {/* Role Balance */}
+              <div className="cb-analytics-card">
+                <div className="cb-analytics-card-title">Balance</div>
+                <div className="cb-analytics-meter-row">
+                  <span>Batting</span>
+                  <div className="cb-analytics-meter"><span style={{ width: `${myTeamRoleBalance.batting}%` }} /></div>
+                  <strong>{myTeamRoleBalance.batting}%</strong>
+                </div>
+                <div className="cb-analytics-meter-row">
+                  <span>Bowling</span>
+                  <div className="cb-analytics-meter"><span style={{ width: `${myTeamRoleBalance.bowling}%` }} /></div>
+                  <strong>{myTeamRoleBalance.bowling}%</strong>
+                </div>
+                <div className="cb-analytics-meter-row">
+                  <span>Fielding</span>
+                  <div className="cb-analytics-meter"><span style={{ width: `${myTeamRoleBalance.fielding}%` }} /></div>
+                  <strong>{myTeamRoleBalance.fielding}%</strong>
+                </div>
+              </div>
+
+              {/* Top Picks */}
+              <div className="cb-analytics-card">
+                <div className="cb-analytics-card-title">Top Picks</div>
+                {myTeamTopPicks.length > 0 ? myTeamTopPicks.map((player, index) => (
+                  <div key={player.id} className="cb-analytics-list-item">
+                    <span>#{index + 1} {player.name}</span>
+                    <strong>{formatLakhs(player.soldAmount)}</strong>
+                  </div>
+                )) : <div className="cb-analytics-empty">No picks yet</div>}
+              </div>
+
+              {/* Budget & Rules */}
+              <div className="cb-analytics-card">
+                <div className="cb-analytics-card-title">Budget &amp; Rules</div>
+                <div className="cb-analytics-list-item">
+                  <span>Total Spend</span>
+                  <strong>{formatLakhs(spentAmount)}</strong>
+                </div>
+                <div className="cb-analytics-list-item">
+                  <span>Remaining</span>
+                  <strong>{formatLakhs(myTeam.remainingPurse)}</strong>
+                </div>
+                <div className="cb-analytics-list-item">
+                  <span>Max Allowed Bid</span>
+                  <strong>{formatLakhs(myTeamMaxBid)}</strong>
+                </div>
+                <div className={`cb-analytics-status-badge ${myTeamBudgetStatus}`}>
+                  {myTeamBudgetStatus === 'danger' ? 'Budget Risk: High' : myTeamBudgetStatus === 'warning' ? 'Budget Risk: Warning' : 'Budget Risk: Safe'}
+                </div>
               </div>
             </div>
           </div>

@@ -2041,3 +2041,106 @@
   from { opacity: 0; transform: translateY(16px); }
   to { opacity: 1; transform: translateY(0); }
 }
+
+/* ═══════════════════════════════════════════════════════
+   TEAM ANALYTICS SECTION
+   ═══════════════════════════════════════════════════════ */
+.cb-analytics-section {
+  margin-top: 0.25rem;
+  margin-bottom: 0.5rem;
+}
+
+.cb-analytics-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.5rem;
+}
+
+.cb-analytics-card {
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--cb-radius-sm);
+  padding: 0.65rem 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.cb-analytics-card-title {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--cb-text-muted);
+}
+
+.cb-analytics-meter-row,
+.cb-analytics-list-item {
+  display: grid;
+  grid-template-columns: 4.5rem 1fr auto;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.78rem;
+  color: rgba(255, 255, 255, 0.82);
+}
+
+.cb-analytics-list-item strong,
+.cb-analytics-meter-row strong {
+  color: #a7f02d;
+  font-weight: 700;
+}
+
+.cb-analytics-meter {
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+  overflow: hidden;
+}
+
+.cb-analytics-meter > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #76d84b, #a7f02d);
+  transition: width 0.4s ease;
+}
+
+.cb-analytics-status-badge {
+  margin-top: 0.15rem;
+  padding: 0.2rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  width: fit-content;
+}
+
+.cb-analytics-status-badge.safe {
+  background: rgba(34, 197, 94, 0.2);
+  color: #86efac;
+}
+
+.cb-analytics-status-badge.warning {
+  background: rgba(245, 158, 11, 0.2);
+  color: #fcd34d;
+}
+
+.cb-analytics-status-badge.danger {
+  background: rgba(239, 68, 68, 0.2);
+  color: #fda4af;
+}
+
+.cb-analytics-empty {
+  font-size: 0.78rem;
+  color: rgba(255, 255, 255, 0.45);
+  padding: 0.25rem 0;
+}
+
+/* 2-column grid on wider screens */
+@media (min-width: 500px) {
+  .cb-analytics-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+  .cb-analytics-grid > :last-child {
+    grid-column: span 2;
+  }
+}
