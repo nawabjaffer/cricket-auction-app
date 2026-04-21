@@ -53,6 +53,8 @@ export { obsService } from './obsService';
 export {
   getCachedStorageUrl,
   resolveImageAsync,
+  resolveMediaToStorage,
+  uploadFileToStorage,
   preloadImage,
   batchPreloadImages,
 } from './firebaseStorageService';

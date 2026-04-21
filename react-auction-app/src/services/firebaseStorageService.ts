@@ -108,25 +108,106 @@ function getDbInstance(): Database {
 // ── In-flight dedup: don't upload the same URL twice concurrently ─────────────
 const inFlight = new Map<string, Promise<string>>();
 
-// ── Upload an image from a remote URL to Firebase Storage ─────────────────────
+function extFromContentType(contentType: string, fallbackUrl: string): string {
+  const ct = contentType.toLowerCase();
+  if (ct.includes('png')) return 'png';
+  if (ct.includes('webp')) return 'webp';
+  if (ct.includes('gif')) return 'gif';
+  if (ct.includes('svg')) return 'svg';
+  if (ct.includes('jpeg') || ct.includes('jpg')) return 'jpg';
+  if (ct.includes('mp4')) return 'mp4';
+  if (ct.includes('webm')) return 'webm';
+  if (ct.includes('quicktime')) return 'mov';
+
+  const match = /\.([a-zA-Z0-9]+)(?:\?|$)/.exec(fallbackUrl);
+  if (match?.[1]) return match[1].toLowerCase();
+  return 'bin';
+}
+
+// Detect actual mime type from file magic bytes (fixes Drive's octet-stream responses)
+function sniffMimeFromBytes(bytes: Uint8Array): string | null {
+  if (bytes.length < 4) return null;
+  // JPEG: FF D8 FF
+  if (bytes[0] === 0xFF && bytes[1] === 0xD8 && bytes[2] === 0xFF) return 'image/jpeg';
+  // PNG: 89 50 4E 47 0D 0A 1A 0A
+  if (bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4E && bytes[3] === 0x47) return 'image/png';
+  // GIF: 47 49 46 38
+  if (bytes[0] === 0x47 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x38) return 'image/gif';
+  // WEBP: RIFF....WEBP
+  if (bytes.length >= 12 && bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46
+      && bytes[8] === 0x57 && bytes[9] === 0x45 && bytes[10] === 0x42 && bytes[11] === 0x50) return 'image/webp';
+  // BMP: 42 4D
+  if (bytes[0] === 0x42 && bytes[1] === 0x4D) return 'image/bmp';
+  // MP4 / ISO-BMFF: bytes 4-7 = "ftyp"
+  if (bytes.length >= 12 && bytes[4] === 0x66 && bytes[5] === 0x74 && bytes[6] === 0x79 && bytes[7] === 0x70) return 'video/mp4';
+  // WebM / Matroska: 1A 45 DF A3
+  if (bytes[0] === 0x1A && bytes[1] === 0x45 && bytes[2] === 0xDF && bytes[3] === 0xA3) return 'video/webm';
+  // SVG: starts with "<?xml" or "<svg"
+  if (bytes[0] === 0x3C) {
+    const head = String.fromCharCode(...Array.from(bytes.slice(0, Math.min(256, bytes.length))));
+    if (/^\s*<\?xml/i.test(head) || /<svg[\s>]/i.test(head)) return 'image/svg+xml';
+  }
+  return null;
+}
+
+// ── Upload media from a remote URL to Firebase Storage ───────────────────────
 async function uploadFromRemoteUrl(
   originalUrl: string,
   storagePath: string
 ): Promise<string> {
-  const response = await fetch(originalUrl, { mode: 'cors', cache: 'no-store' });
-  if (!response.ok) throw new Error(`Fetch failed ${response.status}`);
+  // Normalize Drive URLs to the lh3 CDN which reliably returns image bytes
+  // (raw drive.google.com often returns an HTML interstitial page for large files).
+  const fileId = extractDriveIdFromUrl(originalUrl);
+  const fetchCandidates: string[] = fileId
+    ? [
+        `https://lh3.googleusercontent.com/d/${fileId}=s2048`,
+        `https://lh3.googleusercontent.com/d/${fileId}=w2048`,
+        `https://drive.google.com/thumbnail?id=${fileId}&sz=w2048`,
+        originalUrl,
+      ]
+    : [originalUrl];
 
-  const blob = await response.blob();
-  if (blob.size === 0) throw new Error('Empty blob');
+  let lastErr: unknown = null;
+  for (const candidate of fetchCandidates) {
+    try {
+      const response = await fetch(candidate, { mode: 'cors', cache: 'no-store' });
+      if (!response.ok) { lastErr = new Error(`HTTP ${response.status}`); continue; }
+      const arrayBuffer = await response.arrayBuffer();
+      if (arrayBuffer.byteLength === 0) { lastErr = new Error('Empty payload'); continue; }
+      const bytes = new Uint8Array(arrayBuffer);
 
-  // Detect content type; default to jpeg
-  const ct = blob.type || 'image/jpeg';
-  const ext = ct.includes('png') ? 'png' : ct.includes('webp') ? 'webp' : 'jpg';
-  const fullPath = `${storagePath}.${ext}`;
+      // REQUIRE magic-byte detection — never upload HTML / unknown as .bin
+      const sniffed = sniffMimeFromBytes(bytes);
+      if (!sniffed) { lastErr = new Error('Unrecognized media — likely HTML interstitial'); continue; }
 
-  const sRef = storageRef(getStorageInstance(), fullPath);
-  await uploadBytes(sRef, blob, { contentType: ct, cacheControl: 'public,max-age=31536000' });
-  return getDownloadURL(sRef);
+      const ext = extFromContentType(sniffed, originalUrl);
+      if (ext === 'bin') { lastErr = new Error(`No extension for ct=${sniffed}`); continue; }
+      const fullPath = `${storagePath}.${ext}`;
+
+      const blob = new Blob([bytes], { type: sniffed });
+      const sRef = storageRef(getStorageInstance(), fullPath);
+      await uploadBytes(sRef, blob, { contentType: sniffed, cacheControl: 'public,max-age=31536000' });
+      return getDownloadURL(sRef);
+    } catch (err) {
+      lastErr = err;
+    }
+  }
+  throw lastErr instanceof Error ? lastErr : new Error('All upload candidates failed');
+}
+
+// Local helper to keep uploadFromRemoteUrl self-contained.
+function extractDriveIdFromUrl(url: string): string | null {
+  if (!url) return null;
+  const patterns = [
+    /\/file\/d\/([a-zA-Z0-9_-]{10,})/,
+    /[?&]id=([a-zA-Z0-9_-]{10,})/,
+    /\/d\/([a-zA-Z0-9_-]{10,})/,
+  ];
+  for (const p of patterns) {
+    const m = p.exec(url);
+    if (m?.[1]) return m[1];
+  }
+  return null;
 }
 
 // ── Core resolution logic ─────────────────────────────────────────────────────
@@ -198,6 +279,20 @@ async function resolveToStorageUrl(
   return promise;
 }
 
+async function uploadBlobToStorage(
+  blob: Blob,
+  storagePath: string,
+  fileName?: string
+): Promise<string> {
+  const ct = blob.type || 'application/octet-stream';
+  const ext = extFromContentType(ct, fileName || storagePath);
+  const normalizedBase = storagePath.replace(/\.[a-zA-Z0-9]+$/, '');
+  const fullPath = `${normalizedBase}.${ext}`;
+  const sRef = storageRef(getStorageInstance(), fullPath);
+  await uploadBytes(sRef, blob, { contentType: ct, cacheControl: 'public,max-age=31536000' });
+  return getDownloadURL(sRef);
+}
+
 // ── Public API ────────────────────────────────────────────────────────────────
 
 /** Preload and cache a single image URL (fire-and-forget). */
@@ -224,6 +319,26 @@ export function resolveImageAsync(
   resolveToStorageUrl(originalUrl, storagePath)
     .then((url) => { if (url !== originalUrl) onResolved(url); })
     .catch(() => {});
+}
+
+/**
+ * Resolves any remote media URL (image/video) to Firebase Storage and returns
+ * the Storage URL. On failure, returns the original URL.
+ */
+export async function resolveMediaToStorage(
+  originalUrl: string,
+  storagePath: string
+): Promise<string> {
+  return resolveToStorageUrl(originalUrl, storagePath);
+}
+
+/** Uploads a File object directly to Firebase Storage and returns download URL. */
+export async function uploadFileToStorage(
+  file: File,
+  storagePath: string
+): Promise<string> {
+  if (!file) throw new Error('No file provided');
+  return uploadBlobToStorage(file, storagePath, file.name);
 }
 
 /**

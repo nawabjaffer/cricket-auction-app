@@ -8,6 +8,7 @@ import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import type { Player } from '../../types';
 import { extractDriveFileId } from '../../utils/driveImage';
+import { getCachedStorageUrl, resolveImageAsync } from '../../services/firebaseStorageService';
 import { getRoleBadgeColor, getRoleCategory } from '../../utils/roleFormatter';
 import { getRoleBasedStats } from '../../utils/playerStats';
 
@@ -101,6 +102,7 @@ export default function PlayerOverlay({ player, maxStats = 6 }: PlayerOverlayPro
   const attemptCountRef = useRef(0);
   const [currentUrlIndex, setCurrentUrlIndex] = useState(0);
   const [usePlaceholder, setUsePlaceholder] = useState(false);
+  const [resolvedStorageUrl, setResolvedStorageUrl] = useState('');
 
   const safePlayer = useMemo(() => {
     const safeId = player?.id ? String(player.id) : 'unknown-player';
@@ -139,6 +141,26 @@ export default function PlayerOverlay({ player, maxStats = 6 }: PlayerOverlayPro
     setUsePlaceholder(false);
   }, [safePlayer.id]);
 
+  useEffect(() => {
+    if (!safePlayer.imageUrl) {
+      setResolvedStorageUrl('');
+      return;
+    }
+
+    const cached = getCachedStorageUrl(safePlayer.imageUrl);
+    if (cached) {
+      setResolvedStorageUrl(cached);
+      return;
+    }
+
+    const fileId = extractDriveFileId(safePlayer.imageUrl);
+    if (fileId) setResolvedStorageUrl(`https://lh3.googleusercontent.com/d/${fileId}=s512`);
+    else setResolvedStorageUrl(safePlayer.imageUrl);
+
+    const storagePath = `images/players/${safePlayer.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
+    resolveImageAsync(safePlayer.imageUrl, storagePath, (url) => setResolvedStorageUrl(url));
+  }, [safePlayer.imageUrl, safePlayer.name]);
+
   const handleImageError = useCallback(() => {
     if (usePlaceholder) return;
 
@@ -163,8 +185,9 @@ export default function PlayerOverlay({ player, maxStats = 6 }: PlayerOverlayPro
 
   const currentImageSrc = useMemo(() => {
     if (usePlaceholder || imageUrls.length === 0) return PLACEHOLDER_IMAGE;
+    if (resolvedStorageUrl) return resolvedStorageUrl;
     return imageUrls[currentUrlIndex];
-  }, [usePlaceholder, imageUrls, currentUrlIndex]);
+  }, [usePlaceholder, imageUrls, currentUrlIndex, resolvedStorageUrl]);
 
   // Role-based stats
   const roleStats = useMemo(() => getRoleBasedStats(safePlayer, maxStats), [safePlayer, maxStats]);

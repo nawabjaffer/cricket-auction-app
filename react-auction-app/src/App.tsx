@@ -54,6 +54,7 @@ import {
   useAuctionDataLoader,
   useSaveInitialSnapshot,
   useAdminPlayersOverrides,
+  useBootPreload,
 } from './hooks';
 import { useRealtimeDesktopSync } from './hooks/useRealtimeSync';
 import { audioService, imageCacheService } from './services';
@@ -140,7 +141,6 @@ function AuctionApp() {
   
   // Image loading state
   const [imageLoadingState, setImageLoadingState] = useState<'loading' | 'loaded' | 'error'>('loading');
-  const [currentImageAttempt, setCurrentImageAttempt] = useState(0);
   const [imgSrc, setImgSrc] = useState<string>('');
   const currentPlayerIdRef = useRef<string | null>(null);
 
@@ -168,6 +168,10 @@ function AuctionApp() {
   // Load initial data
   const { isLoading, isError, error } = useInitialData();
   const { refreshAll } = useRefreshData();
+
+  // Boot-time media preload — caches all player/team/sponsor images before
+  // showing the main UI so subsequent transitions are instant.
+  const bootPreload = useBootPreload(!isLoading && !isError);
 
   // Auction state
   const auction = useAuction();
@@ -660,31 +664,16 @@ function AuctionApp() {
   // Preload player image - simple URL tracking
   const { onImageLoad } = useImagePreload(transformedImageUrl);
 
-  // Async image polling with exponential backoff
+  // Image element ref for load/error handling
   const imgRef = useRef<HTMLImageElement>(null);
-  
-  // Get all possible image URLs for retry
-  const getImageUrlVariants = useCallback((player: typeof currentPlayer) => {
-    if (!player?.imageUrl) return [];
-    
-    const fileId = extractDriveFileId(player.imageUrl);
-    if (!fileId) return [player.imageUrl];
-    
-    return [
-      `https://lh3.googleusercontent.com/d/${fileId}=w800`,
-      `https://drive.google.com/thumbnail?id=${fileId}&sz=w800`,
-      `https://drive.google.com/uc?export=view&id=${fileId}`,
-    ];
-  }, []);
 
   // Reset image state when player changes — also set the first URL to try
   const currentPlayerId = currentPlayer?.id ?? null;
   useEffect(() => {
     if (!currentPlayerId) return;
     currentPlayerIdRef.current = currentPlayerId;
-    setCurrentImageAttempt(0);
     setImageLoadingState('loading');
-    setImgSrc(transformedImageUrl || '');
+    setImgSrc(transformedImageUrl || '/placeholder_player.png');
   }, [currentPlayerId, transformedImageUrl]);
 
   // Loading state
@@ -695,6 +684,11 @@ function AuctionApp() {
   // Error state
   if (isError) {
     return <ErrorScreen error={error} onRetry={refreshAll} />;
+  }
+
+  // Block main UI until media is warmed in local cache for smooth live auction
+  if (!bootPreload.done) {
+    return <LoadingScreen progress={bootPreload.progress} loaded={bootPreload.loaded} total={bootPreload.total} />;
   }
 
   return (
@@ -1091,9 +1085,7 @@ function AuctionApp() {
                           animate={{ opacity: [0.5, 1, 0.5] }}
                           transition={{ duration: 1.5, repeat: Infinity }}
                         >
-                          {imageLoadingState === 'loading' && currentImageAttempt > 0 
-                            ? `Loading image... (attempt ${currentImageAttempt})`
-                            : 'Loading player...'}
+                          Loading player...
                         </motion.p>
                       </motion.div>
                     )}
@@ -1125,20 +1117,8 @@ function AuctionApp() {
                       if (failedUrl.includes('placeholder_player.png')) return;
                       
                       imageCacheService.markAsFailed(failedUrl);
-                      
-                      // Cycle to next URL variant directly — no pre-testing
-                      const urlVariants = getImageUrlVariants(currentPlayer);
-                      const nextAttempt = currentImageAttempt + 1;
-                      const maxAttempts = Math.max(urlVariants.length * 2, 8);
-                      
-                      if (nextAttempt >= maxAttempts || urlVariants.length === 0) {
-                        setImageLoadingState('error');
-                        return;
-                      }
-                      
-                      const nextUrl = urlVariants[nextAttempt % urlVariants.length];
-                      setCurrentImageAttempt(nextAttempt);
-                      setImgSrc(nextUrl);
+                      setImageLoadingState('error');
+                      setImgSrc('/placeholder_player.png');
                     }}
                   />
                 </>
@@ -1883,7 +1863,9 @@ function AuctionApp() {
 }
 
 // Loading Screen — cinematic broadcast-style transition
-function LoadingScreen() {
+function LoadingScreen({ progress, loaded, total }: { readonly progress?: number; readonly loaded?: number; readonly total?: number } = {}) {
+  const hasProgress = typeof progress === 'number' && typeof total === 'number' && total > 0;
+  const pct = hasProgress ? Math.min(100, Math.round((progress as number) * 100)) : 0;
   return (
     <div className="loading-transition">
       {/* Animated background */}
@@ -1922,6 +1904,16 @@ function LoadingScreen() {
         />
         <div className="loading-transition__title">AUCTION</div>
         <div className="loading-transition__subtitle">LIVE</div>
+        {hasProgress && (
+          <div style={{ marginTop: 24, textAlign: 'center', color: 'rgba(255,255,255,0.9)' }}>
+            <div style={{ width: 260, height: 6, background: 'rgba(255,255,255,0.18)', borderRadius: 999, overflow: 'hidden', margin: '0 auto' }}>
+              <div style={{ width: `${pct}%`, height: '100%', background: 'linear-gradient(90deg,#fbbf24,#f97316)', transition: 'width 180ms ease-out' }} />
+            </div>
+            <div style={{ marginTop: 10, fontSize: 13, letterSpacing: 2 }}>
+              PRELOADING MEDIA · {loaded}/{total}
+            </div>
+          </div>
+        )}
       </motion.div>
 
       {/* Bottom branding */}

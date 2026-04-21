@@ -12,6 +12,7 @@ import { activeConfig } from '../../config';
 import { formatRoleDisplay, getRoleCategory, getRoleBadgeColor as getRoleBadgeHex } from '../../utils/roleFormatter';
 import { getCachedStorageUrl, resolveImageAsync } from '../../services/firebaseStorageService';
 import { extractDriveFileId } from '../../utils/driveImage';
+import { getLiveBlobUrl } from '../../services/mediaBlobCache';
 
 interface PlayerCardProps {
   player: Player;
@@ -45,17 +46,30 @@ export function PlayerCard({
   const [resolvedImg, setResolvedImg] = useState(() => {
     if (!player.imageUrl) return '/assets/man.jpg';
     const cached = getCachedStorageUrl(player.imageUrl);
-    if (cached) return cached;
+    if (cached) {
+      const blob = getLiveBlobUrl(cached);
+      return blob || cached;
+    }
     const fileId = extractDriveFileId(player.imageUrl);
     if (fileId) return `https://lh3.googleusercontent.com/d/${fileId}=s512`;
     return player.imageUrl;
   });
   useEffect(() => {
     if (!player.imageUrl) return;
+    let alive = true;
     const cached = getCachedStorageUrl(player.imageUrl);
-    if (cached) { setResolvedImg(cached); return; }
+    if (cached) {
+      const blob = getLiveBlobUrl(cached);
+      setResolvedImg(blob || cached);
+      return () => { alive = false; };
+    }
     const storagePath = `images/players/${player.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
-    resolveImageAsync(player.imageUrl, storagePath, (url) => setResolvedImg(url));
+    resolveImageAsync(player.imageUrl, storagePath, (url) => {
+      if (!alive) return;
+      const blob = getLiveBlobUrl(url);
+      setResolvedImg(blob || url);
+    });
+    return () => { alive = false; };
   }, [player.imageUrl, player.name]);
 
   const isUnderAge = player.age !== null && player.age < activeConfig.auction.rules.underAgeLimit;

@@ -81,10 +81,45 @@ export function useInitialData() {
           useAuctionStore.getState().setTeams(persistedTeams);
         }
 
-        // Load admin players from Firebase
-        const adminPlayers = await auctionPersistence.getAdminPlayers();
+        // Load admin players from Firebase AND raw players from Google Sheets
+        // in parallel. Sheets data is used as the base so that any admin player
+        // with an empty imageUrl falls back to the sheet's imageUrl.
+        const [adminPlayers, sheetPlayers] = await Promise.all([
+          auctionPersistence.getAdminPlayers().catch(() => null),
+          googleSheetsService.fetchPlayers([]).catch((err) => {
+            console.warn('[useInitialData] Google Sheets fetch failed:', err);
+            return [] as Player[];
+          }),
+        ]);
+
+        // Seed the base (originalPlayers) with sheet data first so the
+        // subsequent override merge can fall back to sheet imageUrl when
+        // the admin copy is empty.
+        if (sheetPlayers && sheetPlayers.length > 0) {
+          useAuctionStore.getState().setPlayers(sheetPlayers);
+        }
+
         if (adminPlayers && adminPlayers.length > 0) {
           useAuctionStore.getState().setAdminPlayerOverrides(adminPlayers);
+
+          // Repair: if any admin player had an empty imageUrl that sheets
+          // can fill, persist the repaired list back so other clients see it.
+          if (sheetPlayers && sheetPlayers.length > 0) {
+            const sheetMap = new Map(sheetPlayers.map((p) => [p.id, p]));
+            let changed = false;
+            const repaired = adminPlayers.map((ap) => {
+              if (!ap.imageUrl && sheetMap.get(ap.id)?.imageUrl) {
+                changed = true;
+                return { ...ap, imageUrl: sheetMap.get(ap.id)!.imageUrl };
+              }
+              return ap;
+            });
+            if (changed) {
+              auctionPersistence.saveAdminPlayers(repaired).catch((err) => {
+                console.warn('[useInitialData] repair save failed:', err);
+              });
+            }
+          }
         }
 
         _globalDataLoaded = true;
