@@ -8,7 +8,7 @@
 // services never fire reads against the wrong tenant.
 // ============================================================================
 
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { useParams } from 'react-router-dom';
 import { setActiveTenant, DEFAULT_TENANT_ID } from '../../services/tenantPath';
 import { tenantService, type TenantRecord } from '../../services/tenantService';
@@ -20,12 +20,9 @@ export function TenantGate({ children }: Props) {
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [tenant, setTenant] = useState<TenantRecord | null>(null);
-  const slugRef = useRef<string | undefined>(undefined);
 
   useEffect(() => {
     const slug = (tenantSlug ?? '').trim();
-    if (slugRef.current === slug) return;
-    slugRef.current = slug;
     setReady(false);
     setError(null);
 
@@ -50,21 +47,20 @@ export function TenantGate({ children }: Props) {
         const found = await tenantService.resolveBySlug(slug);
         if (cancelled) return;
         if (!found) {
+          console.warn('[TenantGate] Tenant not found for slug:', slug);
           setError(`Tournament "${slug}" not found.`);
           setActiveTenant(DEFAULT_TENANT_ID);
-          setReady(true);
-          return;
+        } else {
+          setActiveTenant(found.id);
+          setTenant(found);
         }
-        setActiveTenant(found.id);
-        setTenant(found);
-        setReady(true);
       } catch (err) {
         if (cancelled) return;
         console.error('[TenantGate] Failed to resolve tenant:', err);
         setError('Failed to load tournament.');
         setActiveTenant(DEFAULT_TENANT_ID);
-        setReady(true);
       }
+      if (!cancelled) setReady(true);
     })();
     return () => { cancelled = true; };
   }, [tenantSlug]);

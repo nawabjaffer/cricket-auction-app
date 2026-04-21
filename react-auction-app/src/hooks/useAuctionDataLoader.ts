@@ -7,16 +7,28 @@ import { useEffect, useState } from 'react';
 import { auctionPersistence } from '../services/auctionPersistence';
 import { realtimeSync } from '../services/realtimeSync';
 import { batchPreloadImages } from '../services/firebaseStorageService';
+import { getActiveTenant, onTenantChange } from '../services/tenantPath';
 import { useAuctionStore } from '../store/auctionStore';
 import type { SoldPlayer } from '../types';
 
-// Module-level flag: once data has been restored in this session,
-// skip the Firebase restore on subsequent mounts (e.g. returning from /live).
-let _globalRestoreComplete = false;
+// Per-tenant flag: track restore completion separately for each tenant so
+// switching tenants always re-runs the restore against the new namespace.
+const _restoreCompleteByTenant = new Set<string>();
+
+// Drop the previous tenant's restore flag when the active tenant changes.
+onTenantChange((_next, prev) => { _restoreCompleteByTenant.delete(prev); });
 
 export function useAuctionDataLoader() {
+  const [tenantId, setTenantId] = useState(getActiveTenant());
   const [isRestoring, setIsRestoring] = useState(false);
-  const [hasRestoredData, setHasRestoredData] = useState(_globalRestoreComplete);
+  const [hasRestoredData, setHasRestoredData] = useState(_restoreCompleteByTenant.has(tenantId));
+
+  // Re-render this hook's consumer when the active tenant changes so the
+  // effect below can re-run against the new namespace.
+  useEffect(() => {
+    const unsub = onTenantChange((next) => setTenantId(next));
+    return () => { unsub(); };
+  }, []);
 
   const { 
     setTeams, 
@@ -114,7 +126,7 @@ export function useAuctionDataLoader() {
         useAuctionStore.getState().reconcilePlayerPools();
 
         setHasRestoredData(true);
-        _globalRestoreComplete = true;
+        _restoreCompleteByTenant.add(tenantId);
         console.log('[DataLoader] ✅ Data restored from Firebase:', {
           soldPlayers: restoredSoldPlayers.length,
           unsoldPlayers: restoredUnsoldPlayers.length,
@@ -151,11 +163,14 @@ export function useAuctionDataLoader() {
       }
     };
 
-    // Only attempt restore once
-    if (!hasRestoredData && !isRestoring) {
+    // Only attempt restore once per tenant
+    if (!_restoreCompleteByTenant.has(tenantId) && !isRestoring) {
+      setHasRestoredData(false);
       restoreDataFromFirebase();
+    } else if (_restoreCompleteByTenant.has(tenantId) && !hasRestoredData) {
+      setHasRestoredData(true);
     }
-  }, [hasRestoredData, isRestoring, setSoldPlayers, setUnsoldPlayers, setTeams]);
+  }, [tenantId, hasRestoredData, isRestoring, setSoldPlayers, setUnsoldPlayers, setTeams]);
 
   return {
     isRestoring,

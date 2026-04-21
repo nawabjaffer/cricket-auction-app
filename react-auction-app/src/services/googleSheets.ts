@@ -99,8 +99,9 @@ class GoogleSheetsService {
   /**
    * Build API URL for fetching sheet data
    */
-  private buildUrl(range: string): string {
-    return `${API_BASE}/${this.config.sheetId}/values/${encodeURIComponent(range)}?key=${this.config.apiKey}`;
+  private buildUrl(range: string, sheetIdOverride?: string): string {
+    const sheetId = sheetIdOverride && sheetIdOverride.length > 0 ? sheetIdOverride : this.config.sheetId;
+    return `${API_BASE}/${sheetId}/values/${encodeURIComponent(range)}?key=${this.config.apiKey}`;
   }
 
   /**
@@ -144,9 +145,9 @@ class GoogleSheetsService {
   /**
    * Fetch all players from registration sheet
    */
-  async fetchPlayers(excludeSoldIds: string[] = []): Promise<Player[]> {
+  async fetchPlayers(excludeSoldIds: string[] = [], sheetIdOverride?: string): Promise<Player[]> {
     try {
-      const url = this.buildUrl(this.config.ranges.players);
+      const url = this.buildUrl(this.config.ranges.players, sheetIdOverride);
       const response = await fetch(url);
       const data = await response.json();
 

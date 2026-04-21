@@ -23,18 +23,37 @@ const TENANT_ID_PATTERN = /^[a-zA-Z0-9_-]+$/;
 
 let _activeTenantId: string = DEFAULT_TENANT_ID;
 
+// ── Tenant-change subscribers ────────────────────────────────────────────
+// Modules that cache data at module level (data loaders, services, stores)
+// register a callback here so they can flush their cache when the active
+// tenant switches. This prevents one tenant's data from leaking into another.
+type TenantChangeListener = (newId: string, prevId: string) => void;
+const _listeners = new Set<TenantChangeListener>();
+
+export function onTenantChange(listener: TenantChangeListener): () => void {
+  _listeners.add(listener);
+  return () => { _listeners.delete(listener); };
+}
+
 export function setActiveTenant(tenantId: string | null | undefined): void {
   const raw = (tenantId ?? '').trim();
-  if (!raw) {
-    _activeTenantId = DEFAULT_TENANT_ID;
-    return;
+  let next = DEFAULT_TENANT_ID;
+  if (raw) {
+    if (TENANT_ID_PATTERN.test(raw)) {
+      next = raw;
+    } else {
+      console.warn(`[tenantPath] Invalid tenant id "${raw}"; falling back to default.`);
+    }
   }
-  if (!TENANT_ID_PATTERN.test(raw)) {
-    console.warn(`[tenantPath] Invalid tenant id "${raw}"; falling back to default.`);
-    _activeTenantId = DEFAULT_TENANT_ID;
-    return;
-  }
-  _activeTenantId = raw;
+  if (next === _activeTenantId) return;
+  const prev = _activeTenantId;
+  _activeTenantId = next;
+  // Notify subscribers so caches can be invalidated.
+  _listeners.forEach((fn) => {
+    try { fn(next, prev); } catch (err) {
+      console.error('[tenantPath] tenant-change listener failed:', err);
+    }
+  });
 }
 
 export function getActiveTenant(): string {
@@ -58,4 +77,9 @@ export function tenantPathFor(tenantId: string, relativePath: string): string {
   const id = TENANT_ID_PATTERN.test(tenantId) ? tenantId : DEFAULT_TENANT_ID;
   const clean = (relativePath ?? '').replace(/^\/+/, '');
   return `tenants/${id}/${clean}`;
+}
+
+/** Build a tenant-namespaced storage key (localStorage / sessionStorage / IndexedDB). */
+export function tenantStorageKey(key: string): string {
+  return `t:${_activeTenantId}:${key}`;
 }

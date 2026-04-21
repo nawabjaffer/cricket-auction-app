@@ -25,6 +25,10 @@ export interface TenantRecord {
   franchiseName?: string;
   contactEmail?: string;
   contactPhone?: string;
+  // Optional Google Sheet override (per-tenant player roster source).
+  // When omitted, NO sheet is fetched for this tenant — only RTDB-stored
+  // admin players are used. This keeps tenants strictly isolated.
+  sheetId?: string;
 }
 
 const TENANT_REGISTRY_PATH = () => platformPath('tenants');
