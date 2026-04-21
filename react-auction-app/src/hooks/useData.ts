@@ -145,6 +145,9 @@ export function useInitialData() {
         if (adminSettings?.organizerLogo) {
           useAuctionStore.getState().setOrganizerLogo(adminSettings.organizerLogo);
         }
+        if (adminSettings?.organizerName) {
+          useAuctionStore.getState().setOrganizerName(adminSettings.organizerName);
+        }
 
         // Seed the base (originalPlayers) with sheet data first so the
         // subsequent override merge can fall back to sheet imageUrl when

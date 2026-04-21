@@ -39,6 +39,16 @@ function readCachedOrganizerLogo(): string {
   }
 }
 
+function readCachedOrganizerName(): string {
+  try {
+    const raw = localStorage.getItem('auction-storage');
+    if (!raw) return '';
+    return (JSON.parse(raw) as { state?: { organizerName?: string } })?.state?.organizerName ?? '';
+  } catch {
+    return '';
+  }
+}
+
 // Inject a <link rel="preload"> so the browser prefetches the image before
 // React renders — effectively 0 ms display delay on cache hit.
 function preloadImageUrl(url: string): void {
@@ -53,6 +63,7 @@ function preloadImageUrl(url: string): void {
 
 const _cachedOrganizerLogo = readCachedOrganizerLogo();
 if (_cachedOrganizerLogo) preloadImageUrl(_cachedOrganizerLogo);
+const _cachedOrganizerName = readCachedOrganizerName();
 
 // Initialize persistence with database when available
 const initializePersistence = async () => {
@@ -122,6 +133,7 @@ interface AuctionStore {
 
   // Organizer branding
   organizerLogo: string;
+  organizerName: string;
   
   // Auction state
   auctionState: AuctionState;
@@ -177,6 +189,7 @@ interface AuctionStore {
   setMaxUnsoldRounds: (value: number) => void;
   setAuctionRoleOrder: (order: AuctionRoleCategory[]) => void;
   setOrganizerLogo: (url: string) => void;
+  setOrganizerName: (name: string) => void;
   
   // State management
   setAuctionState: (state: Partial<AuctionState>) => void;
@@ -232,6 +245,7 @@ export const useAuctionStore = create<AuctionStore>()(
         maxUnsoldRounds: 1,
         auctionRoleOrder: [...DEFAULT_AUCTION_ROLE_ORDER],
         organizerLogo: _cachedOrganizerLogo,
+        organizerName: _cachedOrganizerName,
         auctionState: initialAuctionState,
 
         // === Data Loading Actions ===
@@ -992,6 +1006,10 @@ export const useAuctionStore = create<AuctionStore>()(
           set({ organizerLogo: url });
         },
 
+        setOrganizerName: (name) => {
+          set({ organizerName: name });
+        },
+
         startNextRound: () => {
           const { unsoldPlayers, currentRound, maxUnsoldRounds } = get();
           const maxRound = 1 + maxUnsoldRounds;
@@ -1238,6 +1256,7 @@ export const useAuctionStore = create<AuctionStore>()(
           maxUnsoldRounds: state.maxUnsoldRounds,
           auctionRoleOrder: state.auctionRoleOrder,
           organizerLogo: state.organizerLogo,
+          organizerName: state.organizerName,
         }),
       }
     ),
@@ -1261,3 +1280,4 @@ export const useIsLoading = () => useAuctionStore((state) => state.isLoading);
 export const useCurrentRound = () => useAuctionStore((state) => state.currentRound);
 export const useMaxUnsoldRounds = () => useAuctionStore((state) => state.maxUnsoldRounds);
 export const useOrganizerLogo = () => useAuctionStore((state) => state.organizerLogo);
+export const useOrganizerName = () => useAuctionStore((state) => state.organizerName);

@@ -126,6 +126,10 @@ export function useAuctionDataLoader() {
           useAuctionStore.getState().setOrganizerLogo(adminSettings.organizerLogo);
         }
 
+        if (adminSettings?.organizerName) {
+          useAuctionStore.getState().setOrganizerName(adminSettings.organizerName);
+        }
+
         // Reconcile available players to exclude sold/unsold
         useAuctionStore.getState().reconcilePlayerPools();
 

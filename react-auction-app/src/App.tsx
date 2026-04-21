@@ -62,7 +62,7 @@ import { auctionPersistence, type SponsorRecord } from './services/auctionPersis
 import { auctionRules } from './services/auctionRules';
 import { realtimeSync } from './services/realtimeSync';
 import { getCachedStorageUrl, resolveImageAsync } from './services/firebaseStorageService';
-import { useActiveOverlay, useNotification, useCurrentPlayer, useSoldPlayers, useAvailablePlayers, useOriginalPlayers, useTeams, useOrganizerLogo } from './store';
+import { useActiveOverlay, useNotification, useCurrentPlayer, useSoldPlayers, useAvailablePlayers, useOriginalPlayers, useTeams, useOrganizerLogo, useOrganizerName } from './store';
 import { extractDriveFileId } from './utils/driveImage';
 import { formatRoleDisplay, getRoleCategory, parseRoleDetails, getRoleBadgeColor } from './utils/roleFormatter';
 import './index.css';
@@ -190,6 +190,7 @@ function AuctionApp() {
   const allPlayers = useOriginalPlayers();
   const allTeams = useTeams();
   const organizerLogo = useOrganizerLogo();
+  const organizerName = useOrganizerName();
 
   // Handle team squad view
   const handleTeamSquadView = (teamId: string) => {
@@ -892,26 +893,20 @@ function AuctionApp() {
               exit={{ opacity: 0 }}
             >
               <div className="empty-home-logos">
-                {titleSponsor && (
+                {titleSponsor?.logoUrl && (
                   <div className="empty-title-sponsor-logo-wrap" title={`Title Sponsor: ${titleSponsor.name}`}>
-                    {titleSponsor.logoUrl ? (
-                      <img
-                        src={titleSponsor.logoUrl}
-                        alt={`${titleSponsor.name} logo`}
-                        className="empty-title-sponsor-logo"
-                      />
-                    ) : (
-                      <div className="empty-title-sponsor-logo empty-title-sponsor-logo--fallback">
-                        {titleSponsor.name.slice(0, 2).toUpperCase()}
-                      </div>
-                    )}
+                    <img
+                      src={titleSponsor.logoUrl}
+                      alt={`${titleSponsor.name} logo`}
+                      className="empty-title-sponsor-logo"
+                    />
                   </div>
                 )}
 
-                <div className="empty-epl-logo-wrap" title="Eruvai Premier League">
+                <div className="empty-epl-logo-wrap" title={organizerName || 'Auction'}>
                   <img
                     src={organizerLogo || '/assets/BCC Season 6.png'}
-                    alt="EPL event logo"
+                    alt="Organizer logo"
                     className="empty-epl-logo"
                     onError={(e) => {
                       (e.currentTarget as HTMLImageElement).style.display = 'none';
@@ -920,7 +915,9 @@ function AuctionApp() {
                 </div>
               </div>
 
-              <div className="empty-title">Welcome to Eruvai Premier League Auction</div>
+              <div className="empty-title">
+                {organizerName ? `Welcome to ${organizerName} Auction` : 'Welcome to the Auction'}
+              </div>
               <div className="empty-hint">Press <kbd>N</kbd> for next player</div>
               {sponsorLoadState === 'ready' && (
                 <>
