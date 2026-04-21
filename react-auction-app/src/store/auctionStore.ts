@@ -25,6 +25,35 @@ import { realtimeSync } from '../services/realtimeSync';
 import { premiumService } from '../services/premiumService';
 import { getRoleCategory } from '../utils/roleFormatter';
 
+// ── Synchronous localStorage read for instant logo on first render ───────
+// Zustand persist hydrates asynchronously (one tick after mount). Reading
+// the cached URL here means the very first render already has the value
+// — no flash of missing logo.
+function readCachedOrganizerLogo(): string {
+  try {
+    const raw = localStorage.getItem('auction-storage');
+    if (!raw) return '';
+    return (JSON.parse(raw) as { state?: { organizerLogo?: string } })?.state?.organizerLogo ?? '';
+  } catch {
+    return '';
+  }
+}
+
+// Inject a <link rel="preload"> so the browser prefetches the image before
+// React renders — effectively 0 ms display delay on cache hit.
+function preloadImageUrl(url: string): void {
+  if (!url || typeof document === 'undefined') return;
+  if (document.querySelector(`link[rel="preload"][href="${CSS.escape(url)}"]`)) return;
+  const link = document.createElement('link');
+  link.rel = 'preload';
+  link.as = 'image';
+  link.href = url;
+  document.head.appendChild(link);
+}
+
+const _cachedOrganizerLogo = readCachedOrganizerLogo();
+if (_cachedOrganizerLogo) preloadImageUrl(_cachedOrganizerLogo);
+
 // Initialize persistence with database when available
 const initializePersistence = async () => {
   // Wait for realtime sync to initialize
@@ -202,7 +231,7 @@ export const useAuctionStore = create<AuctionStore>()(
         isRound2Active: false,
         maxUnsoldRounds: 1,
         auctionRoleOrder: [...DEFAULT_AUCTION_ROLE_ORDER],
-        organizerLogo: '',
+        organizerLogo: _cachedOrganizerLogo,
         auctionState: initialAuctionState,
 
         // === Data Loading Actions ===
@@ -959,6 +988,7 @@ export const useAuctionStore = create<AuctionStore>()(
         },
 
         setOrganizerLogo: (url) => {
+          if (url) preloadImageUrl(url);
           set({ organizerLogo: url });
         },
 
