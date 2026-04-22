@@ -15,6 +15,28 @@
   z-index: 0;
 }
 
+.obs-overlay--mirror {
+  background:
+    radial-gradient(1000px 460px at 50% 110%, rgba(167, 240, 45, 0.12), transparent 68%),
+    linear-gradient(180deg, rgba(7, 12, 24, 0.96), rgba(3, 7, 16, 0.98));
+}
+
+.obs-mirror-badge {
+  position: absolute;
+  top: 18px;
+  left: 18px;
+  z-index: 120;
+  font-size: 0.76rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.85);
+  background: rgba(0, 0, 0, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 999px;
+  padding: 7px 14px;
+}
+
 /* ── Connection dot ── */
 .obs-conn-dot {
   position: absolute;
@@ -35,16 +57,16 @@
 /* ── Standby watermark ── */
 .obs-standby {
   position: absolute;
-  bottom: 20px;
+  bottom: 24px;
   left: 50%;
   transform: translateX(-50%);
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   background: rgba(0, 0, 0, 0.45);
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 999px;
-  padding: 6px 16px;
+  padding: 9px 18px;
 }
 .obs-standby__dot {
   width: 7px;
@@ -54,7 +76,7 @@
   animation: obs-pulse 2s ease-in-out infinite;
 }
 .obs-standby__text {
-  font-size: 0.62rem;
+  font-size: 0.78rem;
   font-weight: 700;
   letter-spacing: 0.14em;
   color: rgba(255, 255, 255, 0.55);
@@ -67,7 +89,7 @@
   bottom: 0;
   left: 0;
   right: 0;
-  height: 44px;
+  height: 60px;
   background: rgba(0, 0, 0, 0.72);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
@@ -78,12 +100,12 @@
 }
 .obs-ticker__label {
   flex-shrink: 0;
-  font-size: 0.6rem;
+  font-size: 0.74rem;
   font-weight: 800;
   letter-spacing: 0.18em;
   text-transform: uppercase;
   color: #a7f02d;
-  padding: 0 14px;
+  padding: 0 18px;
   border-right: 1px solid rgba(255, 255, 255, 0.15);
   height: 100%;
   display: flex;
@@ -105,26 +127,26 @@
 .obs-ticker__item {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
-  padding: 0 24px;
+  gap: 9px;
+  padding: 0 28px;
   border-right: 1px solid rgba(255, 255, 255, 0.08);
 }
 .obs-ticker__logo {
-  width: 22px;
-  height: 22px;
+  width: 30px;
+  height: 30px;
   border-radius: 4px;
   object-fit: contain;
   flex-shrink: 0;
 }
 .obs-ticker__team-name {
-  font-size: 0.72rem;
+  font-size: 0.9rem;
   font-weight: 700;
   color: rgba(255, 255, 255, 0.9);
   text-transform: uppercase;
   letter-spacing: 0.06em;
 }
 .obs-ticker__purse {
-  font-size: 0.68rem;
+  font-size: 0.86rem;
   font-weight: 600;
   color: #a7f02d;
 }
@@ -138,7 +160,7 @@
    ═══════════════════════════════════════════════════════════════════════════ */
 .obs-pcard {
   position: absolute;
-  bottom: 64px;
+  bottom: 82px;
   left: 50%;
   transform: translateX(-50%) !important;
   display: flex;
@@ -152,10 +174,10 @@
   backdrop-filter: blur(32px);
   -webkit-backdrop-filter: blur(32px);
   border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 20px;
+  border-radius: 24px;
   overflow: hidden;
-  min-width: 680px;
-  max-width: 900px;
+  min-width: 860px;
+  max-width: 1120px;
   box-shadow:
     0 20px 60px rgba(0, 0, 0, 0.6),
     0 0 0 1px rgba(255, 255, 255, 0.06),
@@ -165,8 +187,8 @@
 /* ── Player image section ── */
 .obs-pcard__img-wrap {
   position: relative;
-  width: 140px;
-  min-height: 160px;
+  width: 180px;
+  min-height: 214px;
   flex-shrink: 0;
   overflow: hidden;
   background: linear-gradient(
@@ -194,15 +216,15 @@
 }
 .obs-pcard__role-badge {
   position: absolute;
-  bottom: 8px;
-  left: 8px;
-  font-size: 0.55rem;
+  bottom: 10px;
+  left: 10px;
+  font-size: 0.68rem;
   font-weight: 800;
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: #0a0a14;
   background: #a7f02d;
-  padding: 3px 8px;
+  padding: 5px 10px;
   border-radius: 6px;
   line-height: 1.2;
 }
@@ -213,12 +235,12 @@
   display: flex;
   flex-direction: column;
   justify-content: center;
-  padding: 16px 20px;
-  gap: 6px;
+  padding: 21px 26px;
+  gap: 8px;
   border-right: 1px solid rgba(255, 255, 255, 0.08);
 }
 .obs-pcard__name {
-  font-size: 1.5rem;
+  font-size: 1.95rem;
   font-weight: 900;
   color: #ffffff;
   text-transform: uppercase;
@@ -226,13 +248,13 @@
   line-height: 1.1;
 }
 .obs-pcard__age {
-  font-size: 0.6rem;
+  font-size: 0.78rem;
   font-weight: 600;
   color: rgba(255, 255, 255, 0.4);
   letter-spacing: 0.12em;
 }
 .obs-pcard__base {
-  font-size: 0.62rem;
+  font-size: 0.8rem;
   font-weight: 600;
   color: rgba(255, 255, 255, 0.35);
   letter-spacing: 0.1em;
@@ -244,7 +266,7 @@
 .obs-stats {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 8px;
   margin: 4px 0;
 }
 .obs-stats__pill {
@@ -253,18 +275,18 @@
   align-items: center;
   background: rgba(255, 255, 255, 0.06);
   border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 8px;
-  padding: 4px 10px;
-  min-width: 48px;
+  border-radius: 10px;
+  padding: 6px 12px;
+  min-width: 58px;
 }
 .obs-stats__val {
-  font-size: 0.88rem;
+  font-size: 1.1rem;
   font-weight: 800;
   color: #ffffff;
   line-height: 1.2;
 }
 .obs-stats__lbl {
-  font-size: 0.48rem;
+  font-size: 0.62rem;
   font-weight: 700;
   color: rgba(167, 240, 45, 0.8);
   text-transform: uppercase;
@@ -278,13 +300,13 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 16px 24px;
-  min-width: 160px;
-  gap: 6px;
+  padding: 22px 28px;
+  min-width: 220px;
+  gap: 8px;
 }
 .obs-pcard__team-logo-wrap {
-  width: 52px;
-  height: 52px;
+  width: 68px;
+  height: 68px;
   border-radius: 12px;
   overflow: hidden;
   background: rgba(255, 255, 255, 0.06);
@@ -306,7 +328,7 @@
   text-transform: uppercase;
 }
 .obs-pcard__team-name {
-  font-size: 0.6rem;
+  font-size: 0.8rem;
   font-weight: 700;
   color: rgba(255, 255, 255, 0.7);
   text-transform: uppercase;
@@ -316,7 +338,7 @@
   line-height: 1.2;
 }
 .obs-pcard__bid-amount {
-  font-size: 1.8rem;
+  font-size: 2.4rem;
   font-weight: 900;
   color: #ffffff;
   letter-spacing: -0.02em;
@@ -324,12 +346,12 @@
   text-shadow: 0 2px 12px rgba(167, 240, 45, 0.3);
 }
 .obs-pcard__bid-amount--base {
-  font-size: 1.5rem;
+  font-size: 2rem;
   text-shadow: none;
   color: rgba(255, 255, 255, 0.8);
 }
 .obs-pcard__bid-label {
-  font-size: 0.55rem;
+  font-size: 0.72rem;
   font-weight: 700;
   letter-spacing: 0.16em;
   text-transform: uppercase;
@@ -341,16 +363,16 @@
    ═══════════════════════════════════════════════════════════════════════════ */
 .obs-bid-history {
   position: absolute;
-  bottom: 210px;
+  bottom: 282px;
   left: 50%;
   transform: translateX(-50%);
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
 }
 .obs-bid-history__title {
-  font-size: 0.52rem;
+  font-size: 0.7rem;
   font-weight: 800;
   letter-spacing: 0.2em;
   text-transform: uppercase;
@@ -365,14 +387,14 @@
 .obs-bid-history__item {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 14px;
   background: rgba(0, 0, 0, 0.55);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 8px;
-  padding: 4px 14px;
-  min-width: 220px;
+  border-radius: 10px;
+  padding: 7px 16px;
+  min-width: 280px;
   justify-content: space-between;
 }
 .obs-bid-history__item--latest {
@@ -380,14 +402,14 @@
   border-color: rgba(167, 240, 45, 0.25);
 }
 .obs-bid-history__team {
-  font-size: 0.65rem;
+  font-size: 0.84rem;
   font-weight: 700;
   color: rgba(255, 255, 255, 0.75);
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
 .obs-bid-history__amt {
-  font-size: 0.7rem;
+  font-size: 0.92rem;
   font-weight: 800;
   color: #a7f02d;
 }
@@ -407,9 +429,9 @@
   right: 32px;
   top: 50%;
   transform: translateY(-50%);
-  min-width: 320px;
-  max-width: 380px;
-  padding: 20px 22px;
+  min-width: 400px;
+  max-width: 460px;
+  padding: 26px 28px;
   border-radius: 16px;
   background: linear-gradient(145deg, rgba(10, 14, 30, 0.92), rgba(20, 26, 50, 0.88));
   border: 1px solid rgba(255, 255, 255, 0.08);
@@ -434,7 +456,7 @@
 }
 .obs-team-stats__title {
   font-weight: 800;
-  font-size: 1.2rem;
+  font-size: 1.5rem;
   letter-spacing: 0.02em;
 }
 .obs-team-stats__grid {
@@ -449,20 +471,20 @@
   text-align: center;
 }
 .obs-team-stats__val {
-  font-size: 1.35rem;
+  font-size: 1.7rem;
   font-weight: 800;
   color: #fbbf24;
   line-height: 1.2;
 }
 .obs-team-stats__lbl {
-  font-size: 0.7rem;
+  font-size: 0.86rem;
   letter-spacing: 0.08em;
   opacity: 0.72;
   margin-top: 4px;
 }
 .obs-team-stats__captain {
   margin-top: 12px;
-  font-size: 0.85rem;
+  font-size: 1rem;
   text-align: center;
   opacity: 0.88;
 }
@@ -497,18 +519,18 @@
   padding: 12px;
 }
 .obs-team-squad__name {
-  font-size: 2.4rem;
+  font-size: 3rem;
   font-weight: 900;
   letter-spacing: 0.02em;
 }
 .obs-team-squad__meta {
   display: flex;
   gap: 10px;
-  font-size: 1rem;
+  font-size: 1.2rem;
   opacity: 0.8;
 }
 .obs-team-squad__note {
-  font-size: 0.9rem;
+  font-size: 1.08rem;
   opacity: 0.55;
   max-width: 480px;
   text-align: center;

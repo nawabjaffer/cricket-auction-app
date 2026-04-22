@@ -182,7 +182,7 @@ function PlayerStats({ player }: { player: OverlayPlayer }) {
 // ══════════════════════════════════════════════════════════════════════════════
 // Component
 // ══════════════════════════════════════════════════════════════════════════════
-export default function OBSOverlayPage() {
+export default function OBSOverlayPage({ browserMode = false }: { readonly browserMode?: boolean }) {
   const [state,         setState]        = useState<OverlayState | null>(null);
   const [broadcastMode, setBroadcastMode] = useState<string>('auction');
   const [broadcastControl, setBroadcastControl] = useState<{
@@ -294,7 +294,12 @@ export default function OBSOverlayPage() {
   const soldTeam   = (activeOverlay && selectedTeam)  ? (selectedTeam  as unknown as Team)   : null;
 
   return (
-    <div className="obs-overlay">
+    <div className={`obs-overlay ${browserMode ? 'obs-overlay--mirror' : ''}`}>
+      {browserMode && (
+        <div className="obs-mirror-badge" aria-hidden="true">
+          MIRROR MODE · READ ONLY
+        </div>
+      )}
       {/* Connection dot */}
       <span className={`obs-conn-dot ${connected ? 'obs-conn-dot--on' : ''}`} />
 

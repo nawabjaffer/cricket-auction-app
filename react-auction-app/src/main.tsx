@@ -74,6 +74,7 @@ createRoot(document.getElementById('root')!).render(
             <Route path="/live-admin" element={<LiveAdminPage />} />
             <Route path="/obs-overlay" element={<OBSOverlayPage />} />
             <Route path="/obs-dock" element={<OBSDockPage />} />
+            <Route path="/mirror" element={<OBSOverlayPage browserMode />} />
 
             {/* Super-admin portal — manage tournaments (tenants) */}
             <Route path="/platform-admin" element={<PlatformAdminPage />} />
@@ -90,6 +91,7 @@ createRoot(document.getElementById('root')!).render(
             <Route path="/:tenantSlug/live-admin" element={<TenantGate><LiveAdminPage /></TenantGate>} />
             <Route path="/:tenantSlug/obs-overlay" element={<TenantGate><OBSOverlayPage /></TenantGate>} />
             <Route path="/:tenantSlug/obs-dock" element={<TenantGate><OBSDockPage /></TenantGate>} />
+            <Route path="/:tenantSlug/mirror" element={<TenantGate><OBSOverlayPage browserMode /></TenantGate>} />
           </Routes>
         </BrowserRouter>
       </QueryClientProvider>
