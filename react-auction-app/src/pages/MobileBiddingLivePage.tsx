@@ -8,13 +8,14 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { GiCricketBat } from 'react-icons/gi';
-import { IoSwapVertical, IoRefresh, IoPeople, IoChevronDown, IoSearch, IoClose, IoFlash, IoPersonCircle, IoList, IoTrophy, IoWallet, IoStatsChart, IoEllipsisHorizontal } from 'react-icons/io5';
+import { IoSwapVertical, IoRefresh, IoPeople, IoChevronDown, IoSearch, IoClose, IoFlash, IoPersonCircle, IoList, IoTrophy, IoWallet, IoStatsChart, IoEllipsisHorizontal, IoHeart, IoHeartOutline, IoStar } from 'react-icons/io5';
 import { authService } from '../services';
 import type { AuthSession } from '../services';
 import { auctionPersistence, type SponsorRecord } from '../services/auctionPersistence';
 import { realtimeSync } from '../services/realtimeSync';
 import { onValue, ref } from 'firebase/database';
 import { tenantPath } from '../services/tenantPath';
+import { wishlistService, MAX_WISHLIST_PICKS, type WishlistMap } from '../services/wishlistService';
 import { useRealtimeMobileSync } from '../hooks/useRealtimeSync';
 import { useMotionSensor } from '../hooks/useMotionSensor';
 import { TeamLogo } from '../components/TeamLogo/TeamLogo';
@@ -31,7 +32,7 @@ interface BidFeedback {
 }
 
 type LoginScreen = 'access' | 'scout';
-type MainTab = 'live' | 'myteam' | 'players';
+type MainTab = 'live' | 'myteam' | 'players' | 'wishlist';
 type StatsView = 'batting' | 'bowling';
 
 interface ExpandedPlayerStats {
@@ -42,6 +43,7 @@ interface ExpandedPlayerStats {
 const TAB_CONFIG: { key: MainTab; label: string; icon: typeof IoFlash }[] = [
   { key: 'live', label: 'Live', icon: IoFlash },
   { key: 'myteam', label: 'My Team', icon: IoPersonCircle },
+  { key: 'wishlist', label: 'Wishlist', icon: IoStar },
   { key: 'players', label: 'Players', icon: IoList },
 ];
 
@@ -115,6 +117,10 @@ export function MobileBiddingLivePage() {
   const [topBuysIndex, setTopBuysIndex] = useState(0);
   const [scoutSearch, setScoutSearch] = useState('');
   const [scoutRoleFilter, setScoutRoleFilter] = useState<string>('all');
+  // Wishlist (private per team)
+  const [wishlist, setWishlist] = useState<WishlistMap>({});
+  const [wishlistError, setWishlistError] = useState<string>('');
+  const [wishlistBusy, setWishlistBusy] = useState<string | null>(null); // playerId currently being toggled
 
   useEffect(() => {
     if (runtimeCredentials.length > 0) {
@@ -222,6 +228,30 @@ export function MobileBiddingLivePage() {
       unsubSold?.();
     };
   }, []);
+
+  // Real-time subscription for the logged-in team's wishlist (private)
+  useEffect(() => {
+    const teamId = session?.teamId;
+    if (!teamId) { setWishlist({}); return; }
+    let cancelled = false;
+    let unsub: (() => void) | null = null;
+    (async () => {
+      try {
+        await realtimeSync.ensureInitialized();
+        const db = realtimeSync.getDatabase();
+        if (!db || cancelled) return;
+        wishlistService.initialize(db);
+        const wishRef = ref(db, wishlistService.wishlistRefPath(teamId));
+        unsub = onValue(wishRef, (snap) => {
+          if (cancelled) return;
+          setWishlist(snap.exists() ? (snap.val() as WishlistMap) : {});
+        });
+      } catch {
+        if (!cancelled) setWishlist({});
+      }
+    })();
+    return () => { cancelled = true; unsub?.(); };
+  }, [session?.teamId]);
 
   // Auto-reconnect with exponential backoff
   useEffect(() => {
@@ -362,6 +392,28 @@ export function MobileBiddingLivePage() {
     setBidCount(0);
     setLastSoldPlayer(null);
   }, []);
+
+  // Toggle a player in/out of the current team's private wishlist
+  const toggleWishlist = useCallback(async (playerId: string) => {
+    const teamId = session?.teamId;
+    if (!teamId) return;
+    setWishlistError('');
+    setWishlistBusy(playerId);
+    const isPicked = !!wishlist[playerId];
+    try {
+      if (isPicked) {
+        await wishlistService.removePlayer(teamId, playerId);
+      } else {
+        await wishlistService.addPlayer(teamId, playerId);
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Could not update wishlist';
+      setWishlistError(msg);
+      setFeedback({ type: 'error', message: msg, timestamp: Date.now() });
+    } finally {
+      setWishlistBusy(null);
+    }
+  }, [session?.teamId, wishlist]);
 
   // Bid handlers
   const handleRaiseBid = useCallback(async () => {
@@ -1183,13 +1235,14 @@ export function MobileBiddingLivePage() {
       <AnimatePresence>
         {activeTab !== 'live' && currentPlayer && (
           <motion.button
-            className="cb-live-banner"
+            className={`cb-live-banner ${wishlist[currentPlayer.id] ? 'cb-live-banner--wishlisted' : ''}`}
             initial={{ opacity: 0, y: -30 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -30 }}
             onClick={() => setActiveTab('live')}
           >
             <span className="cb-live-banner-dot" />
+            {wishlist[currentPlayer.id] && <IoStar size={14} className="cb-live-banner-star" />}
             <span className="cb-live-banner-name">{currentPlayer.name}</span>
             <span className="cb-live-banner-bid">{formatLakhs(currentBid)}</span>
             {isMyBid && <span className="cb-live-banner-my">YOUR BID</span>}
@@ -1223,12 +1276,23 @@ export function MobileBiddingLivePage() {
           {/* Player card */}
           {currentPlayer ? (
             <motion.div
-              className="cb-player-card"
+              className={`cb-player-card ${currentPlayer && wishlist[currentPlayer.id] ? 'cb-player-card--wishlisted' : ''}`}
               key={currentPlayer.id}
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.3 }}
             >
+              {currentPlayer && wishlist[currentPlayer.id] && (
+                <motion.div
+                  className="cb-wishlist-alert"
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ type: 'spring', stiffness: 400, damping: 20 }}
+                >
+                  <IoStar className="cb-wishlist-alert-icon" />
+                  <span>Your wishlist pick is up for auction</span>
+                </motion.div>
+              )}
               {/* Player image + basic info */}
               <div className="cb-player-top">
                 <div className="cb-player-image-wrap">
@@ -1635,6 +1699,17 @@ export function MobileBiddingLivePage() {
                         <span className="cb-player-row-base">{formatLakhs(p.basePrice)}</span>
                         {sold && <span className="cb-player-row-sold-badge">{sold.teamName}</span>}
                         {sold && <span className="cb-player-row-sold-amt">{formatLakhs(sold.soldAmount)}</span>}
+                        {!sold && session?.teamId && (
+                          <button
+                            type="button"
+                            className={`cb-wishlist-heart ${wishlist[p.id] ? 'active' : ''}`}
+                            aria-label={wishlist[p.id] ? 'Remove from wishlist' : 'Add to wishlist'}
+                            disabled={wishlistBusy === p.id}
+                            onClick={(e) => { e.stopPropagation(); void toggleWishlist(p.id); }}
+                          >
+                            {wishlist[p.id] ? <IoHeart size={18} /> : <IoHeartOutline size={18} />}
+                          </button>
+                        )}
                       </div>
                     </div>
                     <AnimatePresence>
@@ -1657,6 +1732,165 @@ export function MobileBiddingLivePage() {
           )}
         </div>
       )}
+
+      {/* ═══════════════ WISHLIST TAB ═══════════════ */}
+      {activeTab === 'wishlist' && session && (() => {
+        const pickedIds = Object.keys(wishlist);
+        const pickedPlayers = pickedIds
+          .map(id => allPlayers.find(p => p.id === id))
+          .filter((p): p is Player => !!p)
+          .sort((a, b) => (wishlist[b.id]?.addedAt ?? 0) - (wishlist[a.id]?.addedAt ?? 0));
+        const soldIdSet = new Set(soldRecords.map(s => s.id));
+        const availableToPick = allPlayers
+          .filter(p => !soldIdSet.has(p.id) && !wishlist[p.id])
+          .filter(p => {
+            if (!scoutSearch.trim()) return true;
+            const q = scoutSearch.toLowerCase();
+            return p.name.toLowerCase().includes(q) || p.id.toLowerCase().includes(q);
+          });
+        const atCap = pickedIds.length >= MAX_WISHLIST_PICKS;
+        return (
+          <div className="cb-content cb-wishlist-tab">
+            <div className="cb-wishlist-header">
+              <div>
+                <h2 className="cb-wishlist-title">
+                  <IoStar /> My Dream Picks
+                </h2>
+                <p className="cb-wishlist-sub">
+                  Private to <strong>{session.teamName}</strong> · {pickedIds.length}/{MAX_WISHLIST_PICKS} picks
+                </p>
+              </div>
+              <div className="cb-wishlist-progress">
+                <div
+                  className="cb-wishlist-progress-fill"
+                  style={{ width: `${(pickedIds.length / MAX_WISHLIST_PICKS) * 100}%` }}
+                />
+              </div>
+            </div>
+
+            {wishlistError && (
+              <div className="cb-error">{wishlistError}</div>
+            )}
+
+            {/* Picked list */}
+            <section className="cb-wishlist-section">
+              <h3 className="cb-wishlist-section-title">
+                Your Picks {pickedIds.length > 0 && <span className="cb-wishlist-count">{pickedIds.length}</span>}
+              </h3>
+              {pickedPlayers.length === 0 ? (
+                <div className="cb-wishlist-empty">
+                  <IoHeartOutline size={28} />
+                  <p>No picks yet — tap the heart on any player below to add them.</p>
+                </div>
+              ) : (
+                <div className="cb-wishlist-picked-list">
+                  {pickedPlayers.map((p) => {
+                    const sold = soldRecords.find(s => s.id === p.id);
+                    const parsed = parseRoleDetails(p.role);
+                    return (
+                      <motion.div
+                        key={p.id}
+                        className={`cb-wishlist-pick ${sold ? 'sold' : ''}`}
+                        layout
+                        initial={{ opacity: 0, x: -8 }}
+                        animate={{ opacity: 1, x: 0 }}
+                      >
+                        <div className="cb-wishlist-pick-img">
+                          <PlayerImage imageUrl={p.imageUrl || ''} playerName={p.name} size="sm" />
+                        </div>
+                        <div className="cb-wishlist-pick-info">
+                          <span className="cb-wishlist-pick-name">{p.name}</span>
+                          <div className="cb-wishlist-pick-meta">
+                            <span className="cb-squad-role-badge" style={{ background: getRoleBadgeColor(parsed.category) }}>
+                              {parsed.badge} {parsed.coreRole}
+                            </span>
+                            <span className="cb-wishlist-pick-base">Base {formatLakhs(p.basePrice)}</span>
+                          </div>
+                          {sold && (
+                            <span className="cb-wishlist-pick-sold">
+                              Sold to {sold.teamName} · {formatLakhs(sold.soldAmount)}
+                            </span>
+                          )}
+                        </div>
+                        <button
+                          type="button"
+                          className="cb-wishlist-pick-remove"
+                          aria-label="Remove pick"
+                          disabled={wishlistBusy === p.id}
+                          onClick={() => void toggleWishlist(p.id)}
+                        >
+                          <IoClose size={18} />
+                        </button>
+                      </motion.div>
+                    );
+                  })}
+                </div>
+              )}
+            </section>
+
+            {/* Pool to pick from */}
+            <section className="cb-wishlist-section">
+              <h3 className="cb-wishlist-section-title">Add Players</h3>
+              <div className="cb-search-bar cb-wishlist-search">
+                <IoSearch size={18} className="cb-search-icon" />
+                <input
+                  type="text"
+                  className="cb-search-input"
+                  placeholder="Search player to add..."
+                  value={scoutSearch}
+                  onChange={(e) => setScoutSearch(e.target.value)}
+                />
+                {scoutSearch && (
+                  <button className="cb-search-clear" onClick={() => setScoutSearch('')}>
+                    <IoClose size={16} />
+                  </button>
+                )}
+              </div>
+
+              {atCap && (
+                <div className="cb-wishlist-cap-warn">
+                  You've hit the {MAX_WISHLIST_PICKS}-player limit. Remove a pick to add another.
+                </div>
+              )}
+
+              <div className="cb-wishlist-pool">
+                {availableToPick.slice(0, 60).map((p) => {
+                  const parsed = parseRoleDetails(p.role);
+                  return (
+                    <button
+                      key={p.id}
+                      type="button"
+                      className="cb-wishlist-pool-row"
+                      disabled={atCap || wishlistBusy === p.id}
+                      onClick={() => void toggleWishlist(p.id)}
+                    >
+                      <div className="cb-wishlist-pool-img">
+                        <PlayerImage imageUrl={p.imageUrl || ''} playerName={p.name} size="sm" />
+                      </div>
+                      <div className="cb-wishlist-pool-info">
+                        <span className="cb-wishlist-pool-name">{p.name}</span>
+                        <div className="cb-wishlist-pool-meta">
+                          <span className="cb-squad-role-badge" style={{ background: getRoleBadgeColor(parsed.category) }}>
+                            {parsed.badge} {parsed.coreRole}
+                          </span>
+                          <span className="cb-wishlist-pool-base">Base {formatLakhs(p.basePrice)}</span>
+                        </div>
+                      </div>
+                      <IoHeartOutline size={22} className="cb-wishlist-pool-add" />
+                    </button>
+                  );
+                })}
+                {availableToPick.length === 0 && (
+                  <div className="cb-wishlist-empty"><p>No matching players.</p></div>
+                )}
+                {availableToPick.length > 60 && (
+                  <p className="cb-wishlist-hint">Showing first 60. Refine search to narrow down.</p>
+                )}
+              </div>
+            </section>
+          </div>
+        );
+      })()}
 
       {/* ── Bottom Tab Bar ── */}
       <nav className="cb-bottom-nav">
