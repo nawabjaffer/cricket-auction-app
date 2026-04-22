@@ -17,7 +17,7 @@ import type { Player, Team } from '../types';
  * Hook for Desktop: Broadcasts state changes via Firebase Realtime Database
  * Call this in the main App component
  */
-export function useRealtimeDesktopSync(): void {
+export function useRealtimeDesktopSync(enabled = true): void {
   const currentPlayer = useAuctionStore(state => state.currentPlayer);
   const currentBid = useAuctionStore(state => state.currentBid);
   const selectedTeam = useAuctionStore(state => state.selectedTeam);
@@ -61,6 +61,7 @@ export function useRealtimeDesktopSync(): void {
 
   // Initialize as desktop on mount - ensure it completes
   useEffect(() => {
+    if (!enabled) return;
     if (!isInitialized.current && !initPromiseRef.current) {
       isInitialized.current = true;
       
@@ -99,10 +100,11 @@ export function useRealtimeDesktopSync(): void {
     return () => {
       unsubscribe();
     };
-  }, [raiseBidForTeam, currentPlayer, currentBid, selectedTeam, teams, auctionState.isAuctionActive]);
+  }, [enabled, raiseBidForTeam, currentPlayer, currentBid, selectedTeam, teams, auctionState.isAuctionActive]);
 
   // Broadcast state changes
   useEffect(() => {
+    if (!enabled) return;
     if (!isInitialized.current) return;
     if (!realtimeSyncService.isReady()) {
       if (import.meta.env.DEV) console.log('[useRealtimeDesktopSync] ⏳ Service not ready yet, waiting...');
@@ -127,10 +129,11 @@ export function useRealtimeDesktopSync(): void {
       (storeActiveOverlay === 'sold' || storeActiveOverlay === 'unsold') ? storeActiveOverlay : null,
       bidHistory
     );
-  }, [currentPlayer, currentBid, selectedTeam, teams, auctionState.isAuctionActive, storeActiveOverlay, bidHistory]);
+  }, [enabled, currentPlayer, currentBid, selectedTeam, teams, auctionState.isAuctionActive, storeActiveOverlay, bidHistory]);
 
   // Heartbeat broadcast to ensure mobile receives state even if no changes
   useEffect(() => {
+    if (!enabled) return;
     if (!isInitialized.current) return;
 
     const interval = setInterval(() => {
@@ -151,7 +154,7 @@ export function useRealtimeDesktopSync(): void {
     }, 2000);
 
     return () => clearInterval(interval);
-  }, []);
+  }, [enabled]);
 }
 
 /**
@@ -162,6 +165,13 @@ export interface RealtimeMobileSyncState {
   currentBid: number;
   selectedTeam: Team | null;
   teams: Team[];
+  bidHistory: Array<{
+    teamId: string;
+    teamName: string;
+    teamLogoUrl?: string;
+    amount: number;
+    timestamp: string;
+  }>;
   auctionActive: boolean;
   activeOverlay: 'sold' | 'unsold' | null;
   isConnected: boolean;
@@ -178,7 +188,7 @@ export interface RealtimeMobileSyncState {
 /**
  * Hook for Mobile: Receives state updates via Firebase Realtime Database
  */
-export function useRealtimeMobileSync(): RealtimeMobileSyncState {
+export function useRealtimeMobileSync(enabled = true): RealtimeMobileSyncState {
   const [syncState, setSyncState] = useState<RealtimeAuctionState>({
     currentPlayer: null,
     currentBid: 0,
@@ -203,6 +213,7 @@ export function useRealtimeMobileSync(): RealtimeMobileSyncState {
 
   // Initialize on mount
   useEffect(() => {
+    if (!enabled) return;
     if (!isInitialized.current) {
       isInitialized.current = true;
       
@@ -240,7 +251,7 @@ export function useRealtimeMobileSync(): RealtimeMobileSyncState {
       unsubscribeReset();
       clearInterval(connectionCheck);
     };
-  }, []);
+  }, [enabled]);
 
   // Submit bid handler
   const submitBid = useCallback(async (
@@ -336,6 +347,7 @@ export function useRealtimeMobileSync(): RealtimeMobileSyncState {
     currentBid: syncState.currentBid,
     selectedTeam,
     teams,
+    bidHistory: syncState.bidHistory || [],
     auctionActive: syncState.auctionActive,
     activeOverlay: (syncState.activeOverlay === 'sold' || syncState.activeOverlay === 'unsold')
       ? syncState.activeOverlay

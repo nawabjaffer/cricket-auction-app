@@ -12,7 +12,7 @@ export default function MirrorPage() {
     return slug || DEFAULT_TENANT_SLUG;
   }, [tenantSlug]);
 
-  const mirrorSrc = useMemo(() => `/${targetSlug}/`, [targetSlug]);
+  const mirrorSrc = useMemo(() => `/${targetSlug}/?mirror=1`, [targetSlug]);
 
   // Hard-disable keyboard interaction on mirror host page.
   useEffect(() => {

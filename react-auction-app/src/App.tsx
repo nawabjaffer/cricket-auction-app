@@ -56,13 +56,14 @@ import {
   useAdminPlayersOverrides,
   useBootPreload,
 } from './hooks';
-import { useRealtimeDesktopSync } from './hooks/useRealtimeSync';
+import { useRealtimeDesktopSync, useRealtimeMobileSync } from './hooks/useRealtimeSync';
 import { audioService, imageCacheService } from './services';
 import { auctionPersistence, type SponsorRecord } from './services/auctionPersistence';
 import { auctionRules } from './services/auctionRules';
 import { realtimeSync } from './services/realtimeSync';
 import { getCachedStorageUrl, resolveImageAsync } from './services/firebaseStorageService';
 import { useActiveOverlay, useNotification, useCurrentPlayer, useSoldPlayers, useAvailablePlayers, useOriginalPlayers, useTeams, useOrganizerLogo, useOrganizerName } from './store';
+import { useAuctionStore } from './store/auctionStore';
 import { extractDriveFileId } from './utils/driveImage';
 import { formatRoleDisplay, getRoleCategory, parseRoleDetails, getRoleBadgeColor } from './utils/roleFormatter';
 import './index.css';
@@ -98,6 +99,10 @@ export default function App() {
 // Auction App Content
 function AuctionApp() {
   const navigate = useNavigate();
+  const isMirrorMode = useMemo(() => {
+    if (typeof window === 'undefined') return false;
+    return new URLSearchParams(window.location.search).get('mirror') === '1';
+  }, []);
   const [showCoinJar, setShowCoinJar] = useState(false);
   const [selectedPlayerName, setSelectedPlayerName] = useState<string>('');
   const [showHelpModal, setShowHelpModal] = useState(false);
@@ -148,7 +153,8 @@ function AuctionApp() {
   const { currentTheme } = useTheme();
   
   // Initialize Firebase Realtime Database sync for desktop (broadcasts state to mobile devices)
-  useRealtimeDesktopSync();
+  useRealtimeDesktopSync(!isMirrorMode);
+  const mirrorSync = useRealtimeMobileSync(isMirrorMode);
   
   // Load auction data from Firebase if available
   useAuctionDataLoader();
@@ -192,6 +198,56 @@ function AuctionApp() {
   const organizerLogo = useOrganizerLogo();
   const organizerName = useOrganizerName();
 
+  // Mirror follower mode: hydrate local store from realtime desktop state
+  // so this page stays in lockstep with the controlling laptop.
+  useEffect(() => {
+    if (!isMirrorMode || !mirrorSync.isConnected) return;
+
+    useAuctionStore.setState((prev) => ({
+      ...prev,
+      currentPlayer: mirrorSync.currentPlayer,
+      currentBid: mirrorSync.currentBid,
+      selectedTeam: mirrorSync.selectedTeam,
+      teams: mirrorSync.teams,
+      bidHistory: mirrorSync.bidHistory,
+      activeOverlay: mirrorSync.activeOverlay,
+      auctionState: {
+        ...prev.auctionState,
+        currentPlayer: mirrorSync.currentPlayer,
+        currentBid: mirrorSync.currentBid,
+        selectedTeam: mirrorSync.selectedTeam,
+        bidHistory: mirrorSync.bidHistory,
+        isAuctionActive: mirrorSync.auctionActive,
+      },
+    }));
+  }, [
+    isMirrorMode,
+    mirrorSync.isConnected,
+    mirrorSync.lastUpdate,
+    mirrorSync.currentPlayer,
+    mirrorSync.currentBid,
+    mirrorSync.selectedTeam,
+    mirrorSync.teams,
+    mirrorSync.bidHistory,
+    mirrorSync.activeOverlay,
+    mirrorSync.auctionActive,
+  ]);
+
+  // Mirror follower mode: adopt desktop broadcast view mode (break/squad/standings).
+  useEffect(() => {
+    if (!isMirrorMode) return;
+    const unsub = realtimeSync.subscribeBroadcastControl((control) => {
+      const mode = control?.mode ?? 'auction';
+      setShowBreakOverlay(mode === 'break');
+      setShowTeamSquadView(mode === 'teamSquad');
+      setShowTeamOverlay(mode === 'standings');
+      if (mode === 'teamSquad' && control?.teamSquadTeamId) {
+        setSelectedTeamForSquad(control.teamSquadTeamId);
+      }
+    });
+    return () => unsub();
+  }, [isMirrorMode]);
+
   // Handle team squad view
   const handleTeamSquadView = (teamId: string) => {
     console.log('[V1 App] handleTeamSquadView called with teamId:', teamId);
@@ -206,6 +262,7 @@ function AuctionApp() {
   // `broadcastControl.mode`. The data payload (team id, break duration)
   // lets receivers render an identical view without local state.
   useEffect(() => {
+    if (isMirrorMode) return;
     // Derive the current mode from local UI flags. Priority:
     //   break > teamSquad > standings (team stats) > auction (default)
     let mode: 'auction' | 'break' | 'teamSquad' | 'standings' = 'auction';
@@ -227,7 +284,7 @@ function AuctionApp() {
     // We intentionally depend only on visibility flags + relevant ids to
     // avoid publishing on every player/bid change.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showBreakOverlay, showTeamSquadView, showTeamOverlay, selectedTeamForSquad, selectedTeam?.id]);
+  }, [isMirrorMode, showBreakOverlay, showTeamSquadView, showTeamOverlay, selectedTeamForSquad, selectedTeam?.id]);
 
   const handleOpenTeamDisplay = useCallback(() => {
     const initialTeamId = selectedTeam?.id || allTeams[0]?.id || '';
@@ -243,7 +300,7 @@ function AuctionApp() {
 
   // Keyboard shortcuts with team overlay toggle
   useKeyboardShortcuts({ 
-    enabled: !showCoinJar && !showJumpModal && !showAdminPanel,
+    enabled: !isMirrorMode && !showCoinJar && !showJumpModal && !showAdminPanel,
     onViewToggle: () => setShowTeamOverlay(prev => !prev),
     onEscape: () => setShowTeamOverlay(false),
     onHeaderToggle: () => setShowHeader(prev => !prev),
@@ -289,6 +346,7 @@ function AuctionApp() {
 
   // Admin panel keyboard shortcut (Ctrl+Shift+A)
   useEffect(() => {
+    if (isMirrorMode) return;
     const handleAdminKeyboard = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'A') {
         e.preventDefault();
@@ -298,10 +356,11 @@ function AuctionApp() {
 
     window.addEventListener('keydown', handleAdminKeyboard);
     return () => window.removeEventListener('keydown', handleAdminKeyboard);
-  }, []);
+  }, [isMirrorMode]);
 
   // Break overlay keyboard shortcut (B key)
   useEffect(() => {
+    if (isMirrorMode) return;
     const handleBreakKey = (e: KeyboardEvent) => {
       if (e.key === 'b' || e.key === 'B') {
         // Don't trigger when typing in input fields or when admin/modals are open
@@ -316,10 +375,11 @@ function AuctionApp() {
 
     window.addEventListener('keydown', handleBreakKey);
     return () => window.removeEventListener('keydown', handleBreakKey);
-  }, [showAdminPanel, showJumpModal, showCoinJar]);
+  }, [isMirrorMode, showAdminPanel, showJumpModal, showCoinJar]);
 
   // Live transition keyboard shortcut (L key) - flip transition to /live
   useEffect(() => {
+    if (isMirrorMode) return;
     const handleLiveKey = (e: KeyboardEvent) => {
       if (e.key === 'l' || e.key === 'L') {
         const target = e.target as HTMLElement;
@@ -338,10 +398,11 @@ function AuctionApp() {
 
     window.addEventListener('keydown', handleLiveKey);
     return () => window.removeEventListener('keydown', handleLiveKey);
-  }, [showAdminPanel, showJumpModal, showCoinJar, showBreakOverlay, navigate]);
+  }, [isMirrorMode, showAdminPanel, showJumpModal, showCoinJar, showBreakOverlay, navigate]);
 
   // Top 3 Buys carousel keyboard shortcut ("/" key)
   useEffect(() => {
+    if (isMirrorMode) return;
     const handleTopBuysKey = (e: KeyboardEvent) => {
       if (e.key === '/') {
         const target = e.target as HTMLElement;
@@ -366,7 +427,7 @@ function AuctionApp() {
 
     window.addEventListener('keydown', handleTopBuysKey);
     return () => window.removeEventListener('keydown', handleTopBuysKey);
-  }, [showAdminPanel, showJumpModal, showCoinJar, showTopBuysOverlay]);
+  }, [isMirrorMode, showAdminPanel, showJumpModal, showCoinJar, showTopBuysOverlay]);
 
   const handleJumpSubmit = () => {
     if (auction.selectionMode !== 'sequential') {
