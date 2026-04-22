@@ -217,7 +217,7 @@
   background: #eff6ff;
 }
 
-.admin-compact-avatar-fallback {
+.admin-compact-avatar-error {
   position: absolute;
   inset: 0;
   display: flex;
@@ -225,8 +225,7 @@
   justify-content: center;
   font-size: 0.85rem;
   font-weight: 700;
-  color: #1e3a8a;
-  text-transform: uppercase;
+  color: #dc2626;
 }
 
 .admin-compact-avatar-img {

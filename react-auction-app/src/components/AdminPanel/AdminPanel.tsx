@@ -18,6 +18,65 @@ import type { Team, Player, AuctionRoleCategory, BattingStats, BowlingStats } fr
 import { DEFAULT_AUCTION_ROLE_ORDER, createEmptyBattingStats, createEmptyBowlingStats } from '../../types';
 import { formatRoleDisplay, getRoleCategory, getRoleBadgeColor } from '../../utils/roleFormatter';
 import { localImageCacheService } from '../../services/localImageCache';
+import { getCachedStorageUrl, resolveImageAsync } from '../../services/firebaseStorageService';
+import { extractDriveFileId } from '../../utils/driveImage';
+import { getLiveBlobUrl } from '../../services/mediaBlobCache';
+
+// Small avatar that resolves Google Drive / Firebase Storage URLs the same way
+// PlayerCard does, so admin thumbnails match what the auction listing shows.
+function CompactPlayerAvatar({ imageUrl, playerName }: { readonly imageUrl?: string; readonly playerName: string }) {
+  const [src, setSrc] = useState<string>(() => {
+    if (!imageUrl) return '';
+    const cached = getCachedStorageUrl(imageUrl);
+    if (cached) {
+      const blob = getLiveBlobUrl(cached);
+      return blob || cached;
+    }
+    const fileId = extractDriveFileId(imageUrl);
+    if (fileId) return `https://lh3.googleusercontent.com/d/${fileId}=s96`;
+    return imageUrl;
+  });
+  const [errored, setErrored] = useState(false);
+
+  useEffect(() => {
+    if (!imageUrl) { setSrc(''); return; }
+    let alive = true;
+    setErrored(false);
+    const cached = getCachedStorageUrl(imageUrl);
+    if (cached) {
+      const blob = getLiveBlobUrl(cached);
+      setSrc(blob || cached);
+      return () => { alive = false; };
+    }
+    const fileId = extractDriveFileId(imageUrl);
+    if (fileId) setSrc(`https://lh3.googleusercontent.com/d/${fileId}=s96`);
+    else setSrc(imageUrl);
+    const storagePath = `images/players/${playerName.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
+    resolveImageAsync(imageUrl, storagePath, (url) => {
+      if (!alive) return;
+      const blob = getLiveBlobUrl(url);
+      setSrc(blob || url);
+    });
+    return () => { alive = false; };
+  }, [imageUrl, playerName]);
+
+  const showError = !imageUrl || errored;
+
+  return (
+    <div className="admin-compact-avatar" aria-hidden="true">
+      {!showError && src && (
+        <img
+          src={src}
+          alt=""
+          className="admin-compact-avatar-img"
+          loading="lazy"
+          onError={() => setErrored(true)}
+        />
+      )}
+      {showError && <span className="admin-compact-avatar-error">✕</span>}
+    </div>
+  );
+}
 
 type LogoSourceMode = 'drive' | 'upload';
 
@@ -2129,19 +2188,7 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
                   <div className="admin-compact-list">
                     {paginatedPlayers.map((player) => (
                       <div key={player.id} className="admin-compact-item">
-                        <div className="admin-compact-avatar" aria-hidden="true">
-                          <span className="admin-compact-avatar-fallback">
-                            {player.name.charAt(0).toUpperCase()}
-                          </span>
-                          {player.imageUrl && (
-                            <img
-                              src={player.imageUrl}
-                              alt=""
-                              className="admin-compact-avatar-img"
-                              onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-                            />
-                          )}
-                        </div>
+                        <CompactPlayerAvatar imageUrl={player.imageUrl} playerName={player.name} />
                         <div className="admin-compact-main">
                           <div className="admin-player-name-row">
                             <strong>{player.name}</strong>

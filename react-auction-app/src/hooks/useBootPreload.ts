@@ -23,6 +23,19 @@ const BOOT_TIMEOUT_MS = 30_000;
 const PER_ITEM_TIMEOUT = 8_000;
 const MAX_CONCURRENT = 6;
 
+// Flag persisted for the browser tab's lifetime so that navigating to /live
+// (or any other route that remounts <App />) and back does not trigger a
+// second full preload cycle — the media is already warm in IndexedDB / HTTP
+// cache from the first boot.
+const SESSION_FLAG = 'bootPreloadDone_v1';
+function hasSessionFlag(): boolean {
+  try { return typeof sessionStorage !== 'undefined' && sessionStorage.getItem(SESSION_FLAG) === '1'; }
+  catch { return false; }
+}
+function setSessionFlag() {
+  try { sessionStorage?.setItem(SESSION_FLAG, '1'); } catch { /* ignore */ }
+}
+
 type MediaItem = { originalUrl: string; storagePath: string };
 
 async function collectMediaItems(): Promise<MediaItem[]> {
@@ -92,20 +105,28 @@ function preloadImage(url: string, timeoutMs: number): Promise<void> {
 }
 
 export function useBootPreload(enabled: boolean): BootPreloadState {
-  const [state, setState] = useState<BootPreloadState>({
-    done: false, loaded: 0, total: 0, progress: 0, phase: 'idle',
-  });
+  const [state, setState] = useState<BootPreloadState>(() => (
+    hasSessionFlag()
+      ? { done: true, loaded: 0, total: 0, progress: 1, phase: 'done' }
+      : { done: false, loaded: 0, total: 0, progress: 0, phase: 'idle' }
+  ));
   const startedRef = useRef(false);
 
   useEffect(() => {
     if (!enabled) return;
     if (startedRef.current) return;
+    if (hasSessionFlag()) {
+      startedRef.current = true;
+      setState({ done: true, loaded: 0, total: 0, progress: 1, phase: 'done' });
+      return;
+    }
     startedRef.current = true;
 
     let cancelled = false;
     const hardTimeout = setTimeout(() => {
       if (cancelled) return;
       cancelled = true;
+      setSessionFlag();
       setState((s) => ({ ...s, done: true, phase: 'done' }));
     }, BOOT_TIMEOUT_MS);
 
@@ -115,6 +136,7 @@ export function useBootPreload(enabled: boolean): BootPreloadState {
       const total = items.length;
       if (total === 0) {
         clearTimeout(hardTimeout);
+        setSessionFlag();
         setState({ done: true, loaded: 0, total: 0, progress: 1, phase: 'done' });
         return;
       }
@@ -151,11 +173,13 @@ export function useBootPreload(enabled: boolean): BootPreloadState {
 
       if (!cancelled) {
         clearTimeout(hardTimeout);
+        setSessionFlag();
         setState({ done: true, loaded, total, progress: 1, phase: 'done' });
       }
     })().catch(() => {
       if (!cancelled) {
         clearTimeout(hardTimeout);
+        setSessionFlag();
         setState((s) => ({ ...s, done: true, phase: 'done' }));
       }
     });
