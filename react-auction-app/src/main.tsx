@@ -15,6 +15,7 @@ import LivePage from './pages/LivePage'
 import LiveAdminPage from './pages/LiveAdminPage'
 import OBSOverlayPage from './pages/OBSOverlayPage'
 import OBSDockPage from './pages/OBSDockPage'
+import MirrorPage from './pages/MirrorPage'
 import PlatformAdminPage from './pages/PlatformAdminPage'
 import { TenantGate } from './components/TenantGate/TenantGate'
 import './index.css'
@@ -74,7 +75,7 @@ createRoot(document.getElementById('root')!).render(
             <Route path="/live-admin" element={<LiveAdminPage />} />
             <Route path="/obs-overlay" element={<OBSOverlayPage />} />
             <Route path="/obs-dock" element={<OBSDockPage />} />
-            <Route path="/mirror" element={<OBSOverlayPage browserMode />} />
+            <Route path="/mirror" element={<MirrorPage />} />
 
             {/* Super-admin portal — manage tournaments (tenants) */}
             <Route path="/platform-admin" element={<PlatformAdminPage />} />
@@ -91,7 +92,7 @@ createRoot(document.getElementById('root')!).render(
             <Route path="/:tenantSlug/live-admin" element={<TenantGate><LiveAdminPage /></TenantGate>} />
             <Route path="/:tenantSlug/obs-overlay" element={<TenantGate><OBSOverlayPage /></TenantGate>} />
             <Route path="/:tenantSlug/obs-dock" element={<TenantGate><OBSDockPage /></TenantGate>} />
-            <Route path="/:tenantSlug/mirror" element={<TenantGate><OBSOverlayPage browserMode /></TenantGate>} />
+            <Route path="/:tenantSlug/mirror" element={<TenantGate><MirrorPage /></TenantGate>} />
           </Routes>
         </BrowserRouter>
       </QueryClientProvider>
