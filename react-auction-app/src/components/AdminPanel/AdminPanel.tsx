@@ -10,7 +10,7 @@ import { IoClose, IoSave, IoRefresh, IoDownload, IoVideocam, IoAdd, IoTrash, IoA
 import { auctionPersistence, type AdminSettings, type SponsorRecord } from '../../services/auctionPersistence';
 import { googleSheetsService, imagePreloaderService, resolveMediaToStorage, uploadFileToStorage } from '../../services';
 import { useAuctionStore } from '../../store/auctionStore';
-import { exportSoldPlayers } from '../../utils/exportData';
+import { exportSoldPlayers, downloadPlayersTemplate, downloadScoresTemplate } from '../../utils/exportData';
 import FeatureFlagsTab from './FeatureFlagsTab';
 import StreamingTab from './StreamingTab';
 import './AdminPanel.css';
@@ -2170,11 +2170,27 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
                       <IoDownload size={18} /> Import CSV
                     </button>
                     <button
+                      className="admin-btn admin-btn-info"
+                      onClick={downloadPlayersTemplate}
+                      disabled={isSaving}
+                      title="Download CSV template with sample headers"
+                    >
+                      <IoDownload size={18} /> Players Template
+                    </button>
+                    <button
                       className="admin-btn admin-btn-accent"
                       onClick={() => statsCsvInputRef.current?.click()}
                       disabled={isSaving}
                     >
                       <IoStatsChart size={18} /> Import Scores
+                    </button>
+                    <button
+                      className="admin-btn admin-btn-info"
+                      onClick={downloadScoresTemplate}
+                      disabled={isSaving}
+                      title="Download CSV template for player statistics"
+                    >
+                      <IoDownload size={18} /> Scores Template
                     </button>
                     <label className="admin-page-size">
                       <span>Rows per page</span>

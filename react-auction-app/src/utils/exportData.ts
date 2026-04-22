@@ -75,3 +75,177 @@ export function exportSoldPlayers(players: SoldPlayerRecord[]): void {
   const filename = `auction-sold-players-${timestamp}.csv`;
   downloadCSV(csv, filename);
 }
+
+/**
+ * Generate CSV template for importing players
+ * Includes headers and sample data row
+ */
+export function generatePlayersCSVTemplate(): string {
+  const headers = [
+    'ID',
+    'Name',
+    'Role',
+    'Base Price',
+    'Image URL',
+    'Age',
+    'Date of Birth',
+    'Matches',
+    'Runs',
+    'Wickets',
+    'Batting Best Figures',
+    'Bowling Best Figures',
+    'Innings',
+    'Not Out',
+    'Highest Score',
+    'Average',
+    'Strike Rate',
+    '30s',
+    '50s',
+    '100s',
+    '4s',
+    '6s',
+    'Bowling Matches',
+    'Bowling Innings',
+    'Overs',
+    'Maidens',
+    'Bowling Runs',
+    'BB',
+    '3WKTs',
+    '5WKTs',
+    'Economy',
+    'Bowling SR',
+    'Bowling Average',
+  ];
+
+  // Sample data row to help users understand the format
+  const sampleRow = [
+    'PLAYER001',
+    'John Doe',
+    'Batsman',
+    '500000',
+    'https://example.com/image.jpg',
+    '28',
+    '1995-06-15',
+    '120',
+    '4500',
+    '0',
+    'N/A',
+    'N/A',
+    '100',
+    '5',
+    '156',
+    '45.00',
+    '95.23',
+    '8',
+    '12',
+    '3',
+    '45',
+    '25',
+    '0',
+    '0',
+    '0',
+    '0',
+    '0',
+    'N/A',
+    '0',
+    '0',
+    '0.00',
+    '0.00',
+    '0.00',
+  ];
+
+  const csvContent = [
+    headers.join(','),
+    sampleRow.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','),
+  ].join('\n');
+
+  return csvContent;
+}
+
+/**
+ * Generate CSV template for importing player statistics/scores
+ * Includes headers and sample data row
+ */
+export function generateScoresCSVTemplate(): string {
+  const headers = [
+    'ID',
+    'Full Name',
+    'Matches Played',
+    'Innings',
+    'Not Out',
+    'Runs',
+    'Highest Score',
+    'Average',
+    'Strike Rate',
+    '30s',
+    '50s',
+    '100s',
+    '4s',
+    '6s',
+    'Bowling Matches',
+    'Bowling Innings',
+    'Overs',
+    'Maidens',
+    'Bowling Runs',
+    'Wickets',
+    'BB',
+    '3WKTs',
+    '5WKTs',
+    'Economy',
+    'Bowling SR',
+    'Bowling Average',
+  ];
+
+  // Sample data row
+  const sampleRow = [
+    'PLAYER001',
+    'John Doe',
+    '45',
+    '43',
+    '8',
+    '1850',
+    '89',
+    '52.86',
+    '142.31',
+    '6',
+    '8',
+    '2',
+    '52',
+    '18',
+    '25',
+    '24',
+    '98.5',
+    '12',
+    '450',
+    '28',
+    '3/24',
+    '2',
+    '1',
+    '4.56',
+    '21.07',
+    '16.07',
+  ];
+
+  const csvContent = [
+    headers.join(','),
+    sampleRow.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','),
+  ].join('\n');
+
+  return csvContent;
+}
+
+/**
+ * Download players CSV template
+ */
+export function downloadPlayersTemplate(): void {
+  const csv = generatePlayersCSVTemplate();
+  downloadCSV(csv, 'players-template.csv');
+}
+
+/**
+ * Download scores CSV template
+ */
+export function downloadScoresTemplate(): void {
+  const csv = generateScoresCSVTemplate();
+  downloadCSV(csv, 'scores-template.csv');
+}
