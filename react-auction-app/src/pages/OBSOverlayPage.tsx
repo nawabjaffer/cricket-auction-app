@@ -14,8 +14,10 @@ import { getDatabase, ref, onValue } from 'firebase/database';
 import { getCachedStorageUrl, resolveImageAsync } from '../services/firebaseStorageService';
 import { extractDriveFileId } from '../utils/driveImage';
 import SoldAnimation from '../components/Live/SoldAnimation';
+import { BreakOverlay } from '../components/Overlays/BreakOverlay';
 import type { Player, Team } from '../types';
-import { tenantPath, setActiveTenant, DEFAULT_TENANT_ID } from '../services/tenantPath';
+import type { SponsorRecord } from '../services/auctionPersistence';
+import { tenantPath } from '../services/tenantPath';
 import './OBSOverlayPage.css';
 
 // ── Firebase: module-level synchronous init ──────────────────────────────────
@@ -30,24 +32,9 @@ const FB_CONFIG = {
 const OBS_APP_NAME = 'obs-overlay';
 const obsApp = getApps().find((a) => a.name === OBS_APP_NAME) ?? initializeApp(FB_CONFIG, OBS_APP_NAME);
 const obsDb  = getDatabase(obsApp);
-// Resolve tenant from URL (?tenant=xyz or /:tenantSlug/obs-overlay) so OBS
-// can point at any tournament. Falls back to the default tenant.
-(function resolveObsTenant() {
-  try {
-    const params = new URLSearchParams(window.location.search);
-    const qp = params.get('tenant') || params.get('tenantId') || params.get('tournament');
-    if (qp) { setActiveTenant(qp); return; }
-    const segments = window.location.pathname.split('/').filter(Boolean);
-    // Treat first segment as tenant if it looks like a tenant id/slug.
-    if (segments.length >= 2 && /^[a-zA-Z0-9_-]+$/.test(segments[0])) {
-      setActiveTenant(segments[0]);
-      return;
-    }
-  } catch { /* ignore */ }
-  setActiveTenant(DEFAULT_TENANT_ID);
-})();
-const PATH_STATE   = tenantPath('auction/currentState');
-const PATH_CONTROL = tenantPath('auction/broadcastControl');
+// Paths are resolved dynamically at subscribe-time so TenantGate's
+// `setActiveTenant()` has already run and the tenant id uses the
+// canonical form (underscores, not hyphens from the URL slug).
 
 // ── Types matching RealtimeAuctionState (includes stats + bid history) ────────
 interface OverlayPlayer {
@@ -71,6 +58,10 @@ interface OverlayPlayer {
 interface OverlayTeam {
   id: string; name: string; logoUrl: string;
   remainingPurse: number;
+  playersBought?: number;
+  totalPlayerThreshold?: number;
+  highestBid?: number;
+  captain?: string;
   primaryColor?: string; secondaryColor?: string;
 }
 interface BidHistoryEntry {
@@ -194,13 +185,31 @@ function PlayerStats({ player }: { player: OverlayPlayer }) {
 export default function OBSOverlayPage() {
   const [state,         setState]        = useState<OverlayState | null>(null);
   const [broadcastMode, setBroadcastMode] = useState<string>('auction');
+  const [broadcastControl, setBroadcastControl] = useState<{
+    mode: string;
+    breakDuration?: number;
+    breakStartedAt?: number;
+    sponsorDisplayDuration?: number;
+    selectedTeamId?: string | null;
+    teamSquadTeamId?: string | null;
+    lastUpdate?: number;
+  } | null>(null);
   const [activeOverlay, setActiveOverlay] = useState<'sold' | 'unsold' | null>(null);
   const [connected,     setConnected]    = useState(false);
+  const [sponsors,      setSponsors]     = useState<SponsorRecord[]>([]);
+  const [adminSettings, setAdminSettings] = useState<{ organizerLogo?: string; organizerName?: string } | null>(null);
   const animatingRef = useRef(false);
 
   useEffect(() => {
+    // Resolve paths at subscribe-time so the active tenant (set by TenantGate)
+    // is used. This avoids the slug-vs-id mismatch (epl-2026 vs epl_2026).
+    const pathState    = tenantPath('auction/currentState');
+    const pathControl  = tenantPath('auction/broadcastControl');
+    const pathSponsors = tenantPath('auction/sponsors');
+    const pathAdminSet = tenantPath('auction/adminSettings');
+
     const unsubState = onValue(
-      ref(obsDb, PATH_STATE),
+      ref(obsDb, pathState),
       (snap) => {
         setConnected(true);
         if (!snap.exists()) return;
@@ -215,10 +224,32 @@ export default function OBSOverlayPage() {
       (err) => console.error('[OBSOverlay] state error:', err)
     );
     const unsubControl = onValue(
-      ref(obsDb, PATH_CONTROL),
-      (snap) => { if (snap.exists()) setBroadcastMode(snap.val()?.mode ?? 'auction'); }
+      ref(obsDb, pathControl),
+      (snap) => {
+        if (snap.exists()) {
+          const ctrl = snap.val();
+          setBroadcastMode(ctrl?.mode ?? 'auction');
+          setBroadcastControl(ctrl ?? null);
+        } else {
+          setBroadcastMode('auction');
+          setBroadcastControl(null);
+        }
+      }
     );
-    return () => { unsubState(); unsubControl(); };
+    const unsubSponsors = onValue(
+      ref(obsDb, pathSponsors),
+      (snap) => {
+        if (!snap.exists()) { setSponsors([]); return; }
+        const raw = snap.val();
+        const list: SponsorRecord[] = Array.isArray(raw) ? raw : Object.values(raw ?? {});
+        setSponsors(list.filter((s): s is SponsorRecord => !!s && typeof s === 'object' && 'id' in s));
+      }
+    );
+    const unsubAdmin = onValue(
+      ref(obsDb, pathAdminSet),
+      (snap) => { if (snap.exists()) setAdminSettings(snap.val()); }
+    );
+    return () => { unsubState(); unsubControl(); unsubSponsors(); unsubAdmin(); };
   }, []);
 
   // ── Derived ───────────────────────────────────────────────────────────────
@@ -228,7 +259,24 @@ export default function OBSOverlayPage() {
   const teams         = state?.teams         ?? [];
   const bidHistory    = state?.bidHistory    ?? [];
   const isBreak       = broadcastMode === 'break';
-  const hasPlayer     = !!currentPlayer && !activeOverlay && !isBreak;
+  const isStandings   = broadcastMode === 'standings';
+  const isTeamSquad   = broadcastMode === 'teamSquad';
+  const overlayModeActive = isBreak || isStandings || isTeamSquad;
+  const hasPlayer     = !!currentPlayer && !activeOverlay && !overlayModeActive;
+
+  // Focused team for standings panel
+  const standingsTeam = useMemo(() => {
+    if (!isStandings) return null;
+    const id = broadcastControl?.selectedTeamId;
+    return teams.find((t) => t.id === id) ?? teams[0] ?? null;
+  }, [isStandings, broadcastControl?.selectedTeamId, teams]);
+
+  // Focused team for teamSquad view
+  const squadTeam = useMemo(() => {
+    if (!isTeamSquad) return null;
+    const id = broadcastControl?.teamSquadTeamId;
+    return teams.find((t) => t.id === id) ?? teams[0] ?? null;
+  }, [isTeamSquad, broadcastControl?.teamSquadTeamId, teams]);
 
   // ── Image resolution via Firebase Storage ─────────────────────────────────
   const playerStoragePath = currentPlayer
@@ -260,9 +308,10 @@ export default function OBSOverlayPage() {
         )}
       </AnimatePresence>
 
-      {/* Teams ticker */}
+      {/* Teams ticker — always visible marquee whenever we have team data and
+          no full-screen overlay (break/squad) is active. */}
       <AnimatePresence>
-        {teams.length > 0 && hasPlayer && (
+        {teams.length > 0 && !isBreak && !isTeamSquad && !activeOverlay && (
           <motion.div className="obs-ticker"
             initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}
             transition={{ duration: 0.3 }}>
@@ -382,6 +431,96 @@ export default function OBSOverlayPage() {
             amount={currentBid || 0}
             onComplete={() => { animatingRef.current = false; setActiveOverlay(null); }}
           />
+        )}
+      </AnimatePresence>
+
+      {/* ── BREAK OVERLAY (ads + sponsor carousel with timer) ─────────── */}
+      <BreakOverlay
+        isVisible={isBreak}
+        durationSeconds={(() => {
+          const total = broadcastControl?.breakDuration ?? 120;
+          const started = broadcastControl?.breakStartedAt;
+          const last = broadcastControl?.lastUpdate;
+          if (started && last) {
+            const elapsed = Math.max(0, Math.floor((last - started) / 1000));
+            return Math.max(total - elapsed, 1);
+          }
+          return total;
+        })()}
+        key={`break-${broadcastControl?.breakStartedAt ?? 'n'}`}
+        sponsorDisplayDuration={broadcastControl?.sponsorDisplayDuration ?? 15}
+        sponsors={sponsors}
+        organizerLogo={adminSettings?.organizerLogo}
+        auctionTitle={adminSettings?.organizerName ? `${adminSettings.organizerName} AUCTION` : undefined}
+        onClose={() => { /* OBS is read-only; actual close is driven by desktop */ }}
+      />
+
+      {/* ── TEAM STATS PANEL (standings) ──────────────────────────────── */}
+      <AnimatePresence>
+        {isStandings && standingsTeam && (
+          <motion.div
+            className="obs-team-stats"
+            initial={{ x: '110%', opacity: 0 }}
+            animate={{ x: 0, opacity: 1 }}
+            exit={{ x: '110%', opacity: 0 }}
+            transition={{ type: 'spring', damping: 26, stiffness: 280 }}
+          >
+            <div className="obs-team-stats__header">
+              {standingsTeam.logoUrl && (
+                <img src={standingsTeam.logoUrl} alt="" className="obs-team-stats__logo" />
+              )}
+              <div className="obs-team-stats__title">{standingsTeam.name}</div>
+            </div>
+            <div className="obs-team-stats__grid">
+              <div className="obs-team-stats__cell">
+                <div className="obs-team-stats__val">{standingsTeam.playersBought ?? 0}</div>
+                <div className="obs-team-stats__lbl">PLAYERS</div>
+              </div>
+              <div className="obs-team-stats__cell">
+                <div className="obs-team-stats__val">{fmt(standingsTeam.remainingPurse ?? 0)}</div>
+                <div className="obs-team-stats__lbl">PURSE</div>
+              </div>
+              <div className="obs-team-stats__cell">
+                <div className="obs-team-stats__val">{standingsTeam.totalPlayerThreshold ?? '-'}</div>
+                <div className="obs-team-stats__lbl">SLOTS</div>
+              </div>
+              <div className="obs-team-stats__cell">
+                <div className="obs-team-stats__val">{fmt(standingsTeam.highestBid ?? 0)}</div>
+                <div className="obs-team-stats__lbl">HIGHEST BID</div>
+              </div>
+            </div>
+            {standingsTeam.captain && (
+              <div className="obs-team-stats__captain">ICON: {standingsTeam.captain}</div>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ── TEAM SQUAD VIEW ───────────────────────────────────────────── */}
+      <AnimatePresence>
+        {isTeamSquad && squadTeam && (
+          <motion.div
+            className="obs-team-squad"
+            initial={{ opacity: 0, scale: 0.96 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.96 }}
+            transition={{ duration: 0.35 }}
+          >
+            <div className="obs-team-squad__header">
+              {squadTeam.logoUrl && (
+                <img src={squadTeam.logoUrl} alt="" className="obs-team-squad__logo" />
+              )}
+              <div className="obs-team-squad__name">{squadTeam.name}</div>
+              <div className="obs-team-squad__meta">
+                <span>{squadTeam.playersBought ?? 0} Players</span>
+                <span>•</span>
+                <span>Purse {fmt(squadTeam.remainingPurse ?? 0)}</span>
+              </div>
+            </div>
+            <div className="obs-team-squad__note">
+              Squad view mirrors the main screen. Detailed player grid appears on the desktop.
+            </div>
+          </motion.div>
         )}
       </AnimatePresence>
     </div>

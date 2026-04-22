@@ -13,6 +13,8 @@ import { authService } from '../services';
 import type { AuthSession } from '../services';
 import { auctionPersistence, type SponsorRecord } from '../services/auctionPersistence';
 import { realtimeSync } from '../services/realtimeSync';
+import { onValue, ref } from 'firebase/database';
+import { tenantPath } from '../services/tenantPath';
 import { useRealtimeMobileSync } from '../hooks/useRealtimeSync';
 import { useMotionSensor } from '../hooks/useMotionSensor';
 import { TeamLogo } from '../components/TeamLogo/TeamLogo';
@@ -138,29 +140,60 @@ export function MobileBiddingLivePage() {
     return () => { isMounted = false; };
   }, []);
 
-  // Load all players & sold records for Scout / My Team / Players tabs
+  // Real-time subscription for players & sold records (Scout / My Team / Players tabs)
   useEffect(() => {
-    if (playersLoaded) return;
-    let isMounted = true;
-    const loadAllData = async () => {
+    let cancelled = false;
+    let unsubPlayers: (() => void) | null = null;
+    let unsubSold: (() => void) | null = null;
+
+    const setup = async () => {
       try {
         await realtimeSync.ensureInitialized();
         const db = realtimeSync.getDatabase();
-        if (!db) return;
+        if (!db || cancelled) return;
         auctionPersistence.initialize(db);
-        const [players, sold] = await Promise.all([
-          auctionPersistence.getAdminPlayers(),
-          auctionPersistence.getSoldPlayers(),
-        ]);
-        if (!isMounted) return;
-        if (players) setAllPlayers(players);
-        if (sold) setSoldRecords(sold.map(s => ({ id: s.id, teamName: s.teamName, soldAmount: s.soldAmount })));
-        setPlayersLoaded(true);
-      } catch { /* silently fallback */ }
+
+        // Subscribe to admin players — live updates
+        const playersRef = ref(db, tenantPath('auction/adminPlayers'));
+        unsubPlayers = onValue(playersRef, (snap) => {
+          if (cancelled) return;
+          if (snap.exists()) {
+            const raw = snap.val();
+            const arr: unknown[] = Array.isArray(raw) ? raw : Object.values(raw ?? {});
+            const players = arr.filter(
+              (p): p is Player => p != null && typeof p === 'object' && 'id' in (p as Record<string, unknown>)
+            );
+            setAllPlayers(players);
+          }
+          if (!playersLoaded) setPlayersLoaded(true);
+        });
+
+        // Subscribe to sold players — live updates
+        const soldRef = ref(db, tenantPath('auction/soldPlayers'));
+        unsubSold = onValue(soldRef, (snap) => {
+          if (cancelled) return;
+          if (snap.exists()) {
+            const data = snap.val();
+            const records = (Object.values(data) as Array<{ id: string; teamName: string; soldAmount: number }>)
+              .map(s => ({ id: s.id, teamName: s.teamName, soldAmount: s.soldAmount }));
+            setSoldRecords(records);
+          } else {
+            setSoldRecords([]);
+          }
+        });
+      } catch {
+        // Silently fallback — mark as loaded so UI doesn't stay in loading state
+        if (!cancelled && !playersLoaded) setPlayersLoaded(true);
+      }
     };
-    loadAllData();
-    return () => { isMounted = false; };
-  }, [playersLoaded]);
+
+    setup();
+    return () => {
+      cancelled = true;
+      unsubPlayers?.();
+      unsubSold?.();
+    };
+  }, []);
 
   // Auto-reconnect with exponential backoff
   useEffect(() => {

@@ -201,6 +201,34 @@ function AuctionApp() {
     setShowTeamSquadView(true);
   };
 
+  // ── Broadcast UI overlay state to /live and /obs-overlay ────────────────
+  // Desktop tells the receivers which overlay should be visible via
+  // `broadcastControl.mode`. The data payload (team id, break duration)
+  // lets receivers render an identical view without local state.
+  useEffect(() => {
+    // Derive the current mode from local UI flags. Priority:
+    //   break > teamSquad > standings (team stats) > auction (default)
+    let mode: 'auction' | 'break' | 'teamSquad' | 'standings' = 'auction';
+    if (showBreakOverlay) mode = 'break';
+    else if (showTeamSquadView) mode = 'teamSquad';
+    else if (showTeamOverlay) mode = 'standings';
+
+    const payload = {
+      mode,
+      lastUpdate: Date.now(),
+      ...(mode === 'break' ? { breakDuration: breakDurationSeconds, breakStartedAt: Date.now() } : {}),
+      ...(mode === 'teamSquad' ? { teamSquadTeamId: selectedTeamForSquad || null } : {}),
+      ...(mode === 'standings' ? { selectedTeamId: selectedTeam?.id || allTeams[0]?.id || null } : {}),
+    };
+
+    realtimeSync.setBroadcastControl(payload).catch((err) => {
+      console.warn('[App] Failed to publish broadcast control:', err);
+    });
+    // We intentionally depend only on visibility flags + relevant ids to
+    // avoid publishing on every player/bid change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showBreakOverlay, showTeamSquadView, showTeamOverlay, selectedTeamForSquad, selectedTeam?.id]);
+
   const handleOpenTeamDisplay = useCallback(() => {
     const initialTeamId = selectedTeam?.id || allTeams[0]?.id || '';
 

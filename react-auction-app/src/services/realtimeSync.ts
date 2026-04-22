@@ -43,7 +43,7 @@ const CAMERA_CONFIG_PATH          = () => tenantPath('auction/cameraConfig');
 const MOBILE_BIDDING_CONFIG_PATH  = () => tenantPath('auction/mobileBiddingConfig');
 
 // Broadcast control state (synced from /live-admin to /live)
-export type BroadcastMode = 'auction' | 'break' | 'ad' | 'standings';
+export type BroadcastMode = 'auction' | 'break' | 'ad' | 'standings' | 'teamSquad';
 export type BroadcastTransition = 'cut' | 'fade' | 'slide' | 'zoom';
 export type CameraLayoutMode = 'single' | 'pip' | 'split' | 'quad';
 
@@ -55,6 +55,10 @@ export interface BroadcastControlState {
   sponsorDisplayDuration?: number; // seconds per sponsor in center (10-60)
   transition?: BroadcastTransition;
   cameraLayout?: CameraLayoutMode;
+  // Team stats panel (mode === 'standings'): which team is focused.
+  selectedTeamId?: string | null;
+  // Team squad view (mode === 'teamSquad'): which team's squad is shown.
+  teamSquadTeamId?: string | null;
   lastUpdate: number;
 }
 
@@ -181,6 +185,11 @@ class RealtimeSyncService {
   private readonly bidListeners = new Set<BidListener>();
   private readonly sessionResetListeners = new Set<SessionResetListener>();
   private unsubscribers: Unsubscribe[] = [];
+  // Guards: ensure each Firebase subscription is attached at most once even if
+  // `initAsDesktop` / `initAsMobile` are called multiple times across pages.
+  private _stateListenerAttached = false;
+  private _bidListenerAttached = false;
+  private _sessionResetListenerAttached = false;
   
   // Local state cache
   private currentState: RealtimeAuctionState | null = null;
@@ -229,7 +238,10 @@ class RealtimeSyncService {
 
   /**
    * Initialize as Desktop (broadcaster)
-   * Desktop writes auction state to Firebase
+   * Desktop writes auction state to Firebase.
+   * NOTE: Desktop role is "sticky" — once set we never downgrade to 'mobile'.
+   * This protects the broadcaster singleton from being clobbered when another
+   * page (e.g. /live) incidentally calls `initAsMobile()`.
    */
   async initAsDesktop(): Promise<void> {
     const initialized = await this.initialize();
@@ -237,17 +249,20 @@ class RealtimeSyncService {
       console.error('[RealtimeSync] Failed to initialize as desktop');
       return;
     }
-    
+
     this.role = 'desktop';
     if (IS_DEV) console.log('[RealtimeSync] Initialized as DESKTOP');
-    
+
     // Listen for mobile bids
     this.listenForMobileBids();
   }
 
   /**
    * Initialize as Mobile (receiver)
-   * Mobile reads auction state and can submit bids
+   * Mobile reads auction state and can submit bids.
+   * If this instance is already acting as desktop (same tab), we do NOT flip
+   * the role — mobile-only listeners are still attached so state/reset
+   * subscriptions work, but desktop broadcasts keep flowing.
    */
   async initAsMobile(): Promise<void> {
     const initialized = await this.initialize();
@@ -255,14 +270,16 @@ class RealtimeSyncService {
       console.error('[RealtimeSync] Failed to initialize as mobile');
       return;
     }
-    
-    this.role = 'mobile';
-    if (IS_DEV) console.log('[RealtimeSync] Initialized as MOBILE');
-    
-    // Listen for state changes
+
+    if (this.role !== 'desktop') {
+      this.role = 'mobile';
+    }
+    if (IS_DEV) console.log('[RealtimeSync] Initialized as MOBILE (role =', this.role, ')');
+
+    // Listen for state changes (idempotent)
     this.listenForStateChanges();
 
-    // Listen for session reset
+    // Listen for session reset (idempotent)
     this.listenForSessionReset();
   }
 
@@ -347,7 +364,8 @@ class RealtimeSyncService {
    * Mobile: Listen for auction state changes
    */
   private listenForStateChanges(): void {
-    if (!this.db) return;
+    if (!this.db || this._stateListenerAttached) return;
+    this._stateListenerAttached = true;
 
     if (IS_DEV) console.log('[RealtimeSync] Starting state listener...');
     
@@ -383,7 +401,8 @@ class RealtimeSyncService {
    * Desktop: Listen for mobile bids
    */
   private listenForMobileBids(): void {
-    if (!this.db) return;
+    if (!this.db || this._bidListenerAttached) return;
+    this._bidListenerAttached = true;
 
     if (IS_DEV) console.log('[RealtimeSync] Starting bid listener...');
     
@@ -432,7 +451,8 @@ class RealtimeSyncService {
    * Mobile: Listen for session reset events
    */
   private listenForSessionReset(): void {
-    if (!this.db) return;
+    if (!this.db || this._sessionResetListenerAttached) return;
+    this._sessionResetListenerAttached = true;
 
     const resetRef = ref(this.db, SESSION_RESET_PATH());
     const unsubscribe = onValue(

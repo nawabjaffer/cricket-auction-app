@@ -17,6 +17,7 @@ export interface OBSSceneMap {
   break: string;
   ad: string;
   standings: string;
+  teamSquad: string;
 }
 
 const DEFAULT_SCENE_MAP: OBSSceneMap = {
@@ -24,6 +25,7 @@ const DEFAULT_SCENE_MAP: OBSSceneMap = {
   break: 'Break',
   ad: 'Sponsor',
   standings: 'Standings',
+  teamSquad: 'TeamSquad',
 };
 
 class OBSIntegrationPlugin {
