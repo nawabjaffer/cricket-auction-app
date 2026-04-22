@@ -2129,6 +2129,19 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
                   <div className="admin-compact-list">
                     {paginatedPlayers.map((player) => (
                       <div key={player.id} className="admin-compact-item">
+                        <div className="admin-compact-avatar" aria-hidden="true">
+                          <span className="admin-compact-avatar-fallback">
+                            {player.name.charAt(0).toUpperCase()}
+                          </span>
+                          {player.imageUrl && (
+                            <img
+                              src={player.imageUrl}
+                              alt=""
+                              className="admin-compact-avatar-img"
+                              onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                            />
+                          )}
+                        </div>
                         <div className="admin-compact-main">
                           <div className="admin-player-name-row">
                             <strong>{player.name}</strong>
