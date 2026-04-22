@@ -124,6 +124,14 @@ export interface Team {
   brandLogoUrl?: string;
   ownerCompany?: string;
   brandTagline?: string;
+  /**
+   * Optional login credentials for /connect-bidding when the tournament
+   * runs in strict-login mode (adminSettings.easyLoginMode = false).
+   * When easyLoginMode is true, these are ignored and a derived username
+   * (slugified team name) with a default password is used.
+   */
+  authUsername?: string;
+  authPassword?: string;
 }
 
 export interface TeamStats {

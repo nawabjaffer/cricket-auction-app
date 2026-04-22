@@ -48,6 +48,8 @@ const TAB_CONFIG: { key: MainTab; label: string; icon: typeof IoFlash }[] = [
 export function MobileBiddingLivePage() {
   const [session, setSession] = useState<AuthSession | null>(authService.getSession());
   const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [easyLoginMode, setEasyLoginMode] = useState(true);
   const [loginError, setLoginError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [feedback, setFeedback] = useState<BidFeedback | null>(null);
@@ -71,16 +73,20 @@ export function MobileBiddingLivePage() {
     mobileBiddingConfig,
   } = useRealtimeMobileSync();
 
-  // Build credentials from live team data
+  // Build credentials from live team data. If the admin has configured per-team
+  // username/password in the Teams tab, those take precedence; otherwise we
+  // derive a slugified username + default password (easy-login compatible).
   const runtimeCredentials = useMemo(() => {
     return teams.map((team, index) => {
       const normalized = team.name.toLowerCase().replace(/[^a-z0-9]+/g, '');
-      const uname = normalized || `team${index + 1}`;
+      const derivedUname = normalized || `team${index + 1}`;
+      const uname = (team.authUsername?.trim() || derivedUname).toLowerCase();
+      const password = team.authPassword?.trim() || `${derivedUname}123`;
       return {
         teamId: team.id,
         teamName: team.name,
         username: uname,
-        password: `${uname}123`,
+        password,
         primaryColor: team.primaryColor || '#3b82f6',
         secondaryColor: team.secondaryColor || '#1e40af',
         logoUrl: team.logoUrl || '',
@@ -138,6 +144,28 @@ export function MobileBiddingLivePage() {
     };
     loadSponsors();
     return () => { isMounted = false; };
+  }, []);
+
+  // Real-time subscription for admin settings (easy login mode)
+  useEffect(() => {
+    let cancelled = false;
+    let unsub: (() => void) | null = null;
+    (async () => {
+      try {
+        await realtimeSync.ensureInitialized();
+        const db = realtimeSync.getDatabase();
+        if (!db || cancelled) return;
+        const settingsRef = ref(db, tenantPath('auction/adminSettings'));
+        unsub = onValue(settingsRef, (snap) => {
+          if (cancelled) return;
+          if (snap.exists()) {
+            const s = snap.val() as { easyLoginMode?: boolean };
+            setEasyLoginMode(s.easyLoginMode !== false); // default true
+          }
+        });
+      } catch { /* ignore — default stays true */ }
+    })();
+    return () => { cancelled = true; unsub?.(); };
   }, []);
 
   // Real-time subscription for players & sold records (Scout / My Team / Players tabs)
@@ -300,11 +328,17 @@ export function MobileBiddingLivePage() {
     }
   }, []);
 
-  // Login by username only — auto-resolve password from credentials
+  // Login by username (+ password when easy-login is OFF). In easy-login mode
+  // the password is resolved automatically from runtimeCredentials; in strict
+  // mode the typed password must match the team's admin-configured password.
   const handleLogin = useCallback(async () => {
     if (!username) { setLoginError('Enter team username'); return; }
     const matchingCred = runtimeCredentials.find(c => c.username.toLowerCase() === username.toLowerCase());
     if (!matchingCred) { setLoginError('Team not found. Check the username.'); return; }
+    if (!easyLoginMode) {
+      if (!password) { setLoginError('Enter team password'); return; }
+      if (password !== matchingCred.password) { setLoginError('Invalid username or password'); return; }
+    }
     setIsLoading(true);
     setLoginError('');
     try {
@@ -320,7 +354,7 @@ export function MobileBiddingLivePage() {
     } finally {
       setIsLoading(false);
     }
-  }, [username, runtimeCredentials]);
+  }, [username, password, easyLoginMode, runtimeCredentials]);
 
   const handleLogout = useCallback(() => {
     authService.logout();
@@ -643,7 +677,8 @@ export function MobileBiddingLivePage() {
                 </div>
 
                 {/* Team cards — tap to login (username-based, no password) */}
-                {runtimeCredentials.length > 0 && (
+                {/* Team cards grid — only visible when Easy Login is enabled */}
+                {easyLoginMode && runtimeCredentials.length > 0 && (
                   <div className="cb-team-card-grid">
                     {runtimeCredentials.map((cred) => {
                       const teamData = teams.find(t => t.id === cred.teamId);
@@ -681,27 +716,60 @@ export function MobileBiddingLivePage() {
                   </motion.div>
                 )}
 
-                {/* Manual username login */}
-                <details className="cb-manual-login">
-                  <summary>Enter username manually</summary>
-                  <form className="cb-login-form" onSubmit={(e) => { e.preventDefault(); handleLogin(); }}>
+                {/* Strict-mode login form (always visible when easy login is OFF) */}
+                {!easyLoginMode ? (
+                  <form className="cb-login-form cb-login-form--strict" onSubmit={(e) => { e.preventDefault(); handleLogin(); }}>
                     <div className="cb-field">
+                      <label htmlFor="cb-username" className="cb-field-label">Team Username</label>
                       <input
                         type="text" id="cb-username" value={username}
                         onChange={(e) => setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9]/g, ''))}
-                        placeholder="Team username (e.g. royal)"
+                        placeholder="e.g. royal"
                         disabled={isLoading} autoComplete="username" autoCapitalize="none"
+                      />
+                    </div>
+                    <div className="cb-field">
+                      <label htmlFor="cb-password" className="cb-field-label">Password</label>
+                      <input
+                        type="password" id="cb-password" value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        placeholder="Enter team password"
+                        disabled={isLoading} autoComplete="current-password"
                       />
                     </div>
                     <motion.button
                       type="submit" className="cb-login-btn"
-                      disabled={isLoading || !username}
+                      disabled={isLoading || !username || !password}
                       whileTap={{ scale: 0.98 }}
                     >
-                      {isLoading ? <span className="cb-spinner" /> : 'Join Team'}
+                      {isLoading ? <span className="cb-spinner" /> : 'Sign In'}
                     </motion.button>
+                    <div className="cb-login-hint">
+                      Credentials are provided by the tournament organizer.
+                    </div>
                   </form>
-                </details>
+                ) : (
+                  <details className="cb-manual-login">
+                    <summary>Enter username manually</summary>
+                    <form className="cb-login-form" onSubmit={(e) => { e.preventDefault(); handleLogin(); }}>
+                      <div className="cb-field">
+                        <input
+                          type="text" id="cb-username" value={username}
+                          onChange={(e) => setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9]/g, ''))}
+                          placeholder="Team username (e.g. royal)"
+                          disabled={isLoading} autoComplete="username" autoCapitalize="none"
+                        />
+                      </div>
+                      <motion.button
+                        type="submit" className="cb-login-btn"
+                        disabled={isLoading || !username}
+                        whileTap={{ scale: 0.98 }}
+                      >
+                        {isLoading ? <span className="cb-spinner" /> : 'Join Team'}
+                      </motion.button>
+                    </form>
+                  </details>
+                )}
               </>
             ) : (
               /* ── Scout Screen — Available Players ── */

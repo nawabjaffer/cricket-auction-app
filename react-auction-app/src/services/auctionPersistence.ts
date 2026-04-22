@@ -203,6 +203,12 @@ export interface AdminSettings {
   auctionRoleOrder?: AuctionRoleCategory[];
   // Under-age spotlight threshold (e.g. 18)
   underAgeThreshold?: number;
+  /**
+   * When true (default), /connect-bidding shows clickable team cards with
+   * zero-password auto-login. When false, teams must type their
+   * admin-configured username and password.
+   */
+  easyLoginMode?: boolean;
 }
 
 class AuctionPersistenceService {
@@ -414,6 +420,8 @@ class AuctionPersistenceService {
       if (t.brandLogoUrl) record.brandLogoUrl = t.brandLogoUrl;
       if (t.ownerCompany) record.ownerCompany = t.ownerCompany;
       if (t.brandTagline) record.brandTagline = t.brandTagline;
+      if (t.authUsername) record.authUsername = t.authUsername;
+      if (t.authPassword) record.authPassword = t.authPassword;
       return record;
     });
 

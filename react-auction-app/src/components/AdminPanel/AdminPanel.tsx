@@ -111,6 +111,8 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
   const [auctionRoleOrder, setAuctionRoleOrder] = useState<AuctionRoleCategory[]>([...DEFAULT_AUCTION_ROLE_ORDER]);
   // Under-age spotlight threshold
   const [underAgeThreshold, setUnderAgeThreshold] = useState(18);
+  // Easy login mode for /connect-bidding — true = tap team card, false = username/password
+  const [easyLoginMode, setEasyLoginMode] = useState(true);
 
   // Store
   const { teams, setTeams, soldPlayers, originalPlayers, setAdminPlayerOverrides, reconcilePlayerPools } = useAuctionStore();
@@ -269,6 +271,7 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
           if (settings.underAgeThreshold != null) {
             setUnderAgeThreshold(settings.underAgeThreshold);
           }
+          setEasyLoginMode(settings.easyLoginMode !== false); // default true
         }
       } catch (error) {
         console.error('[AdminPanel] Failed to load settings:', error);
@@ -355,6 +358,7 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
         updatedAt: Date.now(),
         auctionRoleOrder,
         underAgeThreshold,
+        easyLoginMode,
       };
 
       await auctionPersistence.saveAdminSettings(settings);
@@ -1673,6 +1677,23 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
                     </small>
                   </div>
 
+                  <h3 style={{ marginTop: '2rem' }}>Connect-Bidding Login</h3>
+                  <div className="form-group">
+                    <label className="admin-toggle-row">
+                      <input
+                        type="checkbox"
+                        checked={easyLoginMode}
+                        onChange={(e) => setEasyLoginMode(e.target.checked)}
+                      />
+                      <span>Easy Login Mode</span>
+                    </label>
+                    <small style={{ color: '#6b7280', display: 'block', marginTop: '0.35rem' }}>
+                      {easyLoginMode
+                        ? 'ON — team representatives tap their team card on /connect-bidding to join instantly. No password required.'
+                        : 'OFF — team representatives must enter the username and password configured per team in the Teams tab.'}
+                    </small>
+                  </div>
+
                   <h3 style={{ marginTop: '2rem' }}>Theme Colors</h3>
 
                   <div className="color-grid">
@@ -2600,6 +2621,38 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
                           placeholder="https://drive.google.com/..."
                         />
                       )}
+                    </div>
+
+                    <div className="admin-media-field">
+                      <div className="admin-media-header">
+                        <label>Team Login (strict mode)</label>
+                        <span>{easyLoginMode ? 'Optional — Easy Login is ON' : 'Required — Easy Login is OFF'}</span>
+                      </div>
+                      <div className="form-row">
+                        <div className="form-group" style={{ flex: 1 }}>
+                          <label>Username</label>
+                          <input
+                            type="text"
+                            value={teamDraft.authUsername || ''}
+                            onChange={(e) => setTeamDraft({ ...teamDraft, authUsername: e.target.value.toLowerCase().replace(/[^a-z0-9]/g, '') })}
+                            placeholder="e.g. royal"
+                            autoComplete="off"
+                          />
+                        </div>
+                        <div className="form-group" style={{ flex: 1 }}>
+                          <label>Password</label>
+                          <input
+                            type="text"
+                            value={teamDraft.authPassword || ''}
+                            onChange={(e) => setTeamDraft({ ...teamDraft, authPassword: e.target.value })}
+                            placeholder="e.g. royal@2026"
+                            autoComplete="off"
+                          />
+                        </div>
+                      </div>
+                      <small style={{ color: '#6b7280' }}>
+                        Used on /connect-bidding when Easy Login is OFF. Share these with the team manager only.
+                      </small>
                     </div>
 
                     <div className="admin-modal-actions">

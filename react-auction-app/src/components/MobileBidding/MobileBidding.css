@@ -228,6 +228,29 @@
   gap: 0.75rem;
   padding: 0.75rem;
 }
+.cb-login-form--strict {
+  gap: 0.85rem;
+  padding: 1rem;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: var(--cb-radius-md, 14px);
+  margin-top: 1rem;
+}
+.cb-field-label {
+  display: block;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.6);
+  margin-bottom: 0.35rem;
+}
+.cb-login-hint {
+  margin-top: 0.25rem;
+  font-size: 0.75rem;
+  color: rgba(255,255,255,0.55);
+  text-align: center;
+}
 .cb-field input {
   width: 100%;
   padding: 0.7rem 0.85rem;
