@@ -197,38 +197,35 @@ function AuctionApp({ mirrorMode = false }: { mirrorMode?: boolean }) {
 
   // Mirror follower mode: hydrate local store from realtime desktop state
   // so this page stays in lockstep with the controlling laptop.
+  // We use a ref to hold the latest sync data and trigger only on lastUpdate
+  // (a primitive) to avoid infinite re-render loops from new object references.
+  const mirrorSyncRef = useRef(mirrorSync);
+  mirrorSyncRef.current = mirrorSync;
+
   useEffect(() => {
-    if (!isMirrorMode || !mirrorSync.isConnected) return;
+    if (!isMirrorMode) return;
+    const ms = mirrorSyncRef.current;
+    if (!ms.isConnected || !ms.lastUpdate) return;
 
     useAuctionStore.setState((prev) => ({
       ...prev,
-      currentPlayer: mirrorSync.currentPlayer,
-      currentBid: mirrorSync.currentBid,
-      selectedTeam: mirrorSync.selectedTeam,
-      teams: mirrorSync.teams,
-      bidHistory: mirrorSync.bidHistory,
-      activeOverlay: mirrorSync.activeOverlay,
+      currentPlayer: ms.currentPlayer,
+      currentBid: ms.currentBid,
+      selectedTeam: ms.selectedTeam,
+      teams: ms.teams,
+      bidHistory: ms.bidHistory,
+      activeOverlay: ms.activeOverlay,
       auctionState: {
         ...prev.auctionState,
-        currentPlayer: mirrorSync.currentPlayer,
-        currentBid: mirrorSync.currentBid,
-        selectedTeam: mirrorSync.selectedTeam,
-        bidHistory: mirrorSync.bidHistory,
-        isAuctionActive: mirrorSync.auctionActive,
+        currentPlayer: ms.currentPlayer,
+        currentBid: ms.currentBid,
+        selectedTeam: ms.selectedTeam,
+        bidHistory: ms.bidHistory,
+        isAuctionActive: ms.auctionActive,
       },
     }));
-  }, [
-    isMirrorMode,
-    mirrorSync.isConnected,
-    mirrorSync.lastUpdate,
-    mirrorSync.currentPlayer,
-    mirrorSync.currentBid,
-    mirrorSync.selectedTeam,
-    mirrorSync.teams,
-    mirrorSync.bidHistory,
-    mirrorSync.activeOverlay,
-    mirrorSync.auctionActive,
-  ]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isMirrorMode, mirrorSync.lastUpdate]);
 
   // Mirror follower mode: adopt desktop broadcast view mode (break/squad/standings).
   useEffect(() => {
