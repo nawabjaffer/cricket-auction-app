@@ -50,6 +50,31 @@ export default function ConnectBiddingAdminPage() {
     bidHistory,
   } = useRealtimeMobileSync();
 
+  // Build runtime credentials from live team data (same as MobileBiddingLivePage)
+  const runtimeCredentials = useMemo(() => {
+    return teams.map((team, index) => {
+      const normalized = team.name.toLowerCase().replace(/[^a-z0-9]+/g, '');
+      const derivedUname = normalized || `team${index + 1}`;
+      const uname = ((team as any).authUsername?.trim() || derivedUname).toLowerCase();
+      const pass = ((team as any).authPassword?.trim() || `${derivedUname}123`);
+      return {
+        teamId: team.id,
+        teamName: team.name,
+        username: uname,
+        password: pass,
+        primaryColor: team.primaryColor || '#3b82f6',
+        secondaryColor: team.secondaryColor || '#1e40af',
+        logoUrl: team.logoUrl || '',
+      };
+    });
+  }, [teams]);
+
+  useEffect(() => {
+    if (runtimeCredentials.length > 0) {
+      authService.setTeamCredentials(runtimeCredentials);
+    }
+  }, [runtimeCredentials]);
+
   // Clear feedback after delay
   useEffect(() => {
     if (!feedback) return;
@@ -66,12 +91,20 @@ export default function ConnectBiddingAdminPage() {
     } catch {}
   }, [email, adminLogin]);
 
-  // Team login handler
-  const handleTeamLogin = useCallback((e?: React.FormEvent) => {
-    if (e) e.preventDefault();
+  // Team login handler (accepts event or credential object)
+  const handleTeamLogin = useCallback((arg?: React.FormEvent | any) => {
+    if (arg && typeof arg.preventDefault === 'function') arg.preventDefault();
     setLoginError('');
     setIsLoading(true);
-    const result = authService.login(username, password);
+
+    let result;
+    if (arg && arg.teamId) {
+      // clicked credential card
+      result = authService.login(arg.username, arg.password);
+    } else {
+      result = authService.login(username, password);
+    }
+
     if (result.success && result.session) {
       setTeamSession(result.session);
       setUsername('');
@@ -198,6 +231,31 @@ export default function ConnectBiddingAdminPage() {
               <span>{isConnected ? 'Auction Live' : 'Waiting for auction...'}</span>
               {teams.length > 0 && <span className="cb-team-count">{teams.length} teams</span>}
             </div>
+            {/* Team cards — quick login when runtime credentials are available */}
+            {runtimeCredentials.length > 0 && (
+              <div className="cb-team-card-grid">
+                {runtimeCredentials.map((cred) => (
+                  <motion.button
+                    key={cred.teamId}
+                    type="button"
+                    className={`cb-team-card-btn`}
+                    onClick={() => handleTeamLogin(cred)}
+                    style={{ '--card-bg': cred.primaryColor, '--card-bg2': cred.secondaryColor } as React.CSSProperties}
+                    whileTap={{ scale: 0.96 }}
+                    disabled={isLoading}
+                  >
+                    {cred.logoUrl ? (
+                      <TeamLogo logoUrl={cred.logoUrl} teamName={cred.teamName} size="sm" className="cb-team-card-logo" />
+                    ) : (
+                      <div className="cb-team-card-initials">{cred.teamName.slice(0, 2).toUpperCase()}</div>
+                    )}
+                    <span className="cb-team-card-name">{cred.teamName}</span>
+                    <span className="cb-team-card-username">@{cred.username}</span>
+                  </motion.button>
+                ))}
+              </div>
+            )}
+
             <form className="cb-login-form cb-login-form--strict" onSubmit={handleTeamLogin}>
               <div className="cb-field">
                 <label htmlFor="cb-username" className="cb-field-label">Team Username</label>
