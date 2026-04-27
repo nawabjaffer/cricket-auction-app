@@ -361,8 +361,9 @@ describe('retry', () => {
     const fn = vi.fn().mockRejectedValue(new Error('always fail'));
     vi.useFakeTimers();
     const p = retry(fn, 2, 1);
+    const rejection = expect(p).rejects.toThrow('always fail');
     await vi.advanceTimersByTimeAsync(100);
-    await expect(p).rejects.toThrow('always fail');
+    await rejection;
     vi.useRealTimers();
   });
 });
