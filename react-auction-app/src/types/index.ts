@@ -65,6 +65,7 @@ export interface Player {
   basePrice: number;
   dateOfBirth?: string;
   phone?: string;
+  whatsappNumber?: string;
   // Expanded stats (optional for backward compatibility)
   battingStats?: BattingStats;
   bowlingStats?: BowlingStats;
@@ -433,6 +434,7 @@ export interface PlayerColumnMappings {
   dateOfBirth: number;
   bloodGroup: number;
   phoneNumber: number;
+  whatsappNumber?: number;
   jerseySize: number;
   shoeSize: number;
   role: number;

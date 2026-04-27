@@ -471,6 +471,8 @@ class AuctionPersistenceService {
         bowlingBestFigures: p.bowlingBestFigures ?? '',
         basePrice: p.basePrice ?? 0,
       };
+      if (p.phone) record.phone = p.phone;
+      if (p.whatsappNumber) record.whatsappNumber = p.whatsappNumber;
       if (p.dateOfBirth) record.dateOfBirth = p.dateOfBirth;
       if (p.battingStats) record.battingStats = p.battingStats;
       if (p.bowlingStats) record.bowlingStats = p.bowlingStats;

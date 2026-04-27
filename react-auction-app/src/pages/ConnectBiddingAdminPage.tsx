@@ -8,7 +8,7 @@
 
 import { useState, useCallback, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { IoClose, IoShieldCheckmark, IoPeople, IoWallet, IoTrophy, IoStatsChart } from 'react-icons/io5';
+import { IoClose, IoShieldCheckmark, IoPeople } from 'react-icons/io5';
 import { GiCricketBat } from 'react-icons/gi';
 import { useRealtimeMobileSync } from '../hooks/useRealtimeSync';
 import { useAdminAuth } from '../hooks/useAdminAuth';
@@ -47,7 +47,6 @@ export default function ConnectBiddingAdminPage() {
     isConnected,
     lastUpdate,
     submitBid,
-    bidHistory,
   } = useRealtimeMobileSync();
 
   // Build runtime credentials from live team data (same as MobileBiddingLivePage)
@@ -161,11 +160,10 @@ export default function ConnectBiddingAdminPage() {
     return new Date(lastUpdate).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
   }, [lastUpdate]);
 
-  // Auction-wide stats
-  const totalPlayersSold = teams.reduce((s, t) => s + (t.playersBought || 0), 0);
-  const totalMoneySpent = teams.reduce((s, t) => s + ((t.allocatedAmount || 0) - t.remainingPurse), 0);
-  const topBuyTeam = useMemo(() => [...teams].sort((a, b) => (b.highestBid || 0) - (a.highestBid || 0))[0], [teams]);
-  const teamsByPlayers = useMemo(() => [...teams].sort((a, b) => (b.playersBought || 0) - (a.playersBought || 0)), [teams]);
+  const loggedInTeam = useMemo(
+    () => teams.find((t) => t.id === teamSession?.teamId) || teams.find((t) => t.name === teamSession?.teamName) || null,
+    [teams, teamSession],
+  );
 
   const themePrimary = '#e4be75';
   const themeSecondary = '#24467c';
@@ -340,14 +338,15 @@ export default function ConnectBiddingAdminPage() {
                 </div>
                 {selectedTeam && (
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, padding: '0.4rem 0.7rem', background: 'rgba(255,255,255,0.08)', borderRadius: 8 }}>
-                    {selectedTeam.logoUrl && <TeamLogo logoUrl={selectedTeam.logoUrl} teamName={selectedTeam.name} size="sm" />}
-                    <span style={{ fontWeight: 600, fontSize: '0.85rem' }}>{selectedTeam.name}</span>
-                    <span style={{ marginLeft: 'auto', fontSize: '0.7rem', background: 'rgba(251,191,36,0.25)', color: '#fbbf24', padding: '2px 8px', borderRadius: 6, fontWeight: 700 }}>LEADING</span>
-                  </div>
-                )}
-                {bidHistory.length > 0 && (
-                  <div style={{ marginTop: 8, fontSize: '0.72rem', opacity: 0.6 }}>
-                    History: {bidHistory.slice(-4).map(b => `${b.teamName} ${formatLakhs(b.amount)}`).join(' → ')}
+                    {loggedInTeam && selectedTeam.id === loggedInTeam.id ? (
+                      <>
+                        {selectedTeam.logoUrl && <TeamLogo logoUrl={selectedTeam.logoUrl} teamName={selectedTeam.name} size="sm" />}
+                        <span style={{ fontWeight: 600, fontSize: '0.85rem' }}>You are leading</span>
+                        <span style={{ marginLeft: 'auto', fontSize: '0.7rem', background: 'rgba(251,191,36,0.25)', color: '#fbbf24', padding: '2px 8px', borderRadius: 6, fontWeight: 700 }}>LEADING</span>
+                      </>
+                    ) : (
+                      <span style={{ fontWeight: 600, fontSize: '0.85rem' }}>Another team is leading</span>
+                    )}
                   </div>
                 )}
               </div>
@@ -363,142 +362,89 @@ export default function ConnectBiddingAdminPage() {
         {/* Team Cards Grid — with Raise Bid buttons */}
         <motion.div className="cb-login-card" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, delay: 0.1 }} style={{ marginTop: '0.75rem' }}>
           <h3 style={{ margin: '0 0 0.75rem', fontSize: '0.95rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6 }}>
-            <IoPeople size={16} /> Select Team to Raise Bid
+            <IoPeople size={16} /> Your Team Bid Controls
           </h3>
 
           <div className="cb-team-card-grid">
-            {teams.map(team => {
-              const isLeading = selectedTeam?.id === team.id;
-              const purseUsedPct = team.allocatedAmount ? Math.round(((team.allocatedAmount - team.remainingPurse) / team.allocatedAmount) * 100) : 0;
-              return (
-                <div
-                  key={team.id}
-                  className={`cb-team-card-btn ${isLeading ? 'active' : ''}`}
-                  style={{ '--card-bg': team.primaryColor || '#3b82f6', '--card-bg2': team.secondaryColor || '#1e40af', cursor: 'default', position: 'relative' } as React.CSSProperties}
-                >
-                  {isLeading && (
-                    <span style={{ position: 'absolute', top: 6, right: 8, fontSize: '0.55rem', background: 'rgba(251,191,36,0.9)', color: '#000', padding: '1px 6px', borderRadius: 4, fontWeight: 800, letterSpacing: 0.5 }}>LEADING</span>
-                  )}
-                  {team.logoUrl ? (
-                    <TeamLogo logoUrl={team.logoUrl} teamName={team.name} size="sm" className="cb-team-card-logo" />
-                  ) : (
-                    <div className="cb-team-card-initials">{team.name.slice(0, 2).toUpperCase()}</div>
-                  )}
-                  <span className="cb-team-card-name">{team.name}</span>
-                  <span className="cb-team-card-meta">
-                    {team.playersBought || 0}/{team.totalPlayerThreshold || 25} players
-                  </span>
-                  <span className="cb-team-card-meta" style={{ fontSize: '0.65rem' }}>
-                    {formatLakhs(team.remainingPurse)} left &middot; {purseUsedPct}% used
-                  </span>
-
-                  {/* Action buttons */}
-                  <div style={{ display: 'flex', gap: 6, width: '100%', marginTop: 6 }}>
-                    <motion.button
-                      whileTap={{ scale: 0.92 }}
-                      disabled={!currentPlayer || !isConnected || !auctionActive || !!busyTeamId}
-                      onClick={(e) => { e.stopPropagation(); handleRaiseBid(team.id, team.name); }}
-                      style={{
-                        flex: 1,
-                        padding: '0.5rem 0',
-                        borderRadius: 8,
-                        border: 'none',
-                        background: 'linear-gradient(135deg, #22c55e, #16a34a)',
-                        color: '#fff',
-                        fontWeight: 800,
-                        fontSize: '0.72rem',
-                        cursor: 'pointer',
-                        opacity: (!currentPlayer || !auctionActive) ? 0.4 : 1,
-                        letterSpacing: 0.5,
-                      }}
-                    >
-                      {busyTeamId === team.id ? '...' : `RAISE +₹100L`}
-                    </motion.button>
-                    <motion.button
-                      whileTap={{ scale: 0.92 }}
-                      disabled={!currentPlayer || !isConnected || !isLeading || !!busyTeamId}
-                      onClick={(e) => { e.stopPropagation(); handlePass(team.id, team.name); }}
-                      style={{
-                        padding: '0.5rem 0.7rem',
-                        borderRadius: 8,
-                        border: '1px solid rgba(255,255,255,0.25)',
-                        background: 'transparent',
-                        color: '#fff',
-                        fontWeight: 700,
-                        fontSize: '0.72rem',
-                        cursor: 'pointer',
-                        opacity: !isLeading ? 0.3 : 1,
-                      }}
-                    >
-                      PASS
-                    </motion.button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </motion.div>
-
-        {/* Auction Dashboard (same as team login page) */}
-        {teams.length > 0 && (
-          <motion.div className="cb-auction-dashboard" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, delay: 0.2 }}>
-            <h2 className="cb-dash-title"><IoStatsChart size={18} /> Auction Overview</h2>
-            <div className="cb-dash-stats">
-              <div className="cb-dash-stat">
-                <div className="cb-dash-stat-icon sold"><IoPeople size={18} /></div>
-                <div className="cb-dash-stat-body">
-                  <span className="cb-dash-stat-value">{totalPlayersSold}</span>
-                  <span className="cb-dash-stat-label">Players Sold</span>
-                </div>
-              </div>
-              <div className="cb-dash-stat">
-                <div className="cb-dash-stat-icon spent"><IoWallet size={18} /></div>
-                <div className="cb-dash-stat-body">
-                  <span className="cb-dash-stat-value">{formatLakhs(totalMoneySpent)}</span>
-                  <span className="cb-dash-stat-label">Total Spent</span>
-                </div>
-              </div>
-              <div className="cb-dash-stat">
-                <div className="cb-dash-stat-icon top"><IoTrophy size={18} /></div>
-                <div className="cb-dash-stat-body">
-                  <span className="cb-dash-stat-value">{formatLakhs(topBuyTeam?.highestBid || 0)}</span>
-                  <span className="cb-dash-stat-label">Highest Bid</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Team leaderboard */}
-            <div className="cb-dash-leaderboard">
-              <h3 className="cb-dash-section-title">Team Standings</h3>
-              {teamsByPlayers.map((t, i) => {
-                const spent = (t.allocatedAmount || 0) - t.remainingPurse;
-                const purseUsedPct = t.allocatedAmount ? Math.round((spent / t.allocatedAmount) * 100) : 0;
+            {loggedInTeam ? (
+              (() => {
+                const team = loggedInTeam;
+                const isLeading = selectedTeam?.id === team.id;
+                const purseUsedPct = team.allocatedAmount
+                  ? Math.round(((team.allocatedAmount - team.remainingPurse) / team.allocatedAmount) * 100)
+                  : 0;
                 return (
-                  <div key={t.id} className="cb-dash-team-row" style={{ '--row-color': t.primaryColor || '#3b82f6' } as React.CSSProperties}>
-                    <div className="cb-dash-team-rank">#{i + 1}</div>
-                    <div className="cb-dash-team-logo">
-                      {t.logoUrl ? <TeamLogo logoUrl={t.logoUrl} teamName={t.name} size="sm" /> : <div className="cb-dash-team-initial">{t.name.slice(0, 2).toUpperCase()}</div>}
-                    </div>
-                    <div className="cb-dash-team-info">
-                      <span className="cb-dash-team-name">{t.name}</span>
-                      <div className="cb-dash-team-bar-wrap">
-                        <div className="cb-dash-team-bar">
-                          <div className="cb-dash-team-bar-fill" style={{ width: `${purseUsedPct}%` }} />
-                        </div>
-                        <span className="cb-dash-team-pct">{purseUsedPct}%</span>
-                      </div>
-                    </div>
-                    <div className="cb-dash-team-nums">
-                      <span className="cb-dash-team-players">{t.playersBought || 0} <small>players</small></span>
-                      <span className="cb-dash-team-purse">{formatLakhs(t.remainingPurse)}</span>
-                      {(t.highestBid || 0) > 0 && <span className="cb-dash-team-top-buy">Top: {formatLakhs(t.highestBid)}</span>}
+                  <div
+                    key={team.id}
+                    className={`cb-team-card-btn ${isLeading ? 'active' : ''}`}
+                    style={{ '--card-bg': team.primaryColor || '#3b82f6', '--card-bg2': team.secondaryColor || '#1e40af', cursor: 'default', position: 'relative' } as React.CSSProperties}
+                  >
+                    {isLeading && (
+                      <span style={{ position: 'absolute', top: 6, right: 8, fontSize: '0.55rem', background: 'rgba(251,191,36,0.9)', color: '#000', padding: '1px 6px', borderRadius: 4, fontWeight: 800, letterSpacing: 0.5 }}>LEADING</span>
+                    )}
+                    {team.logoUrl ? (
+                      <TeamLogo logoUrl={team.logoUrl} teamName={team.name} size="sm" className="cb-team-card-logo" />
+                    ) : (
+                      <div className="cb-team-card-initials">{team.name.slice(0, 2).toUpperCase()}</div>
+                    )}
+                    <span className="cb-team-card-name">{team.name}</span>
+                    <span className="cb-team-card-meta">
+                      {team.playersBought || 0}/{team.totalPlayerThreshold || 25} players
+                    </span>
+                    <span className="cb-team-card-meta" style={{ fontSize: '0.65rem' }}>
+                      {formatLakhs(team.remainingPurse)} left &middot; {purseUsedPct}% used
+                    </span>
+
+                    <div style={{ display: 'flex', gap: 6, width: '100%', marginTop: 6 }}>
+                      <motion.button
+                        whileTap={{ scale: 0.92 }}
+                        disabled={!currentPlayer || !isConnected || !auctionActive || !!busyTeamId}
+                        onClick={(e) => { e.stopPropagation(); handleRaiseBid(team.id, team.name); }}
+                        style={{
+                          flex: 1,
+                          padding: '0.5rem 0',
+                          borderRadius: 8,
+                          border: 'none',
+                          background: 'linear-gradient(135deg, #22c55e, #16a34a)',
+                          color: '#fff',
+                          fontWeight: 800,
+                          fontSize: '0.72rem',
+                          cursor: 'pointer',
+                          opacity: (!currentPlayer || !auctionActive) ? 0.4 : 1,
+                          letterSpacing: 0.5,
+                        }}
+                      >
+                        {busyTeamId === team.id ? '...' : `RAISE +₹100L`}
+                      </motion.button>
+                      <motion.button
+                        whileTap={{ scale: 0.92 }}
+                        disabled={!currentPlayer || !isConnected || !isLeading || !!busyTeamId}
+                        onClick={(e) => { e.stopPropagation(); handlePass(team.id, team.name); }}
+                        style={{
+                          padding: '0.5rem 0.7rem',
+                          borderRadius: 8,
+                          border: '1px solid rgba(255,255,255,0.25)',
+                          background: 'transparent',
+                          color: '#fff',
+                          fontWeight: 700,
+                          fontSize: '0.72rem',
+                          cursor: 'pointer',
+                          opacity: !isLeading ? 0.3 : 1,
+                        }}
+                      >
+                        PASS
+                      </motion.button>
                     </div>
                   </div>
                 );
-              })}
-            </div>
-          </motion.div>
-        )}
+              })()
+            ) : (
+              <div className="cb-empty-state" style={{ width: '100%' }}>
+                <p style={{ margin: 0 }}>Logged in team not found in live auction data.</p>
+              </div>
+            )}
+          </div>
+        </motion.div>
 
         <div className="cb-login-footer" style={{ textAlign: 'center', padding: '1rem 0 2rem' }}>
           <p style={{ margin: 0, opacity: 0.5, fontSize: '0.75rem' }}>powered by <b>NJS Creative Labs</b></p>

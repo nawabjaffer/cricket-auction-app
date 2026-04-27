@@ -872,6 +872,8 @@ export function MobileBiddingLivePage() {
                   <div className="cb-scout-player-list">
                     {availablePlayers.slice(0, 50).map((p) => {
                       const parsed = parseRoleDetails(p.role);
+                      const callNumber = (p.phone || p.whatsappNumber || '').trim();
+                      const waNumber = (p.whatsappNumber || p.phone || '').trim();
                       return (
                         <div key={p.id} className="cb-scout-player-item">
                           <div className="cb-scout-player-img-wrap">
@@ -886,14 +888,18 @@ export function MobileBiddingLivePage() {
                               <span className="cb-scout-player-base">{formatLakhs(p.basePrice)}</span>
                             </div>
                           </div>
-                          {p.phone && (
+                          {(callNumber || waNumber) && (
                             <div className="cb-scout-player-actions">
-                              <a href={`https://wa.me/${p.phone.replace(/[^0-9]/g, '')}`} target="_blank" rel="noopener noreferrer" className="cb-contact-btn whatsapp" title="WhatsApp" onClick={e => e.stopPropagation()}>
-                                <IoLogoWhatsapp size={18} />
-                              </a>
-                              <a href={`tel:${p.phone}`} className="cb-contact-btn call" title="Call" onClick={e => e.stopPropagation()}>
-                                <IoCall size={16} />
-                              </a>
+                              {waNumber && (
+                                <a href={`https://wa.me/${waNumber.replace(/[^0-9]/g, '')}`} target="_blank" rel="noopener noreferrer" className="cb-contact-btn whatsapp" title="WhatsApp" onClick={e => e.stopPropagation()}>
+                                  <IoLogoWhatsapp size={18} />
+                                </a>
+                              )}
+                              {callNumber && (
+                                <a href={`tel:${callNumber}`} className="cb-contact-btn call" title="Call" onClick={e => e.stopPropagation()}>
+                                  <IoCall size={16} />
+                                </a>
+                              )}
                             </div>
                           )}
                         </div>
@@ -1645,6 +1651,8 @@ export function MobileBiddingLivePage() {
                 const sold = soldRecords.find(s => s.id === p.id);
                 const parsed = parseRoleDetails(p.role);
                 const isExpanded = expandedPlayer?.player.id === p.id;
+                const callNumber = (p.phone || p.whatsappNumber || '').trim();
+                const waNumber = (p.whatsappNumber || p.phone || '').trim();
                 return (
                   <motion.div
                     key={p.id}
@@ -1681,14 +1689,18 @@ export function MobileBiddingLivePage() {
                             {wishlist[p.id] ? <IoHeart size={18} /> : <IoHeartOutline size={18} />}
                           </button>
                         )}
-                        {p.phone && (
+                        {(callNumber || waNumber) && (
                           <div className="cb-contact-inline">
-                            <a href={`https://wa.me/${p.phone.replace(/[^0-9]/g, '')}`} target="_blank" rel="noopener noreferrer" className="cb-contact-btn whatsapp" title="WhatsApp" onClick={e => e.stopPropagation()}>
-                              <IoLogoWhatsapp size={16} />
-                            </a>
-                            <a href={`tel:${p.phone}`} className="cb-contact-btn call" title="Call" onClick={e => e.stopPropagation()}>
-                              <IoCall size={14} />
-                            </a>
+                            {waNumber && (
+                              <a href={`https://wa.me/${waNumber.replace(/[^0-9]/g, '')}`} target="_blank" rel="noopener noreferrer" className="cb-contact-btn whatsapp" title="WhatsApp" onClick={e => e.stopPropagation()}>
+                                <IoLogoWhatsapp size={16} />
+                              </a>
+                            )}
+                            {callNumber && (
+                              <a href={`tel:${callNumber}`} className="cb-contact-btn call" title="Call" onClick={e => e.stopPropagation()}>
+                                <IoCall size={14} />
+                              </a>
+                            )}
                           </div>
                         )}
                       </div>

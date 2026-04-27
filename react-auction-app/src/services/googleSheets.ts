@@ -142,6 +142,15 @@ class GoogleSheetsService {
     return null;
   }
 
+  private normalizeContact(value: string | undefined): string {
+    return (value || '').trim();
+  }
+
+  private isLikelyPhone(value: string): boolean {
+    const digits = value.replace(/\D/g, '');
+    return digits.length >= 8;
+  }
+
   /**
    * Fetch all players from registration sheet
    */
@@ -169,6 +178,12 @@ class GoogleSheetsService {
           }
 
           const playerId = row[cols.id] || `P${String(index + 1).padStart(3, '0')}`;
+          const phoneRaw = this.normalizeContact(row[cols.phoneNumber]);
+          const whatsappRaw = typeof cols.whatsappNumber === 'number' && cols.whatsappNumber >= 0
+            ? this.normalizeContact(row[cols.whatsappNumber])
+            : '';
+          const phone = this.isLikelyPhone(phoneRaw) ? phoneRaw : '';
+          const whatsappNumber = this.isLikelyPhone(whatsappRaw) ? whatsappRaw : phone;
 
           // Skip if already sold
           if (excludeSoldIds.includes(playerId.trim())) {
@@ -188,6 +203,8 @@ class GoogleSheetsService {
             bowlingBestFigures: row[cols.bowlingBest] || 'N/A',
             basePrice: Number.parseFloat(row[cols.basePrice]) || activeConfig.auction.basePrice,
             dateOfBirth: row[cols.dateOfBirth] || '',
+            ...(phone ? { phone } : {}),
+            ...(whatsappNumber ? { whatsappNumber } : {}),
           };
         })
         .filter((player: Player | null): player is Player => player !== null);

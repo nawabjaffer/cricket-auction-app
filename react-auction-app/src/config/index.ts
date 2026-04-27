@@ -240,6 +240,7 @@ export const defaultConfig: AppConfig = {
       dateOfBirth: 5,
       bloodGroup: 6,
       phoneNumber: 7,
+      whatsappNumber: 8,
       jerseySize: 8,
       shoeSize: 9,
       role: 10,

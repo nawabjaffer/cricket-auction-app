@@ -728,6 +728,8 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
       imageUrl: '',
       basePrice: 0,
       age: null,
+      phone: '',
+      whatsappNumber: '',
       matches: '0',
       runs: '0',
       wickets: '0',
@@ -952,6 +954,8 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
       role: findHeaderIndex(headers, ['role', 'playerrole', 'player_role']),
       basePrice: findHeaderIndex(headers, ['baseprice', 'base_price', 'base price']),
       imageUrl: findHeaderIndex(headers, ['imageurl', 'image_url', 'image', 'photo', 'photourl']),
+      phone: findHeaderIndex(headers, ['phone', 'phonenumber', 'phone number', 'mobile', 'mobile number', 'contact number']),
+      whatsappNumber: findHeaderIndex(headers, ['whatsapp', 'whatsappnumber', 'whatsapp number', 'wa', 'wa number', 'whatsapp no']),
       age: findHeaderIndex(headers, ['age']),
       matches: findHeaderIndex(headers, ['matches']),
       runs: findHeaderIndex(headers, ['runs']),
@@ -999,6 +1003,8 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
       const basePrice = Number.parseFloat(get(idx.basePrice));
       const age = Number.parseInt(get(idx.age), 10);
       const idFromCsv = get(idx.id).trim();
+      const phone = get(idx.phone).trim();
+      const whatsappNumber = get(idx.whatsappNumber).trim() || phone;
 
       // Build expanded stats if any relevant column exists
       const hasBattingCols = [idx.batInnings, idx.batNotOut, idx.batHighestScore, idx.batAverage, idx.batStrikeRate, idx.batFifties, idx.batHundreds, idx.batFours, idx.batSixes, idx.batThirties].some((i) => i >= 0);
@@ -1047,6 +1053,8 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
         battingBestFigures: get(idx.battingBest).trim() || 'N/A',
         bowlingBestFigures: get(idx.bowlingBest).trim() || 'N/A',
         dateOfBirth: get(idx.dob).trim() || '',
+        phone: phone || undefined,
+        whatsappNumber: whatsappNumber || undefined,
         ...(battingStats ? { battingStats } : {}),
         ...(bowlingStats ? { bowlingStats } : {}),
       });
@@ -2797,6 +2805,27 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
                           type="text"
                           value={playerDraft.matches}
                           onChange={(e) => setPlayerDraft({ ...playerDraft, matches: e.target.value })}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="form-row">
+                      <div className="form-group">
+                        <label>Phone Number</label>
+                        <input
+                          type="text"
+                          value={playerDraft.phone || ''}
+                          onChange={(e) => setPlayerDraft({ ...playerDraft, phone: e.target.value })}
+                          placeholder="e.g. +919876543210"
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label>WhatsApp Number</label>
+                        <input
+                          type="text"
+                          value={playerDraft.whatsappNumber || ''}
+                          onChange={(e) => setPlayerDraft({ ...playerDraft, whatsappNumber: e.target.value })}
+                          placeholder="e.g. +919912345678"
                         />
                       </div>
                     </div>
