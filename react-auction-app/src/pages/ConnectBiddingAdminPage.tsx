@@ -12,6 +12,7 @@ import { IoClose, IoShieldCheckmark, IoPeople, IoWallet, IoTrophy, IoStatsChart 
 import { GiCricketBat } from 'react-icons/gi';
 import { useRealtimeMobileSync } from '../hooks/useRealtimeSync';
 import { useAdminAuth } from '../hooks/useAdminAuth';
+import { authService, type AuthSession } from '../services/auth';
 import { TeamLogo } from '../components/TeamLogo/TeamLogo';
 import { PlayerImage } from '../components/PlayerImage/PlayerImage';
 import { getRoleLabel, getRoleBadgeClass } from '../utils/playerStats';
@@ -24,8 +25,16 @@ interface BidFeedback {
 }
 
 export default function ConnectBiddingAdminPage() {
-  const { isAuthenticated, login, logout, loading: authLoading, error: authError } = useAdminAuth();
+
+  // Admin login (for admin-only access)
+  const { isAuthenticated, login: adminLogin, logout: adminLogout, loading: authLoading, error: authError } = useAdminAuth();
   const [email, setEmail] = useState('');
+  // Team login (for team selection)
+  const [teamSession, setTeamSession] = useState<AuthSession | null>(authService.getSession());
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [loginError, setLoginError] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
   const [feedback, setFeedback] = useState<BidFeedback | null>(null);
   const [busyTeamId, setBusyTeamId] = useState<string | null>(null);
 
@@ -48,12 +57,36 @@ export default function ConnectBiddingAdminPage() {
     return () => clearTimeout(timer);
   }, [feedback]);
 
-  const handleLogin = useCallback(async () => {
+
+  // Admin login handler
+  const handleAdminLogin = useCallback(async () => {
     if (!email.trim()) return;
     try {
-      await login(email.trim());
-    } catch { /* error handled by useAdminAuth */ }
-  }, [email, login]);
+      await adminLogin(email.trim());
+    } catch {}
+  }, [email, adminLogin]);
+
+  // Team login handler
+  const handleTeamLogin = useCallback((e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    setLoginError('');
+    setIsLoading(true);
+    const result = authService.login(username, password);
+    if (result.success && result.session) {
+      setTeamSession(result.session);
+      setUsername('');
+      setPassword('');
+    } else {
+      setLoginError(result.error || 'Invalid credentials');
+    }
+    setIsLoading(false);
+  }, [username, password]);
+
+  // Team logout
+  const handleTeamLogout = useCallback(() => {
+    authService.logout();
+    setTeamSession(null);
+  }, []);
 
   const handleRaiseBid = useCallback(async (teamId: string, teamName: string) => {
     if (!currentPlayer || !isConnected || busyTeamId) return;
@@ -104,7 +137,7 @@ export default function ConnectBiddingAdminPage() {
   const themePrimary = '#e4be75';
   const themeSecondary = '#24467c';
 
-  // ─── Admin Login Screen (same layout as team login) ───
+  // ─── Admin Login Screen ───
   if (!isAuthenticated) {
     return (
       <div className="cb-login-page" style={{ '--cb-primary': themePrimary, '--cb-secondary': themeSecondary } as React.CSSProperties}>
@@ -118,16 +151,13 @@ export default function ConnectBiddingAdminPage() {
               <h1>Bid Controller</h1>
               <p>Admin access to raise bids on behalf of teams</p>
             </div>
-
             <div className={`cb-status-pill ${isConnected ? 'live' : ''}`}>
               <span className="cb-status-dot" />
               <span>{isConnected ? 'Auction Live' : 'Waiting for auction...'}</span>
               {teams.length > 0 && <span className="cb-team-count">{teams.length} teams</span>}
             </div>
-
             {authError && <div className="cb-error">{authError}</div>}
-
-            <form className="cb-login-form cb-login-form--strict" onSubmit={e => { e.preventDefault(); handleLogin(); }}>
+            <form className="cb-login-form cb-login-form--strict" onSubmit={e => { e.preventDefault(); handleAdminLogin(); }}>
               <div className="cb-field">
                 <label htmlFor="admin-email" className="cb-field-label">Admin Email</label>
                 <input
@@ -142,49 +172,76 @@ export default function ConnectBiddingAdminPage() {
               </motion.button>
               <div className="cb-login-hint">Use your tournament admin email.</div>
             </form>
-
             <div className="cb-login-footer"><p>powered by <b>NJS Creative Labs</b></p></div>
           </motion.div>
-
-          {/* Auction Overview Dashboard (same as team login page) */}
-          {teams.length > 0 && (
-            <motion.div className="cb-auction-dashboard" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, delay: 0.15 }}>
-              <h2 className="cb-dash-title"><IoStatsChart size={18} /> Auction Overview</h2>
-              <div className="cb-dash-stats">
-                <div className="cb-dash-stat">
-                  <div className="cb-dash-stat-icon sold"><IoPeople size={18} /></div>
-                  <div className="cb-dash-stat-body">
-                    <span className="cb-dash-stat-value">{totalPlayersSold}</span>
-                    <span className="cb-dash-stat-label">Players Sold</span>
-                  </div>
-                </div>
-                <div className="cb-dash-stat">
-                  <div className="cb-dash-stat-icon spent"><IoWallet size={18} /></div>
-                  <div className="cb-dash-stat-body">
-                    <span className="cb-dash-stat-value">{formatLakhs(totalMoneySpent)}</span>
-                    <span className="cb-dash-stat-label">Total Spent</span>
-                  </div>
-                </div>
-                <div className="cb-dash-stat">
-                  <div className="cb-dash-stat-icon top"><IoTrophy size={18} /></div>
-                  <div className="cb-dash-stat-body">
-                    <span className="cb-dash-stat-value">{formatLakhs(topBuyTeam?.highestBid || 0)}</span>
-                    <span className="cb-dash-stat-label">Highest Bid</span>
-                  </div>
-                </div>
-              </div>
-            </motion.div>
-          )}
         </div>
       </div>
     );
   }
 
-  // ─── Main Admin Bidding Interface (logged in) ───
+  // ─── Team Login Screen ───
+  if (!teamSession) {
+    return (
+      <div className="cb-login-page" style={{ '--cb-primary': themePrimary, '--cb-secondary': themeSecondary } as React.CSSProperties}>
+        <div className="cb-login-bg" />
+        <div className="cb-login-scroll">
+          <motion.div className="cb-login-card" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}>
+            <div className="cb-login-brand">
+              <motion.div className="cb-login-icon" initial={{ scale: 0.8 }} animate={{ scale: 1 }} transition={{ delay: 0.2, type: 'spring' }}>
+                <GiCricketBat size={44} color="#fff" />
+              </motion.div>
+              <h1>Team Login</h1>
+              <p>Select your team and enter password</p>
+            </div>
+            <div className={`cb-status-pill ${isConnected ? 'live' : ''}`}>
+              <span className="cb-status-dot" />
+              <span>{isConnected ? 'Auction Live' : 'Waiting for auction...'}</span>
+              {teams.length > 0 && <span className="cb-team-count">{teams.length} teams</span>}
+            </div>
+            <form className="cb-login-form cb-login-form--strict" onSubmit={handleTeamLogin}>
+              <div className="cb-field">
+                <label htmlFor="cb-username" className="cb-field-label">Team Username</label>
+                <input
+                  type="text" id="cb-username" value={username}
+                  onChange={e => setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9]/g, ''))}
+                  placeholder="e.g. royal"
+                  disabled={isLoading} autoComplete="username" autoCapitalize="none"
+                />
+              </div>
+              <div className="cb-field">
+                <label htmlFor="cb-password" className="cb-field-label">Password</label>
+                <input
+                  type="password" id="cb-password" value={password}
+                  onChange={e => setPassword(e.target.value)}
+                  placeholder="Enter team password"
+                  disabled={isLoading} autoComplete="current-password"
+                />
+              </div>
+              <motion.button type="submit" className="cb-login-btn" disabled={isLoading || !username || !password} whileTap={{ scale: 0.98 }}>
+                {isLoading ? <span className="cb-spinner" /> : 'Sign In'}
+              </motion.button>
+              {loginError && <div className="cb-error">{loginError}</div>}
+              <div className="cb-login-hint">Credentials are provided by the tournament organizer.</div>
+            </form>
+            <div className="cb-login-footer"><p>powered by <b>NJS Creative Labs</b></p></div>
+          </motion.div>
+        </div>
+      </div>
+    );
+  }
+
+  // ─── Main Admin Bidding Interface (after team login) ───
   return (
     <div className="cb-login-page" style={{ '--cb-primary': themePrimary, '--cb-secondary': themeSecondary } as React.CSSProperties}>
       <div className="cb-login-bg" />
       <div className="cb-login-scroll">
+        {/* Team session bar */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', marginBottom: 8 }}>
+          <span style={{ fontWeight: 600, fontSize: '0.9rem', marginRight: 12 }}>Team: {teamSession.teamName}</span>
+          <motion.button className="cb-icon-btn" onClick={handleTeamLogout} whileTap={{ scale: 0.9 }} title="Logout Team" style={{ background: 'rgba(255,255,255,0.1)', borderRadius: 8, width: 32, height: 32, border: 'none', color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <IoClose size={16} />
+          </motion.button>
+        </div>
 
         {/* Live Player Card */}
         <motion.div className="cb-login-card" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}>
@@ -199,7 +256,7 @@ export default function ConnectBiddingAdminPage() {
                 <span className="cb-status-dot" />
                 {isConnected ? formattedTime : 'Offline'}
               </span>
-              <motion.button className="cb-icon-btn" onClick={() => logout()} whileTap={{ scale: 0.9 }} title="Logout" style={{ background: 'rgba(255,255,255,0.1)', borderRadius: 8, width: 32, height: 32, border: 'none', color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <motion.button className="cb-icon-btn" onClick={() => adminLogout()} whileTap={{ scale: 0.9 }} title="Logout" style={{ background: 'rgba(255,255,255,0.1)', borderRadius: 8, width: 32, height: 32, border: 'none', color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <IoClose size={16} />
               </motion.button>
             </div>
