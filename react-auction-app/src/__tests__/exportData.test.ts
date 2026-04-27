@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { generateSoldPlayersCSV, downloadCSV, exportSoldPlayers, generatePlayersCSVTemplate, generateScoresCSVTemplate } from '../utils/exportData';
+import { generateSoldPlayersCSV, downloadCSV, exportSoldPlayers, generatePlayersCSVTemplate, generatePlayersBulkEditCSV, generateScoresCSVTemplate } from '../utils/exportData';
 
 describe('generateSoldPlayersCSV', () => {
   it('generates CSV with headers', () => {
@@ -117,9 +117,37 @@ describe('CSV Templates', () => {
     expect(csv).toContain('Role');
     expect(csv).toContain('Base Price');
     expect(csv).toContain('Image URL');
+    expect(csv).toContain('Phone');
+    expect(csv).toContain('WhatsApp Number');
     // Should have sample data rows
     const lines = csv.trim().split('\n');
     expect(lines.length).toBeGreaterThan(1);
+  });
+
+  it('generates players bulk-edit CSV with existing player rows', () => {
+    const csv = generatePlayersBulkEditCSV([
+      {
+        id: 'P100',
+        name: 'Bulk Player',
+        role: 'Batsman',
+        basePrice: 500,
+        imageUrl: 'https://img.test/p100.jpg',
+        phone: '+919876543210',
+        whatsappNumber: '+919812345678',
+        age: 26,
+        dateOfBirth: '1999-01-01',
+        matches: '40',
+        runs: '1500',
+        wickets: '10',
+        battingBestFigures: '110',
+        bowlingBestFigures: '2/20',
+      },
+    ] as any);
+
+    expect(csv).toContain('P100');
+    expect(csv).toContain('Bulk Player');
+    expect(csv).toContain('+919876543210');
+    expect(csv).toContain('+919812345678');
   });
 
   it('generates scores CSV template with stat headers', () => {

@@ -2179,9 +2179,9 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
                     </button>
                     <button
                       className="admin-btn admin-btn-info"
-                      onClick={downloadPlayersTemplate}
+                      onClick={() => downloadPlayersTemplate(editingPlayers)}
                       disabled={isSaving}
-                      title="Download CSV template with sample headers"
+                      title="Download current players in sheet format for bulk edit and re-import"
                     >
                       <IoDownload size={18} /> Players Template
                     </button>

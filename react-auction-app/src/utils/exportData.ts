@@ -4,6 +4,9 @@
 // ============================================================================
 
 import type { SoldPlayerRecord } from '../services/auctionPersistence';
+import type { Player } from '../types';
+
+const escapeCsvCell = (cell: unknown): string => `"${String(cell ?? '').replace(/"/g, '""')}"`;
 
 /**
  * Convert sold players to CSV format
@@ -41,7 +44,7 @@ export function generateSoldPlayersCSV(players: SoldPlayerRecord[]): string {
 
   const csvContent = [
     headers.join(','),
-    ...rows.map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(',')),
+    ...rows.map(row => row.map(escapeCsvCell).join(',')),
   ].join('\n');
 
   return csvContent;
@@ -160,7 +163,100 @@ export function generatePlayersCSVTemplate(): string {
 
   const csvContent = [
     headers.join(','),
-    sampleRow.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','),
+    sampleRow.map(escapeCsvCell).join(','),
+  ].join('\n');
+
+  return csvContent;
+}
+
+/**
+ * Generate CSV for bulk-editing existing players.
+ * Uses the same column order as the import template.
+ */
+export function generatePlayersBulkEditCSV(players: Player[]): string {
+  const headers = [
+    'ID',
+    'Name',
+    'Role',
+    'Base Price',
+    'Image URL',
+    'Phone',
+    'WhatsApp Number',
+    'Age',
+    'Date of Birth',
+    'Matches',
+    'Runs',
+    'Wickets',
+    'Batting Best Figures',
+    'Bowling Best Figures',
+    'Innings',
+    'Not Out',
+    'Highest Score',
+    'Average',
+    'Strike Rate',
+    '30s',
+    '50s',
+    '100s',
+    '4s',
+    '6s',
+    'Bowling Matches',
+    'Bowling Innings',
+    'Overs',
+    'Maidens',
+    'Bowling Runs',
+    'BB',
+    '3WKTs',
+    '5WKTs',
+    'Economy',
+    'Bowling SR',
+    'Bowling Average',
+  ];
+
+  const rows = players.map((p) => {
+    const bat = p.battingStats;
+    const bowl = p.bowlingStats;
+    return [
+      p.id,
+      p.name,
+      p.role,
+      Number.isFinite(p.basePrice) ? p.basePrice : 0,
+      p.imageUrl || '',
+      p.phone || '',
+      p.whatsappNumber || '',
+      p.age ?? '',
+      p.dateOfBirth || '',
+      bat?.matches || p.matches || '0',
+      bat?.runs || p.runs || '0',
+      bowl?.wickets || p.wickets || '0',
+      p.battingBestFigures || 'N/A',
+      p.bowlingBestFigures || 'N/A',
+      bat?.innings || '0',
+      bat?.notOut || '0',
+      bat?.highestScore || '0',
+      bat?.average || '0.00',
+      bat?.strikeRate || '0.00',
+      bat?.thirties || '0',
+      bat?.fifties || '0',
+      bat?.hundreds || '0',
+      bat?.fours || '0',
+      bat?.sixes || '0',
+      bowl?.matches || '0',
+      bowl?.innings || '0',
+      bowl?.overs || '0',
+      bowl?.maidens || '0',
+      bowl?.runs || '0',
+      bowl?.bestBowling || 'N/A',
+      bowl?.threeWickets || '0',
+      bowl?.fiveWickets || '0',
+      bowl?.economy || '0.00',
+      bowl?.strikeRate || '0.00',
+      bowl?.average || '0.00',
+    ];
+  });
+
+  const csvContent = [
+    headers.join(','),
+    ...rows.map((row) => row.map(escapeCsvCell).join(',')),
   ].join('\n');
 
   return csvContent;
@@ -241,9 +337,12 @@ export function generateScoresCSVTemplate(): string {
 /**
  * Download players CSV template
  */
-export function downloadPlayersTemplate(): void {
-  const csv = generatePlayersCSVTemplate();
-  downloadCSV(csv, 'players-template.csv');
+export function downloadPlayersTemplate(players: Player[] = []): void {
+  const hasExistingData = players.length > 0;
+  const csv = hasExistingData
+    ? generatePlayersBulkEditCSV(players)
+    : generatePlayersCSVTemplate();
+  downloadCSV(csv, hasExistingData ? 'players-bulk-edit.csv' : 'players-template.csv');
 }
 
 /**
