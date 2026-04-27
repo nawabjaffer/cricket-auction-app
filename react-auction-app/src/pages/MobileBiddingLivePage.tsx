@@ -8,7 +8,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { GiCricketBat } from 'react-icons/gi';
-import { IoSwapVertical, IoRefresh, IoPeople, IoChevronDown, IoSearch, IoClose, IoFlash, IoPersonCircle, IoList, IoTrophy, IoWallet, IoStatsChart, IoEllipsisHorizontal, IoHeart, IoHeartOutline, IoStar } from 'react-icons/io5';
+import { IoSwapVertical, IoRefresh, IoPeople, IoChevronDown, IoSearch, IoClose, IoFlash, IoPersonCircle, IoList, IoTrophy, IoWallet, IoStatsChart, IoEllipsisHorizontal, IoHeart, IoHeartOutline, IoStar, IoCall, IoLogoWhatsapp } from 'react-icons/io5';
 import { authService } from '../services';
 import type { AuthSession } from '../services';
 import { auctionPersistence, type SponsorRecord } from '../services/auctionPersistence';
@@ -415,24 +415,7 @@ export function MobileBiddingLivePage() {
     }
   }, [session?.teamId, wishlist]);
 
-  // Bid handlers
-  const handleRaiseBid = useCallback(async () => {
-    if (!myTeam || !currentPlayer || !isConnected) return;
-    const newBid = currentBid + 100;
-    const success = await submitBid(myTeam.id, newBid, 'raise');
-    if (success) {
-      setBidCount(prev => prev + 1);
-      setFeedback({ type: 'success', message: `Bid placed: ₹${newBid}L`, timestamp: Date.now() });
-    }
-  }, [myTeam, currentPlayer, currentBid, isConnected, submitBid]);
-
-  const handleStopBidding = useCallback(async () => {
-    if (!myTeam || !isMyBid) return;
-    const success = await submitBid(myTeam.id, currentBid, 'stop');
-    if (success) {
-      setFeedback({ type: 'info', message: 'Stopped bidding', timestamp: Date.now() });
-    }
-  }, [myTeam, isMyBid, currentBid, submitBid]);
+  // Bid handlers removed — bidding is now managed via /connect-bidding-admin
 
   const handleManualRefresh = useCallback(() => {
     setFeedback({ type: 'info', message: 'Refreshing connection...', timestamp: Date.now() });
@@ -903,6 +886,16 @@ export function MobileBiddingLivePage() {
                               <span className="cb-scout-player-base">{formatLakhs(p.basePrice)}</span>
                             </div>
                           </div>
+                          {p.phone && (
+                            <div className="cb-scout-player-actions">
+                              <a href={`https://wa.me/${p.phone.replace(/[^0-9]/g, '')}`} target="_blank" rel="noopener noreferrer" className="cb-contact-btn whatsapp" title="WhatsApp" onClick={e => e.stopPropagation()}>
+                                <IoLogoWhatsapp size={18} />
+                              </a>
+                              <a href={`tel:${p.phone}`} className="cb-contact-btn call" title="Call" onClick={e => e.stopPropagation()}>
+                                <IoCall size={16} />
+                              </a>
+                            </div>
+                          )}
                         </div>
                       );
                     })}
@@ -1407,30 +1400,8 @@ export function MobileBiddingLivePage() {
             </div>
           )}
 
-          {/* ── Action Buttons ── */}
-          <div className="cb-actions">
-            {mobileBiddingConfig.enableRaiseBid && (
-              <motion.button
-                className="cb-action-btn raise"
-                onClick={handleRaiseBid}
-                disabled={!currentPlayer || !isConnected}
-                whileTap={{ scale: 0.95 }}
-              >
-                <span className="cb-action-label">RAISE BID</span>
-                <span className="cb-action-sub">+₹100L</span>
-              </motion.button>
-            )}
-            {mobileBiddingConfig.enableStopBidding && (
-              <motion.button
-                className="cb-action-btn stop"
-                onClick={handleStopBidding}
-                disabled={!currentPlayer || !isMyBid}
-                whileTap={{ scale: 0.95 }}
-              >
-                <span className="cb-action-label">PASS</span>
-              </motion.button>
-            )}
-          </div>
+          {/* ── Action Buttons (raise bid removed — controlled from /connect-bidding-admin) ── */}
+          {/* Teams can only view the live auction. Admin assistant raises bids via /connect-bidding-admin. */}
         </div>
       )}
 
@@ -1709,6 +1680,16 @@ export function MobileBiddingLivePage() {
                           >
                             {wishlist[p.id] ? <IoHeart size={18} /> : <IoHeartOutline size={18} />}
                           </button>
+                        )}
+                        {p.phone && (
+                          <div className="cb-contact-inline">
+                            <a href={`https://wa.me/${p.phone.replace(/[^0-9]/g, '')}`} target="_blank" rel="noopener noreferrer" className="cb-contact-btn whatsapp" title="WhatsApp" onClick={e => e.stopPropagation()}>
+                              <IoLogoWhatsapp size={16} />
+                            </a>
+                            <a href={`tel:${p.phone}`} className="cb-contact-btn call" title="Call" onClick={e => e.stopPropagation()}>
+                              <IoCall size={14} />
+                            </a>
+                          </div>
                         )}
                       </div>
                     </div>

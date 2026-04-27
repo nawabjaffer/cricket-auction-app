@@ -64,6 +64,7 @@ export interface Player {
   bowlingBestFigures: string;
   basePrice: number;
   dateOfBirth?: string;
+  phone?: string;
   // Expanded stats (optional for backward compatibility)
   battingStats?: BattingStats;
   bowlingStats?: BowlingStats;

@@ -2447,3 +2447,40 @@
   .cb-wishlist-pool { max-height: 60vh; }
 }
 
+/* ═══════════════════════════════════════════════════════
+   PHONE / WHATSAPP CONTACT BUTTONS
+   ═══════════════════════════════════════════════════════ */
+.cb-scout-player-actions,
+.cb-contact-inline {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-shrink: 0;
+}
+.cb-contact-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: none;
+  cursor: pointer;
+  text-decoration: none;
+  transition: transform 0.15s, opacity 0.15s;
+}
+.cb-contact-btn:active { transform: scale(0.9); }
+.cb-contact-btn.whatsapp {
+  background: #25d366;
+  color: #fff;
+}
+.cb-contact-btn.call {
+  background: rgba(255,255,255,0.15);
+  color: #60a5fa;
+}
+.cb-contact-btn.call:hover { background: rgba(255,255,255,0.25); }
+.cb-scout-player-item {
+  display: flex;
+  align-items: center;
+}
+

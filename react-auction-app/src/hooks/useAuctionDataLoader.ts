@@ -189,14 +189,14 @@ export function useAuctionDataLoader() {
 /**
  * Hook to save initial snapshot when data is loaded from Google Sheets
  */
-export function useSaveInitialSnapshot() {
+export function useSaveInitialSnapshot(enabled = true) {
   const [snapshotSaved, setSnapshotSaved] = useState(false);
   const { availablePlayers, teams } = useAuctionStore();
 
   useEffect(() => {
     const saveSnapshot = async () => {
       // Only save if we have data and haven't saved yet
-      if (snapshotSaved || availablePlayers.length === 0 || teams.length === 0) {
+      if (!enabled || snapshotSaved || availablePlayers.length === 0 || teams.length === 0) {
         return;
       }
 
@@ -239,7 +239,7 @@ export function useSaveInitialSnapshot() {
     };
 
     saveSnapshot();
-  }, [availablePlayers, teams, snapshotSaved]);
+  }, [enabled, availablePlayers, teams, snapshotSaved]);
 
   return { snapshotSaved };
 }

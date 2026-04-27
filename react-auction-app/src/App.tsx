@@ -88,21 +88,18 @@ const FALLBACK_SPONSORS: SponsorRecord[] = [
 ];
 
 // Main App with Providers
-export default function App() {
+export default function App({ mirrorMode = false }: { mirrorMode?: boolean }) {
   return (
     <QueryClientProvider client={queryClient}>
-      <AuctionApp />
+      <AuctionApp mirrorMode={mirrorMode} />
     </QueryClientProvider>
   );
 }
 
 // Auction App Content
-function AuctionApp() {
+function AuctionApp({ mirrorMode = false }: { mirrorMode?: boolean }) {
   const navigate = useNavigate();
-  const isMirrorMode = useMemo(() => {
-    if (typeof window === 'undefined') return false;
-    return new URLSearchParams(window.location.search).get('mirror') === '1';
-  }, []);
+  const isMirrorMode = mirrorMode;
   const [showCoinJar, setShowCoinJar] = useState(false);
   const [selectedPlayerName, setSelectedPlayerName] = useState<string>('');
   const [showHelpModal, setShowHelpModal] = useState(false);
@@ -159,8 +156,8 @@ function AuctionApp() {
   // Load auction data from Firebase if available
   useAuctionDataLoader();
   
-  // Save initial snapshot to Firebase for reset functionality
-  useSaveInitialSnapshot();
+  // Save initial snapshot to Firebase for reset functionality (skip in mirror mode)
+  useSaveInitialSnapshot(!isMirrorMode);
 
   // Apply admin-edited player overrides
   useAdminPlayersOverrides();
@@ -246,6 +243,14 @@ function AuctionApp() {
       }
     });
     return () => unsub();
+  }, [isMirrorMode]);
+
+  // Mirror mode: block all keyboard events to prevent accidental control
+  useEffect(() => {
+    if (!isMirrorMode) return;
+    const swallow = (e: KeyboardEvent) => { e.preventDefault(); e.stopPropagation(); };
+    window.addEventListener('keydown', swallow, { capture: true });
+    return () => window.removeEventListener('keydown', swallow, { capture: true });
   }, [isMirrorMode]);
 
   // Handle team squad view
@@ -784,13 +789,19 @@ function AuctionApp() {
 
   return (
     <div 
-      className="app-shell text-white"
+      className={`app-shell text-white${isMirrorMode ? ' mirror-mode' : ''}`}
       style={{
         backgroundImage: currentTheme.background 
           ? `url(${currentTheme.background})` 
           : undefined,
       }}
     >
+      {/* Mirror badge */}
+      {isMirrorMode && (
+        <div style={{ position: 'fixed', top: 12, right: 16, zIndex: 9999, background: 'rgba(239,68,68,0.85)', color: '#fff', padding: '4px 14px', borderRadius: 8, fontSize: 13, fontWeight: 700, letterSpacing: 1, backdropFilter: 'blur(6px)', pointerEvents: 'none' }}>
+          MIRROR
+        </div>
+      )}
       {/* Single full-screen GIF (in front of background, behind UI) */}
       <div className="corner-gifs" aria-hidden>
         <img

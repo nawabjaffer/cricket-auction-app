@@ -1,40 +1,11 @@
-import { useMemo, useEffect } from 'react';
-import { useParams } from 'react-router-dom';
-import './MirrorPage.css';
+import App from '../App';
 
-const DEFAULT_TENANT_SLUG = 'epl-2026';
-
+/**
+ * Mirror page — renders the main auction App in read-only mirror mode.
+ * No iframe, no separate execution context. The App component subscribes to
+ * Firebase RTDB as a mobile/follower and hydrates the Zustand store from the
+ * desktop broadcaster's state. Keyboard shortcuts are blocked.
+ */
 export default function MirrorPage() {
-  const { tenantSlug } = useParams<{ tenantSlug?: string }>();
-
-  const targetSlug = useMemo(() => {
-    const slug = (tenantSlug || DEFAULT_TENANT_SLUG).trim();
-    return slug || DEFAULT_TENANT_SLUG;
-  }, [tenantSlug]);
-
-  const mirrorSrc = useMemo(() => `/${targetSlug}/?mirror=1`, [targetSlug]);
-
-  // Hard-disable keyboard interaction on mirror host page.
-  useEffect(() => {
-    const swallowKey = (event: KeyboardEvent) => {
-      event.preventDefault();
-    };
-    globalThis.addEventListener('keydown', swallowKey, { capture: true });
-    return () => {
-      globalThis.removeEventListener('keydown', swallowKey, { capture: true });
-    };
-  }, []);
-
-  return (
-    <div className="mirror-page">
-      <iframe
-        className="mirror-page__frame"
-        src={mirrorSrc}
-        title="Auction Mirror View"
-        loading="eager"
-        referrerPolicy="same-origin"
-      />
-      <div className="mirror-page__input-blocker" aria-hidden="true" />
-    </div>
-  );
+  return <App mirrorMode />;
 }

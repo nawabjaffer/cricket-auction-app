@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { generateSoldPlayersCSV, downloadCSV, exportSoldPlayers } from '../utils/exportData';
+import { generateSoldPlayersCSV, downloadCSV, exportSoldPlayers, generatePlayersCSVTemplate, generateScoresCSVTemplate } from '../utils/exportData';
 
 describe('generateSoldPlayersCSV', () => {
   it('generates CSV with headers', () => {
@@ -106,5 +106,30 @@ describe('exportSoldPlayers', () => {
     expect(mockLink.setAttribute).toHaveBeenCalledWith('download', expect.stringContaining('auction-sold-players-'));
 
     vi.restoreAllMocks();
+  });
+});
+
+describe('CSV Templates', () => {
+  it('generates players CSV template with required headers', () => {
+    const csv = generatePlayersCSVTemplate();
+    expect(csv).toContain('ID');
+    expect(csv).toContain('Name');
+    expect(csv).toContain('Role');
+    expect(csv).toContain('Base Price');
+    expect(csv).toContain('Image URL');
+    // Should have sample data rows
+    const lines = csv.trim().split('\n');
+    expect(lines.length).toBeGreaterThan(1);
+  });
+
+  it('generates scores CSV template with stat headers', () => {
+    const csv = generateScoresCSVTemplate();
+    expect(csv).toContain('ID');
+    expect(csv).toContain('Matches');
+    expect(csv).toContain('Runs');
+    expect(csv).toContain('Wickets');
+    // Should have sample data rows
+    const lines = csv.trim().split('\n');
+    expect(lines.length).toBeGreaterThan(1);
   });
 });
