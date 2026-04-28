@@ -124,6 +124,8 @@ export interface RealtimeAuctionState {
     highestBid?: number;
     captain?: string;
     underAgePlayers?: number;
+    authUsername?: string;
+    authPassword?: string;
   }>;
   auctionActive: boolean;
   activeOverlay: 'sold' | 'unsold' | null;

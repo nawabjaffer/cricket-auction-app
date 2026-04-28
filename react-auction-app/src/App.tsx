@@ -713,13 +713,41 @@ function AuctionApp({ mirrorMode = false }: { mirrorMode?: boolean }) {
   };
 
   // Stats rows for player panel
-  const statRows = useMemo(() => ([
-    { label: 'Matches', value: currentPlayer?.matches || '—' },
-    { label: 'Runs', value: currentPlayer?.runs || '—' },
-    { label: 'Wickets', value: currentPlayer?.wickets || '—' },
-    { label: 'Bowling Best', value: currentPlayer?.bowlingBestFigures || '—' },
-    { label: 'Highest Score', value: currentPlayer?.battingBestFigures || '—' },
-  ]), [currentPlayer]);
+  const statRows = useMemo(() => {
+    const rows = [];
+    
+    // Add age if available
+    if (typeof currentPlayer?.age === 'number') {
+      rows.push({ label: 'Age', value: currentPlayer.age });
+    }
+    
+    // Add matches if available (and not empty)
+    if (currentPlayer?.matches && currentPlayer.matches !== '0' && currentPlayer.matches !== '') {
+      rows.push({ label: 'Matches', value: currentPlayer.matches });
+    }
+    
+    // Add runs if available (and not 'N/A' or empty)
+    if (currentPlayer?.runs && currentPlayer.runs !== 'N/A' && currentPlayer.runs !== '') {
+      rows.push({ label: 'Runs', value: currentPlayer.runs });
+    }
+    
+    // Add wickets if available (and not 'N/A' or empty)
+    if (currentPlayer?.wickets && currentPlayer.wickets !== 'N/A' && currentPlayer.wickets !== '') {
+      rows.push({ label: 'Wickets', value: currentPlayer.wickets });
+    }
+    
+    // Add bowling best if available (and not 'N/A' or empty)
+    if (currentPlayer?.bowlingBestFigures && currentPlayer.bowlingBestFigures !== 'N/A' && currentPlayer.bowlingBestFigures !== '') {
+      rows.push({ label: 'Bowling Best', value: currentPlayer.bowlingBestFigures });
+    }
+    
+    // Add highest score if available (and not 'N/A' or empty)
+    if (currentPlayer?.battingBestFigures && currentPlayer.battingBestFigures !== 'N/A' && currentPlayer.battingBestFigures !== '') {
+      rows.push({ label: 'Highest Score', value: currentPlayer.battingBestFigures });
+    }
+    
+    return rows;
+  }, [currentPlayer]);
 
   // Get current player image URL
   const playerImageUrl = currentPlayer?.imageUrl ?? null;

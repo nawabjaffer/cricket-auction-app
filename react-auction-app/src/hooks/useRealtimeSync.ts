@@ -333,6 +333,8 @@ export function useRealtimeMobileSync(enabled = true): RealtimeMobileSyncState {
     underAgePlayers: t.underAgePlayers || 0,
     primaryColor: t.primaryColor,
     secondaryColor: t.secondaryColor,
+    authUsername: t.authUsername,
+    authPassword: t.authPassword,
   }));
 
   // Extract mobile bidding config
