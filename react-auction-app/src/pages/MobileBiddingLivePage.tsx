@@ -1878,7 +1878,7 @@ export function MobileBiddingLivePage() {
               )}
 
               <div className="cb-wishlist-pool">
-                {availableToPick.slice(0, 60).map((p) => {
+                {availableToPick.map((p) => {
                   const parsed = parseRoleDetails(p.role);
                   return (
                     <button
@@ -1906,9 +1906,6 @@ export function MobileBiddingLivePage() {
                 })}
                 {availableToPick.length === 0 && (
                   <div className="cb-wishlist-empty"><p>No matching players.</p></div>
-                )}
-                {availableToPick.length > 60 && (
-                  <p className="cb-wishlist-hint">Showing first 60. Refine search to narrow down.</p>
                 )}
               </div>
             </section>

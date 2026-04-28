@@ -2607,7 +2607,10 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
                         <input
                           type="number"
                           value={teamDraft.remainingPurse}
-                          onChange={(e) => setTeamDraft({ ...teamDraft, remainingPurse: Number.parseInt(e.target.value || '0', 10) || 0 })}
+                          onChange={(e) => {
+                            const newPurse = Number.parseInt(e.target.value || '0', 10) || 0;
+                            setTeamDraft({ ...teamDraft, remainingPurse: newPurse, allocatedAmount: newPurse });
+                          }}
                         />
                       </div>
                     </div>
