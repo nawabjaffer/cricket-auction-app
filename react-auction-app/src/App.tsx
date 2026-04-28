@@ -795,7 +795,7 @@ function AuctionApp({ mirrorMode = false }: { mirrorMode?: boolean }) {
     >
       {/* Mirror badge */}
       {isMirrorMode && (
-        <div style={{ position: 'fixed', top: 12, right: 16, zIndex: 9999, background: 'rgba(239,68,68,0.85)', color: '#fff', padding: '4px 14px', borderRadius: 8, fontSize: 13, fontWeight: 700, letterSpacing: 1, backdropFilter: 'blur(6px)', pointerEvents: 'none' }}>
+        <div style={{ position: 'fixed', top: 12, right: 16, zIndex: 9999, background: 'rgba(239,68,68,0.15)', color: '#fff', borderRadius: 8, fontSize: 8, fontWeight: 700, letterSpacing: 1, backdropFilter: 'blur(6px)', pointerEvents: 'none' }}>
           MIRROR
         </div>
       )}

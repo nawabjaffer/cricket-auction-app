@@ -6,9 +6,10 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 
-import { IoClose, IoSave, IoRefresh, IoDownload, IoVideocam, IoAdd, IoTrash, IoArrowUp, IoArrowDown, IoSearch, IoStatsChart } from 'react-icons/io5';
+import { IoClose, IoSave, IoRefresh, IoDownload, IoVideocam, IoAdd, IoTrash, IoArrowUp, IoArrowDown, IoSearch, IoStatsChart, IoCloudUpload } from 'react-icons/io5';
 import { auctionPersistence, type AdminSettings, type SponsorRecord } from '../../services/auctionPersistence';
 import { googleSheetsService, imagePreloaderService, resolveMediaToStorage, uploadFileToStorage } from '../../services';
+import AdminImageBulkUpload from './AdminImageBulkUpload';
 import { useAuctionStore } from '../../store/auctionStore';
 import { exportSoldPlayers, downloadPlayersTemplate, downloadScoresTemplate } from '../../utils/exportData';
 import FeatureFlagsTab from './FeatureFlagsTab';
@@ -134,6 +135,7 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
   const [teamDraft, setTeamDraft] = useState<Team | null>(null);
   const [editingPlayerId, setEditingPlayerId] = useState<string | null>(null);
   const [playerDraft, setPlayerDraft] = useState<Player | null>(null);
+  const [isBulkUploadOpen, setIsBulkUploadOpen] = useState(false);
   // Icon player state for the player editor
   const [isIconPlayer, setIsIconPlayer] = useState(false);
   const [iconTeamId, setIconTeamId] = useState<string>('');
@@ -906,6 +908,34 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
     }
   };
 
+  const handleBulkSaveImages = async (updatedPlayers: Player[]) => {
+    setIsSaving(true);
+    try {
+      // Persist uploaded image URLs and update store
+      await auctionPersistence.saveAdminPlayers(updatedPlayers);
+      setAdminPlayerOverrides(updatedPlayers);
+
+      // Preload uploaded images into local cache (best-effort)
+      const items = updatedPlayers
+        .filter(p => p.imageUrl)
+        .map(p => ({ url: p.imageUrl as string, storagePath: `images/players/${p.id}` }));
+      void imagePreloaderService.preloadImages(items.map(i => i.url)).catch(() => {});
+
+      showUploadFeedback('Player images saved', 'success');
+      setSaveStatus('success');
+      setTimeout(() => setSaveStatus('idle'), 2000);
+    } catch (err) {
+      console.error('[AdminPanel] bulk save images failed', err);
+      showUploadFeedback('Failed to save images', 'error');
+      setSaveStatus('error');
+      setTimeout(() => setSaveStatus('idle'), 2000);
+      throw err;
+    } finally {
+      setIsSaving(false);
+      setIsBulkUploadOpen(false);
+    }
+  };
+
   const parseCsvLine = (line: string): string[] => {
     const values: string[] = [];
     let current = '';
@@ -1060,7 +1090,16 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
       });
     });
 
-    return parsed;
+    // Merge with existing players to preserve images if the CSV image mapping is missing/empty
+    const mergedParsed = parsed.map(p => {
+      const existing = editingPlayers.find(ep => ep.id === p.id);
+      if (existing && existing.imageUrl && !p.imageUrl) {
+        return { ...p, imageUrl: existing.imageUrl };
+      }
+      return p;
+    });
+
+    return mergedParsed;
   };
 
   const applyImportedPlayers = async (players: Player[]) => {
@@ -1465,6 +1504,15 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
           </motion.div>
         )}
       </AnimatePresence>
+
+      <AdminImageBulkUpload
+        players={editingPlayers}
+        page={playerPage}
+        pageSize={playerPageSize}
+        isOpen={isBulkUploadOpen}
+        onClose={() => setIsBulkUploadOpen(false)}
+        onBulkSave={handleBulkSaveImages}
+      />
 
       {/* Save status toast */}
       <AnimatePresence>
@@ -2186,6 +2234,15 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
                       <IoDownload size={18} /> Players Template
                     </button>
                     <button
+                      type="button"
+                      className="admin-btn admin-btn-info"
+                      onClick={() => { setIsBulkUploadOpen(true); showUploadFeedback('Opening bulk image uploader', 'success'); }}
+                      disabled={isSaving}
+                      title="Open bulk image uploader (page-scoped)"
+                    >
+                      <IoCloudUpload size={18} /> Bulk Upload Images
+                    </button>
+                    <button
                       className="admin-btn admin-btn-accent"
                       onClick={() => statsCsvInputRef.current?.click()}
                       disabled={isSaving}
@@ -2668,7 +2725,7 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
                           <input
                             type="text"
                             value={teamDraft.authPassword || ''}
-                            onChange={(e) => setTeamDraft({ ...teamDraft, authPassword: e.target.value })}
+                            onChange={(e) => setTeamDraft({ ...teamDraft, authPassword: e.target.value.trim() })}
                             placeholder="e.g. royal@2026"
                             autoComplete="off"
                           />

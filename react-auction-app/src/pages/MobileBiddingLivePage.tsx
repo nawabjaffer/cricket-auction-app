@@ -62,6 +62,30 @@ export function MobileBiddingLivePage() {
   const lastPlayerIdRef = useRef<string | null>(null);
   const reconnectTimeoutRef = useRef<number | null>(null);
 
+  const normalizeContactNumber = (value: unknown): string => {
+    const raw = String(value ?? '').trim();
+    if (!raw) return '';
+    const lower = raw.toLowerCase();
+    if (lower === 'n/a' || lower === 'na' || lower === 'null' || lower === 'undefined' || lower === '-') return '';
+    const digits = raw.replace(/\D/g, '');
+    return digits.length >= 8 ? raw : '';
+  };
+
+  const extractContactNumbers = (player: Player): { callNumber: string; waNumber: string } => {
+    const src = player as Player & Record<string, unknown>;
+    const phone = normalizeContactNumber(
+      src.phone ?? src.phoneNumber ?? src.mobile ?? src.mobileNumber,
+    );
+    const wa = normalizeContactNumber(
+      src.whatsappNumber ?? src.whatsapp ?? src.whatsappNo ?? src.whatsapp_number ?? src.whatsAppNumber,
+    );
+
+    return {
+      callNumber: phone || wa,
+      waNumber: wa || phone,
+    };
+  };
+
   const {
     currentPlayer,
     currentBid,
@@ -194,9 +218,18 @@ export function MobileBiddingLivePage() {
           if (snap.exists()) {
             const raw = snap.val();
             const arr: unknown[] = Array.isArray(raw) ? raw : Object.values(raw ?? {});
-            const players = arr.filter(
-              (p): p is Player => p != null && typeof p === 'object' && 'id' in (p as Record<string, unknown>)
-            );
+            const players = arr
+              .filter(
+                (p): p is Player => p != null && typeof p === 'object' && 'id' in (p as Record<string, unknown>)
+              )
+              .map((p) => {
+                const { callNumber, waNumber } = extractContactNumbers(p);
+                return {
+                  ...p,
+                  ...(callNumber ? { phone: callNumber } : {}),
+                  ...(waNumber ? { whatsappNumber: waNumber } : {}),
+                };
+              });
             setAllPlayers(players);
           }
           if (!playersLoaded) setPlayersLoaded(true);
@@ -367,7 +400,7 @@ export function MobileBiddingLivePage() {
     if (!matchingCred) { setLoginError('Team not found. Check the username.'); return; }
     if (!easyLoginMode) {
       if (!password) { setLoginError('Enter team password'); return; }
-      if (password !== matchingCred.password) { setLoginError('Invalid username or password'); return; }
+      if (password.trim() !== matchingCred.password) { setLoginError('Invalid username or password'); return; }
     }
     setIsLoading(true);
     setLoginError('');
@@ -872,8 +905,7 @@ export function MobileBiddingLivePage() {
                   <div className="cb-scout-player-list">
                     {availablePlayers.slice(0, 50).map((p) => {
                       const parsed = parseRoleDetails(p.role);
-                      const callNumber = (p.phone || p.whatsappNumber || '').trim();
-                      const waNumber = (p.whatsappNumber || p.phone || '').trim();
+                      const { callNumber, waNumber } = extractContactNumbers(p);
                       return (
                         <div key={p.id} className="cb-scout-player-item">
                           <div className="cb-scout-player-img-wrap">
@@ -1651,8 +1683,7 @@ export function MobileBiddingLivePage() {
                 const sold = soldRecords.find(s => s.id === p.id);
                 const parsed = parseRoleDetails(p.role);
                 const isExpanded = expandedPlayer?.player.id === p.id;
-                const callNumber = (p.phone || p.whatsappNumber || '').trim();
-                const waNumber = (p.whatsappNumber || p.phone || '').trim();
+                const { callNumber, waNumber } = extractContactNumbers(p);
                 return (
                   <motion.div
                     key={p.id}
