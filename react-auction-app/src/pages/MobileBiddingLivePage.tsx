@@ -22,7 +22,7 @@ import { TeamLogo } from '../components/TeamLogo/TeamLogo';
 import { PlayerImage } from '../components/PlayerImage/PlayerImage';
 import { getRoleBasedStats, getRoleLabel, getRoleBadgeClass } from '../utils/playerStats';
 import { parseRoleDetails, getRoleBadgeColor } from '../utils/roleFormatter';
-import type { Player } from '../types';
+import type { Player, Team } from '../types';
 import '../components/MobileBidding/MobileBidding.css';
 
 interface BidFeedback {
@@ -468,11 +468,6 @@ export function MobileBiddingLivePage() {
     return date.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
   }, [lastUpdate]);
 
-  const maxAffordableBid = useMemo(() => {
-    if (!myTeam) return 0;
-    return Math.floor((myTeam.remainingPurse || 0) / 100) * 100;
-  }, [myTeam]);
-
   const formatLakhs = (value: number) => `₹${Number.isFinite(value) ? value.toFixed(1) : '0.0'}L`;
 
   // Role-based stats for current player
@@ -495,12 +490,46 @@ export function MobileBiddingLivePage() {
 
   const spentAmount = useMemo(() => mySquad.reduce((sum, p) => sum + p.soldAmount, 0), [mySquad]);
 
+  const teamSpentByName = useMemo(() => {
+    const map = new Map<string, number>();
+    soldRecords.forEach((record) => {
+      if (!record.teamName) return;
+      map.set(record.teamName, (map.get(record.teamName) ?? 0) + record.soldAmount);
+    });
+    return map;
+  }, [soldRecords]);
+
+  const getTeamBudgetTotal = useCallback((team: Team | null) => {
+    if (!team) return 0;
+    const spent = teamSpentByName.get(team.name) ?? 0;
+    const remaining = team.remainingPurse || 0;
+    const allocated = team.allocatedAmount || 0;
+    const derivedTotal = remaining + spent;
+    return Math.max(allocated, derivedTotal, remaining);
+  }, [teamSpentByName]);
+
+  const getTeamRemaining = useCallback((team: Team | null) => {
+    if (!team) return 0;
+    const total = getTeamBudgetTotal(team);
+    const spent = teamSpentByName.get(team.name) ?? 0;
+    if (spent > 0) return Math.max(total - spent, 0);
+    return Math.max(team.remainingPurse || 0, total);
+  }, [getTeamBudgetTotal, teamSpentByName]);
+
+  const myTeamBudgetTotal = useMemo(() => getTeamBudgetTotal(myTeam), [getTeamBudgetTotal, myTeam]);
+  const myTeamRemaining = useMemo(() => getTeamRemaining(myTeam), [getTeamRemaining, myTeam]);
+
+  const maxAffordableBid = useMemo(() => {
+    if (!myTeam) return 0;
+    return Math.floor(myTeamRemaining / 100) * 100;
+  }, [myTeam, myTeamRemaining]);
+
   // Budget usage percentage
   const budgetPct = useMemo(() => {
     if (!myTeam) return 0;
-    const total = myTeam.allocatedAmount || (myTeam.remainingPurse + spentAmount);
+    const total = myTeamBudgetTotal || (myTeamRemaining + spentAmount);
     return total > 0 ? Math.round((spentAmount / total) * 100) : 0;
-  }, [myTeam, spentAmount]);
+  }, [myTeam, myTeamBudgetTotal, myTeamRemaining, spentAmount]);
 
   // ── Team Analytics (for My Team tab) ──
   const myTeamRoleBalance = useMemo(() => {
@@ -532,8 +561,8 @@ export function MobileBiddingLivePage() {
     if (slotsLeft <= 0) return 0;
     // Reserve 0.5L per remaining slot (except current)
     const reserved = Math.max(slotsLeft - 1, 0) * 0.5;
-    return Math.max((myTeam.remainingPurse || 0) - reserved, 0);
-  }, [myTeam]);
+    return Math.max(myTeamRemaining - reserved, 0);
+  }, [myTeam, myTeamRemaining]);
 
   const myTeamBudgetStatus = useMemo(() => {
     if (!myTeam) return 'safe' as const;
@@ -696,7 +725,7 @@ export function MobileBiddingLivePage() {
 
     // Compute auction-wide stats for login dashboard
     const totalPlayersSold = teams.reduce((s, t) => s + (t.playersBought || 0), 0);
-    const totalMoneySpent = teams.reduce((s, t) => s + ((t.allocatedAmount || 0) - t.remainingPurse), 0);
+    const totalMoneySpent = [...teamSpentByName.values()].reduce((sum, value) => sum + value, 0);
     const topBuyTeam = [...teams].sort((a, b) => (b.highestBid || 0) - (a.highestBid || 0))[0];
     const teamsByPlayers = [...teams].sort((a, b) => (b.playersBought || 0) - (a.playersBought || 0));
 
@@ -769,7 +798,7 @@ export function MobileBiddingLivePage() {
                           <span className="cb-team-card-username">@{cred.username}</span>
                           {teamData && (
                             <span className="cb-team-card-meta">
-                              {teamData.playersBought || 0} players &middot; {formatLakhs(teamData.remainingPurse)}
+                              {teamData.playersBought || 0} players &middot; {formatLakhs(getTeamRemaining(teamData))}
                             </span>
                           )}
                         </motion.button>
@@ -903,7 +932,7 @@ export function MobileBiddingLivePage() {
                   </div>
                 ) : (
                   <div className="cb-scout-player-list">
-                    {availablePlayers.slice(0, 50).map((p) => {
+                    {availablePlayers.map((p) => {
                       const parsed = parseRoleDetails(p.role);
                       const { callNumber, waNumber } = extractContactNumbers(p);
                       return (
@@ -937,9 +966,6 @@ export function MobileBiddingLivePage() {
                         </div>
                       );
                     })}
-                    {availablePlayers.length > 50 && (
-                      <div className="cb-scout-more">+{availablePlayers.length - 50} more players</div>
-                    )}
                   </div>
                 )}
 
@@ -999,8 +1025,9 @@ export function MobileBiddingLivePage() {
               <div className="cb-dash-leaderboard">
                 <h3 className="cb-dash-section-title">Team Standings</h3>
                 {teamsByPlayers.map((t, i) => {
-                  const spent = (t.allocatedAmount || 0) - t.remainingPurse;
-                  const purseUsedPct = t.allocatedAmount ? Math.round((spent / t.allocatedAmount) * 100) : 0;
+                  const totalBudget = getTeamBudgetTotal(t);
+                  const spent = teamSpentByName.get(t.name) ?? 0;
+                  const purseUsedPct = totalBudget > 0 ? Math.round((spent / totalBudget) * 100) : 0;
                   const teamCred = runtimeCredentials.find(c => c.teamId === t.id);
                   return (
                     <div key={t.id} className="cb-dash-team-row" style={{ '--row-color': teamCred?.primaryColor || '#3b82f6' } as React.CSSProperties}>
@@ -1019,7 +1046,7 @@ export function MobileBiddingLivePage() {
                       </div>
                       <div className="cb-dash-team-nums">
                         <span className="cb-dash-team-players">{t.playersBought || 0} <small>players</small></span>
-                        <span className="cb-dash-team-purse">{formatLakhs(t.remainingPurse)}</span>
+                        <span className="cb-dash-team-purse">{formatLakhs(getTeamRemaining(t))}</span>
                         {(t.highestBid || 0) > 0 && <span className="cb-dash-team-top-buy">Top: {formatLakhs(t.highestBid)}</span>}
                       </div>
                     </div>
@@ -1235,7 +1262,7 @@ export function MobileBiddingLivePage() {
               <div className="cb-hb-labels">
                 <span className="cb-hb-label">
                   <IoWallet size={12} />
-                  {formatLakhs(myTeam.remainingPurse)}
+                  {formatLakhs(myTeamRemaining)}
                 </span>
                 <span className="cb-hb-players">{myTeam.playersBought || 0}/{myTeam.totalPlayerThreshold || 25} players</span>
               </div>
@@ -1289,7 +1316,7 @@ export function MobileBiddingLivePage() {
             <div className="cb-budget-strip">
               <div className="cb-budget-item">
                 <span>Budget</span>
-                <strong>{formatLakhs(myTeam.remainingPurse)}</strong>
+                <strong>{formatLakhs(myTeamRemaining)}</strong>
               </div>
               <div className="cb-budget-divider" />
               <div className="cb-budget-item">
@@ -1460,7 +1487,7 @@ export function MobileBiddingLivePage() {
             <div className="cb-budget-progress">
               <div className="cb-budget-progress-labels">
                 <span>Spent {formatLakhs(spentAmount)}</span>
-                <span>Left {formatLakhs(myTeam.remainingPurse)}</span>
+                <span>Left {formatLakhs(myTeamRemaining)}</span>
               </div>
               <div className="cb-budget-progress-bar">
                 <motion.div
@@ -1537,7 +1564,7 @@ export function MobileBiddingLivePage() {
                 </div>
                 <div className="cb-analytics-list-item">
                   <span>Remaining</span>
-                  <strong>{formatLakhs(myTeam.remainingPurse)}</strong>
+                  <strong>{formatLakhs(myTeamRemaining)}</strong>
                 </div>
                 <div className="cb-analytics-list-item">
                   <span>Max Allowed Bid</span>
@@ -1619,7 +1646,7 @@ export function MobileBiddingLivePage() {
                   </div>
                   <div className="cb-lb-stats">
                     <span className="cb-lb-players">{t.playersBought || 0} players</span>
-                    <span className="cb-lb-purse">{formatLakhs(t.remainingPurse)}</span>
+                    <span className="cb-lb-purse">{formatLakhs(getTeamRemaining(t))}</span>
                   </div>
                 </div>
               ))}

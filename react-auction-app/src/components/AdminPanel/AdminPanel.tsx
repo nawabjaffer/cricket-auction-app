@@ -387,8 +387,13 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
   const handleSaveTeams = async () => {
     setIsSaving(true);
     try {
-      await auctionPersistence.saveTeams(editingTeams);
-      setTeams(editingTeams);
+      const normalizedTeams = editingTeams.map((team) => ({
+        ...team,
+        allocatedAmount: Math.max(team.allocatedAmount ?? 0, team.remainingPurse ?? 0),
+      }));
+      await auctionPersistence.saveTeams(normalizedTeams);
+      setEditingTeams(normalizedTeams);
+      setTeams(normalizedTeams);
       reconcilePlayerPools();
 
       setSaveStatus('success');
@@ -490,9 +495,13 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
   const saveTeamDraft = async () => {
     if (!editingTeamId || !teamDraft) return;
 
+    const normalizedDraft = {
+      ...teamDraft,
+      allocatedAmount: Math.max(teamDraft.allocatedAmount ?? 0, teamDraft.remainingPurse ?? 0),
+    };
     const updatedTeams = editingTeams.map((team) => (
       team.id === editingTeamId
-        ? { ...teamDraft }
+        ? { ...normalizedDraft }
         : team
     ));
     setEditingTeams(updatedTeams);
