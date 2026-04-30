@@ -68,6 +68,7 @@ createRoot(document.getElementById('root')!).render(
             {/* Legacy top-level routes — all fall back to the default tenant (epl_2026) */}
             <Route path="/" element={<App />} />
             <Route path="/connect-bididng" element={<MobileBiddingLivePage />} />
+            <Route path="/connect-bidding" element={<MobileBiddingLivePage />} />
             <Route path="/diagnostics" element={<FirebaseDiagnostics />} />
             <Route path="/admin/login" element={<AdminLogin />} />
             <Route path="/admin" element={<AdminPage />} />

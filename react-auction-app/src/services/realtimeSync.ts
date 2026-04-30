@@ -340,6 +340,8 @@ class RealtimeSyncService {
         highestBid: t.highestBid,
         captain: t.captain,
         underAgePlayers: t.underAgePlayers,
+        authUsername: t.authUsername,
+        authPassword: t.authPassword,
       })),
       auctionActive,
       activeOverlay: activeOverlay ?? null,
@@ -387,8 +389,8 @@ class RealtimeSyncService {
             });
           }
           this.notifyStateListeners(state);
-        } else {
-          if (IS_DEV) console.log('[RealtimeSync] No auction state found');
+        } else if (IS_DEV) {
+          console.log('[RealtimeSync] No auction state found');
         }
       },
       (error) => {

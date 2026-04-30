@@ -51,6 +51,7 @@ export function MobileBiddingLivePage() {
   const [session, setSession] = useState<AuthSession | null>(authService.getSession());
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [authTeams, setAuthTeams] = useState<Team[]>([]);
   const [easyLoginMode, setEasyLoginMode] = useState(true);
   const [loginError, setLoginError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -103,7 +104,8 @@ export function MobileBiddingLivePage() {
   // username/password in the Teams tab, those take precedence; otherwise we
   // derive a slugified username + default password (easy-login compatible).
   const runtimeCredentials = useMemo(() => {
-    return teams.map((team, index) => {
+    const sourceTeams = authTeams.length > 0 ? authTeams : teams;
+    return sourceTeams.map((team, index) => {
       const normalized = team.name.toLowerCase().replace(/[^a-z0-9]+/g, '');
       const derivedUname = normalized || `team${index + 1}`;
       const uname = (team.authUsername?.trim() || derivedUname).toLowerCase();
@@ -118,7 +120,7 @@ export function MobileBiddingLivePage() {
         logoUrl: team.logoUrl || '',
       };
     });
-  }, [teams]);
+  }, [authTeams, teams]);
 
   const [loginScreen, setLoginScreen] = useState<LoginScreen>('access');
   const [previewTeamId, setPreviewTeamId] = useState<string | null>(null);
@@ -194,6 +196,40 @@ export function MobileBiddingLivePage() {
           }
         });
       } catch { /* ignore — default stays true */ }
+    })();
+    return () => { cancelled = true; unsub?.(); };
+  }, []);
+
+  // Real-time subscription for team records used by connect-bidding auth.
+  // This is the source of truth for admin-configured username/password.
+  useEffect(() => {
+    let cancelled = false;
+    let unsub: (() => void) | null = null;
+    (async () => {
+      try {
+        await realtimeSync.ensureInitialized();
+        const db = realtimeSync.getDatabase();
+        if (!db || cancelled) return;
+        const teamsRef = ref(db, tenantPath('auction/teams'));
+        unsub = onValue(teamsRef, (snap) => {
+          if (cancelled) return;
+          if (!snap.exists()) {
+            setAuthTeams([]);
+            return;
+          }
+          const raw = snap.val();
+          const list: Team[] = (Array.isArray(raw) ? raw : Object.values(raw ?? {}))
+            .filter((entry): entry is Team => (
+              entry != null
+              && typeof entry === 'object'
+              && 'id' in (entry as Record<string, unknown>)
+              && 'name' in (entry as Record<string, unknown>)
+            ));
+          setAuthTeams(list);
+        });
+      } catch {
+        if (!cancelled) setAuthTeams([]);
+      }
     })();
     return () => { cancelled = true; unsub?.(); };
   }, []);
