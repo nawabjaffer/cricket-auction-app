@@ -217,8 +217,7 @@ function AuctionApp({ mirrorMode = false }: { mirrorMode?: boolean }) {
     if (!ms.isConnected || !ms.lastUpdate) return;
 
     useAuctionStore.setState((prev) => {
-      const newState: Record<string, unknown> = {
-        ...prev,
+      const updates: Partial<typeof prev> = {
         currentPlayer: ms.currentPlayer,
         currentBid: ms.currentBid,
         selectedTeam: ms.selectedTeam,
@@ -235,13 +234,16 @@ function AuctionApp({ mirrorMode = false }: { mirrorMode?: boolean }) {
         },
       };
 
-      // When sold overlay is active, ensure soldPlayers has the current player
-      // so SoldOverlay can display the correct data
+      // When sold overlay is active, ensure soldPlayers ends with the current player
+      // so SoldOverlay (which reads .at(-1)) displays the correct data
       if (ms.activeOverlay === 'sold' && ms.currentPlayer && ms.selectedTeam) {
-        const lastSold = prev.soldPlayers.at(-1);
+        const existingSold = updates.soldPlayers ?? prev.soldPlayers;
+        const lastSold = existingSold.at(-1);
         if (!lastSold || lastSold.id !== ms.currentPlayer.id) {
-          newState.soldPlayers = [
-            ...prev.soldPlayers,
+          // Remove any existing entry for this player, then push to end
+          const filtered = existingSold.filter(p => p.id !== ms.currentPlayer!.id);
+          updates.soldPlayers = [
+            ...filtered,
             {
               ...ms.currentPlayer,
               soldAmount: ms.currentBid,
@@ -253,7 +255,24 @@ function AuctionApp({ mirrorMode = false }: { mirrorMode?: boolean }) {
         }
       }
 
-      return newState;
+      // When unsold overlay is active, ensure unsoldPlayers ends with the current player
+      if (ms.activeOverlay === 'unsold' && ms.currentPlayer) {
+        const existingUnsold = updates.unsoldPlayers ?? prev.unsoldPlayers;
+        const lastUnsold = existingUnsold.at(-1);
+        if (!lastUnsold || lastUnsold.id !== ms.currentPlayer.id) {
+          const filtered = existingUnsold.filter(p => p.id !== ms.currentPlayer!.id);
+          updates.unsoldPlayers = [
+            ...filtered,
+            {
+              ...ms.currentPlayer,
+              round: '1',
+              unsoldDate: new Date().toISOString(),
+            },
+          ];
+        }
+      }
+
+      return { ...prev, ...updates };
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isMirrorMode, mirrorSync.lastUpdate]);

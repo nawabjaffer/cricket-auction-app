@@ -63,7 +63,8 @@ export function MobileBiddingLivePage() {
   const [feedback, setFeedback] = useState<BidFeedback | null>(null);
   const [bidCount, setBidCount] = useState(0);
   const [lastSoldPlayer, setLastSoldPlayer] = useState<{name: string; amount: number; winnerTeam: string} | null>(null);
-  const [motionEnabled, setMotionEnabled] = useState(false);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [motionEnabled, _setMotionEnabled] = useState(false);
   const [reconnectAttempts, setReconnectAttempts] = useState(0);
   const lastPlayerIdRef = useRef<string | null>(null);
   const reconnectTimeoutRef = useRef<number | null>(null);
@@ -420,16 +421,11 @@ export function MobileBiddingLivePage() {
     setFeedback({ type: 'success', message: `Gesture bid: ₹${newBid}L`, timestamp: Date.now() });
   }, [myTeam, currentPlayer, currentBid, isConnected, submitBid]);
 
-  const { isActive: motionActive, isSupported: motionSupported } = useMotionSensor({
+  const { isActive: motionActive } = useMotionSensor({
     enabled: motionEnabled && !!session,
     onMotionDetected: handleMotionBid,
     cooldown: 2000,
   });
-
-  const handleToggleMotionSensor = useCallback(() => {
-    setMotionEnabled(prev => !prev);
-    setFeedback({ type: 'info', message: motionEnabled ? 'Gesture bidding disabled' : 'Gesture bidding enabled', timestamp: Date.now() });
-  }, [motionEnabled]);
 
   // Username-only team login (password auto-resolved from credentials)
   const handleTeamLogin = useCallback(async (cred: typeof runtimeCredentials[0]) => {
@@ -1397,18 +1393,6 @@ export function MobileBiddingLivePage() {
             <div className="cb-header-right">
               <motion.button className="cb-icon-btn" onClick={handleManualRefresh} whileTap={{ scale: 0.9 }} title="Refresh">
                 <IoRefresh size={18} />
-              </motion.button>
-              {motionSupported && (
-                <motion.button
-                  className={`cb-icon-btn ${motionActive ? 'active' : ''}`}
-                  onClick={handleToggleMotionSensor} whileTap={{ scale: 0.9 }}
-                  title={motionActive ? 'Gesture active' : 'Enable gesture'}
-                >
-                  <IoSwapVertical size={18} />
-                </motion.button>
-              )}
-              <motion.button className="cb-icon-btn" onClick={() => setShowTeamMenu(true)} whileTap={{ scale: 0.9 }} title="Teams">
-                <IoPeople size={18} />
               </motion.button>
               <motion.button className="cb-icon-btn logout" onClick={handleLogout} whileTap={{ scale: 0.9 }} title="Logout">
                 <IoEllipsisHorizontal size={18} />
