@@ -91,7 +91,7 @@ export function BreakOverlay({
     }
   }, [centerSponsors.length]);
 
-  // ESC / B to close
+  // ESC / B to close, N to next sponsor
   useEffect(() => {
     if (!isVisible) return;
     const handleKey = (e: KeyboardEvent) => {
@@ -99,10 +99,14 @@ export function BreakOverlay({
         e.preventDefault();
         onClose();
       }
+      if ((e.key === 'n' || e.key === 'N') && centerSponsors.length > 1) {
+        e.preventDefault();
+        setActiveSponsorIndex((prev) => (prev + 1) % centerSponsors.length);
+      }
     };
     globalThis.addEventListener('keydown', handleKey);
     return () => globalThis.removeEventListener('keydown', handleKey);
-  }, [isVisible, onClose]);
+  }, [isVisible, onClose, centerSponsors.length]);
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -175,7 +179,10 @@ export function BreakOverlay({
                 <span className="break-ov__title-sponsors-label">Title Sponsor</span>
                 <div className="break-ov__title-sponsors-logos">
                   {titleSponsors.map(s => (
-                    <img key={s.id} src={s.logoUrl} alt={s.name} className="break-ov__title-sponsor-logo" />
+                    <div key={s.id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                      <img src={s.logoUrl} alt={s.name} className="break-ov__title-sponsor-logo" />
+                      <span className="break-ov__title-sponsor-name">{s.name}</span>
+                    </div>
                   ))}
                 </div>
               </div>
@@ -333,7 +340,7 @@ export function BreakOverlay({
 
           {/* NJS Creative Labs footer branding */}
           <div className="break-ov__hint">
-            Press <kbd>B</kbd> or <kbd>ESC</kbd> to end break
+            Press <kbd>B</kbd> or <kbd>ESC</kbd> to end break · <kbd>N</kbd> next ad
             <span style={{ marginLeft: '1.5rem', opacity: 0.6 }}>powered by <b style={{ color: 'rgba(129,140,248,0.6)' }}>NJS Creative Labs</b></span>
           </div>
         </motion.div>

@@ -572,6 +572,10 @@ function AuctionApp({ mirrorMode = false }: { mirrorMode?: boolean }) {
     let alive = true;
     const load = async () => {
       try {
+        const ok = await realtimeSync.ensureInitialized();
+        if (!ok || !alive) return;
+        const db = realtimeSync.getDatabase();
+        if (db) auctionPersistence.initialize(db);
         const settings = await auctionPersistence.getAdminSettings();
         if (alive && settings) setAdminSettings(settings);
       } catch { /* ignore */ }
@@ -1868,6 +1872,7 @@ function AuctionApp({ mirrorMode = false }: { mirrorMode?: boolean }) {
       <AdminPanel 
         isOpen={showAdminPanel} 
         onClose={() => setShowAdminPanel(false)}
+        onSettingsSaved={(settings) => setAdminSettings(settings)}
       />
 
       {/* Analytics Carousel - Bottom of screen (toggle with '-' key) */}

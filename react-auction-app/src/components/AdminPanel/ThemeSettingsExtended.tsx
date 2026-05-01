@@ -196,8 +196,8 @@ export function ThemeSettingsExtended({ settings, onChange, teams }: ThemeSettin
 
       {/* ─── Section 2: Special Categories ──────────────────────────────────── */}
       <div className="admin-section-card">
-        <h3 className="admin-section-title">🏷️ Special Player Categories</h3>
-        <p className="admin-section-desc">Add custom categories like Under-19, Under-17, Over-40 for player grouping in team views and bidding pages.</p>
+        <h3 className="admin-section-title">🏷️ Special Player Categories & Age Spotlight</h3>
+        <p className="admin-section-desc">Add custom categories like Under-19, Under-17, Over-40. Players matching a category will get a spotlight badge during the auction and in team views.</p>
         <div className="admin-items-list">
           {specialCategories.map(cat => (
             <div key={cat.id} className="admin-item-row">

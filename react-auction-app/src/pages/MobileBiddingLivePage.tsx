@@ -377,11 +377,13 @@ export function MobileBiddingLivePage() {
     }
   }, [lastSessionReset, session]);
 
-  // Detect my team from session
+  // Detect my team from session — prefer broadcast teams, fallback to authTeams
   const myTeam = useMemo(() => {
     if (!session) return null;
-    return teams.find(t => t.id === session.teamId) || null;
-  }, [session, teams]);
+    return teams.find(t => t.id === session.teamId)
+      || authTeams.find(t => t.id === session.teamId)
+      || null;
+  }, [session, teams, authTeams]);
 
   const isMyBid = selectedTeam?.id === myTeam?.id;
 
@@ -1545,6 +1547,11 @@ export function MobileBiddingLivePage() {
       )}
 
       {/* ═══════════════ MY TEAM TAB ═══════════════ */}
+      {activeTab === 'myteam' && !myTeam && (
+        <div className="cb-content cb-team-tab" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 200 }}>
+          <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: 14 }}>Loading team data...</p>
+        </div>
+      )}
       {activeTab === 'myteam' && myTeam && (
         <div className="cb-content cb-team-tab">
           {/* Team overview card */}

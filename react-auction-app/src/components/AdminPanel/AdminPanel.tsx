@@ -7,7 +7,7 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 import { IoClose, IoSave, IoRefresh, IoDownload, IoVideocam, IoAdd, IoTrash, IoArrowUp, IoArrowDown, IoSearch, IoStatsChart, IoCloudUpload } from 'react-icons/io5';
-import { auctionPersistence, type AdminSettings, type SponsorRecord } from '../../services/auctionPersistence';
+import { auctionPersistence, type AdminSettings, type SponsorRecord, type SpecialCategory } from '../../services/auctionPersistence';
 import { realtimeSync } from '../../services/realtimeSync';
 import { googleSheetsService, imagePreloaderService, resolveMediaToStorage, uploadFileToStorage } from '../../services';
 import AdminImageBulkUpload from './AdminImageBulkUpload';
@@ -87,15 +87,28 @@ type LogoSourceMode = 'drive' | 'upload';
 interface AdminPanelProps {
   readonly isOpen: boolean;
   readonly onClose: () => void;
+  readonly onSettingsSaved?: (settings: AdminSettings) => void;
   readonly mode?: 'drawer' | 'page';
 }
 
-export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps) {
+export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }: AdminPanelProps) {
   const PAGE_SIZE_OPTIONS = [10, 20, 50, 100] as const;
   const slugify = (value: string) => value.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
   const isDriveLikeUrl = (value?: string) => {
     const url = (value ?? '').trim().toLowerCase();
     return url.includes('drive.google.com') || url.includes('docs.google.com') || url.includes('googleusercontent.com');
+  };
+
+  // Get matching special category for a player's age
+  const getAgeCategory = (age?: number | null) => {
+    if (age == null || age <= 0) return null;
+    const cats: SpecialCategory[] = extendedSettingsRef.current?.specialCategories ?? loadedAdminSettings?.specialCategories ?? [];
+    return cats.find(c => {
+      if (c.ageMax != null && age > c.ageMax) return false;
+      if (c.ageMin != null && age < c.ageMin) return false;
+      if (c.ageMax == null && c.ageMin == null) return false;
+      return true;
+    }) ?? null;
   };
 
   const [activeTab, setActiveTab] = useState<'theme' | 'teams' | 'sponsors' | 'players' | 'export' | 'features' | 'streaming' | 'reset'>('theme');
@@ -113,8 +126,6 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
 
   // Auction role ordering
   const [auctionRoleOrder, setAuctionRoleOrder] = useState<AuctionRoleCategory[]>([...DEFAULT_AUCTION_ROLE_ORDER]);
-  // Under-age spotlight threshold
-  const [underAgeThreshold, setUnderAgeThreshold] = useState(18);
   // Easy login mode for /connect-bidding — true = tap team card, false = username/password
   const [easyLoginMode, setEasyLoginMode] = useState(true);
 
@@ -261,15 +272,21 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
   useEffect(() => {
     let isMounted = true;
 
-    const ensureDb = async () => {
-      await realtimeSync.ensureInitialized();
+    const ensureDb = async (): Promise<boolean> => {
+      const ok = await realtimeSync.ensureInitialized();
+      if (!ok) return false;
       const db = realtimeSync.getDatabase();
-      if (db) auctionPersistence.initialize(db);
+      if (db) {
+        auctionPersistence.initialize(db);
+        return true;
+      }
+      return false;
     };
 
     const loadSettings = async () => {
       try {
-        await ensureDb();
+        const dbReady = await ensureDb();
+        if (!dbReady || !isMounted) return;
         const settings = await auctionPersistence.getAdminSettings();
         if (settings) {
           setLoadedAdminSettings(settings);
@@ -284,9 +301,6 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
           if (settings.auctionRoleOrder?.length) {
             setAuctionRoleOrder(settings.auctionRoleOrder);
           }
-          if (settings.underAgeThreshold != null) {
-            setUnderAgeThreshold(settings.underAgeThreshold);
-          }
           setEasyLoginMode(settings.easyLoginMode !== false); // default true
         }
       } catch (error) {
@@ -296,7 +310,8 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
 
     const loadSponsors = async () => {
       try {
-        await ensureDb();
+        const dbReady = await ensureDb();
+        if (!dbReady || !isMounted) return;
         const sponsors = await auctionPersistence.getSponsors();
         if (!isMounted) return;
 
@@ -379,14 +394,17 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
         auctionTitle,
         updatedAt: Date.now(),
         auctionRoleOrder,
-        underAgeThreshold,
         easyLoginMode,
         // Merge in extended settings (player stats, categories, budget, breaks, etc.)
         ...extendedSettingsRef.current,
       };
 
-      await auctionPersistence.saveAdminSettings(settings);
-      setLoadedAdminSettings(settings);
+      // Strip undefined values — Firebase RTDB rejects them
+      const clean = JSON.parse(JSON.stringify(settings)) as AdminSettings;
+
+      await auctionPersistence.saveAdminSettings(clean);
+      setLoadedAdminSettings(clean);
+      onSettingsSaved?.(clean);
 
       // Apply theme colors to document
       document.documentElement.style.setProperty('--color-primary', primaryColor);
@@ -1793,22 +1811,6 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
                     ))}
                   </div>
 
-                  <h3 style={{ marginTop: '2rem' }}>Under-Age Spotlight</h3>
-                  <div className="form-group">
-                    <label>Under-Age Threshold</label>
-                    <input
-                      type="number"
-                      min={0}
-                      max={25}
-                      value={underAgeThreshold}
-                      onChange={(e) => setUnderAgeThreshold(Math.max(0, Number.parseInt(e.target.value || '18', 10)))}
-                      placeholder="e.g., 18"
-                    />
-                    <small style={{ color: '#6b7280' }}>
-                      Players below this age will get a special "Under {underAgeThreshold}" spotlight badge during the auction.
-                    </small>
-                  </div>
-
                   <h3 style={{ marginTop: '2rem' }}>Connect-Bidding Login</h3>
                   <div className="form-group">
                     <label className="admin-toggle-row">
@@ -2381,9 +2383,7 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
                         <div className="admin-compact-main">
                           <div className="admin-player-name-row">
                             <strong>{player.name}</strong>
-                            {player.age != null && player.age > 0 && player.age < underAgeThreshold && (
-                              <span className="admin-underage-chip">U{underAgeThreshold}</span>
-                            )}
+                            {(() => { const cat = getAgeCategory(player.age); return cat ? <span className="admin-underage-chip" style={cat.color ? { background: cat.color } : undefined}>{cat.label}</span> : null; })()}
                           </div>
                           <small>
                             <span className="admin-role-dot" style={{ background: getRoleBadgeColor(player.role) }} />
@@ -2884,9 +2884,7 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
                         >
                           {formatRoleDisplay(playerDraft.role)}
                         </span>
-                        {playerDraft.age != null && playerDraft.age > 0 && playerDraft.age < underAgeThreshold && (
-                          <span className="admin-underage-chip">U{underAgeThreshold}</span>
-                        )}
+                        {(() => { const cat = getAgeCategory(playerDraft.age); return cat ? <span className="admin-underage-chip" style={cat.color ? { background: cat.color } : undefined}>{cat.label}</span> : null; })()}
                       </div>
                     </div>
 
