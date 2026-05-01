@@ -8,6 +8,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 
 import { IoClose, IoSave, IoRefresh, IoDownload, IoVideocam, IoAdd, IoTrash, IoArrowUp, IoArrowDown, IoSearch, IoStatsChart, IoCloudUpload } from 'react-icons/io5';
 import { auctionPersistence, type AdminSettings, type SponsorRecord } from '../../services/auctionPersistence';
+import { realtimeSync } from '../../services/realtimeSync';
 import { googleSheetsService, imagePreloaderService, resolveMediaToStorage, uploadFileToStorage } from '../../services';
 import AdminImageBulkUpload from './AdminImageBulkUpload';
 import { ThemeSettingsExtended } from './ThemeSettingsExtended';
@@ -144,6 +145,8 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
   const [isSavingSponsors, setIsSavingSponsors] = useState(false);
   const [isMigratingMedia, setIsMigratingMedia] = useState(false);
   const [loadedAdminSettings, setLoadedAdminSettings] = useState<AdminSettings | null>(null);
+  // Holds the latest extended settings from ThemeSettingsExtended, merged on save
+  const extendedSettingsRef = useRef<Partial<AdminSettings>>({});
   const csvFileInputRef = useRef<HTMLInputElement | null>(null);
   const statsCsvInputRef = useRef<HTMLInputElement | null>(null);
   const organizerLogoFileRef = useRef<HTMLInputElement | null>(null);
@@ -258,8 +261,15 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
   useEffect(() => {
     let isMounted = true;
 
+    const ensureDb = async () => {
+      await realtimeSync.ensureInitialized();
+      const db = realtimeSync.getDatabase();
+      if (db) auctionPersistence.initialize(db);
+    };
+
     const loadSettings = async () => {
       try {
+        await ensureDb();
         const settings = await auctionPersistence.getAdminSettings();
         if (settings) {
           setLoadedAdminSettings(settings);
@@ -286,6 +296,7 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
 
     const loadSponsors = async () => {
       try {
+        await ensureDb();
         const sponsors = await auctionPersistence.getSponsors();
         if (!isMounted) return;
 
@@ -350,6 +361,11 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
   const handleSaveTheme = async () => {
     setIsSaving(true);
     try {
+      // Ensure DB is ready
+      await realtimeSync.ensureInitialized();
+      const db = realtimeSync.getDatabase();
+      if (db) auctionPersistence.initialize(db);
+
       const settings: AdminSettings = {
         organizerName,
         organizerLogo,
@@ -365,9 +381,12 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
         auctionRoleOrder,
         underAgeThreshold,
         easyLoginMode,
+        // Merge in extended settings (player stats, categories, budget, breaks, etc.)
+        ...extendedSettingsRef.current,
       };
 
       await auctionPersistence.saveAdminSettings(settings);
+      setLoadedAdminSettings(settings);
 
       // Apply theme colors to document
       document.documentElement.style.setProperty('--color-primary', primaryColor);
@@ -1862,39 +1881,24 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
                     </div>
                   </div>
 
-                  <button
-                    className="admin-btn admin-btn-primary"
-                    onClick={handleSaveTheme}
-                    disabled={isSaving}
-                  >
-                    <IoSave size={18} /> Save Settings
-                  </button>
-
                   {/* Extended Settings - Player Stats, Categories, Budget, Breaks, Loading, Owners, Iconic Players */}
                   <div style={{ marginTop: '2rem', borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '2rem' }}>
                     <h3 style={{ marginBottom: '1rem' }}>Advanced Configuration</h3>
                     <ThemeSettingsExtended
                       settings={loadedAdminSettings}
                       teams={editingTeams}
-                      onSave={async (partial) => {
-                        const current = loadedAdminSettings || {
-                          organizerName,
-                          organizerLogo,
-                          numberOfTeams: teams.length,
-                          maxUnsoldRounds,
-                          themeColors: { primary: primaryColor, secondary: secondaryColor, accent: accentColor },
-                          auctionTitle,
-                          updatedAt: Date.now(),
-                          auctionRoleOrder,
-                          underAgeThreshold,
-                          easyLoginMode,
-                        };
-                        const merged: AdminSettings = { ...current, ...partial, updatedAt: Date.now() };
-                        await auctionPersistence.saveAdminSettings(merged);
-                        setLoadedAdminSettings(merged);
-                      }}
+                      onChange={(partial) => { extendedSettingsRef.current = partial; }}
                     />
                   </div>
+
+                  <button
+                    className="admin-btn admin-btn-primary"
+                    onClick={handleSaveTheme}
+                    disabled={isSaving}
+                    style={{ marginTop: '1.5rem' }}
+                  >
+                    <IoSave size={18} /> Save Settings
+                  </button>
                 </div>
               )}
 

@@ -25,7 +25,7 @@
 
 .admin-section-desc {
   font-size: 0.82rem;
-  color: rgba(255, 255, 255, 0.5);
+  color: rgba(0, 0, 0, 0.5);
   margin-bottom: 16px;
   line-height: 1.5;
 }
@@ -48,7 +48,7 @@
   cursor: pointer;
   transition: all 0.15s;
   font-size: 0.85rem;
-  color: rgba(255, 255, 255, 0.8);
+  color: #000;
 }
 .admin-checkbox-item:hover {
   background: rgba(59, 130, 246, 0.08);
@@ -131,7 +131,7 @@
 }
 .admin-form-field label {
   font-size: 0.78rem;
-  color: rgba(255, 255, 255, 0.5);
+  color: rgba(0, 0, 0, 0.8);
   font-weight: 600;
 }
 
@@ -193,7 +193,7 @@
   background: rgba(255, 255, 255, 0.02);
   border: 1px solid rgba(255, 255, 255, 0.06);
   cursor: pointer;
-  color: rgba(255, 255, 255, 0.8);
+  color: rgba(0, 0, 0, 0.8);
   font-size: 0.85rem;
   transition: all 0.15s;
 }
@@ -219,7 +219,7 @@
   font-size: 16px;
 }
 .admin-break-inactive {
-  color: rgba(255, 255, 255, 0.3);
+  color: rgba(0, 0, 0, 0.3);
   font-size: 14px;
 }
 
@@ -240,49 +240,11 @@
 .admin-team-name {
   font-weight: 700;
   font-size: 0.9rem;
-  color: rgba(255, 255, 255, 0.9);
+  color: rgba(0, 0, 0, 0.9);
 }
 .admin-empty-note {
   font-size: 0.8rem;
-  color: rgba(255, 255, 255, 0.3);
+  color: rgba(0, 0, 0, 0.3);
   font-style: italic;
   padding: 6px 0;
-}
-
-/* Save section */
-.admin-save-section {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  padding-top: 8px;
-}
-.admin-save-btn {
-  padding: 12px 32px;
-  border-radius: 10px;
-  background: linear-gradient(135deg, #3b82f6, #6366f1);
-  border: none;
-  color: #fff;
-  font-weight: 700;
-  font-size: 0.95rem;
-  cursor: pointer;
-  transition: all 0.2s;
-  box-shadow: 0 4px 16px rgba(59, 130, 246, 0.3);
-}
-.admin-save-btn:hover:not(:disabled) {
-  transform: translateY(-1px);
-  box-shadow: 0 6px 20px rgba(59, 130, 246, 0.4);
-}
-.admin-save-btn:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-.admin-save-msg {
-  font-size: 0.85rem;
-  font-weight: 600;
-}
-.admin-save-msg.success {
-  color: #4ade80;
-}
-.admin-save-msg.error {
-  color: #f87171;
 }

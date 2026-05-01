@@ -51,11 +51,12 @@ const DEFAULT_BUDGET_RULES: BudgetRulesConfig = {
 
 interface ThemeSettingsExtendedProps {
   readonly settings: AdminSettings | null;
-  readonly onSave: (partial: Partial<AdminSettings>) => Promise<void>;
+  /** Called whenever any extended field changes so the parent can merge on save */
+  readonly onChange: (partial: Partial<AdminSettings>) => void;
   readonly teams: Team[];
 }
 
-export function ThemeSettingsExtended({ settings, onSave, teams }: ThemeSettingsExtendedProps) {
+export function ThemeSettingsExtended({ settings, onChange, teams }: ThemeSettingsExtendedProps) {
   // Player Stats Fields
   const [playerStatsFields, setPlayerStatsFields] = useState<string[]>(
     settings?.playerStatsFields ?? ['age', 'matches', 'runs', 'wickets', 'battingBestFigures', 'bowlingBestFigures']
@@ -92,9 +93,6 @@ export function ThemeSettingsExtended({ settings, onSave, teams }: ThemeSettings
     settings?.maxIconicPlayers ?? 1
   );
 
-  const [saving, setSaving] = useState(false);
-  const [saveMsg, setSaveMsg] = useState<string>('');
-
   // Sync when settings change externally
   useEffect(() => {
     if (!settings) return;
@@ -108,28 +106,20 @@ export function ThemeSettingsExtended({ settings, onSave, teams }: ThemeSettings
     if (settings.maxIconicPlayers != null) setMaxIconicPlayers(settings.maxIconicPlayers);
   }, [settings]);
 
-  const handleSave = async () => {
-    setSaving(true);
-    setSaveMsg('');
-    try {
-      await onSave({
-        playerStatsFields,
-        specialCategories,
-        budgetRules,
-        auctionBreaks,
-        currentBreakId: currentBreakId || undefined,
-        loadingScreen,
-        teamOwners,
-        maxIconicPlayers,
-      });
-      setSaveMsg('Settings saved successfully!');
-      setTimeout(() => setSaveMsg(''), 3000);
-    } catch {
-      setSaveMsg('Failed to save settings.');
-    } finally {
-      setSaving(false);
-    }
-  };
+  // Notify parent of every change so it can merge on the single "Save Settings" click
+  useEffect(() => {
+    onChange({
+      playerStatsFields,
+      specialCategories,
+      budgetRules,
+      auctionBreaks,
+      currentBreakId: currentBreakId || undefined,
+      loadingScreen,
+      teamOwners,
+      maxIconicPlayers,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [playerStatsFields, specialCategories, budgetRules, auctionBreaks, currentBreakId, loadingScreen, teamOwners, maxIconicPlayers]);
 
   // ─── Player Stats Fields ─────────────────────────────────────────────────
   const toggleStatField = (key: string) => {
@@ -487,14 +477,6 @@ export function ThemeSettingsExtended({ settings, onSave, teams }: ThemeSettings
             className="admin-input admin-input-sm"
           />
         </div>
-      </div>
-
-      {/* ─── Save Button ────────────────────────────────────────────────────── */}
-      <div className="admin-save-section">
-        <button onClick={handleSave} disabled={saving} className="admin-save-btn">
-          {saving ? 'Saving...' : 'Save All Settings'}
-        </button>
-        {saveMsg && <span className={`admin-save-msg ${saveMsg.includes('Failed') ? 'error' : 'success'}`}>{saveMsg}</span>}
       </div>
     </div>
   );
