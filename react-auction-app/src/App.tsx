@@ -953,8 +953,8 @@ function AuctionApp({ mirrorMode = false }: { mirrorMode?: boolean }) {
                 }}
                 transition={{ duration: 0.5, ease: [0.32, 0.72, 0, 1] }}
               >
-                <img src="/assets/BCC Season 6.png" alt="BCC" className="club-logo" />
-                <span>Eruvai Premier League</span>
+                <img src={organizerLogo || '/assets/BCC Season 6.png'} alt={organizerName || 'Auction'} className="club-logo" />
+                <span>{organizerName || 'Auction'}</span>
               </motion.div>
               <motion.div 
                 className="neon-bar-wrapper"
