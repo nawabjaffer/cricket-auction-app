@@ -1,0 +1,185 @@
+/* ============================================================================
+   TEAM STANDINGS OVERLAY - Cinematic table styles
+   ============================================================================ */
+
+.team-standings-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.team-standings-container {
+  position: relative;
+  width: 95vw;
+  max-width: 1400px;
+  max-height: 90vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  background: linear-gradient(135deg, rgba(15, 23, 42, 0.98), rgba(30, 41, 59, 0.96));
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 20px;
+  padding: 32px;
+  box-shadow: 
+    0 0 80px rgba(59, 130, 246, 0.15),
+    0 25px 50px rgba(0, 0, 0, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.team-standings-close {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 50%;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(255, 255, 255, 0.7);
+  cursor: pointer;
+  transition: all 0.2s;
+  font-size: 18px;
+}
+.team-standings-close:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+  transform: scale(1.1);
+}
+
+.team-standings-title {
+  text-align: center;
+  font-size: 1.8rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  margin-bottom: 24px;
+  background: linear-gradient(135deg, #fff, #94a3b8);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  text-shadow: 0 0 40px rgba(59, 130, 246, 0.3);
+}
+
+.team-standings-table-wrap {
+  overflow-x: auto;
+  overflow-y: auto;
+  flex: 1;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.team-standings-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.team-standings-table thead {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+
+.team-standings-table th {
+  padding: 14px 16px;
+  text-align: center;
+  font-weight: 700;
+  font-size: 0.75rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(148, 163, 184, 0.9);
+  background: linear-gradient(180deg, rgba(15, 23, 42, 0.98), rgba(30, 41, 59, 0.95));
+  border-bottom: 1px solid rgba(59, 130, 246, 0.2);
+  white-space: nowrap;
+}
+.team-standings-table th.th-team {
+  text-align: left;
+  padding-left: 20px;
+}
+
+.team-standings-row {
+  transition: background 0.2s;
+}
+.team-standings-row:hover {
+  background: rgba(59, 130, 246, 0.06);
+}
+
+.team-standings-table td {
+  padding: 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.9);
+}
+.team-standings-table td.td-team {
+  padding-left: 20px;
+}
+
+.team-standings-team-cell {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.team-standings-logo {
+  width: 40px;
+  height: 40px;
+  object-fit: contain;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  padding: 2px;
+}
+
+.team-standings-name {
+  font-weight: 700;
+  font-size: 1rem;
+  white-space: nowrap;
+}
+
+.td-number {
+  text-align: center;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.td-spent {
+  color: #f87171;
+}
+
+.td-remaining {
+  color: #4ade80;
+}
+
+.td-max {
+  color: #fbbf24;
+}
+
+.td-category {
+  font-weight: 700;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .team-standings-container {
+    width: 98vw;
+    padding: 16px;
+    border-radius: 12px;
+  }
+  .team-standings-title {
+    font-size: 1.3rem;
+  }
+  .team-standings-table {
+    font-size: 0.75rem;
+  }
+  .team-standings-logo {
+    width: 28px;
+    height: 28px;
+  }
+}

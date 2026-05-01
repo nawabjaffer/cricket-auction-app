@@ -42,13 +42,16 @@ class WishlistService {
 
   /**
    * Add a player to the team's wishlist. Throws if the cap is reached.
+   * @param cap Optional per-team cap. When omitted, falls back to MAX_WISHLIST_PICKS.
+   *            Pass `team.totalPlayerThreshold` to enforce the admin-configured size.
    */
-  async addPlayer(teamId: string, playerId: string): Promise<void> {
+  async addPlayer(teamId: string, playerId: string, cap?: number): Promise<void> {
     if (!this.db) throw new Error('Wishlist service not initialized');
     const current = await this.getWishlist(teamId);
     if (current[playerId]) return; // already picked — no-op
-    if (Object.keys(current).length >= MAX_WISHLIST_PICKS) {
-      throw new Error(`Wishlist is full (max ${MAX_WISHLIST_PICKS} players)`);
+    const effectiveCap = Math.max(1, Math.min(cap ?? MAX_WISHLIST_PICKS, MAX_WISHLIST_PICKS * 4));
+    if (Object.keys(current).length >= effectiveCap) {
+      throw new Error(`Wishlist is full (max ${effectiveCap} players)`);
     }
     const entry: WishlistEntry = { addedAt: Date.now() };
     await set(ref(this.db, this.teamPath(teamId, playerId)), entry);

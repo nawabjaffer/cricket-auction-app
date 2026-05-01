@@ -120,6 +120,8 @@ export interface Team {
   remainingPurse: number;
   highestBid: number;
   captain: string;
+  /** Multiple iconic players per team (extends legacy `captain` field) */
+  iconicPlayers?: string[];
   underAgePlayers: number;
   primaryColor?: string;
   secondaryColor?: string;

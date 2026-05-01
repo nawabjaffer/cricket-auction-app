@@ -10,6 +10,8 @@ import { IoClose, IoSave, IoRefresh, IoDownload, IoVideocam, IoAdd, IoTrash, IoA
 import { auctionPersistence, type AdminSettings, type SponsorRecord } from '../../services/auctionPersistence';
 import { googleSheetsService, imagePreloaderService, resolveMediaToStorage, uploadFileToStorage } from '../../services';
 import AdminImageBulkUpload from './AdminImageBulkUpload';
+import { ThemeSettingsExtended } from './ThemeSettingsExtended';
+import '../../components/AdminPanel/ThemeSettingsExtended.css';
 import { useAuctionStore } from '../../store/auctionStore';
 import { exportSoldPlayers, downloadPlayersTemplate, downloadScoresTemplate } from '../../utils/exportData';
 import FeatureFlagsTab from './FeatureFlagsTab';
@@ -141,6 +143,7 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
   const [iconTeamId, setIconTeamId] = useState<string>('');
   const [isSavingSponsors, setIsSavingSponsors] = useState(false);
   const [isMigratingMedia, setIsMigratingMedia] = useState(false);
+  const [loadedAdminSettings, setLoadedAdminSettings] = useState<AdminSettings | null>(null);
   const csvFileInputRef = useRef<HTMLInputElement | null>(null);
   const statsCsvInputRef = useRef<HTMLInputElement | null>(null);
   const organizerLogoFileRef = useRef<HTMLInputElement | null>(null);
@@ -259,6 +262,7 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
       try {
         const settings = await auctionPersistence.getAdminSettings();
         if (settings) {
+          setLoadedAdminSettings(settings);
           setOrganizerName(settings.organizerName);
           setOrganizerLogo(settings.organizerLogo);
           setAuctionTitle(settings.auctionTitle);
@@ -495,9 +499,20 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
   const saveTeamDraft = async () => {
     if (!editingTeamId || !teamDraft) return;
 
+    // Reconcile budget against actual sold players for this team so that the
+    // displayed "remaining" never drifts when admin edits a team mid-auction.
+    // allocatedAmount is the source of truth for "total budget"; remainingPurse
+    // is derived = allocatedAmount - sum(soldPlayer.soldAmount for this team).
+    const teamSpent = soldPlayers
+      .filter(sp => sp.teamId === editingTeamId || sp.teamName === teamDraft.name)
+      .reduce((sum, sp) => sum + (sp.soldAmount || 0), 0);
+    const newAllocated = Math.max(teamDraft.allocatedAmount ?? 0, teamSpent);
+    const newRemaining = Math.max(0, newAllocated - teamSpent);
+
     const normalizedDraft = {
       ...teamDraft,
-      allocatedAmount: Math.max(teamDraft.allocatedAmount ?? 0, teamDraft.remainingPurse ?? 0),
+      allocatedAmount: newAllocated,
+      remainingPurse: newRemaining,
     };
     const updatedTeams = editingTeams.map((team) => (
       team.id === editingTeamId
@@ -1492,6 +1507,39 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
     }
   };
 
+  // Wipe ONLY live broadcast/session paths in RTDB. Preserves teams, players,
+  // sponsors, theme, settings and per-team wishlists. Use between sessions to
+  // prevent stale "live state" from leaking into the next auction.
+  const handleClearLiveSessionState = async () => {
+    const confirmed = globalThis.confirm(
+      'CLEAR LIVE SESSION STATE?\n\n' +
+      'This will wipe stale live-broadcast data from Firebase:\n' +
+      '  • Current player / current bid snapshot\n' +
+      '  • Mobile bid stream\n' +
+      '  • Session reset signals\n' +
+      '  • Overlay broadcast control flags\n\n' +
+      'PRESERVED: Teams, players, sponsors, theme, admin settings, wishlists,\n' +
+      'sold/unsold player history.\n\n' +
+      'Safe to run between auction sessions.'
+    );
+    if (!confirmed) return;
+
+    try {
+      setIsSaving(true);
+      await auctionPersistence.clearLiveSessionState();
+      showUploadFeedback('Live session state cleared. Stale broadcast data removed.');
+      setSaveStatus('success');
+      setTimeout(() => setSaveStatus('idle'), 2500);
+    } catch (error) {
+      console.error('[AdminPanel] Failed to clear live session state:', error);
+      showUploadFeedback('Failed to clear live session state.', 'error');
+      setSaveStatus('error');
+      setTimeout(() => setSaveStatus('idle'), 3000);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const panelContent = (
     <div className={`admin-panel ${mode === 'page' ? 'admin-panel--page' : ''}`}>
       {/* Global saving progress bar */}
@@ -1821,6 +1869,32 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
                   >
                     <IoSave size={18} /> Save Settings
                   </button>
+
+                  {/* Extended Settings - Player Stats, Categories, Budget, Breaks, Loading, Owners, Iconic Players */}
+                  <div style={{ marginTop: '2rem', borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '2rem' }}>
+                    <h3 style={{ marginBottom: '1rem' }}>Advanced Configuration</h3>
+                    <ThemeSettingsExtended
+                      settings={loadedAdminSettings}
+                      teams={editingTeams}
+                      onSave={async (partial) => {
+                        const current = loadedAdminSettings || {
+                          organizerName,
+                          organizerLogo,
+                          numberOfTeams: teams.length,
+                          maxUnsoldRounds,
+                          themeColors: { primary: primaryColor, secondary: secondaryColor, accent: accentColor },
+                          auctionTitle,
+                          updatedAt: Date.now(),
+                          auctionRoleOrder,
+                          underAgeThreshold,
+                          easyLoginMode,
+                        };
+                        const merged: AdminSettings = { ...current, ...partial, updatedAt: Date.now() };
+                        await auctionPersistence.saveAdminSettings(merged);
+                        setLoadedAdminSettings(merged);
+                      }}
+                    />
+                  </div>
                 </div>
               )}
 
@@ -2467,6 +2541,32 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
 
                   <hr style={{ border: 'none', borderTop: '1px solid rgba(0,0,0,0.1)', margin: '1.5rem 0' }} />
 
+                  {/* Live Session State — wipes only live broadcast paths */}
+                  <h3>Clear Live Session State</h3>
+                  <div className="reset-warning reset-warning--amber">
+                    <p>🧹 Removes stale live-only data from Firebase:</p>
+                    <ul>
+                      <li>Current player / current bid snapshot</li>
+                      <li>Mobile bid stream</li>
+                      <li>Session reset signals</li>
+                      <li>Overlay broadcast control flags</li>
+                    </ul>
+                    <p style={{ marginTop: '0.5rem', opacity: 0.8, fontSize: '0.8rem' }}>
+                      ✓ Preserves teams, players, sponsors, theme, settings, wishlists, sold/unsold history.
+                    </p>
+                  </div>
+
+                  <button
+                    className="admin-btn admin-btn-secondary"
+                    onClick={handleClearLiveSessionState}
+                    disabled={isSaving}
+                    style={{ marginBottom: '2rem' }}
+                  >
+                    <IoRefresh size={18} /> Clear Live Session State
+                  </button>
+
+                  <hr style={{ border: 'none', borderTop: '1px solid rgba(0,0,0,0.1)', margin: '1.5rem 0' }} />
+
                   {/* Full Reset — reloads from sheets snapshot */}
                   <h3>Full Reset (Reload from Sheets)</h3>
                   <div className="reset-warning">
@@ -2515,24 +2615,24 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
 
                     <div className="form-row">
                       <div className="form-group" ref={iconPickerRef}>
-                        <label>Icon Player</label>
+                        <label>Icon Player(s)</label>
                         <div className="icon-player-picker">
                           <div
                             className={`icon-player-selected ${showIconPlayerPicker ? 'open' : ''}`}
                             onClick={() => setShowIconPlayerPicker(prev => !prev)}
                           >
-                            <span className={teamDraft.captain ? 'has-value' : 'placeholder'}>
-                              {teamDraft.captain || '— Select iconic player —'}
+                            <span className={(teamDraft.iconicPlayers?.length || teamDraft.captain) ? 'has-value' : 'placeholder'}>
+                              {(teamDraft.iconicPlayers?.length ? teamDraft.iconicPlayers.join(', ') : teamDraft.captain) || '— Select iconic player(s) —'}
                             </span>
-                            {teamDraft.captain && (
+                            {(teamDraft.iconicPlayers?.length || teamDraft.captain) ? (
                               <button
                                 type="button"
                                 className="icon-player-clear"
-                                onClick={(e) => { e.stopPropagation(); setTeamDraft({ ...teamDraft, captain: '' }); }}
+                                onClick={(e) => { e.stopPropagation(); setTeamDraft({ ...teamDraft, captain: '', iconicPlayers: [] }); }}
                               >
                                 <IoClose size={14} />
                               </button>
-                            )}
+                            ) : null}
                           </div>
 
                           {showIconPlayerPicker && (
@@ -2557,23 +2657,35 @@ export function AdminPanel({ isOpen, onClose, mode = 'drawer' }: AdminPanelProps
                                 {filteredIconPlayers.length === 0 ? (
                                   <div className="icon-player-empty">No players found</div>
                                 ) : (
-                                  filteredIconPlayers.slice(0, 50).map((p) => (
-                                    <button
-                                      key={p.id}
-                                      type="button"
-                                      className={`icon-player-option ${p.name === teamDraft.captain ? 'selected' : ''}`}
-                                      onClick={() => {
-                                        setTeamDraft({ ...teamDraft, captain: p.name });
-                                        setShowIconPlayerPicker(false);
-                                        setIconPlayerSearch('');
-                                      }}
-                                    >
-                                      <span className="icon-player-name">{p.name}</span>
-                                      <span className="icon-player-role" style={{ background: getRoleBadgeColor(getRoleCategory(p.role)) }}>
-                                        {formatRoleDisplay(p.role)}
-                                      </span>
-                                    </button>
-                                  ))
+                                  filteredIconPlayers.slice(0, 50).map((p) => {
+                                    const currentIconics = teamDraft.iconicPlayers ?? (teamDraft.captain ? [teamDraft.captain] : []);
+                                    const isSelected = currentIconics.some(n => n.toLowerCase() === p.name.toLowerCase());
+                                    return (
+                                      <button
+                                        key={p.id}
+                                        type="button"
+                                        className={`icon-player-option ${isSelected ? 'selected' : ''}`}
+                                        onClick={() => {
+                                          let updated: string[];
+                                          if (isSelected) {
+                                            updated = currentIconics.filter(n => n.toLowerCase() !== p.name.toLowerCase());
+                                          } else {
+                                            updated = [...currentIconics, p.name];
+                                          }
+                                          setTeamDraft({
+                                            ...teamDraft,
+                                            captain: updated[0] || '',
+                                            iconicPlayers: updated,
+                                          });
+                                        }}
+                                      >
+                                        <span className="icon-player-name">{isSelected ? '✓ ' : ''}{p.name}</span>
+                                        <span className="icon-player-role" style={{ background: getRoleBadgeColor(getRoleCategory(p.role)) }}>
+                                          {formatRoleDisplay(p.role)}
+                                        </span>
+                                      </button>
+                                    );
+                                  })
                                 )}
                                 {filteredIconPlayers.length > 50 && (
                                   <div className="icon-player-more">+{filteredIconPlayers.length - 50} more — refine search</div>

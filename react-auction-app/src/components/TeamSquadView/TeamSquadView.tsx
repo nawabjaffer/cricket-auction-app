@@ -8,6 +8,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { IoGridOutline, IoChevronDownOutline } from 'react-icons/io5';
 import type { Team, SoldPlayer } from '../../types';
+import type { SpecialCategory, TeamOwner } from '../../services/auctionPersistence';
 import { PlayerImage } from '../PlayerImage/PlayerImage';
 import { TeamLogo } from '../TeamLogo/TeamLogo';
 import { extractDriveFileId } from '../../utils/driveImage';
@@ -25,6 +26,8 @@ interface TeamSquadViewProps {
   readonly soldPlayers: SoldPlayer[];
   readonly allPlayers: CaptainSourcePlayer[];
   readonly onClose: () => void;
+  readonly specialCategories?: SpecialCategory[];
+  readonly teamOwners?: Record<string, TeamOwner[]>;
 }
 
 /**
@@ -41,7 +44,9 @@ export function TeamSquadView({
   teams, 
   soldPlayers,
   allPlayers,
-  onClose 
+  onClose,
+  specialCategories = [],
+  teamOwners = {},
 }: TeamSquadViewProps) {
   const [activeTeamId, setActiveTeamId] = useState(teamId);
   const [isTeamMenuOpen, setIsTeamMenuOpen] = useState(false);
@@ -188,37 +193,70 @@ export function TeamSquadView({
   }, [activeTeam, teamPlayers]);
 
   const captainData = useMemo(() => {
-    if (!activeTeam?.captain) return null;
+    // Support multiple iconic players
+    const iconicNames = activeTeam?.iconicPlayers?.length
+      ? activeTeam.iconicPlayers
+      : activeTeam?.captain ? [activeTeam.captain] : [];
 
-    // Normalize for fuzzy matching
-    const normCaptain = activeTeam.captain.toLowerCase().replace(/\./g, '').replace(/\s+/g, ' ').trim();
-    const fuzzyMatch = (name: string) => name.toLowerCase().replace(/\./g, '').replace(/\s+/g, ' ').trim() === normCaptain;
+    if (iconicNames.length === 0) return null;
 
-    // First check allPlayers (original data with latest uploaded images)
-    const fromAll = allPlayers.find(
-      (player) => fuzzyMatch(player.name || '')
-    );
+    const resolve = (captainName: string) => {
+      const normCaptain = captainName.toLowerCase().replace(/\./g, '').replace(/\s+/g, ' ').trim();
+      const fuzzyMatch = (name: string) => name.toLowerCase().replace(/\./g, '').replace(/\s+/g, ' ').trim() === normCaptain;
 
-    // Also check soldPlayers for this team
-    const fromSold = teamPlayers.find(
-      (player) => fuzzyMatch(player.name || '')
-    );
+      const fromAll = allPlayers.find((player) => fuzzyMatch(player.name || ''));
+      const fromSold = teamPlayers.find((player) => fuzzyMatch(player.name || ''));
 
-    // Prefer allPlayers imageUrl (latest), fallback to soldPlayers imageUrl
-    const imageUrl = fromAll?.imageUrl || fromSold?.imageUrl || '';
-    const name = fromAll?.name || fromSold?.name || activeTeam.captain;
-    const role = fromAll?.role || fromSold?.role || '';
+      const imageUrl = fromAll?.imageUrl || fromSold?.imageUrl || '';
+      const name = fromAll?.name || fromSold?.name || captainName;
+      const role = fromAll?.role || fromSold?.role || '';
+      return { name, imageUrl, role };
+    };
 
-    console.log('[TSV Captain]', activeTeam.name, '→ captain:', activeTeam.captain,
-      '| fromAll:', fromAll ? { name: fromAll.name, hasImage: !!fromAll.imageUrl, urlPrefix: (fromAll.imageUrl || '').slice(0, 40) } : null,
-      '| fromSold:', fromSold ? { name: fromSold.name, hasImage: !!fromSold.imageUrl } : null,
-      '| finalUrl:', imageUrl ? imageUrl.slice(0, 60) + '...' : '(empty)');
+    // Return first iconic player data for the main display
+    const primary = resolve(iconicNames[0]);
+    console.log('[TSV Captain]', activeTeam?.name, '→ captain:', iconicNames[0],
+      '| finalUrl:', primary.imageUrl ? primary.imageUrl.slice(0, 60) + '...' : '(empty)');
+    return primary;
+  }, [activeTeam, allPlayers, teamPlayers]);
 
-    return { name, imageUrl, role };
+  // All iconic players data
+  const allIconicData = useMemo(() => {
+    const iconicNames = activeTeam?.iconicPlayers?.length
+      ? activeTeam.iconicPlayers
+      : activeTeam?.captain ? [activeTeam.captain] : [];
+
+    return iconicNames.map(captainName => {
+      const normCaptain = captainName.toLowerCase().replace(/\./g, '').replace(/\s+/g, ' ').trim();
+      const fuzzyMatch = (name: string) => name.toLowerCase().replace(/\./g, '').replace(/\s+/g, ' ').trim() === normCaptain;
+      const fromAll = allPlayers.find((player) => fuzzyMatch(player.name || ''));
+      const fromSold = teamPlayers.find((player) => fuzzyMatch(player.name || ''));
+      return {
+        name: fromAll?.name || fromSold?.name || captainName,
+        imageUrl: fromAll?.imageUrl || fromSold?.imageUrl || '',
+        role: fromAll?.role || fromSold?.role || '',
+      };
+    });
   }, [activeTeam, allPlayers, teamPlayers]);
 
   const squadTargetCount = activeTeam?.totalPlayerThreshold || teamPlayers.length;
   const remainingSlots = Math.max(squadTargetCount - teamPlayers.length, 0);
+
+  // Derive spent and remaining from sold players for this team. This is the
+  // single source of truth — it stays in sync even if team.remainingPurse drifts
+  // because of broadcast lag or a mid-auction admin edit.
+  const spentBudget = useMemo(
+    () => teamPlayers.reduce((sum, p) => sum + (p.soldAmount || 0), 0),
+    [teamPlayers],
+  );
+  const totalBudget = Math.max(activeTeam?.allocatedAmount || 0, spentBudget);
+  const remainingBudget = Math.max(0, totalBudget - spentBudget);
+  // Highest single-buy for this team (more meaningful than team.highestBid which
+  // can lag when not broadcast).
+  const highestBuy = useMemo(
+    () => teamPlayers.reduce((max, p) => Math.max(max, p.soldAmount || 0), 0),
+    [teamPlayers],
+  );
 
   // Handle ESC key to close
   useEffect(() => {
@@ -328,6 +366,14 @@ export function TeamSquadView({
                 <h2 className="tsv-squad-label">SQUAD</h2>
                 <div className="tsv-team-details">
                   <p className="tsv-team-owner">Brand Owner: {activeTeam.ownerCompany || 'Not Available'}</p>
+                  {(() => {
+                    const owners = teamOwners[activeTeam.id];
+                    return owners?.length ? (
+                      <p className="tsv-team-owner" style={{ fontSize: '0.85em', opacity: 0.85 }}>
+                        {owners.map(o => `${o.name}${o.designation ? ` (${o.designation})` : ''}`).join(' · ')}
+                      </p>
+                    ) : null;
+                  })()}
                   <div className="tsv-team-stats">
                     <span className="tsv-team-stat-chip">Total Slots: {squadTargetCount}</span>
                     <span className="tsv-team-stat-chip">Filled: {teamPlayers.length}</span>
@@ -439,10 +485,20 @@ export function TeamSquadView({
               </div>
 
               <div className="tsv-captain-info">
-                <span className="tsv-captain-badge">ICON PLAYER</span>
-                <h3 className="tsv-captain-name">
-                  {captainData?.name || activeTeam.captain || 'No Icon player'}
-                </h3>
+                <span className="tsv-captain-badge">{allIconicData.length > 1 ? 'ICON PLAYERS' : 'ICON PLAYER'}</span>
+                {allIconicData.length > 1 ? (
+                  <div className="tsv-iconic-list">
+                    {allIconicData.map((p, i) => (
+                      <h3 key={i} className="tsv-captain-name" style={i > 0 ? { fontSize: '0.85em', opacity: 0.85 } : undefined}>
+                        {p.name}
+                      </h3>
+                    ))}
+                  </div>
+                ) : (
+                  <h3 className="tsv-captain-name">
+                    {captainData?.name || activeTeam.captain || 'No Icon player'}
+                  </h3>
+                )}
               </div>
             </motion.div>
 
@@ -463,21 +519,40 @@ export function TeamSquadView({
                   <span className="tsv-stat-label">Players Needed</span>
                 </div>
                 <div className="tsv-stat-item">
-                  <span className="tsv-stat-value">₹{((activeTeam.highestBid || 0)).toFixed(1)}L</span>
+                  <span className="tsv-stat-value">₹{highestBuy.toFixed(1)}L</span>
                   <span className="tsv-stat-label">Highest Bid</span>
                 </div>
                 <div className="tsv-stat-item">
-                  <span className="tsv-stat-value">₹{((activeTeam.remainingPurse || 0)).toFixed(1)}L</span>
+                  <span className="tsv-stat-value">₹{remainingBudget.toFixed(1)}L</span>
                   <span className="tsv-stat-label">Remaining Budget</span>
                 </div>
                 <div className="tsv-stat-item">
-                  <span className="tsv-stat-value">₹{((activeTeam.allocatedAmount || 0)).toFixed(1)}L</span>
+                  <span className="tsv-stat-value">₹{spentBudget.toFixed(1)}L</span>
+                  <span className="tsv-stat-label">Spent</span>
+                </div>
+                <div className="tsv-stat-item">
+                  <span className="tsv-stat-value">₹{totalBudget.toFixed(1)}L</span>
                   <span className="tsv-stat-label">Total Budget</span>
                 </div>
                 <div className="tsv-stat-item">
                   <span className="tsv-stat-value">{activeTeam.underAgePlayers || 0}</span>
                   <span className="tsv-stat-label">Under-Age Players</span>
                 </div>
+                {specialCategories.map(cat => {
+                  const count = teamPlayers.filter(p => {
+                    const age = typeof p.age === 'number' ? p.age : null;
+                    if (age === null) return false;
+                    if (cat.ageMin != null && age < cat.ageMin) return false;
+                    if (cat.ageMax != null && age > cat.ageMax) return false;
+                    return true;
+                  }).length;
+                  return (
+                    <div key={cat.id} className="tsv-stat-item">
+                      <span className="tsv-stat-value" style={{ color: cat.color }}>{count}</span>
+                      <span className="tsv-stat-label">{cat.label}</span>
+                    </div>
+                  );
+                })}
               </div>
               <div className="tsv-stat-status">
                 {remainingSlots === 0 ? (

@@ -11,7 +11,7 @@ import { GiCricketBat } from 'react-icons/gi';
 import { IoSwapVertical, IoRefresh, IoPeople, IoChevronDown, IoSearch, IoClose, IoFlash, IoPersonCircle, IoList, IoTrophy, IoWallet, IoStatsChart, IoEllipsisHorizontal, IoHeart, IoHeartOutline, IoStar, IoCall, IoLogoWhatsapp } from 'react-icons/io5';
 import { authService } from '../services';
 import type { AuthSession } from '../services';
-import { auctionPersistence, type SponsorRecord } from '../services/auctionPersistence';
+import { auctionPersistence, type SponsorRecord, type AdminSettings, type SpecialCategory, type BudgetRulesConfig } from '../services/auctionPersistence';
 import { realtimeSync } from '../services/realtimeSync';
 import { onValue, ref } from 'firebase/database';
 import { tenantPath } from '../services/tenantPath';
@@ -53,6 +53,8 @@ export function MobileBiddingLivePage() {
   const [password, setPassword] = useState('');
   const [authTeams, setAuthTeams] = useState<Team[]>([]);
   const [easyLoginMode, setEasyLoginMode] = useState(true);
+  const [specialCategories, setSpecialCategories] = useState<SpecialCategory[]>([]);
+  const [budgetRulesConfig, setBudgetRulesConfig] = useState<BudgetRulesConfig | null>(null);
   const [loginError, setLoginError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [feedback, setFeedback] = useState<BidFeedback | null>(null);
@@ -104,12 +106,25 @@ export function MobileBiddingLivePage() {
   // username/password in the Teams tab, those take precedence; otherwise we
   // derive a slugified username + default password (easy-login compatible).
   const runtimeCredentials = useMemo(() => {
+    const sanitize = (v: unknown) => String(v ?? '')
+      .replace(/[\u200B-\u200D\uFEFF\u00A0]/g, '')
+      .trim();
+    // Prefer the direct RTDB subscription (authTeams) which carries the latest
+    // admin-configured authUsername/authPassword. Fall back to broadcast teams
+    // ONLY if authTeams hasn't loaded — and warn so we can spot stale logins.
+    const usingFallback = authTeams.length === 0 && teams.length > 0;
+    if (usingFallback) {
+      console.warn('[ConnectBidding] authTeams not loaded yet; using broadcast teams as fallback. ' +
+        'Login passwords may be stale until /auction/teams subscription resolves.');
+    }
     const sourceTeams = authTeams.length > 0 ? authTeams : teams;
     return sourceTeams.map((team, index) => {
       const normalized = team.name.toLowerCase().replace(/[^a-z0-9]+/g, '');
       const derivedUname = normalized || `team${index + 1}`;
-      const uname = (team.authUsername?.trim() || derivedUname).toLowerCase();
-      const password = team.authPassword?.trim() || `${derivedUname}123`;
+      const adminUname = sanitize(team.authUsername).toLowerCase();
+      const adminPass = sanitize(team.authPassword);
+      const uname = adminUname || derivedUname;
+      const password = adminPass || `${derivedUname}123`;
       return {
         teamId: team.id,
         teamName: team.name,
@@ -191,8 +206,10 @@ export function MobileBiddingLivePage() {
         unsub = onValue(settingsRef, (snap) => {
           if (cancelled) return;
           if (snap.exists()) {
-            const s = snap.val() as { easyLoginMode?: boolean };
+            const s = snap.val() as AdminSettings;
             setEasyLoginMode(s.easyLoginMode !== false); // default true
+            if (s.specialCategories) setSpecialCategories(s.specialCategories);
+            if (s.budgetRules) setBudgetRulesConfig(s.budgetRules);
           }
         });
       } catch { /* ignore — default stays true */ }
@@ -429,26 +446,42 @@ export function MobileBiddingLivePage() {
 
   // Login by username (+ password when easy-login is OFF). In easy-login mode
   // the password is resolved automatically from runtimeCredentials; in strict
-  // mode the typed password must match the team's admin-configured password.
+  // mode the typed password is sent to authService.login() which is the single
+  // source of truth (handles trim / NBSP / zero-width / case folding).
   const handleLogin = useCallback(async () => {
     if (!username) { setLoginError('Enter team username'); return; }
-    const matchingCred = runtimeCredentials.find(c => c.username.toLowerCase() === username.toLowerCase());
-    if (!matchingCred) { setLoginError('Team not found. Check the username.'); return; }
-    if (!easyLoginMode) {
-      if (!password) { setLoginError('Enter team password'); return; }
-      if (password.trim() !== matchingCred.password) { setLoginError('Invalid username or password'); return; }
+    const sanitize = (v: string) => (v ?? '')
+      .replace(/[\u200B-\u200D\uFEFF\u00A0]/g, '')
+      .trim();
+    const userKey = sanitize(username).toLowerCase();
+    const matchingCred = runtimeCredentials.find(c => sanitize(c.username).toLowerCase() === userKey);
+    if (!matchingCred) {
+      console.warn('[ConnectBidding] No matching team for username', userKey,
+        'known:', runtimeCredentials.map(c => c.username));
+      setLoginError('Team not found. Check the username.');
+      return;
     }
+
+    if (!easyLoginMode && !password) {
+      setLoginError('Enter team password');
+      return;
+    }
+
     setIsLoading(true);
     setLoginError('');
     try {
-      const result = await authService.login(matchingCred.username, matchingCred.password);
+      // In easy-login mode, use the credential's stored password.
+      // In strict mode, send the typed password — authService validates it.
+      const passToSend = easyLoginMode ? matchingCred.password : password;
+      const result = await authService.login(matchingCred.username, passToSend);
       if (result.success && result.session) {
         setSession(result.session);
         setFeedback({ type: 'success', message: `Welcome, ${result.session.teamName}!`, timestamp: Date.now() });
       } else {
-        setLoginError(result.error || 'Login failed');
+        setLoginError(result.error || 'Invalid username or password');
       }
-    } catch {
+    } catch (err) {
+      console.error('[ConnectBidding] Login error', err);
       setLoginError('Connection error. Please try again.');
     } finally {
       setIsLoading(false);
@@ -473,7 +506,12 @@ export function MobileBiddingLivePage() {
       if (isPicked) {
         await wishlistService.removePlayer(teamId, playerId);
       } else {
-        await wishlistService.addPlayer(teamId, playerId);
+        // Cap wishlist size to the admin-configured per-team threshold so each
+        // team can only plan as many picks as squad slots they actually have.
+        const cap = myTeam?.totalPlayerThreshold && myTeam.totalPlayerThreshold > 0
+          ? myTeam.totalPlayerThreshold
+          : undefined;
+        await wishlistService.addPlayer(teamId, playerId, cap);
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Could not update wishlist';
@@ -1554,9 +1592,37 @@ export function MobileBiddingLivePage() {
                 <span className="cb-tstat-label">Top Buy</span>
               </div>
             </div>
-          </div>
 
-          {/* Team Analytics */}
+            {/* Budget Rule Alerts */}
+            {budgetRulesConfig?.maxBidPerPlayer && maxAffordableBid > 0 && (
+              <div style={{ padding: '6px 12px', fontSize: 12, color: 'var(--theme-text-secondary)', textAlign: 'center', opacity: 0.7 }}>
+                Max bid per player: {formatLakhs(budgetRulesConfig.maxBidPerPlayer)}
+              </div>
+            )}
+
+            {/* Special Category Badges */}
+            {specialCategories.length > 0 && (
+              <div className="cb-team-stats-grid" style={{ marginTop: 8 }}>
+                {specialCategories.map(cat => {
+                  const count = mySquad.filter(p => {
+                    const age = typeof p.age === 'number' ? p.age : parseInt(String(p.age), 10);
+                    if (isNaN(age)) return false;
+                    return cat.ageMin != null && cat.ageMax != null
+                      ? age >= cat.ageMin && age <= cat.ageMax
+                      : cat.ageMin != null ? age >= cat.ageMin
+                      : cat.ageMax != null ? age <= cat.ageMax
+                      : false;
+                  }).length;
+                  return (
+                    <div key={cat.id} className="cb-team-stat">
+                      <span className="cb-tstat-value">{count}</span>
+                      <span className="cb-tstat-label">{cat.label}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
           <div className="cb-analytics-section">
             <h3 className="cb-section-title">Team Analytics</h3>
             <div className="cb-analytics-grid">
@@ -1835,7 +1901,12 @@ export function MobileBiddingLivePage() {
             const q = scoutSearch.toLowerCase();
             return p.name.toLowerCase().includes(q) || p.id.toLowerCase().includes(q);
           });
-        const atCap = pickedIds.length >= MAX_WISHLIST_PICKS;
+        // Cap = team.totalPlayerThreshold (admin-configured squad size) when set,
+        // else fall back to the global MAX_WISHLIST_PICKS safety ceiling.
+        const wishlistCap = (myTeam?.totalPlayerThreshold && myTeam.totalPlayerThreshold > 0)
+          ? myTeam.totalPlayerThreshold
+          : MAX_WISHLIST_PICKS;
+        const atCap = pickedIds.length >= wishlistCap;
         return (
           <div className="cb-content cb-wishlist-tab">
             <div className="cb-wishlist-header">
@@ -1844,13 +1915,13 @@ export function MobileBiddingLivePage() {
                   <IoStar /> My Dream Picks
                 </h2>
                 <p className="cb-wishlist-sub">
-                  Private to <strong>{session.teamName}</strong> · {pickedIds.length}/{MAX_WISHLIST_PICKS} picks
+                  Private to <strong>{session.teamName}</strong> · {pickedIds.length}/{wishlistCap} picks
                 </p>
               </div>
               <div className="cb-wishlist-progress">
                 <div
                   className="cb-wishlist-progress-fill"
-                  style={{ width: `${(pickedIds.length / MAX_WISHLIST_PICKS) * 100}%` }}
+                  style={{ width: `${Math.min(100, (pickedIds.length / wishlistCap) * 100)}%` }}
                 />
               </div>
             </div>
@@ -1936,7 +2007,7 @@ export function MobileBiddingLivePage() {
 
               {atCap && (
                 <div className="cb-wishlist-cap-warn">
-                  You've hit the {MAX_WISHLIST_PICKS}-player limit. Remove a pick to add another.
+                  You've hit the {wishlistCap}-player limit. Remove a pick to add another.
                 </div>
               )}
 
@@ -1978,7 +2049,10 @@ export function MobileBiddingLivePage() {
 
       {/* ── Bottom Tab Bar ── */}
       <nav className="cb-bottom-nav">
-        {TAB_CONFIG.map(({ key, label, icon: Icon }) => (
+        {TAB_CONFIG
+          // Wishlist is private — only show the tab after a team has logged in.
+          .filter(({ key }) => key !== 'wishlist' || !!session)
+          .map(({ key, label, icon: Icon }) => (
           <button
             key={key}
             className={`cb-bottom-tab ${activeTab === key ? 'active' : ''}`}

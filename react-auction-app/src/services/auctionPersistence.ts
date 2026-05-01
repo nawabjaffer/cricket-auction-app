@@ -186,6 +186,54 @@ export interface InitialSnapshot {
   source: 'google-sheets';
 }
 
+// Special player category (e.g. Under-19, Over-40)
+export interface SpecialCategory {
+  id: string;
+  label: string;
+  ageMin?: number;
+  ageMax?: number;
+  // Optional color for badge display
+  color?: string;
+}
+
+// Auction break configuration
+export interface AuctionBreak {
+  id: string;
+  title: string;
+  durationSeconds: number;
+  sponsorVideoUrl?: string;
+  order: number;
+}
+
+// Budget rules configuration
+export interface BudgetRulesConfig {
+  totalBudgetPerTeam: number;
+  maxBidPerPlayer: number;
+  minBidIncrement: number;
+  maxBidIncrement: number;
+  safeFundBufferPercent: number;
+  minPlayersRequired: number;
+  maxPlayersAllowed: number;
+  reservedFundPerRemainingPlayer: number;
+}
+
+// Loading screen configuration
+export interface LoadingScreenConfig {
+  mode: 'logo' | 'video';
+  logoUrl?: string;
+  videoUrl?: string;
+  textOverlay?: string;
+}
+
+// Team owner info
+export interface TeamOwner {
+  id: string;
+  name: string;
+  imageUrl?: string;
+  brandImageUrl?: string;
+  designation?: string;
+}
+
 // Admin settings structure
 export interface AdminSettings {
   organizerName: string;
@@ -209,6 +257,21 @@ export interface AdminSettings {
    * admin-configured username and password.
    */
   easyLoginMode?: boolean;
+  // Feature 1: Player stats fields to display in main listing
+  playerStatsFields?: string[];
+  // Feature 2: Custom special categories (replaces single underAgeThreshold)
+  specialCategories?: SpecialCategory[];
+  // Feature 4: Budget rules configuration
+  budgetRules?: BudgetRulesConfig;
+  // Feature 5: Auction breaks
+  auctionBreaks?: AuctionBreak[];
+  currentBreakId?: string;
+  // Feature 6: Loading screen config
+  loadingScreen?: LoadingScreenConfig;
+  // Feature 8: Team owners (keyed by team id)
+  teamOwners?: Record<string, TeamOwner[]>;
+  // Feature 10: Max iconic players per team
+  maxIconicPlayers?: number;
 }
 
 class AuctionPersistenceService {
@@ -593,6 +656,30 @@ class AuctionPersistenceService {
     ];
 
     await Promise.all(promises);
+  }
+
+  /**
+   * Wipe ONLY the live session state used during a running auction.
+   * Preserves teams, players, sponsors, theme/admin settings, and per-team
+   * wishlists. Use this between sessions to keep RTDB lean.
+   *
+   * Cleared paths (under tenants/{tenantId}/):
+   *   - auction/currentState     (live broadcast snapshot)
+   *   - auction/mobileBids       (mobile bid stream)
+   *   - auction/sessionReset     (reset signal)
+   *   - auction/broadcastControl (overlay mode flags)
+   */
+  async clearLiveSessionState(): Promise<void> {
+    if (!this.db) throw new Error('Database not initialized');
+
+    const livePaths = [
+      tenantPath('auction/currentState'),
+      tenantPath('auction/mobileBids'),
+      tenantPath('auction/sessionReset'),
+      tenantPath('auction/broadcastControl'),
+    ];
+
+    await Promise.all(livePaths.map(p => set(ref(this.db!, p), null)));
   }
 
   /**

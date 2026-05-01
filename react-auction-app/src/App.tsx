@@ -34,6 +34,8 @@ import {
   UnsoldOverlay,
   EndOverlay,
   BreakOverlay,
+  TeamStandingsOverlay,
+  TopPicksOverlay,
   CoinJar,
   NotificationContainer,
   TeamSquadView,
@@ -58,7 +60,8 @@ import {
 } from './hooks';
 import { useRealtimeDesktopSync, useRealtimeMobileSync } from './hooks/useRealtimeSync';
 import { audioService, imageCacheService } from './services';
-import { auctionPersistence, type SponsorRecord } from './services/auctionPersistence';
+import { auctionPersistence, type SponsorRecord, type AdminSettings } from './services/auctionPersistence';
+import { ALL_PLAYER_STAT_FIELDS } from './components/AdminPanel/ThemeSettingsExtended';
 import { auctionRules } from './services/auctionRules';
 import { realtimeSync } from './services/realtimeSync';
 import { getCachedStorageUrl, resolveImageAsync } from './services/firebaseStorageService';
@@ -140,6 +143,12 @@ function AuctionApp({ mirrorMode = false }: { mirrorMode?: boolean }) {
   // Top 3 Buys carousel state
   const [showTopBuysOverlay, setShowTopBuysOverlay] = useState(false);
   const [topBuysIndex, setTopBuysIndex] = useState(0);
+  
+  // Team Standings overlay state (Feature 3 - 'g' key)
+  const [showTeamStandingsOverlay, setShowTeamStandingsOverlay] = useState(false);
+  
+  // Admin settings for configurable features
+  const [adminSettings, setAdminSettings] = useState<AdminSettings | null>(null);
   
   // Image loading state
   const [imageLoadingState, setImageLoadingState] = useState<'loading' | 'loaded' | 'error'>('loading');
@@ -431,6 +440,25 @@ function AuctionApp({ mirrorMode = false }: { mirrorMode?: boolean }) {
     return () => window.removeEventListener('keydown', handleTopBuysKey);
   }, [isMirrorMode, showAdminPanel, showJumpModal, showCoinJar, showTopBuysOverlay]);
 
+  // Team Standings overlay keyboard shortcut ('g' key)
+  useEffect(() => {
+    if (isMirrorMode) return;
+    const handleStandingsKey = (e: KeyboardEvent) => {
+      if (e.key === 'g' || e.key === 'G') {
+        const target = e.target as HTMLElement;
+        if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) return;
+        if (showAdminPanel || showJumpModal || showCoinJar) return;
+        if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return;
+
+        e.preventDefault();
+        setShowTeamStandingsOverlay(prev => !prev);
+      }
+    };
+
+    window.addEventListener('keydown', handleStandingsKey);
+    return () => window.removeEventListener('keydown', handleStandingsKey);
+  }, [isMirrorMode, showAdminPanel, showJumpModal, showCoinJar]);
+
   const handleJumpSubmit = () => {
     if (auction.selectionMode !== 'sequential') {
       setJumpError('Sequential mode only');
@@ -537,6 +565,19 @@ function AuctionApp({ mirrorMode = false }: { mirrorMode?: boolean }) {
       isMounted = false;
       unsubscribeSponsors?.();
     };
+  }, []);
+
+  // Load admin settings for configurable features
+  useEffect(() => {
+    let alive = true;
+    const load = async () => {
+      try {
+        const settings = await auctionPersistence.getAdminSettings();
+        if (alive && settings) setAdminSettings(settings);
+      } catch { /* ignore */ }
+    };
+    void load();
+    return () => { alive = false; };
   }, []);
 
   const effectiveSponsors = useMemo(() => {
@@ -712,42 +753,39 @@ function AuctionApp({ mirrorMode = false }: { mirrorMode?: boolean }) {
     setSelectedPlayerName('');
   };
 
-  // Stats rows for player panel
+  // Stats rows for player panel — configurable from admin settings
   const statRows = useMemo(() => {
-    const rows = [];
-    
-    // Add age if available
-    if (typeof currentPlayer?.age === 'number') {
-      rows.push({ label: 'Age', value: currentPlayer.age });
+    const configuredFields = adminSettings?.playerStatsFields ?? ['age', 'matches', 'runs', 'wickets', 'battingBestFigures', 'bowlingBestFigures'];
+    const rows: { label: string; value: string | number }[] = [];
+
+    if (!currentPlayer) return rows;
+
+    for (const fieldKey of configuredFields) {
+      const fieldDef = ALL_PLAYER_STAT_FIELDS.find(f => f.key === fieldKey);
+      if (!fieldDef) continue;
+
+      let value: string | number | undefined;
+
+      if (fieldKey.startsWith('battingStats.')) {
+        const statKey = fieldKey.split('.')[1] as keyof typeof currentPlayer.battingStats;
+        value = currentPlayer.battingStats?.[statKey];
+      } else if (fieldKey.startsWith('bowlingStats.')) {
+        const statKey = fieldKey.split('.')[1] as keyof typeof currentPlayer.bowlingStats;
+        value = currentPlayer.bowlingStats?.[statKey];
+      } else {
+        value = (currentPlayer as unknown as Record<string, unknown>)[fieldKey] as string | number | undefined;
+      }
+
+      // Skip empty, N/A, or zero-only values
+      if (value == null) continue;
+      const strVal = String(value).trim();
+      if (!strVal || strVal === '0' || strVal === 'N/A' || strVal === '0.00') continue;
+
+      rows.push({ label: fieldDef.label, value });
     }
-    
-    // Add matches if available (and not empty)
-    if (currentPlayer?.matches && currentPlayer.matches !== '0' && currentPlayer.matches !== '') {
-      rows.push({ label: 'Matches', value: currentPlayer.matches });
-    }
-    
-    // Add runs if available (and not 'N/A' or empty)
-    if (currentPlayer?.runs && currentPlayer.runs !== 'N/A' && currentPlayer.runs !== '') {
-      rows.push({ label: 'Runs', value: currentPlayer.runs });
-    }
-    
-    // Add wickets if available (and not 'N/A' or empty)
-    if (currentPlayer?.wickets && currentPlayer.wickets !== 'N/A' && currentPlayer.wickets !== '') {
-      rows.push({ label: 'Wickets', value: currentPlayer.wickets });
-    }
-    
-    // Add bowling best if available (and not 'N/A' or empty)
-    if (currentPlayer?.bowlingBestFigures && currentPlayer.bowlingBestFigures !== 'N/A' && currentPlayer.bowlingBestFigures !== '') {
-      rows.push({ label: 'Bowling Best', value: currentPlayer.bowlingBestFigures });
-    }
-    
-    // Add highest score if available (and not 'N/A' or empty)
-    if (currentPlayer?.battingBestFigures && currentPlayer.battingBestFigures !== 'N/A' && currentPlayer.battingBestFigures !== '') {
-      rows.push({ label: 'Highest Score', value: currentPlayer.battingBestFigures });
-    }
-    
+
     return rows;
-  }, [currentPlayer]);
+  }, [currentPlayer, adminSettings?.playerStatsFields]);
 
   // Get current player image URL
   const playerImageUrl = currentPlayer?.imageUrl ?? null;
@@ -1428,7 +1466,7 @@ function AuctionApp({ mirrorMode = false }: { mirrorMode?: boolean }) {
                     <div className="team-meta">
                       <span className="meta-item">
                         <span className="meta-label">Budget</span>
-                        <span className="meta-value">₹{selectedTeam.remainingPurse?.toFixed(1)}L</span>
+                        <span className="meta-value">₹{((selectedTeam.allocatedAmount || 0) - teamTotalSpend).toFixed(1)}L</span>
                       </span>
                       <span className="meta-divider">•</span>
                       <span className="meta-item">
@@ -1482,7 +1520,7 @@ function AuctionApp({ mirrorMode = false }: { mirrorMode?: boolean }) {
                       </div>
                       <div className="analytics-list-item">
                         <span>Remaining</span>
-                        <strong>₹{selectedTeam.remainingPurse.toFixed(1)}L</strong>
+                        <strong>₹{((selectedTeam.allocatedAmount || 0) - teamTotalSpend).toFixed(1)}L</strong>
                       </div>
                       <div className="analytics-list-item">
                         <span>Max Allowed Bid</span>
@@ -1586,184 +1624,35 @@ function AuctionApp({ mirrorMode = false }: { mirrorMode?: boolean }) {
       {/* Break Overlay with sponsor ads */}
       <BreakOverlay
         isVisible={showBreakOverlay}
-        durationSeconds={breakDurationSeconds}
+        durationSeconds={
+          adminSettings?.auctionBreaks?.find(b => b.id === adminSettings?.currentBreakId)?.durationSeconds
+          ?? breakDurationSeconds
+        }
         sponsors={sponsors}
+        auctionTitle={
+          adminSettings?.auctionBreaks?.find(b => b.id === adminSettings?.currentBreakId)?.title
+          ?? undefined
+        }
+        organizerLogo={adminSettings?.organizerLogo}
         onClose={() => setShowBreakOverlay(false)}
       />
 
-      {/* ═══════ TOP 3 BUYS CAROUSEL (press "/") ═══════ */}
-      <AnimatePresence>
-        {showTopBuysOverlay && globalTopBuys.length > 0 && (
-          <motion.div
-            className="top3-overlay"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.3 }}
-            onClick={() => setShowTopBuysOverlay(false)}
-          >
-            <motion.div
-              className="top3-container"
-              initial={{ scale: 0.3, opacity: 0, borderRadius: '50%' }}
-              animate={{ scale: 1, opacity: 1, borderRadius: '24px' }}
-              exit={{ scale: 0.5, opacity: 0, borderRadius: '50%' }}
-              transition={{ type: 'spring', damping: 20, stiffness: 180, duration: 0.6 }}
-              onClick={(e) => e.stopPropagation()}
-            >
-              {/* Header */}
-              <div className="top3-header">
-                <motion.div
-                  className="top3-crown"
-                  initial={{ scale: 0, rotate: -30 }}
-                  animate={{ scale: 1, rotate: 0 }}
-                  transition={{ delay: 0.3, type: 'spring', stiffness: 300 }}
-                >
-                  <IoStar size={28} color="#fbbf24" />
-                </motion.div>
-                <motion.h2
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.35 }}
-                >
-                  Top 3 Buys
-                </motion.h2>
-                <button className="top3-close" onClick={() => setShowTopBuysOverlay(false)}>
-                  <IoClose size={22} />
-                </button>
-              </div>
+      {/* ═══════ TOP PICKS OVERLAY (press "/") ═══════ */}
+      <TopPicksOverlay
+        visible={showTopBuysOverlay}
+        onClose={() => setShowTopBuysOverlay(false)}
+        topBuys={globalTopBuys}
+        currentIndex={topBuysIndex}
+      />
 
-              {/* Carousel */}
-              <div className="top3-carousel">
-                <AnimatePresence mode="wait">
-                  {globalTopBuys.map((buy, i) => i === topBuysIndex && (
-                    <motion.div
-                      key={buy.id}
-                      className={`top3-card rank-${i + 1}`}
-                      initial={{ opacity: 0, x: 120, scale: 0.85 }}
-                      animate={{ opacity: 1, x: 0, scale: 1 }}
-                      exit={{ opacity: 0, x: -120, scale: 0.85 }}
-                      transition={{ type: 'spring', damping: 22, stiffness: 200 }}
-                    >
-                      {/* Brand reveal section */}
-                      <motion.div
-                        className="top3-brand"
-                        initial={{ height: 0, opacity: 0 }}
-                        animate={{ height: 'auto', opacity: 1 }}
-                        transition={{ delay: 0.15, duration: 0.5, ease: 'easeOut' }}
-                      >
-                        <div
-                          className="top3-brand-bg"
-                          style={{
-                            background: `linear-gradient(135deg, ${buy.team?.secondaryColor || '#1e40af'}, ${buy.team?.primaryColor || '#3b82f6'})`,
-                          }}
-                        >
-                          {buy.team?.logoUrl && (
-                            <motion.img
-                              className="top3-brand-logo"
-                              src={buy.team.logoUrl}
-                              alt={buy.team.name}
-                              initial={{ scale: 0, rotate: -25 }}
-                              animate={{ scale: 1, rotate: 0 }}
-                              transition={{ delay: 0.4, type: 'spring', stiffness: 220 }}
-                              onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-                            />
-                          )}
-                          <motion.span
-                            className="top3-brand-name"
-                            initial={{ opacity: 0, y: 8 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ delay: 0.55 }}
-                          >
-                            {buy.team?.ownerCompany || buy.teamName}
-                          </motion.span>
-                          <motion.span
-                            className="top3-brand-tagline"
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 0.7 }}
-                            transition={{ delay: 0.65 }}
-                          >
-                            {buy.team?.brandTagline || buy.teamName}
-                          </motion.span>
-                        </div>
-                      </motion.div>
-
-                      {/* Rank badge */}
-                      <motion.div
-                        className={`top3-rank rank-${i + 1}`}
-                        initial={{ scale: 0 }}
-                        animate={{ scale: 1 }}
-                        transition={{ delay: 0.3, type: 'spring', stiffness: 300 }}
-                      >
-                        #{i + 1}
-                      </motion.div>
-
-                      {/* Player details */}
-                      <motion.div
-                        className="top3-player"
-                        initial={{ opacity: 0, y: 30 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: 0.4, duration: 0.5 }}
-                      >
-                        <div className="top3-player-img-wrap">
-                          {buy.imageUrl && (
-                            <img
-                              src={buy.imageUrl}
-                              alt={buy.name}
-                              className="top3-player-img"
-                              onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-                            />
-                          )}
-                        </div>
-                        <h3 className="top3-player-name">{buy.name}</h3>
-                        <span className="top3-player-role">
-                          {formatRoleDisplay(buy.role)}
-                        </span>
-
-                        {/* Price reveal */}
-                        <motion.div
-                          className="top3-amount"
-                          initial={{ scale: 0.3, opacity: 0 }}
-                          animate={{ scale: 1, opacity: 1 }}
-                          transition={{ delay: 0.6, type: 'spring', stiffness: 200 }}
-                        >
-                          ₹{buy.soldAmount}L
-                        </motion.div>
-
-                        {/* Player stats */}
-                        <div className="top3-stats">
-                          {buy.matches && <div className="top3-stat"><span>Matches</span><strong>{buy.matches}</strong></div>}
-                          {buy.runs && <div className="top3-stat"><span>Runs</span><strong>{buy.runs}</strong></div>}
-                          {buy.wickets && <div className="top3-stat"><span>Wickets</span><strong>{buy.wickets}</strong></div>}
-                          {buy.battingBestFigures && <div className="top3-stat"><span>Best</span><strong>{buy.battingBestFigures}</strong></div>}
-                        </div>
-                      </motion.div>
-                    </motion.div>
-                  ))}
-                </AnimatePresence>
-              </div>
-
-              {/* Navigation dots + arrows */}
-              <div className="top3-nav">
-                <button className="top3-arrow" disabled={topBuysIndex === 0} onClick={() => setTopBuysIndex(i => i - 1)}>&lsaquo;</button>
-                <div className="top3-dots">
-                  {globalTopBuys.map((_, i) => (
-                    <button
-                      key={i}
-                      className={`top3-dot ${i === topBuysIndex ? 'active' : ''}`}
-                      onClick={() => setTopBuysIndex(i)}
-                    />
-                  ))}
-                </div>
-                <button className="top3-arrow" disabled={topBuysIndex === globalTopBuys.length - 1} onClick={() => setTopBuysIndex(i => i + 1)}>&rsaquo;</button>
-              </div>
-
-              <div className="top3-hint">
-                Press <kbd>/</kbd> to toggle &middot; <kbd>←→</kbd> to navigate &middot; <kbd>Esc</kbd> to close
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {/* ═══════ TEAM STANDINGS OVERLAY (press "g") ═══════ */}
+      <TeamStandingsOverlay
+        visible={showTeamStandingsOverlay}
+        onClose={() => setShowTeamStandingsOverlay(false)}
+        teams={allTeams}
+        soldPlayers={soldPlayers}
+        settings={adminSettings}
+      />
 
       {/* Live Transition Animation */}
       <AnimatePresence>
@@ -1959,6 +1848,8 @@ function AuctionApp({ mirrorMode = false }: { mirrorMode?: boolean }) {
           teams={allTeams}
           soldPlayers={soldPlayers}
           allPlayers={allPlayers}
+          specialCategories={adminSettings?.specialCategories}
+          teamOwners={adminSettings?.teamOwners}
           onClose={() => {
             setShowTeamSquadView(false);
             setSelectedTeamForSquad('');
@@ -1989,6 +1880,33 @@ function AuctionApp({ mirrorMode = false }: { mirrorMode?: boolean }) {
 function LoadingScreen({ progress, loaded, total }: { readonly progress?: number; readonly loaded?: number; readonly total?: number } = {}) {
   const hasProgress = typeof progress === 'number' && typeof total === 'number' && total > 0;
   const pct = hasProgress ? Math.min(100, Math.round((progress as number) * 100)) : 0;
+
+  // Read cached admin settings for loading screen configuration
+  const [loadingConfig, setLoadingConfig] = useState<{ mode: 'logo' | 'video'; logoUrl?: string; videoUrl?: string; textOverlay?: string } | null>(null);
+  const [cachedOrgLogo, setCachedOrgLogo] = useState('');
+  useEffect(() => {
+    // Try to get settings from localStorage cache for instant display
+    try {
+      const raw = localStorage.getItem('auction-storage');
+      if (raw) {
+        const data = JSON.parse(raw) as { state?: { organizerLogo?: string } };
+        if (data.state?.organizerLogo) setCachedOrgLogo(data.state.organizerLogo);
+      }
+    } catch { /* ignore */ }
+    // Then try async admin settings
+    const load = async () => {
+      try {
+        const settings = await auctionPersistence.getAdminSettings();
+        if (settings?.loadingScreen) setLoadingConfig(settings.loadingScreen);
+        if (settings?.organizerLogo) setCachedOrgLogo(settings.organizerLogo);
+      } catch { /* ignore */ }
+    };
+    void load();
+  }, []);
+
+  const effectiveLogoUrl = loadingConfig?.logoUrl || cachedOrgLogo || '/assets/BCC Season 6.png';
+  const isVideoMode = loadingConfig?.mode === 'video' && loadingConfig.videoUrl;
+
   return (
     <div className="loading-transition">
       {/* Animated background */}
@@ -2019,14 +1937,32 @@ function LoadingScreen({ progress, loaded, total }: { readonly progress?: number
         animate={{ opacity: [0, 1, 1, 0], scale: [0.6, 1, 1, 0.8] }}
         transition={{ duration: 3, times: [0, 0.3, 0.7, 1], ease: 'easeInOut', repeat: Infinity }}
       >
-        <img
-          src="/assets/BCC Season 6.png"
-          alt="Tournament"
-          className="loading-transition__logo"
-          onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
-        />
-        <div className="loading-transition__title">AUCTION</div>
-        <div className="loading-transition__subtitle">LIVE</div>
+        {isVideoMode ? (
+          <>
+            <video
+              src={loadingConfig!.videoUrl}
+              autoPlay
+              muted
+              loop
+              playsInline
+              style={{ maxWidth: 320, maxHeight: 200, borderRadius: 12, objectFit: 'contain' }}
+            />
+            {loadingConfig?.textOverlay && (
+              <div className="loading-transition__title" style={{ marginTop: 16 }}>{loadingConfig.textOverlay}</div>
+            )}
+          </>
+        ) : (
+          <>
+            <img
+              src={effectiveLogoUrl}
+              alt="Tournament"
+              className="loading-transition__logo"
+              onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
+            />
+            <div className="loading-transition__title">AUCTION</div>
+            <div className="loading-transition__subtitle">LIVE</div>
+          </>
+        )}
         {hasProgress && (
           <div style={{ marginTop: 24, textAlign: 'center', color: 'rgba(255,255,255,0.9)' }}>
             <div style={{ width: 260, height: 6, background: 'rgba(255,255,255,0.18)', borderRadius: 999, overflow: 'hidden', margin: '0 auto' }}>

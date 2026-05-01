@@ -142,14 +142,31 @@ class AuthService {
   }
 
   /**
-   * Authenticate team with credentials
+   * Authenticate team with credentials.
+   * Both username and password are trimmed and compared case-insensitively for username
+   * and exact (post-trim) for password. NBSP and zero-width characters are stripped to
+   * tolerate copy/paste from spreadsheets and admin UIs.
    */
   login(username: string, password: string): { success: boolean; error?: string; session?: AuthSession } {
+    const sanitize = (v: string) => (v ?? '')
+      .replace(/[\u200B-\u200D\uFEFF\u00A0]/g, '') // zero-width + nbsp
+      .trim();
+
+    const inputUser = sanitize(username).toLowerCase();
+    const inputPass = sanitize(password);
+
     const credentials = activeTeamCredentials.find(
-      c => c.username.toLowerCase() === username.toLowerCase() && c.password === password
+      c => sanitize(c.username).toLowerCase() === inputUser && sanitize(c.password) === inputPass
     );
 
     if (!credentials) {
+      const known = activeTeamCredentials.map(c => sanitize(c.username).toLowerCase());
+      console.warn('[Auth] Login failed', {
+        triedUser: inputUser,
+        triedPassLen: inputPass.length,
+        knownUsers: known,
+        userMatch: known.includes(inputUser),
+      });
       return { success: false, error: 'Invalid credentials' };
     }
 

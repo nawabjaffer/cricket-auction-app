@@ -34,26 +34,29 @@ export function BreakOverlay({
   const [timeLeft, setTimeLeft] = useState(durationSeconds);
   const [activeSponsorIndex, setActiveSponsorIndex] = useState(0);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const endsAtRef = useRef<number>(0);
 
-  // Reset timer when overlay becomes visible
+  // Reset + start the countdown the instant the overlay becomes visible.
+  // We use a deadline-based clock so the timer is robust against tab throttling
+  // and starts immediately on the first frame after the 'B' keypress.
   useEffect(() => {
-    if (isVisible) {
-      setTimeLeft(durationSeconds);
-      setActiveSponsorIndex(0);
-    }
-  }, [isVisible, durationSeconds]);
+    if (!isVisible) return;
+    endsAtRef.current = Date.now() + durationSeconds * 1000;
+    setTimeLeft(durationSeconds);
+    setActiveSponsorIndex(0);
 
-  // Countdown timer
-  useEffect(() => {
-    if (!isVisible || timeLeft <= 0) return;
-    const interval = setInterval(() => {
-      setTimeLeft((prev) => {
-        if (prev <= 1) { onClose(); return 0; }
-        return prev - 1;
-      });
-    }, 1000);
+    const tick = () => {
+      const remaining = Math.max(0, Math.ceil((endsAtRef.current - Date.now()) / 1000));
+      setTimeLeft(remaining);
+      if (remaining <= 0) {
+        onClose();
+      }
+    };
+    // Fire immediately for snappy feel, then every 250ms.
+    tick();
+    const interval = setInterval(tick, 250);
     return () => clearInterval(interval);
-  }, [isVisible, timeLeft, onClose]);
+  }, [isVisible, durationSeconds, onClose]);
 
   // Categorize sponsors
   const titleSponsors = useMemo(

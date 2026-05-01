@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { IoClose, IoCloudUpload } from 'react-icons/io5';
+import { IoClose, IoCloudUpload, IoDownload } from 'react-icons/io5';
 import type { Player } from '../../types';
 import { uploadFileToStorage } from '../../services';
 
@@ -18,6 +18,64 @@ export default function AdminImageBulkUpload({ players, page, pageSize, isOpen, 
   const [previewMap, setPreviewMap] = useState<Record<string, string>>({});
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState<Record<string, 'pending' | 'uploading' | 'done' | 'error' | undefined>>({});
+  const csvInputRef = useRef<HTMLInputElement | null>(null);
+  const [csvImportCount, setCsvImportCount] = useState(0);
+
+  // Download CSV template for bulk image import
+  const downloadCsvTemplate = () => {
+    const header = 'player_id,player_name,image_url';
+    const rows = players.map(p => `${p.id},${p.name.replace(/,/g, ' ')},${p.imageUrl || ''}`);
+    const csv = [header, ...rows].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'player_images_template.csv';
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  // Import CSV with drive links
+  const handleCsvImport = (file?: File | null) => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const text = e.target?.result as string;
+      if (!text) return;
+      const lines = text.split('\n').filter(l => l.trim());
+      if (lines.length < 2) return; // header + at least one row
+
+      const header = lines[0].split(',').map(h => h.trim().toLowerCase());
+      const idIdx = header.findIndex(h => h === 'player_id' || h === 'id');
+      const urlIdx = header.findIndex(h => h === 'image_url' || h === 'imageurl' || h === 'image' || h === 'drive_link' || h === 'url');
+
+      if (idIdx < 0 || urlIdx < 0) {
+        alert('CSV must have columns: player_id, image_url');
+        return;
+      }
+
+      let count = 0;
+      const updatedPlayers = [...players];
+      for (let i = 1; i < lines.length; i++) {
+        const cols = lines[i].split(',').map(c => c.trim());
+        const playerId = cols[idIdx];
+        const imageUrl = cols[urlIdx];
+        if (!playerId || !imageUrl) continue;
+
+        const playerIdx = updatedPlayers.findIndex(p => p.id === playerId);
+        if (playerIdx >= 0) {
+          updatedPlayers[playerIdx] = { ...updatedPlayers[playerIdx], imageUrl };
+          count++;
+        }
+      }
+
+      if (count > 0) {
+        setCsvImportCount(count);
+        onBulkSave(updatedPlayers).catch(() => {});
+      }
+    };
+    reader.readAsText(file);
+  };
 
   useEffect(() => {
     if (isOpen) console.debug('[AdminImageBulkUpload] opened, page', page, 'pageSize', pageSize);
@@ -85,6 +143,35 @@ export default function AdminImageBulkUpload({ players, page, pageSize, isOpen, 
         </div>
 
         <p style={{ color: '#6b7280' }}>Upload images inline for the current page (rows shown below). Choose files for each player — files are uploaded to Firebase Storage when you click <strong>Upload Selected</strong>. After upload completes, press <strong>Bulk Save</strong> to persist image URLs to the database.</p>
+
+        {/* CSV Import Section */}
+        <div style={{ background: 'rgba(59,130,246,0.08)', border: '1px solid rgba(59,130,246,0.2)', borderRadius: 10, padding: '14px 16px', margin: '12px 0' }}>
+          <div style={{ fontWeight: 700, fontSize: '0.9rem', marginBottom: 6, color: '#3b82f6' }}>CSV Bulk Import (Drive Links)</div>
+          <p style={{ color: '#6b7280', fontSize: '0.82rem', marginBottom: 10 }}>Download the template, fill in Google Drive image URLs per player, then upload the CSV to apply all at once.</p>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            <button className="admin-btn admin-btn-ghost" onClick={downloadCsvTemplate} style={{ fontSize: '0.82rem' }}>
+              <IoDownload style={{ marginRight: 4 }} /> Download Template
+            </button>
+            <button className="admin-btn admin-btn-secondary" onClick={() => csvInputRef.current?.click()} style={{ fontSize: '0.82rem' }}>
+              <IoCloudUpload style={{ marginRight: 4 }} /> Import CSV
+            </button>
+            <input
+              ref={csvInputRef}
+              type="file"
+              accept=".csv"
+              style={{ display: 'none' }}
+              onChange={(e) => {
+                handleCsvImport(e.target.files?.[0]);
+                e.target.value = '';
+              }}
+            />
+            {csvImportCount > 0 && (
+              <span style={{ color: '#4ade80', fontSize: '0.82rem', fontWeight: 600 }}>
+                {csvImportCount} player images updated from CSV
+              </span>
+            )}
+          </div>
+        </div>
 
         <div style={{ maxHeight: '50vh', overflow: 'auto', marginTop: '0.5rem' }}>
           {pageItems.map((p) => (
