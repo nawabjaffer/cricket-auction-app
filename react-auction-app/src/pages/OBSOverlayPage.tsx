@@ -15,8 +15,9 @@ import { getCachedStorageUrl, resolveImageAsync } from '../services/firebaseStor
 import { extractDriveFileId } from '../utils/driveImage';
 import SoldAnimation from '../components/Live/SoldAnimation';
 import { BreakOverlay } from '../components/Overlays/BreakOverlay';
-import type { Player, Team } from '../types';
-import type { SponsorRecord } from '../services/auctionPersistence';
+import { TeamStandingsOverlay } from '../components/Overlays/TeamStandingsOverlay';
+import type { Player, Team, PlayerRole } from '../types';
+import type { SponsorRecord, AdminSettings } from '../services/auctionPersistence';
 import { tenantPath } from '../services/tenantPath';
 import './OBSOverlayPage.css';
 
@@ -197,8 +198,23 @@ export default function OBSOverlayPage({ browserMode = false }: { readonly brows
   const [activeOverlay, setActiveOverlay] = useState<'sold' | 'unsold' | null>(null);
   const [connected,     setConnected]    = useState(false);
   const [sponsors,      setSponsors]     = useState<SponsorRecord[]>([]);
-  const [adminSettings, setAdminSettings] = useState<{ organizerLogo?: string; organizerName?: string } | null>(null);
+  const [adminSettings, setAdminSettings] = useState<AdminSettings | null>(null);
+  const [showTeamStandings, setShowTeamStandings] = useState(false);
+  const [soldPlayersObs, setSoldPlayersObs] = useState<Array<{ id: string; name: string; soldAmount: number; teamName: string; teamId?: string; age?: number | null }>>([]);
   const animatingRef = useRef(false);
+
+  // 'g' key to toggle TeamStandingsOverlay
+  useEffect(() => {
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === 'g' || e.key === 'G') {
+        if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return;
+        e.preventDefault();
+        setShowTeamStandings(prev => !prev);
+      }
+    };
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, []);
 
   useEffect(() => {
     // Resolve paths at subscribe-time so the active tenant (set by TenantGate)
@@ -249,7 +265,18 @@ export default function OBSOverlayPage({ browserMode = false }: { readonly brows
       ref(obsDb, pathAdminSet),
       (snap) => { if (snap.exists()) setAdminSettings(snap.val()); }
     );
-    return () => { unsubState(); unsubControl(); unsubSponsors(); unsubAdmin(); };
+    // Subscribe to sold players for TeamStandingsOverlay
+    const pathSold = tenantPath('auction/soldPlayers');
+    const unsubSold = onValue(
+      ref(obsDb, pathSold),
+      (snap) => {
+        if (!snap.exists()) { setSoldPlayersObs([]); return; }
+        const raw = snap.val();
+        const list = Array.isArray(raw) ? raw : Object.values(raw ?? {});
+        setSoldPlayersObs(list.filter((p): p is typeof list[number] => !!p && typeof p === 'object'));
+      }
+    );
+    return () => { unsubState(); unsubControl(); unsubSponsors(); unsubAdmin(); unsubSold(); };
   }, []);
 
   // ── Derived ───────────────────────────────────────────────────────────────
@@ -528,6 +555,43 @@ export default function OBSOverlayPage({ browserMode = false }: { readonly brows
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* ── TEAM STANDINGS OVERLAY (press 'g') ────────────────────────── */}
+      <TeamStandingsOverlay
+        visible={showTeamStandings}
+        onClose={() => setShowTeamStandings(false)}
+        teams={teams.map(t => ({
+          id: t.id,
+          name: t.name,
+          logoUrl: t.logoUrl,
+          remainingPurse: t.remainingPurse,
+          playersBought: t.playersBought ?? 0,
+          totalPlayerThreshold: t.totalPlayerThreshold ?? 11,
+          remainingPlayers: 0,
+          allocatedAmount: 0,
+          highestBid: t.highestBid ?? 0,
+          captain: t.captain ?? '',
+          underAgePlayers: 0,
+        }))}
+        soldPlayers={soldPlayersObs.map(p => ({
+          id: p.id ?? '',
+          name: p.name ?? (p as Record<string, unknown>).playerName as string ?? '',
+          role: (((p as Record<string, unknown>).role as string) ?? 'Batsman') as PlayerRole,
+          imageUrl: ((p as Record<string, unknown>).imageUrl as string) ?? '',
+          basePrice: ((p as Record<string, unknown>).basePrice as number) ?? 0,
+          age: ((p as Record<string, unknown>).age as number) ?? null,
+          matches: '',
+          runs: '',
+          wickets: '',
+          battingBestFigures: '',
+          bowlingBestFigures: '',
+          soldAmount: ((p as Record<string, unknown>).soldAmount as number) ?? 0,
+          teamName: ((p as Record<string, unknown>).teamName as string) ?? '',
+          teamId: ((p as Record<string, unknown>).teamId as string) ?? undefined,
+          soldDate: ((p as Record<string, unknown>).timestamp as string) ?? '',
+        }))}
+        settings={adminSettings}
+      />
     </div>
   );
 }

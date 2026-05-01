@@ -2668,6 +2668,65 @@ button:focus-visible {
   font-weight: 800;
 }
 
+/* ═══════════ STAT GRID VIEW (>5 stats) ═══════════ */
+.stat-grid-view {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.6rem;
+  width: 100%;
+}
+.stat-grid-view--compact {
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.45rem;
+}
+.stat-grid-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 0.5rem 0.3rem;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  text-align: center;
+  min-height: 3.2rem;
+}
+.stat-grid-value {
+  font-size: clamp(1.1rem, 2vw, 1.4rem);
+  font-weight: 800;
+  color: #f8fafc;
+  line-height: 1.2;
+}
+.stat-grid-label {
+  font-size: clamp(0.55rem, 0.9vw, 0.7rem);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: rgba(255, 255, 255, 0.5);
+  margin-top: 0.15rem;
+}
+
+/* ═══════════ STAT SPLIT VIEW (>9 stats) ═══════════ */
+.stat-split-view {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  width: 100%;
+}
+.stat-split-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+.stat-split-title {
+  font-size: clamp(0.7rem, 1.1vw, 0.85rem);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: rgba(255, 255, 255, 0.6);
+  padding-left: 0.2rem;
+}
+
 .hero-right {
   display: flex;
   flex-direction: column;

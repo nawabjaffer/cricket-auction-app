@@ -216,23 +216,45 @@ function AuctionApp({ mirrorMode = false }: { mirrorMode?: boolean }) {
     const ms = mirrorSyncRef.current;
     if (!ms.isConnected || !ms.lastUpdate) return;
 
-    useAuctionStore.setState((prev) => ({
-      ...prev,
-      currentPlayer: ms.currentPlayer,
-      currentBid: ms.currentBid,
-      selectedTeam: ms.selectedTeam,
-      teams: ms.teams,
-      bidHistory: ms.bidHistory,
-      activeOverlay: ms.activeOverlay,
-      auctionState: {
-        ...prev.auctionState,
+    useAuctionStore.setState((prev) => {
+      const newState: Record<string, unknown> = {
+        ...prev,
         currentPlayer: ms.currentPlayer,
         currentBid: ms.currentBid,
         selectedTeam: ms.selectedTeam,
+        teams: ms.teams,
         bidHistory: ms.bidHistory,
-        isAuctionActive: ms.auctionActive,
-      },
-    }));
+        activeOverlay: ms.activeOverlay,
+        auctionState: {
+          ...prev.auctionState,
+          currentPlayer: ms.currentPlayer,
+          currentBid: ms.currentBid,
+          selectedTeam: ms.selectedTeam,
+          bidHistory: ms.bidHistory,
+          isAuctionActive: ms.auctionActive,
+        },
+      };
+
+      // When sold overlay is active, ensure soldPlayers has the current player
+      // so SoldOverlay can display the correct data
+      if (ms.activeOverlay === 'sold' && ms.currentPlayer && ms.selectedTeam) {
+        const lastSold = prev.soldPlayers.at(-1);
+        if (!lastSold || lastSold.id !== ms.currentPlayer.id) {
+          newState.soldPlayers = [
+            ...prev.soldPlayers,
+            {
+              ...ms.currentPlayer,
+              soldAmount: ms.currentBid,
+              teamName: ms.selectedTeam.name,
+              teamId: ms.selectedTeam.id,
+              soldDate: new Date().toISOString(),
+            },
+          ];
+        }
+      }
+
+      return newState;
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isMirrorMode, mirrorSync.lastUpdate]);
 
@@ -251,10 +273,14 @@ function AuctionApp({ mirrorMode = false }: { mirrorMode?: boolean }) {
     return () => unsub();
   }, [isMirrorMode]);
 
-  // Mirror mode: block all keyboard events to prevent accidental control
+  // Mirror mode: block most keyboard events to prevent accidental control, but allow 'g' for standings
   useEffect(() => {
     if (!isMirrorMode) return;
-    const swallow = (e: KeyboardEvent) => { e.preventDefault(); e.stopPropagation(); };
+    const swallow = (e: KeyboardEvent) => {
+      // Allow 'g' key through for team standings overlay
+      if (e.key === 'g' || e.key === 'G') return;
+      e.preventDefault(); e.stopPropagation();
+    };
     window.addEventListener('keydown', swallow, { capture: true });
     return () => window.removeEventListener('keydown', swallow, { capture: true });
   }, [isMirrorMode]);
@@ -440,14 +466,13 @@ function AuctionApp({ mirrorMode = false }: { mirrorMode?: boolean }) {
     return () => window.removeEventListener('keydown', handleTopBuysKey);
   }, [isMirrorMode, showAdminPanel, showJumpModal, showCoinJar, showTopBuysOverlay]);
 
-  // Team Standings overlay keyboard shortcut ('g' key)
+  // Team Standings overlay keyboard shortcut ('g' key) — works in both desktop and mirror mode
   useEffect(() => {
-    if (isMirrorMode) return;
     const handleStandingsKey = (e: KeyboardEvent) => {
       if (e.key === 'g' || e.key === 'G') {
         const target = e.target as HTMLElement;
         if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) return;
-        if (showAdminPanel || showJumpModal || showCoinJar) return;
+        if (!isMirrorMode && (showAdminPanel || showJumpModal || showCoinJar)) return;
         if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return;
 
         e.preventDefault();
@@ -760,7 +785,7 @@ function AuctionApp({ mirrorMode = false }: { mirrorMode?: boolean }) {
   // Stats rows for player panel — configurable from admin settings
   const statRows = useMemo(() => {
     const configuredFields = adminSettings?.playerStatsFields ?? ['age', 'matches', 'runs', 'wickets', 'battingBestFigures', 'bowlingBestFigures'];
-    const rows: { label: string; value: string | number }[] = [];
+    const rows: { label: string; value: string | number; category: 'batting' | 'bowling' | 'general' }[] = [];
 
     if (!currentPlayer) return rows;
 
@@ -769,13 +794,22 @@ function AuctionApp({ mirrorMode = false }: { mirrorMode?: boolean }) {
       if (!fieldDef) continue;
 
       let value: string | number | undefined;
+      let category: 'batting' | 'bowling' | 'general' = 'general';
 
       if (fieldKey.startsWith('battingStats.')) {
         const statKey = fieldKey.split('.')[1] as keyof typeof currentPlayer.battingStats;
         value = currentPlayer.battingStats?.[statKey];
+        category = 'batting';
       } else if (fieldKey.startsWith('bowlingStats.')) {
         const statKey = fieldKey.split('.')[1] as keyof typeof currentPlayer.bowlingStats;
         value = currentPlayer.bowlingStats?.[statKey];
+        category = 'bowling';
+      } else if (['runs', 'battingBestFigures'].includes(fieldKey)) {
+        value = (currentPlayer as unknown as Record<string, unknown>)[fieldKey] as string | number | undefined;
+        category = 'batting';
+      } else if (['wickets', 'bowlingBestFigures'].includes(fieldKey)) {
+        value = (currentPlayer as unknown as Record<string, unknown>)[fieldKey] as string | number | undefined;
+        category = 'bowling';
       } else {
         value = (currentPlayer as unknown as Record<string, unknown>)[fieldKey] as string | number | undefined;
       }
@@ -785,7 +819,7 @@ function AuctionApp({ mirrorMode = false }: { mirrorMode?: boolean }) {
       const strVal = String(value).trim();
       if (!strVal || strVal === '0' || strVal === 'N/A' || strVal === '0.00') continue;
 
-      rows.push({ label: fieldDef.label, value });
+      rows.push({ label: fieldDef.label, value, category });
     }
 
     return rows;
@@ -1031,22 +1065,116 @@ function AuctionApp({ mirrorMode = false }: { mirrorMode?: boolean }) {
                     );
                   })()}
                 </motion.div>
-                {statRows.map((row, index) => (
-                  <motion.div 
-                    key={row.label} 
-                    className="stat-row"
+                {statRows.length <= 5 ? (
+                  /* ≤5 stats: classic list view */
+                  statRows.map((row, index) => (
+                    <motion.div 
+                      key={row.label} 
+                      className="stat-row"
+                      variants={{
+                        hidden: { opacity: 0, x: -30, filter: 'blur(6px)' },
+                        visible: { opacity: 1, x: 0, filter: 'blur(0px)' },
+                        exit: { opacity: 0, x: 30, filter: 'blur(6px)' }
+                      }}
+                      transition={{ duration: 0.45, delay: 0.2 + index * 0.06, ease: [0.32, 0.72, 0, 1] }}
+                    >
+                      <span className="stat-label">{row.label}</span>
+                      <span className="stat-divider" aria-hidden="true" />
+                      <span className="stat-value">{row.value}</span>
+                    </motion.div>
+                  ))
+                ) : statRows.length <= 9 ? (
+                  /* 6-9 stats: single grid view */
+                  <motion.div
+                    className="stat-grid-view"
                     variants={{
-                      hidden: { opacity: 0, x: -30, filter: 'blur(6px)' },
-                      visible: { opacity: 1, x: 0, filter: 'blur(0px)' },
-                      exit: { opacity: 0, x: 30, filter: 'blur(6px)' }
+                      hidden: { opacity: 0 },
+                      visible: { opacity: 1 },
+                      exit: { opacity: 0 }
                     }}
-                    transition={{ duration: 0.45, delay: 0.2 + index * 0.06, ease: [0.32, 0.72, 0, 1] }}
+                    transition={{ duration: 0.4, delay: 0.2 }}
                   >
-                    <span className="stat-label">{row.label}</span>
-                    <span className="stat-divider" aria-hidden="true" />
-                    <span className="stat-value">{row.value}</span>
+                    {statRows.map((row, index) => (
+                      <motion.div
+                        key={row.label}
+                        className="stat-grid-cell"
+                        variants={{
+                          hidden: { opacity: 0, scale: 0.8 },
+                          visible: { opacity: 1, scale: 1 },
+                          exit: { opacity: 0, scale: 0.8 }
+                        }}
+                        transition={{ duration: 0.35, delay: 0.15 + index * 0.04 }}
+                      >
+                        <span className="stat-grid-value">{row.value}</span>
+                        <span className="stat-grid-label">{row.label}</span>
+                      </motion.div>
+                    ))}
                   </motion.div>
-                ))}
+                ) : (
+                  /* >9 stats: split batting + bowling grids */
+                  <motion.div
+                    className="stat-split-view"
+                    variants={{
+                      hidden: { opacity: 0 },
+                      visible: { opacity: 1 },
+                      exit: { opacity: 0 }
+                    }}
+                    transition={{ duration: 0.4, delay: 0.2 }}
+                  >
+                    {(() => {
+                      const battingRows = statRows.filter(r => r.category === 'batting' || r.category === 'general');
+                      const bowlingRows = statRows.filter(r => r.category === 'bowling');
+                      return (
+                        <>
+                          {battingRows.length > 0 && (
+                            <div className="stat-split-section">
+                              <div className="stat-split-title">🏏 Batting</div>
+                              <div className="stat-grid-view stat-grid-view--compact">
+                                {battingRows.map((row, index) => (
+                                  <motion.div
+                                    key={row.label}
+                                    className="stat-grid-cell"
+                                    variants={{
+                                      hidden: { opacity: 0, scale: 0.8 },
+                                      visible: { opacity: 1, scale: 1 },
+                                      exit: { opacity: 0, scale: 0.8 }
+                                    }}
+                                    transition={{ duration: 0.3, delay: 0.1 + index * 0.03 }}
+                                  >
+                                    <span className="stat-grid-value">{row.value}</span>
+                                    <span className="stat-grid-label">{row.label}</span>
+                                  </motion.div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                          {bowlingRows.length > 0 && (
+                            <div className="stat-split-section">
+                              <div className="stat-split-title">⚾ Bowling</div>
+                              <div className="stat-grid-view stat-grid-view--compact">
+                                {bowlingRows.map((row, index) => (
+                                  <motion.div
+                                    key={row.label}
+                                    className="stat-grid-cell"
+                                    variants={{
+                                      hidden: { opacity: 0, scale: 0.8 },
+                                      visible: { opacity: 1, scale: 1 },
+                                      exit: { opacity: 0, scale: 0.8 }
+                                    }}
+                                    transition={{ duration: 0.3, delay: 0.1 + index * 0.03 }}
+                                  >
+                                    <span className="stat-grid-value">{row.value}</span>
+                                    <span className="stat-grid-label">{row.label}</span>
+                                  </motion.div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </>
+                      );
+                    })()}
+                  </motion.div>
+                )}
               </motion.div>
 
               {/* Bid Info */}
