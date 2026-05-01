@@ -30,8 +30,9 @@ export function TeamStandingsOverlay({ visible, onClose, teams, soldPlayers, set
       const remaining = totalPurse - spent;
       const playersBought = teamPlayers.length;
       const playersToBuy = Math.max(0, (team.totalPlayerThreshold || 11) - playersBought);
-      const maxForOne = playersToBuy > 1
-        ? remaining - ((playersToBuy - 1) * (budgetRules?.reservedFundPerRemainingPlayer ?? 1))
+      const basePrice = budgetRules?.reservedFundPerRemainingPlayer ?? 1;
+      const maxForOne = playersToBuy > 0
+        ? remaining - (playersToBuy * basePrice) + basePrice
         : remaining;
 
       // Count players per special category

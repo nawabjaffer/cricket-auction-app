@@ -1811,22 +1811,40 @@ export function MobileBiddingLivePage() {
             )}
           </div>
 
-          {/* All teams leaderboard */}
+          {/* Team Standings section */}
           <div className="cb-teams-leaderboard">
-            <h3 className="cb-section-title">All Teams</h3>
-            <div className="cb-leaderboard-list">
-              {[...teams].sort((a, b) => (b.playersBought || 0) - (a.playersBought || 0)).map((t) => (
-                <div key={t.id} className={`cb-leaderboard-row ${t.id === myTeam.id ? 'mine' : ''}`}>
-                  <div className="cb-lb-team">
-                    {t.id === myTeam.id && t.logoUrl && <TeamLogo logoUrl={t.logoUrl} teamName={t.name} size="sm" className="cb-lb-logo" />}
-                    <span>{t.name}</span>
+            <div className="cb-standings-header">
+              <h3 className="cb-section-title">
+                <IoTrophy size={16} /> Team Standings
+              </h3>
+              <button className="cb-standings-expand" onClick={() => setShowTeamStandings(true)}>
+                View Full <IoStatsChart size={14} />
+              </button>
+            </div>
+            <div className="cb-standings-table">
+              <div className="cb-standings-thead">
+                <span className="cb-st-col cb-st-rank">#</span>
+                <span className="cb-st-col cb-st-team">Team</span>
+                <span className="cb-st-col cb-st-players">Players</span>
+                <span className="cb-st-col cb-st-spent">Spent</span>
+                <span className="cb-st-col cb-st-purse">Purse Left</span>
+              </div>
+              {[...teams].sort((a, b) => (b.playersBought || 0) - (a.playersBought || 0)).map((t, i) => {
+                const spent = teamSpentByName.get(t.name) ?? 0;
+                const remaining = getTeamRemaining(t);
+                return (
+                  <div key={t.id} className={`cb-standings-row ${t.id === myTeam.id ? 'mine' : ''}`}>
+                    <span className="cb-st-col cb-st-rank">{i + 1}</span>
+                    <span className="cb-st-col cb-st-team">
+                      {t.logoUrl && <TeamLogo logoUrl={t.logoUrl} teamName={t.name} size="sm" className="cb-st-logo" />}
+                      <span className="cb-st-name">{t.name}</span>
+                    </span>
+                    <span className="cb-st-col cb-st-players">{t.playersBought || 0}</span>
+                    <span className="cb-st-col cb-st-spent">{formatLakhs(spent)}</span>
+                    <span className="cb-st-col cb-st-purse">{formatLakhs(remaining)}</span>
                   </div>
-                  <div className="cb-lb-stats">
-                    <span className="cb-lb-players">{t.playersBought || 0} players</span>
-                    <span className="cb-lb-purse">{formatLakhs(getTeamRemaining(t))}</span>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         </div>

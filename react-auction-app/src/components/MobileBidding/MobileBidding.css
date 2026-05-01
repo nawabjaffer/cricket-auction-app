@@ -1506,6 +1506,73 @@
 .cb-lb-players { font-size: 0.75rem; color: var(--cb-text-muted); font-weight: 600; }
 .cb-lb-purse { font-size: 0.75rem; color: var(--cb-warning); font-weight: 700; }
 
+/* ── Team Standings Table (logged-in view) ── */
+.cb-standings-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+}
+.cb-standings-header .cb-section-title {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.cb-standings-expand {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--cb-accent);
+  background: rgba(99,102,241,0.1);
+  border: 1px solid rgba(99,102,241,0.2);
+  border-radius: var(--cb-radius-xs);
+  padding: 0.3rem 0.6rem;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.cb-standings-expand:hover { background: rgba(99,102,241,0.18); }
+.cb-standings-table {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  border-radius: var(--cb-radius-sm);
+  overflow: hidden;
+  border: 1px solid rgba(255,255,255,0.06);
+}
+.cb-standings-thead {
+  display: flex;
+  align-items: center;
+  padding: 0.4rem 0.5rem;
+  background: rgba(255,255,255,0.04);
+  font-size: 0.6rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--cb-text-muted);
+}
+.cb-standings-row {
+  display: flex;
+  align-items: center;
+  padding: 0.45rem 0.5rem;
+  font-size: 0.75rem;
+  border-top: 1px solid rgba(255,255,255,0.04);
+  transition: background 0.15s;
+}
+.cb-standings-row.mine {
+  background: rgba(52,211,153,0.08);
+  border-left: 2px solid rgba(52,211,153,0.5);
+}
+.cb-st-col { flex-shrink: 0; }
+.cb-st-rank { width: 1.5rem; text-align: center; font-weight: 700; color: var(--cb-text-muted); }
+.cb-st-team { flex: 1; display: flex; align-items: center; gap: 0.35rem; font-weight: 600; color: #fff; min-width: 0; overflow: hidden; }
+.cb-st-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cb-st-logo img { width: 16px !important; height: 16px !important; object-fit: contain; }
+.cb-st-players { width: 2.8rem; text-align: center; font-weight: 600; }
+.cb-st-spent { width: 3.5rem; text-align: right; font-weight: 600; color: var(--cb-text-muted); font-size: 0.7rem; }
+.cb-st-purse { width: 3.5rem; text-align: right; font-weight: 700; color: var(--cb-warning); font-size: 0.7rem; }
+
 /* ═══════════════════════════════════════════════════════
    PLAYERS TAB
    ═══════════════════════════════════════════════════════ */

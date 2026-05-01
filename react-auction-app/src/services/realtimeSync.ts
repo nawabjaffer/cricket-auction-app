@@ -43,7 +43,7 @@ const CAMERA_CONFIG_PATH          = () => tenantPath('auction/cameraConfig');
 const MOBILE_BIDDING_CONFIG_PATH  = () => tenantPath('auction/mobileBiddingConfig');
 
 // Broadcast control state (synced from /live-admin to /live)
-export type BroadcastMode = 'auction' | 'break' | 'ad' | 'standings' | 'teamSquad';
+export type BroadcastMode = 'auction' | 'break' | 'ad' | 'standings' | 'teamSquad' | 'teamStandings' | 'topPicks';
 export type BroadcastTransition = 'cut' | 'fade' | 'slide' | 'zoom';
 export type CameraLayoutMode = 'single' | 'pip' | 'split' | 'quad';
 
@@ -59,6 +59,8 @@ export interface BroadcastControlState {
   selectedTeamId?: string | null;
   // Team squad view (mode === 'teamSquad'): which team's squad is shown.
   teamSquadTeamId?: string | null;
+  // Top picks carousel (mode === 'topPicks'): which card index is shown.
+  topBuysIndex?: number;
   lastUpdate: number;
 }
 

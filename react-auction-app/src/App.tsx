@@ -285,6 +285,11 @@ function AuctionApp({ mirrorMode = false }: { mirrorMode?: boolean }) {
       setShowBreakOverlay(mode === 'break');
       setShowTeamSquadView(mode === 'teamSquad');
       setShowTeamOverlay(mode === 'standings');
+      setShowTeamStandingsOverlay(mode === 'teamStandings');
+      setShowTopBuysOverlay(mode === 'topPicks');
+      if (mode === 'topPicks' && control?.topBuysIndex != null) {
+        setTopBuysIndex(control.topBuysIndex);
+      }
       if (mode === 'teamSquad' && control?.teamSquadTeamId) {
         setSelectedTeamForSquad(control.teamSquadTeamId);
       }
@@ -296,8 +301,10 @@ function AuctionApp({ mirrorMode = false }: { mirrorMode?: boolean }) {
   useEffect(() => {
     if (!isMirrorMode) return;
     const swallow = (e: KeyboardEvent) => {
-      // Allow 'g' key through for team standings overlay
+      // Allow 'g' key through for team standings overlay (handled by dedicated handler)
       if (e.key === 'g' || e.key === 'G') return;
+      // Allow Escape through for closing overlays
+      if (e.key === 'Escape') return;
       e.preventDefault(); e.stopPropagation();
     };
     window.addEventListener('keydown', swallow, { capture: true });
@@ -320,10 +327,12 @@ function AuctionApp({ mirrorMode = false }: { mirrorMode?: boolean }) {
   useEffect(() => {
     if (isMirrorMode) return;
     // Derive the current mode from local UI flags. Priority:
-    //   break > teamSquad > standings (team stats) > auction (default)
-    let mode: 'auction' | 'break' | 'teamSquad' | 'standings' = 'auction';
+    //   break > teamSquad > topPicks > teamStandings > standings (team stats) > auction (default)
+    let mode: 'auction' | 'break' | 'teamSquad' | 'standings' | 'teamStandings' | 'topPicks' = 'auction';
     if (showBreakOverlay) mode = 'break';
     else if (showTeamSquadView) mode = 'teamSquad';
+    else if (showTopBuysOverlay) mode = 'topPicks';
+    else if (showTeamStandingsOverlay) mode = 'teamStandings';
     else if (showTeamOverlay) mode = 'standings';
 
     const payload = {
@@ -332,6 +341,7 @@ function AuctionApp({ mirrorMode = false }: { mirrorMode?: boolean }) {
       ...(mode === 'break' ? { breakDuration: breakDurationSeconds, breakStartedAt: Date.now() } : {}),
       ...(mode === 'teamSquad' ? { teamSquadTeamId: selectedTeamForSquad || null } : {}),
       ...(mode === 'standings' ? { selectedTeamId: selectedTeam?.id || allTeams[0]?.id || null } : {}),
+      ...(mode === 'topPicks' ? { topBuysIndex } : {}),
     };
 
     realtimeSync.setBroadcastControl(payload).catch((err) => {
@@ -340,7 +350,7 @@ function AuctionApp({ mirrorMode = false }: { mirrorMode?: boolean }) {
     // We intentionally depend only on visibility flags + relevant ids to
     // avoid publishing on every player/bid change.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isMirrorMode, showBreakOverlay, showTeamSquadView, showTeamOverlay, selectedTeamForSquad, selectedTeam?.id]);
+  }, [isMirrorMode, showBreakOverlay, showTeamSquadView, showTeamOverlay, showTeamStandingsOverlay, showTopBuysOverlay, topBuysIndex, selectedTeamForSquad, selectedTeam?.id]);
 
   const handleOpenTeamDisplay = useCallback(() => {
     const initialTeamId = selectedTeam?.id || allTeams[0]?.id || '';
@@ -495,12 +505,13 @@ function AuctionApp({ mirrorMode = false }: { mirrorMode?: boolean }) {
         if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return;
 
         e.preventDefault();
+        e.stopPropagation();
         setShowTeamStandingsOverlay(prev => !prev);
       }
     };
 
-    window.addEventListener('keydown', handleStandingsKey);
-    return () => window.removeEventListener('keydown', handleStandingsKey);
+    window.addEventListener('keydown', handleStandingsKey, { capture: true });
+    return () => window.removeEventListener('keydown', handleStandingsKey, { capture: true });
   }, [isMirrorMode, showAdminPanel, showJumpModal, showCoinJar]);
 
   const handleJumpSubmit = () => {
