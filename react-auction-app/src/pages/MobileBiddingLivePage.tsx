@@ -22,7 +22,8 @@ import { TeamLogo } from '../components/TeamLogo/TeamLogo';
 import { PlayerImage } from '../components/PlayerImage/PlayerImage';
 import { getRoleBasedStats, getRoleLabel, getRoleBadgeClass } from '../utils/playerStats';
 import { parseRoleDetails, getRoleBadgeColor } from '../utils/roleFormatter';
-import type { Player, Team } from '../types';
+import { TeamStandingsOverlay } from '../components/Overlays/TeamStandingsOverlay';
+import type { Player, Team, SoldPlayer } from '../types';
 import '../components/MobileBidding/MobileBidding.css';
 
 interface BidFeedback {
@@ -55,6 +56,8 @@ export function MobileBiddingLivePage() {
   const [easyLoginMode, setEasyLoginMode] = useState(true);
   const [specialCategories, setSpecialCategories] = useState<SpecialCategory[]>([]);
   const [budgetRulesConfig, setBudgetRulesConfig] = useState<BudgetRulesConfig | null>(null);
+  const [adminSettings, setAdminSettings] = useState<AdminSettings | null>(null);
+  const [showTeamStandings, setShowTeamStandings] = useState(false);
   const [loginError, setLoginError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [feedback, setFeedback] = useState<BidFeedback | null>(null);
@@ -207,6 +210,7 @@ export function MobileBiddingLivePage() {
           if (cancelled) return;
           if (snap.exists()) {
             const s = snap.val() as AdminSettings;
+            setAdminSettings(s);
             setEasyLoginMode(s.easyLoginMode !== false); // default true
             if (s.specialCategories) setSpecialCategories(s.specialCategories);
             if (s.budgetRules) setBudgetRulesConfig(s.budgetRules);
@@ -566,6 +570,24 @@ export function MobileBiddingLivePage() {
 
   const spentAmount = useMemo(() => mySquad.reduce((sum, p) => sum + p.soldAmount, 0), [mySquad]);
 
+  // Build SoldPlayer[] for TeamStandingsOverlay
+  const soldPlayersForOverlay = useMemo((): SoldPlayer[] => {
+    return soldRecords.map(s => {
+      const player = allPlayers.find(p => p.id === s.id);
+      const fallback: Player = {
+        id: s.id, name: s.id, role: 'Player', imageUrl: '',
+        age: null, matches: '0', runs: '0', wickets: '0',
+        battingBestFigures: '', bowlingBestFigures: '', basePrice: 0,
+      };
+      return {
+        ...(player || fallback),
+        soldAmount: s.soldAmount,
+        teamName: s.teamName,
+        soldDate: '',
+      };
+    });
+  }, [soldRecords, allPlayers]);
+
   const teamSpentByName = useMemo(() => {
     const map = new Map<string, number>();
     soldRecords.forEach((record) => {
@@ -577,19 +599,16 @@ export function MobileBiddingLivePage() {
 
   const getTeamBudgetTotal = useCallback((team: Team | null) => {
     if (!team) return 0;
-    const spent = teamSpentByName.get(team.name) ?? 0;
-    const remaining = team.remainingPurse || 0;
-    const allocated = team.allocatedAmount || 0;
-    const derivedTotal = remaining + spent;
-    return Math.max(allocated, derivedTotal, remaining);
-  }, [teamSpentByName]);
+    // Prefer admin-configured budget, fallback to team's allocatedAmount
+    if (budgetRulesConfig?.totalBudgetPerTeam) return budgetRulesConfig.totalBudgetPerTeam;
+    return team.allocatedAmount || 0;
+  }, [budgetRulesConfig]);
 
   const getTeamRemaining = useCallback((team: Team | null) => {
     if (!team) return 0;
     const total = getTeamBudgetTotal(team);
     const spent = teamSpentByName.get(team.name) ?? 0;
-    if (spent > 0) return Math.max(total - spent, 0);
-    return Math.max(team.remainingPurse || 0, total);
+    return Math.max(total - spent, 0);
   }, [getTeamBudgetTotal, teamSpentByName]);
 
   const myTeamBudgetTotal = useMemo(() => getTeamBudgetTotal(myTeam), [getTeamBudgetTotal, myTeam]);
@@ -603,9 +622,9 @@ export function MobileBiddingLivePage() {
   // Budget usage percentage
   const budgetPct = useMemo(() => {
     if (!myTeam) return 0;
-    const total = myTeamBudgetTotal || (myTeamRemaining + spentAmount);
+    const total = myTeamBudgetTotal;
     return total > 0 ? Math.round((spentAmount / total) * 100) : 0;
-  }, [myTeam, myTeamBudgetTotal, myTeamRemaining, spentAmount]);
+  }, [myTeam, myTeamBudgetTotal, spentAmount]);
 
   // ── Team Analytics (for My Team tab) ──
   const myTeamRoleBalance = useMemo(() => {
@@ -633,12 +652,16 @@ export function MobileBiddingLivePage() {
 
   const myTeamMaxBid = useMemo(() => {
     if (!myTeam) return 0;
-    const slotsLeft = (myTeam.totalPlayerThreshold || 25) - (myTeam.playersBought || 0);
+    const slotsLeft = (myTeam.totalPlayerThreshold || budgetRulesConfig?.maxPlayersAllowed || 25) - (myTeam.playersBought || 0);
     if (slotsLeft <= 0) return 0;
-    // Reserve 0.5L per remaining slot (except current)
-    const reserved = Math.max(slotsLeft - 1, 0) * 0.5;
-    return Math.max(myTeamRemaining - reserved, 0);
-  }, [myTeam, myTeamRemaining]);
+    const reservePerSlot = budgetRulesConfig?.reservedFundPerRemainingPlayer ?? 0.5;
+    const reserved = Math.max(slotsLeft - 1, 0) * reservePerSlot;
+    let maxBid = Math.max(myTeamRemaining - reserved, 0);
+    if (budgetRulesConfig?.maxBidPerPlayer) {
+      maxBid = Math.min(maxBid, budgetRulesConfig.maxBidPerPlayer);
+    }
+    return maxBid;
+  }, [myTeam, myTeamRemaining, budgetRulesConfig]);
 
   const myTeamBudgetStatus = useMemo(() => {
     if (!myTeam) return 'safe' as const;
@@ -705,7 +728,7 @@ export function MobileBiddingLivePage() {
     return available;
   }, [allPlayers, soldRecords, scoutRoleFilter, scoutSearch]);
 
-  // Keyboard shortcut: "n" to open top buys carousel
+  // Keyboard shortcut: "n" to open top buys carousel, "g" for team standings
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
@@ -716,16 +739,22 @@ export function MobileBiddingLivePage() {
           
         }
       }
+      if ((e.key === 'g' || e.key === 'G') && session) {
+        setShowTeamStandings(prev => !prev);
+      }
       // Left/right arrow to navigate carousel
       if (showTopBuysCarousel) {
         if (e.key === 'ArrowRight') setTopBuysIndex(prev => Math.min(prev + 1, topBuys.length - 1));
         if (e.key === 'ArrowLeft') setTopBuysIndex(prev => Math.max(prev - 1, 0));
         if (e.key === 'Escape') { setShowTopBuysCarousel(false);  }
       }
+      if (showTeamStandings && e.key === 'Escape') {
+        setShowTeamStandings(false);
+      }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [topBuys.length, showTopBuysCarousel]);
+  }, [topBuys.length, showTopBuysCarousel, showTeamStandings, session]);
 
   // Render full batting + bowling stats panel for a player
   const renderFullStatsPanel = (player: Player, statsView: StatsView, setView: (v: StatsView) => void) => {
@@ -2230,6 +2259,15 @@ export function MobileBiddingLivePage() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Team Standings Overlay (triggered by 'g' key for logged-in users) */}
+      <TeamStandingsOverlay
+        visible={showTeamStandings}
+        onClose={() => setShowTeamStandings(false)}
+        teams={teams}
+        soldPlayers={soldPlayersForOverlay}
+        settings={adminSettings}
+      />
     </div>
   );
 }

@@ -98,19 +98,17 @@
 
 /* ═══════════ HEADER ═══════════ */
 .break-ov__header {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
+  position: relative;
   z-index: 10;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 1.25rem 2.5rem;
+  padding: 0.6rem 2rem;
   background: rgba(0, 0, 0, 0.25);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  flex-shrink: 0;
 }
 
 .break-ov__header-left {
@@ -120,12 +118,12 @@
 }
 
 .break-ov__tournament-logo {
-  width: 56px;
-  height: 56px;
-  border-radius: 14px;
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
   object-fit: contain;
   background: rgba(255,255,255,0.05);
-  padding: 4px;
+  padding: 3px;
   border: 1px solid rgba(255,255,255,0.08);
 }
 
@@ -136,7 +134,7 @@
 
 .break-ov__title {
   margin: 0;
-  font-size: 1.3rem;
+  font-size: 1rem;
   font-weight: 800;
   letter-spacing: 0.06em;
   background: linear-gradient(135deg, #e2e8f0, #94a3b8);
@@ -145,8 +143,8 @@
 }
 
 .break-ov__subtitle {
-  margin: 0.15rem 0 0;
-  font-size: 0.7rem;
+  margin: 0.1rem 0 0;
+  font-size: 0.6rem;
   text-transform: uppercase;
   letter-spacing: 0.15em;
   opacity: 0.4;
@@ -174,8 +172,8 @@
 }
 
 .break-ov__title-sponsor-logo {
-  height: 120px;
-  max-width: 120px;
+  height: 50px;
+  max-width: 80px;
   object-fit: contain;
   filter: brightness(1.1) blur(0.5px);
 }
@@ -198,7 +196,7 @@
 }
 
 .break-ov__timer-value {
-  font-size: 2.2rem;
+  font-size: 1.6rem;
   font-weight: 900;
   font-variant-numeric: tabular-nums;
   background: linear-gradient(135deg, #818cf8, #60a5fa);
@@ -226,6 +224,8 @@
   justify-content: center;
   padding: 0;
   gap: 0;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .break-ov__media-wrap {
@@ -238,9 +238,9 @@
 }
 
 .break-ov__video {
-  width: 100vw;
-  height: 100vh;
-  object-fit: cover;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
   border-radius: 0;
   box-shadow: none;
 }
@@ -364,6 +364,7 @@
   position: relative;
   z-index: 2;
   height: 140px;
+  flex-shrink: 0;
   overflow: hidden;
   perspective: 600px;
 }
@@ -548,17 +549,17 @@
   .break-ov__header {
     flex-wrap: wrap;
     gap: 0.75rem;
-    padding: 1rem 1.5rem;
+    padding: 0.5rem 1rem;
   }
 
   .break-ov__timer-value {
-    font-size: 1.6rem;
+    font-size: 1.3rem;
   }
 
   .break-ov__video {
-    width: 100vw;
-    height: 100vh;
-    object-fit: cover;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
   }
 
   .break-ov__poster {
