@@ -165,6 +165,7 @@ export function MobileBiddingLivePage() {
   const [wishlist, setWishlist] = useState<WishlistMap>({});
   const [wishlistError, setWishlistError] = useState<string>('');
   const [wishlistBusy, setWishlistBusy] = useState<string | null>(null); // playerId currently being toggled
+  const [imageOverlayUrl, setImageOverlayUrl] = useState<string | null>(null);
 
   useEffect(() => {
     if (runtimeCredentials.length > 0) {
@@ -550,6 +551,16 @@ export function MobileBiddingLivePage() {
 
   const formatLakhs = (value: number) => `₹${Number.isFinite(value) ? value.toFixed(1) : '0.0'}L`;
 
+  // WhatsApp number formatter - prepend country code if number doesn't already have one
+  const formatWhatsAppNumber = useCallback((rawNumber: string) => {
+    const digits = rawNumber.replace(/[^0-9]/g, '');
+    const countryCode = (adminSettings as AdminSettings & { defaultCountryCode?: string })?.defaultCountryCode || '91';
+    // If the number already starts with the country code or is longer than 10 digits (already has code)
+    if (digits.startsWith(countryCode)) return digits;
+    if (digits.length > 10) return digits; // assume already has country code
+    return `${countryCode}${digits}`;
+  }, [adminSettings]);
+
   // Role-based stats for current player
   const playerStats = useMemo(() => {
     if (!currentPlayer) return [];
@@ -761,62 +772,106 @@ export function MobileBiddingLivePage() {
     const bs = player.battingStats;
     const bw = player.bowlingStats;
 
+    const battingStats: [string, string][] = [
+      ['Matches', bs?.matches || player.matches || '--'],
+      ['Innings', bs?.innings || '--'],
+      ['Not Out', bs?.notOut || '--'],
+      ['Runs', bs?.runs || player.runs || '--'],
+      ['Highest Score', bs?.highestScore || '--'],
+      ['Average', bs?.average || '--'],
+      ['Strike Rate', bs?.strikeRate || '--'],
+      ['30s', bs?.thirties || '--'],
+      ['50s', bs?.fifties || '--'],
+      ['100s', bs?.hundreds || '--'],
+      ['4s', bs?.fours || '--'],
+      ['6s', bs?.sixes || '--'],
+      ['Best', player.battingBestFigures || '--'],
+    ];
+
+    const bowlingStats: [string, string][] = [
+      ['Matches', bw?.matches || player.matches || '--'],
+      ['Innings', bw?.innings || '--'],
+      ['Overs', bw?.overs || '--'],
+      ['Maidens', bw?.maidens || '--'],
+      ['Runs', bw?.runs || '--'],
+      ['Wickets', bw?.wickets || player.wickets || '--'],
+      ['Best Bowling', bw?.bestBowling || player.bowlingBestFigures || '--'],
+      ['3W Hauls', bw?.threeWickets || '--'],
+      ['5W Hauls', bw?.fiveWickets || '--'],
+      ['Economy', bw?.economy || '--'],
+      ['Strike Rate', bw?.strikeRate || '--'],
+      ['Average', bw?.average || '--'],
+    ];
+
+    const currentStats = statsView === 'batting' ? battingStats : bowlingStats;
+    const useGrid = currentStats.length > 5;
+    const useSplitView = currentStats.length > 9;
+
     return (
       <div className="cb-stats-panel">
-        <div className="cb-stats-toggle">
-          <button className={`cb-stats-toggle-btn ${statsView === 'batting' ? 'active' : ''}`} onClick={() => setView('batting')}>
-            Batting
-          </button>
-          <button className={`cb-stats-toggle-btn ${statsView === 'bowling' ? 'active' : ''}`} onClick={() => setView('bowling')}>
-            Bowling
-          </button>
+        {/* Player image centered at top */}
+        <div className="cb-stats-player-image" onClick={() => player.imageUrl && setImageOverlayUrl(player.imageUrl)}>
+          <PlayerImage imageUrl={player.imageUrl || ''} playerName={player.name} size="lg" className="cb-stats-player-img" />
+          <span className="cb-stats-player-name">{player.name}</span>
         </div>
 
-        {statsView === 'batting' ? (
-          <div className="cb-stats-table">
-            {[
-              ['Matches', bs?.matches || player.matches || '--'],
-              ['Innings', bs?.innings || '--'],
-              ['Not Out', bs?.notOut || '--'],
-              ['Runs', bs?.runs || player.runs || '--'],
-              ['Highest Score', bs?.highestScore || '--'],
-              ['Average', bs?.average || '--'],
-              ['Strike Rate', bs?.strikeRate || '--'],
-              ['30s', bs?.thirties || '--'],
-              ['50s', bs?.fifties || '--'],
-              ['100s', bs?.hundreds || '--'],
-              ['4s', bs?.fours || '--'],
-              ['6s', bs?.sixes || '--'],
-              ['Best', player.battingBestFigures || '--'],
-            ].map(([label, value]) => (
-              <div key={label} className="cb-stats-row">
-                <span className="cb-stats-row-label">{label}</span>
-                <span className="cb-stats-row-value">{value}</span>
+        {useSplitView ? (
+          /* Split view: batting + bowling side by side */
+          <div className="cb-stats-split">
+            <div className="cb-stats-split-section">
+              <div className="cb-stats-split-title batting">Batting</div>
+              <div className="cb-stats-grid-view">
+                {battingStats.map(([label, value]) => (
+                  <div key={label} className="cb-stats-grid-cell">
+                    <span className="cb-stats-grid-label">{label}</span>
+                    <span className="cb-stats-grid-value">{value}</span>
+                  </div>
+                ))}
               </div>
-            ))}
+            </div>
+            <div className="cb-stats-split-section">
+              <div className="cb-stats-split-title bowling">Bowling</div>
+              <div className="cb-stats-grid-view">
+                {bowlingStats.map(([label, value]) => (
+                  <div key={label} className="cb-stats-grid-cell">
+                    <span className="cb-stats-grid-label">{label}</span>
+                    <span className="cb-stats-grid-value">{value}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         ) : (
-          <div className="cb-stats-table">
-            {[
-              ['Matches', bw?.matches || player.matches || '--'],
-              ['Innings', bw?.innings || '--'],
-              ['Overs', bw?.overs || '--'],
-              ['Maidens', bw?.maidens || '--'],
-              ['Runs', bw?.runs || '--'],
-              ['Wickets', bw?.wickets || player.wickets || '--'],
-              ['Best Bowling', bw?.bestBowling || player.bowlingBestFigures || '--'],
-              ['3W Hauls', bw?.threeWickets || '--'],
-              ['5W Hauls', bw?.fiveWickets || '--'],
-              ['Economy', bw?.economy || '--'],
-              ['Strike Rate', bw?.strikeRate || '--'],
-              ['Average', bw?.average || '--'],
-            ].map(([label, value]) => (
-              <div key={label} className="cb-stats-row">
-                <span className="cb-stats-row-label">{label}</span>
-                <span className="cb-stats-row-value">{value}</span>
+          <>
+            <div className="cb-stats-toggle">
+              <button className={`cb-stats-toggle-btn ${statsView === 'batting' ? 'active' : ''}`} onClick={() => setView('batting')}>
+                Batting
+              </button>
+              <button className={`cb-stats-toggle-btn ${statsView === 'bowling' ? 'active' : ''}`} onClick={() => setView('bowling')}>
+                Bowling
+              </button>
+            </div>
+
+            {useGrid ? (
+              <div className="cb-stats-grid-view">
+                {currentStats.map(([label, value]) => (
+                  <div key={label} className="cb-stats-grid-cell">
+                    <span className="cb-stats-grid-label">{label}</span>
+                    <span className="cb-stats-grid-value">{value}</span>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
+            ) : (
+              <div className="cb-stats-table">
+                {currentStats.map(([label, value]) => (
+                  <div key={label} className="cb-stats-row">
+                    <span className="cb-stats-row-label">{label}</span>
+                    <span className="cb-stats-row-value">{value}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
         )}
       </div>
     );
@@ -1057,7 +1112,7 @@ export function MobileBiddingLivePage() {
                           {(callNumber || waNumber) && (
                             <div className="cb-scout-player-actions">
                               {waNumber && (
-                                <a href={`https://wa.me/${waNumber.replace(/[^0-9]/g, '')}`} target="_blank" rel="noopener noreferrer" className="cb-contact-btn whatsapp" title="WhatsApp" onClick={e => e.stopPropagation()}>
+                                <a href={`https://wa.me/${formatWhatsAppNumber(waNumber)}`} target="_blank" rel="noopener noreferrer" className="cb-contact-btn whatsapp" title="WhatsApp" onClick={e => e.stopPropagation()}>
                                   <IoLogoWhatsapp size={18} />
                                 </a>
                               )}
@@ -1888,7 +1943,7 @@ export function MobileBiddingLivePage() {
                         {(callNumber || waNumber) && (
                           <div className="cb-contact-inline">
                             {waNumber && (
-                              <a href={`https://wa.me/${waNumber.replace(/[^0-9]/g, '')}`} target="_blank" rel="noopener noreferrer" className="cb-contact-btn whatsapp" title="WhatsApp" onClick={e => e.stopPropagation()}>
+                              <a href={`https://wa.me/${formatWhatsAppNumber(waNumber)}`} target="_blank" rel="noopener noreferrer" className="cb-contact-btn whatsapp" title="WhatsApp" onClick={e => e.stopPropagation()}>
                                 <IoLogoWhatsapp size={16} />
                               </a>
                             )}
@@ -2268,6 +2323,31 @@ export function MobileBiddingLivePage() {
         soldPlayers={soldPlayersForOverlay}
         settings={adminSettings}
       />
+
+      {/* Image Lightbox Overlay */}
+      <AnimatePresence>
+        {imageOverlayUrl && (
+          <motion.div
+            className="cb-image-overlay"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setImageOverlayUrl(null)}
+          >
+            <motion.img
+              src={imageOverlayUrl}
+              alt="Player"
+              className="cb-image-overlay-img"
+              initial={{ scale: 0.8 }}
+              animate={{ scale: 1 }}
+              exit={{ scale: 0.8 }}
+            />
+            <button className="cb-image-overlay-close" onClick={() => setImageOverlayUrl(null)}>
+              <IoClose size={24} />
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

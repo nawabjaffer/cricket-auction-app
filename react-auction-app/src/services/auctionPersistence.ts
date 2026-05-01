@@ -272,6 +272,8 @@ export interface AdminSettings {
   teamOwners?: Record<string, TeamOwner[]>;
   // Feature 10: Max iconic players per team
   maxIconicPlayers?: number;
+  // Default country code for WhatsApp links (e.g. '91' for India)
+  defaultCountryCode?: string;
 }
 
 class AuctionPersistenceService {

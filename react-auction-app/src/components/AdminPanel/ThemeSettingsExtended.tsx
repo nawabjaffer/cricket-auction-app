@@ -93,6 +93,11 @@ export function ThemeSettingsExtended({ settings, onChange, teams }: ThemeSettin
     settings?.maxIconicPlayers ?? 1
   );
 
+  // Default country code for WhatsApp
+  const [defaultCountryCode, setDefaultCountryCode] = useState<string>(
+    settings?.defaultCountryCode ?? '91'
+  );
+
   // Sync when settings change externally
   useEffect(() => {
     if (!settings) return;
@@ -104,6 +109,7 @@ export function ThemeSettingsExtended({ settings, onChange, teams }: ThemeSettin
     if (settings.loadingScreen) setLoadingScreen(settings.loadingScreen);
     if (settings.teamOwners) setTeamOwners(settings.teamOwners);
     if (settings.maxIconicPlayers != null) setMaxIconicPlayers(settings.maxIconicPlayers);
+    if (settings.defaultCountryCode != null) setDefaultCountryCode(settings.defaultCountryCode);
   }, [settings]);
 
   // Notify parent of every change so it can merge on the single "Save Settings" click
@@ -117,9 +123,10 @@ export function ThemeSettingsExtended({ settings, onChange, teams }: ThemeSettin
       loadingScreen,
       teamOwners,
       maxIconicPlayers,
+      defaultCountryCode,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [playerStatsFields, specialCategories, budgetRules, auctionBreaks, currentBreakId, loadingScreen, teamOwners, maxIconicPlayers]);
+  }, [playerStatsFields, specialCategories, budgetRules, auctionBreaks, currentBreakId, loadingScreen, teamOwners, maxIconicPlayers, defaultCountryCode]);
 
   // ─── Player Stats Fields ─────────────────────────────────────────────────
   const toggleStatField = (key: string) => {
@@ -474,6 +481,22 @@ export function ThemeSettingsExtended({ settings, onChange, teams }: ThemeSettin
             max={5}
             value={maxIconicPlayers}
             onChange={e => setMaxIconicPlayers(Math.max(1, Math.min(5, Number(e.target.value))))}
+            className="admin-input admin-input-sm"
+          />
+        </div>
+      </div>
+
+      {/* ─── Section 8: WhatsApp Country Code ──────────────────────────────── */}
+      <div className="admin-section-card">
+        <h3 className="admin-section-title">📱 WhatsApp Settings</h3>
+        <p className="admin-section-desc">Default country code prepended to player phone numbers for WhatsApp links. Use without + (e.g. 91 for India, 1 for US).</p>
+        <div className="admin-form-field">
+          <label>Default Country Code</label>
+          <input
+            type="text"
+            value={defaultCountryCode}
+            onChange={e => setDefaultCountryCode(e.target.value.replace(/[^0-9]/g, '').slice(0, 4))}
+            placeholder="91"
             className="admin-input admin-input-sm"
           />
         </div>

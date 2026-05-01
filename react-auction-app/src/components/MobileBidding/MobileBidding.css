@@ -2484,3 +2484,142 @@
   align-items: center;
 }
 
+/* ═══════════ PLAYER IMAGE IN STATS PANEL ═══════════ */
+.cb-stats-player-image {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.4rem;
+  margin-bottom: 0.75rem;
+  cursor: pointer;
+}
+.cb-stats-player-img {
+  width: 80px !important;
+  height: 80px !important;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid rgba(255,255,255,0.15);
+  box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+}
+.cb-stats-player-name {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #fff;
+  opacity: 0.9;
+}
+
+/* ═══════════ STATS GRID VIEW ═══════════ */
+.cb-stats-grid-view {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.35rem;
+}
+.cb-stats-grid-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 0.5rem 0.3rem;
+  background: rgba(255,255,255,0.04);
+  border-radius: 8px;
+  border: 1px solid rgba(255,255,255,0.06);
+  text-align: center;
+  min-height: 52px;
+}
+.cb-stats-grid-label {
+  font-size: 0.55rem;
+  color: var(--cb-text-dim, rgba(255,255,255,0.45));
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 0.15rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+.cb-stats-grid-value {
+  font-size: 0.88rem;
+  font-weight: 800;
+  color: #fff;
+}
+
+/* ═══════════ SPLIT VIEW (BATTING + BOWLING) ═══════════ */
+.cb-stats-split {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+.cb-stats-split-section {
+  flex: 1;
+}
+.cb-stats-split-title {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: 0.4rem;
+  padding: 0.2rem 0.6rem;
+  border-radius: 4px;
+  display: inline-block;
+}
+.cb-stats-split-title.batting {
+  color: var(--cb-info, #60a5fa);
+  background: rgba(96,165,250,0.1);
+}
+.cb-stats-split-title.bowling {
+  color: var(--cb-success, #34d399);
+  background: rgba(52,211,153,0.1);
+}
+
+/* ═══════════ IMAGE LIGHTBOX OVERLAY ═══════════ */
+.cb-image-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 99999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0,0,0,0.92);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+.cb-image-overlay-img {
+  max-width: 85vw;
+  max-height: 80vh;
+  object-fit: contain;
+  border-radius: 12px;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.6);
+}
+.cb-image-overlay-close {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  background: rgba(255,255,255,0.15);
+  border: none;
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.cb-image-overlay-close:hover {
+  background: rgba(255,255,255,0.3);
+}
+
+@media (min-width: 600px) {
+  .cb-stats-grid-view {
+    grid-template-columns: repeat(4, 1fr);
+  }
+  .cb-stats-split {
+    flex-direction: row;
+  }
+  .cb-stats-player-img {
+    width: 100px !important;
+    height: 100px !important;
+  }
+}
+
