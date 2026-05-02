@@ -243,3 +243,67 @@ export function useSaveInitialSnapshot(enabled = true) {
 
   return { snapshotSaved };
 }
+
+/**
+ * Live subscription to sold/unsold/teams in Firebase for mirror mode.
+ * Keeps the Zustand store in sync so the marquee and other UI elements
+ * reflect real-time auction changes without a page reload.
+ */
+export function useMirrorLiveSync(enabled = true) {
+  const { setSoldPlayers, setUnsoldPlayers, setTeams } = useAuctionStore();
+
+  useEffect(() => {
+    if (!enabled) return;
+
+    const unsubSold = auctionPersistence.subscribeSoldPlayers((records) => {
+      const players: SoldPlayer[] = records.map(r => ({
+        id: r.id,
+        name: r.playerName,
+        role: r.role as SoldPlayer['role'],
+        age: r.age,
+        matches: r.matches,
+        runs: '',
+        wickets: '',
+        battingBestFigures: '',
+        bowlingBestFigures: r.bestFigures,
+        basePrice: r.basePrice,
+        imageUrl: r.imageUrl,
+        soldAmount: r.soldAmount,
+        teamName: r.teamName,
+        soldDate: new Date(r.timestamp).toISOString(),
+      }));
+      setSoldPlayers(players);
+      useAuctionStore.getState().reconcilePlayerPools();
+    });
+
+    const unsubUnsold = auctionPersistence.subscribeUnsoldPlayers((records) => {
+      const players = records.map(r => ({
+        id: r.id,
+        name: r.name,
+        role: r.role as SoldPlayer['role'],
+        age: r.age,
+        matches: r.matches ?? '',
+        runs: '',
+        wickets: '',
+        battingBestFigures: '',
+        bowlingBestFigures: r.bowlingBest,
+        basePrice: r.basePrice,
+        imageUrl: r.imageUrl,
+        round: r.round,
+        unsoldDate: new Date(r.timestamp).toISOString(),
+      }));
+      setUnsoldPlayers(players);
+      useAuctionStore.getState().reconcilePlayerPools();
+    });
+
+    const unsubTeams = auctionPersistence.subscribeTeams((teams) => {
+      setTeams(teams);
+    });
+
+    return () => {
+      unsubSold();
+      unsubUnsold();
+      unsubTeams();
+    };
+  }, [enabled, setSoldPlayers, setUnsoldPlayers, setTeams]);
+}

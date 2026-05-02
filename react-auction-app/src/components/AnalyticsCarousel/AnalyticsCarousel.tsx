@@ -5,6 +5,7 @@
 
 import { useMemo } from 'react';
 import { useSoldPlayers, useTeams, useAvailablePlayers, useUnsoldPlayers } from '../../store';
+import { inferRoleCategoryFromPlayer } from '../../utils/roleFormatter';
 import './AnalyticsCarousel.css';
 
 interface AnalyticsCarouselProps {
@@ -86,7 +87,7 @@ export function AnalyticsCarousel({ visible = true }: AnalyticsCarouselProps) {
     // Role breakdown
     const roleBreakdown: Record<string, number> = {};
     soldPlayers.forEach(p => {
-      const role = p.role || 'Unknown';
+      const role = inferRoleCategoryFromPlayer(p);
       roleBreakdown[role] = (roleBreakdown[role] || 0) + 1;
     });
 

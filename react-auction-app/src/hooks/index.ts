@@ -36,7 +36,7 @@ export { useRealtimeDesktopSync, useRealtimeMobileSync } from './useRealtimeSync
 export type { RealtimeMobileSyncState } from './useRealtimeSync';
 
 // Admin and data management hooks
-export { useAuctionDataLoader, useSaveInitialSnapshot } from './useAuctionDataLoader';
+export { useAuctionDataLoader, useSaveInitialSnapshot, useMirrorLiveSync } from './useAuctionDataLoader';
 export { useFeatureFlags } from './useFeatureFlags';
 export { useBootPreload } from './useBootPreload';
 export type { BootPreloadState } from './useBootPreload';

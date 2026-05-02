@@ -57,6 +57,7 @@ import {
   useSaveInitialSnapshot,
   useAdminPlayersOverrides,
   useBootPreload,
+  useMirrorLiveSync,
 } from './hooks';
 import { useRealtimeDesktopSync, useRealtimeMobileSync } from './hooks/useRealtimeSync';
 import { audioService, imageCacheService } from './services';
@@ -164,6 +165,9 @@ function AuctionApp({ mirrorMode = false }: { mirrorMode?: boolean }) {
   
   // Load auction data from Firebase if available
   useAuctionDataLoader();
+  
+  // Live-sync sold/unsold/teams from Firebase in mirror mode (keeps marquee in sync)
+  useMirrorLiveSync(isMirrorMode);
   
   // Save initial snapshot to Firebase for reset functionality (skip in mirror mode)
   useSaveInitialSnapshot(!isMirrorMode);

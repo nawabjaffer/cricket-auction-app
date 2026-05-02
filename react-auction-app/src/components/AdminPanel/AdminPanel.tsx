@@ -2571,28 +2571,6 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
 
                   <hr style={{ border: 'none', borderTop: '1px solid rgba(0,0,0,0.1)', margin: '1.5rem 0' }} />
 
-                  {/* Full Reset — reloads from sheets snapshot */}
-                  <h3>Full Reset (Reload from Sheets)</h3>
-                  <div className="reset-warning">
-                    <p>🔴 This action will:</p>
-                    <ul>
-                      <li>Clear all sold and unsold players</li>
-                      <li>Reset team statistics</li>
-                      <li>Restore initial data snapshot from Google Sheets</li>
-                      <li>Reload the page</li>
-                    </ul>
-                  </div>
-
-                  <button
-                    className="admin-btn admin-btn-danger"
-                    onClick={handleResetAuction}
-                    disabled={isSaving}
-                  >
-                    <IoRefresh size={18} /> Full Reset & Reload
-                  </button>
-
-                  <hr style={{ border: 'none', borderTop: '1px solid rgba(0,0,0,0.1)', margin: '1.5rem 0' }} />
-
                   <button
                     className="admin-btn admin-btn-secondary"
                     onClick={handleResetImageCache}

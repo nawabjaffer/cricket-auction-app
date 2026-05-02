@@ -643,6 +643,40 @@ class AuctionPersistenceService {
     await set(sponsorsRef, normalizedSponsors);
   }
 
+  // ==================== LIVE SUBSCRIPTIONS ====================
+
+  subscribeSoldPlayers(onUpdate: (records: SoldPlayerRecord[]) => void): () => void {
+    if (!this.db) { onUpdate([]); return () => {}; }
+    const soldRef = ref(this.db, DB_PATHS.SOLD_PLAYERS);
+    const unsub = onValue(soldRef, (snapshot) => {
+      if (!snapshot.exists()) { onUpdate([]); return; }
+      onUpdate(Object.values(snapshot.val()) as SoldPlayerRecord[]);
+    });
+    return unsub;
+  }
+
+  subscribeUnsoldPlayers(onUpdate: (records: UnsoldPlayerRecord[]) => void): () => void {
+    if (!this.db) { onUpdate([]); return () => {}; }
+    const unsoldRef = ref(this.db, DB_PATHS.UNSOLD_PLAYERS);
+    const unsub = onValue(unsoldRef, (snapshot) => {
+      if (!snapshot.exists()) { onUpdate([]); return; }
+      onUpdate(Object.values(snapshot.val()) as UnsoldPlayerRecord[]);
+    });
+    return unsub;
+  }
+
+  subscribeTeams(onUpdate: (teams: Team[]) => void): () => void {
+    if (!this.db) { onUpdate([]); return () => {}; }
+    const teamsRef = ref(this.db, DB_PATHS.TEAMS);
+    const unsub = onValue(teamsRef, (snapshot) => {
+      if (!snapshot.exists()) { onUpdate([]); return; }
+      const data = snapshot.val();
+      const list = Array.isArray(data) ? data : Object.values(data);
+      onUpdate(list as Team[]);
+    });
+    return unsub;
+  }
+
   // ==================== RESET/CLEAR ====================
 
   /**
