@@ -4,7 +4,7 @@
 // and maps roles to canonical auction categories for ordering.
 // ============================================================================
 
-import type { PlayerRole, AuctionRoleCategory } from '../types';
+import type { PlayerRole, AuctionRoleCategory, Player } from '../types';
 
 // ---------------------------------------------------------------------------
 // Canonical category mapping
@@ -23,14 +23,16 @@ const ROLE_TO_CATEGORY: Record<string, AuctionRoleCategory> = {
   'wk batsman': 'Wicket Keeper Batsman',
   'wk - batsman': 'Wicket Keeper Batsman',
   'keeper': 'Wicket Keeper Batsman',
-  'player': 'Uncategorized',
+  'player': 'Batsman',
 };
 
 /**
  * Map any raw role string to a canonical AuctionRoleCategory.
+ * Never returns 'Uncategorized' — always falls back to 'Batsman' so players
+ * are grouped into a concrete cricket category.
  */
 export function getRoleCategory(role: string | undefined | null): AuctionRoleCategory {
-  if (!role || typeof role !== 'string') return 'Uncategorized';
+  if (!role || typeof role !== 'string') return 'Batsman';
   const key = role.trim().toLowerCase();
 
   // Direct match
@@ -42,7 +44,59 @@ export function getRoleCategory(role: string | undefined | null): AuctionRoleCat
   if (/bowl/i.test(key)) return 'Bowler';
   if (/bat/i.test(key)) return 'Batsman';
 
-  return 'Uncategorized';
+  return 'Batsman';
+}
+
+function toNumber(value: unknown): number {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function hasNonEmptyStat(value: unknown): boolean {
+  if (typeof value !== 'string') return false;
+  const normalized = value.trim().toLowerCase();
+  return normalized !== '' && normalized !== '0' && normalized !== '0.0' && normalized !== '0.00' && normalized !== 'n/a';
+}
+
+/**
+ * Infer a canonical role category from full player data.
+ * This avoids dumping generic "Player" records into "Uncategorized"
+ * when batting/bowling fields already indicate a natural role.
+ */
+export function inferRoleCategoryFromPlayer(player: Partial<Player> | null | undefined): AuctionRoleCategory {
+  // First try role string — getRoleCategory now always returns a concrete category
+  const direct = getRoleCategory(player?.role as string | undefined);
+
+  // If role string gave us 'Batsman' as a generic fallback, try to refine using stats
+  const roleText = typeof player?.role === 'string' ? player.role.trim().toLowerCase() : '';
+  const isGenericRole = !roleText || roleText === 'player' || roleText === 'unknown';
+
+  if (!isGenericRole) return direct;
+
+  // For generic roles, infer from stats
+  if (/wicket[\s-]*keep|^wk\b/.test(roleText)) return 'Wicket Keeper Batsman';
+
+  const runs = toNumber(player?.runs);
+  const wickets = toNumber(player?.wickets);
+  const battingRuns = toNumber(player?.battingStats?.runs);
+  const bowlingWickets = toNumber(player?.bowlingStats?.wickets);
+
+  const battingSignal = runs > 0
+    || battingRuns > 0
+    || hasNonEmptyStat(player?.battingBestFigures)
+    || hasNonEmptyStat(player?.battingStats?.strikeRate)
+    || hasNonEmptyStat(player?.battingStats?.average);
+
+  const bowlingSignal = wickets > 0
+    || bowlingWickets > 0
+    || hasNonEmptyStat(player?.bowlingBestFigures)
+    || hasNonEmptyStat(player?.bowlingStats?.economy)
+    || hasNonEmptyStat(player?.bowlingStats?.average)
+    || hasNonEmptyStat(player?.bowlingStats?.overs);
+
+  if (battingSignal && bowlingSignal) return 'All-Rounder';
+  if (bowlingSignal) return 'Bowler';
+  return 'Batsman';
 }
 
 // ---------------------------------------------------------------------------
@@ -133,8 +187,7 @@ export function formatRoleDisplay(rawRole: string | PlayerRole | undefined | nul
     if (bowlingStyle) {
       coreRole = 'Bowler';
     } else {
-      const category = getRoleCategory(input);
-      coreRole = category === 'Uncategorized' ? 'Player' : category;
+      coreRole = getRoleCategory(input);
     }
   }
 
@@ -159,7 +212,7 @@ export function getRoleBadge(role: string | undefined | null): string {
     case 'Batsman': return 'BAT';
     case 'Bowler': return 'BOWL';
     case 'All-Rounder': return 'AR';
-    default: return 'PLR';
+    default: return 'BAT';
   }
 }
 
@@ -180,7 +233,7 @@ export interface ParsedRole {
  */
 export function parseRoleDetails(rawRole: string | PlayerRole | undefined): ParsedRole {
   if (!rawRole || typeof rawRole !== 'string' || !rawRole.trim()) {
-    return { coreRole: 'Player', category: 'Uncategorized', battingHand: null, bowlingStyle: null, badge: 'PLR' };
+    return { coreRole: 'Batsman', category: 'Batsman', battingHand: null, bowlingStyle: null, badge: 'BAT' };
   }
 
   const input = rawRole.trim();
@@ -217,8 +270,7 @@ export function parseRoleDetails(rawRole: string | PlayerRole | undefined): Pars
     if (bowlingStyle) {
       coreRole = 'Bowler';
     } else {
-      const category = getRoleCategory(input);
-      coreRole = category === 'Uncategorized' ? 'Player' : category;
+      coreRole = getRoleCategory(input);
     }
   }
   coreRole = coreRole.replace(/[-·,]+$/, '').trim();
@@ -239,6 +291,6 @@ export function getRoleBadgeColor(role: string | undefined | null): string {
     case 'Batsman': return '#3b82f6';
     case 'Bowler': return '#ef4444';
     case 'All-Rounder': return '#10b981';
-    default: return '#6b7280';
+    default: return '#3b82f6';
   }
 }

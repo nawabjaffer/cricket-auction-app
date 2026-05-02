@@ -85,8 +85,7 @@ function splitRoleDisplay(rawRole: string | undefined | null): { coreRole: strin
   if (!coreRole || coreRole.toLowerCase() === 'player') {
     if (bowlingStyle) coreRole = 'Bowler';
     else {
-      const cat = getRoleCategory(input);
-      coreRole = cat === 'Uncategorized' ? 'Player' : cat;
+      coreRole = getRoleCategory(input);
     }
   }
 

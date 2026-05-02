@@ -68,7 +68,7 @@ import { getCachedStorageUrl, resolveImageAsync } from './services/firebaseStora
 import { useActiveOverlay, useNotification, useCurrentPlayer, useSoldPlayers, useAvailablePlayers, useOriginalPlayers, useTeams, useOrganizerLogo, useOrganizerName } from './store';
 import { useAuctionStore } from './store/auctionStore';
 import { extractDriveFileId } from './utils/driveImage';
-import { formatRoleDisplay, getRoleCategory, parseRoleDetails, getRoleBadgeColor } from './utils/roleFormatter';
+import { formatRoleDisplay, getRoleCategory, inferRoleCategoryFromPlayer, parseRoleDetails, getRoleBadgeColor } from './utils/roleFormatter';
 import './index.css';
 
 // Create Query Client
@@ -1474,7 +1474,7 @@ function AuctionApp({ mirrorMode = false }: { mirrorMode?: boolean }) {
             >
               <div className="orbit-container">
               {/* Batsman - Bat icons */}
-              {currentPlayer?.role === 'Batsman' && (
+              {inferRoleCategoryFromPlayer(currentPlayer) === 'Batsman' && (
                 <>
                   <span className="float-item float-1">
                     <GiCricketBat className="float-icon" />
@@ -1489,7 +1489,7 @@ function AuctionApp({ mirrorMode = false }: { mirrorMode?: boolean }) {
               )}
 
               {/* Bowler - Ball icons */}
-              {currentPlayer?.role === 'Bowler' && (
+              {inferRoleCategoryFromPlayer(currentPlayer) === 'Bowler' && (
                 <>
                   <span className="float-item float-1">
                     <IoBaseball className="float-icon" />
@@ -1504,7 +1504,7 @@ function AuctionApp({ mirrorMode = false }: { mirrorMode?: boolean }) {
               )}
 
               {/* All-Rounder - Bat + Ball icons */}
-              {currentPlayer?.role === 'All-Rounder' && (
+              {inferRoleCategoryFromPlayer(currentPlayer) === 'All-Rounder' && (
                 <>
                   <span className="float-item float-1">
                     <GiCricketBat className="float-icon" />
@@ -1519,7 +1519,7 @@ function AuctionApp({ mirrorMode = false }: { mirrorMode?: boolean }) {
               )}
 
               {/* Wicket-Keeper - Gloves icons */}
-              {(currentPlayer?.role === 'Wicket-Keeper' || currentPlayer?.role === 'Wicket Keeper' || currentPlayer?.role === 'Wicket Keeper Batsman') && (
+              {inferRoleCategoryFromPlayer(currentPlayer) === 'Wicket Keeper Batsman' && (
                 <>
                   <span className="float-item float-1">
                     <GiBaseballGlove className="float-icon" />
@@ -1529,21 +1529,6 @@ function AuctionApp({ mirrorMode = false }: { mirrorMode?: boolean }) {
                   </span>
                   <span className="float-item float-3">
                     <GiBaseballGlove className="float-icon small" />
-                  </span>
-                </>
-              )}
-
-              {/* Default/Unknown role - Generic cricket icons */}
-              {(!currentPlayer?.role || getRoleCategory(currentPlayer.role) === 'Uncategorized') && (
-                <>
-                  <span className="float-item float-1">
-                    <IoBaseball className="float-icon" />
-                  </span>
-                  <span className="float-item float-2">
-                    <GiCricketBat className="float-icon" />
-                  </span>
-                  <span className="float-item float-3">
-                    <IoStar className="float-icon small" />
                   </span>
                 </>
               )}

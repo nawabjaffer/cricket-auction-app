@@ -27,20 +27,20 @@ describe('getRoleCategory', () => {
     expect(getRoleCategory('allrounder')).toBe('All-Rounder');
   });
 
-  it('returns Uncategorized for unknown roles', () => {
-    expect(getRoleCategory('Unknown')).toBe('Uncategorized');
-    expect(getRoleCategory('Player')).toBe('Uncategorized');
+  it('returns Batsman for unknown roles (never Uncategorized)', () => {
+    expect(getRoleCategory('Unknown')).toBe('Batsman');
+    expect(getRoleCategory('Player')).toBe('Batsman');
   });
 
   it('handles null/undefined/empty safely', () => {
-    expect(getRoleCategory(null)).toBe('Uncategorized');
-    expect(getRoleCategory(undefined)).toBe('Uncategorized');
-    expect(getRoleCategory('')).toBe('Uncategorized');
+    expect(getRoleCategory(null)).toBe('Batsman');
+    expect(getRoleCategory(undefined)).toBe('Batsman');
+    expect(getRoleCategory('')).toBe('Batsman');
   });
 
   it('handles non-string types safely', () => {
-    expect(getRoleCategory(123 as unknown as string)).toBe('Uncategorized');
-    expect(getRoleCategory({} as unknown as string)).toBe('Uncategorized');
+    expect(getRoleCategory(123 as unknown as string)).toBe('Batsman');
+    expect(getRoleCategory({} as unknown as string)).toBe('Batsman');
   });
 });
 
@@ -79,9 +79,9 @@ describe('getRoleBadge', () => {
     expect(getRoleBadge('Wicket Keeper Batsman')).toBe('WK');
   });
 
-  it('returns PLR for null/undefined', () => {
-    expect(getRoleBadge(null)).toBe('PLR');
-    expect(getRoleBadge(undefined)).toBe('PLR');
+  it('returns BAT for null/undefined', () => {
+    expect(getRoleBadge(null)).toBe('BAT');
+    expect(getRoleBadge(undefined)).toBe('BAT');
   });
 });
 
@@ -102,9 +102,9 @@ describe('parseRoleDetails', () => {
 
   it('returns defaults for null/undefined', () => {
     const result = parseRoleDetails(undefined);
-    expect(result.coreRole).toBe('Player');
-    expect(result.category).toBe('Uncategorized');
-    expect(result.badge).toBe('PLR');
+    expect(result.coreRole).toBe('Batsman');
+    expect(result.category).toBe('Batsman');
+    expect(result.badge).toBe('BAT');
   });
 
   it('handles non-string types safely', () => {

@@ -23,7 +23,7 @@ import { AuctionRulesService } from '../services/auctionRules';
 import { auctionPersistence } from '../services/auctionPersistence';
 import { realtimeSync } from '../services/realtimeSync';
 import { premiumService } from '../services/premiumService';
-import { getRoleCategory } from '../utils/roleFormatter';
+import { inferRoleCategoryFromPlayer } from '../utils/roleFormatter';
 
 // ── Synchronous localStorage read for instant logo on first render ───────
 // Zustand persist hydrates asynchronously (one tick after mount). Reading
@@ -289,8 +289,8 @@ export const useAuctionStore = create<AuctionStore>()(
           const orderMap = new Map(auctionRoleOrder.map((role, idx) => [role, idx]));
           const fallbackIndex = auctionRoleOrder.length;
           const sorted = [...filtered].sort((a, b) => {
-            const aIdx = orderMap.get(getRoleCategory(a.role)) ?? fallbackIndex;
-            const bIdx = orderMap.get(getRoleCategory(b.role)) ?? fallbackIndex;
+            const aIdx = orderMap.get(inferRoleCategoryFromPlayer(a)) ?? fallbackIndex;
+            const bIdx = orderMap.get(inferRoleCategoryFromPlayer(b)) ?? fallbackIndex;
             return aIdx - bIdx;
           });
 
