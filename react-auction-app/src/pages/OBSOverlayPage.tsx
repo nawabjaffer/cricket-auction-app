@@ -202,6 +202,12 @@ export default function OBSOverlayPage({ browserMode = false }: { readonly brows
   const [showTeamStandings, setShowTeamStandings] = useState(false);
   const [soldPlayersObs, setSoldPlayersObs] = useState<Array<{ id: string; name: string; soldAmount: number; teamName: string; teamId?: string; age?: number | null }>>([]);
   const animatingRef = useRef(false);
+  const lastAnimatedKeyRef = useRef<string | null>(null);
+  // Snapshot the player/team/bid at the moment overlay triggers so heartbeat
+  // updates don't overwrite the sold animation data mid-flight.
+  const [overlaySnapshot, setOverlaySnapshot] = useState<{
+    player: OverlayPlayer; team: OverlayTeam | null; bid: number;
+  } | null>(null);
 
   // 'g' key to toggle TeamStandingsOverlay
   useEffect(() => {
@@ -233,8 +239,24 @@ export default function OBSOverlayPage({ browserMode = false }: { readonly brows
         setState(s);
         const ov = s.activeOverlay;
         if ((ov === 'sold' || ov === 'unsold') && !animatingRef.current) {
-          animatingRef.current = true;
-          setActiveOverlay(ov);
+          // Build a unique key for this player+overlay to avoid re-triggering
+          // the same animation on repeated heartbeat broadcasts.
+          const animKey = `${ov}-${s.currentPlayer?.id ?? 'unknown'}`;
+          if (animKey !== lastAnimatedKeyRef.current) {
+            animatingRef.current = true;
+            lastAnimatedKeyRef.current = animKey;
+            // Snapshot the player/team/bid so they stay stable during animation
+            if (s.currentPlayer) {
+              setOverlaySnapshot({ player: s.currentPlayer, team: s.selectedTeam ?? null, bid: s.currentBid });
+            }
+            setActiveOverlay(ov);
+          }
+        } else if (!ov) {
+          // Desktop cleared the overlay — reset state
+          if (!animatingRef.current) {
+            setActiveOverlay(null);
+            setOverlaySnapshot(null);
+          }
         }
       },
       (err) => console.error('[OBSOverlay] state error:', err)
@@ -316,9 +338,14 @@ export default function OBSOverlayPage({ browserMode = false }: { readonly brows
     : '';
   const teamLogoSrc = useStorageImage(selectedTeam?.logoUrl, teamStoragePath);
 
-  // ── Cast for SoldAnimation ────────────────────────────────────────────────
-  const soldPlayer = (activeOverlay && currentPlayer) ? (currentPlayer as unknown as Player) : null;
-  const soldTeam   = (activeOverlay && selectedTeam)  ? (selectedTeam  as unknown as Team)   : null;
+  // ── Cast for SoldAnimation — use snapshot to avoid stale data from heartbeat ──
+  const soldPlayer = (activeOverlay && overlaySnapshot?.player)
+    ? (overlaySnapshot.player as unknown as Player)
+    : null;
+  const soldTeam = (activeOverlay && overlaySnapshot?.team)
+    ? (overlaySnapshot.team as unknown as Team)
+    : null;
+  const soldBid = overlaySnapshot?.bid ?? currentBid;
 
   return (
     <div className={`obs-overlay ${browserMode ? 'obs-overlay--mirror' : ''}`}>
@@ -460,8 +487,8 @@ export default function OBSOverlayPage({ browserMode = false }: { readonly brows
             type={activeOverlay}
             player={soldPlayer}
             team={soldTeam}
-            amount={currentBid || 0}
-            onComplete={() => { animatingRef.current = false; setActiveOverlay(null); }}
+            amount={soldBid || 0}
+            onComplete={() => { animatingRef.current = false; setActiveOverlay(null); setOverlaySnapshot(null); }}
           />
         )}
       </AnimatePresence>
