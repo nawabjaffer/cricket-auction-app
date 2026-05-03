@@ -1,0 +1,602 @@
+/* ============================================================================
+   SCORING ADMIN PAGE — Dark theme matching existing admin panels
+   ============================================================================ */
+
+.scoring-admin {
+  position: relative;
+  min-height: 100vh;
+  background: #0f0f1a;
+  color: #e4e4e7;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  overflow-x: hidden;
+}
+
+.scoring-admin__bg {
+  position: fixed;
+  inset: 0;
+  background:
+    radial-gradient(ellipse at 20% 20%, rgba(124, 58, 237, 0.08) 0%, transparent 50%),
+    radial-gradient(ellipse at 80% 80%, rgba(251, 191, 36, 0.06) 0%, transparent 50%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* ── Header ─────────────────────────────────────────────────────────────────── */
+
+.scoring-admin__header {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem 1.5rem;
+  background: rgba(15, 15, 26, 0.9);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.scoring-admin__header-left {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.scoring-admin__title {
+  font-size: 1.3rem;
+  font-weight: 700;
+  color: #fbbf24;
+  margin: 0;
+}
+
+.scoring-admin__subtitle {
+  font-size: 0.75rem;
+  color: #71717a;
+  margin: 0;
+}
+
+.scoring-admin__close-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: none;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #a1a1aa;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.scoring-admin__close-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+}
+
+/* ── Tabs ────────────────────────────────────────────────────────────────────── */
+
+.scoring-admin__tabs {
+  display: flex;
+  gap: 0.25rem;
+  padding: 0.75rem 1.5rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.scoring-admin__tab {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.5rem 1rem;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: #71717a;
+  font-size: 0.82rem;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s;
+}
+
+.scoring-admin__tab:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: #d4d4d8;
+}
+
+.scoring-admin__tab.active {
+  background: rgba(251, 191, 36, 0.12);
+  color: #fbbf24;
+}
+
+/* ── Content area ───────────────────────────────────────────────────────────── */
+
+.scoring-admin__content {
+  position: relative;
+  z-index: 1;
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 1.5rem;
+}
+
+.scoring-admin__section {}
+
+.scoring-admin__section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.25rem;
+}
+
+.scoring-admin__section-header h2 {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: #fafafa;
+  margin: 0;
+}
+
+.scoring-admin__subsection-title {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #d4d4d8;
+  margin: 0 0 0.75rem;
+}
+
+.scoring-admin__hint {
+  font-size: 0.78rem;
+  color: #71717a;
+  margin: -0.25rem 0 1rem;
+  line-height: 1.4;
+}
+
+.scoring-admin__empty {
+  padding: 2rem;
+  text-align: center;
+  color: #52525b;
+  font-size: 0.85rem;
+  border: 1px dashed rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+}
+
+/* ── Form cards ─────────────────────────────────────────────────────────────── */
+
+.scoring-admin__form-card {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 12px;
+  padding: 1.25rem;
+  margin-bottom: 1rem;
+}
+
+.scoring-admin__form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 1rem;
+}
+
+.scoring-admin__form-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+/* ── Fields ──────────────────────────────────────────────────────────────────── */
+
+.scoring-admin__field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.scoring-admin__field > label {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: #a1a1aa;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.scoring-admin__input,
+.scoring-admin__select {
+  padding: 0.5rem 0.75rem;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  color: #e4e4e7;
+  font-size: 0.85rem;
+  transition: border-color 0.2s;
+}
+
+.scoring-admin__input:focus,
+.scoring-admin__select:focus {
+  outline: none;
+  border-color: rgba(251, 191, 36, 0.4);
+}
+
+.scoring-admin__select {
+  cursor: pointer;
+}
+
+.scoring-admin__select option {
+  background: #1a1a2e;
+}
+
+/* ── Buttons ────────────────────────────────────────────────────────────────── */
+
+.scoring-admin__btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.5rem 1rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  color: #d4d4d8;
+  font-size: 0.82rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.scoring-admin__btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.scoring-admin__btn--primary {
+  background: rgba(251, 191, 36, 0.15);
+  border-color: rgba(251, 191, 36, 0.3);
+  color: #fbbf24;
+}
+
+.scoring-admin__btn--primary:hover {
+  background: rgba(251, 191, 36, 0.25);
+}
+
+.scoring-admin__btn--secondary {
+  background: rgba(255, 255, 255, 0.06);
+  color: #a1a1aa;
+}
+
+.scoring-admin__btn--success {
+  background: rgba(16, 185, 129, 0.15);
+  border-color: rgba(16, 185, 129, 0.3);
+  color: #34d399;
+}
+
+.scoring-admin__btn--warning {
+  background: rgba(245, 158, 11, 0.15);
+  border-color: rgba(245, 158, 11, 0.3);
+  color: #fbbf24;
+}
+
+.scoring-admin__btn--danger {
+  background: rgba(239, 68, 68, 0.1);
+  border-color: rgba(239, 68, 68, 0.2);
+  color: #f87171;
+}
+
+.scoring-admin__btn--danger:hover {
+  background: rgba(239, 68, 68, 0.2);
+}
+
+.scoring-admin__btn--sm {
+  padding: 0.3rem 0.6rem;
+  font-size: 0.75rem;
+}
+
+.scoring-admin__btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ── Match Cards ────────────────────────────────────────────────────────────── */
+
+.scoring-admin__match-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.scoring-admin__match-card {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.75rem 1rem;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 10px;
+  flex-wrap: wrap;
+}
+
+.scoring-admin__match-teams {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex: 1;
+  min-width: 200px;
+}
+
+.scoring-admin__team-name {
+  font-weight: 600;
+  color: #fafafa;
+  font-size: 0.9rem;
+}
+
+.scoring-admin__vs {
+  font-size: 0.7rem;
+  color: #52525b;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.scoring-admin__match-meta {
+  display: flex;
+  gap: 0.75rem;
+  font-size: 0.75rem;
+  color: #71717a;
+  flex-wrap: wrap;
+}
+
+.scoring-admin__status {
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.scoring-admin__status--scheduled {
+  background: rgba(99, 102, 241, 0.15);
+  color: #818cf8;
+}
+
+.scoring-admin__status--live {
+  background: rgba(239, 68, 68, 0.15);
+  color: #f87171;
+  animation: pulse-live 2s ease-in-out infinite;
+}
+
+.scoring-admin__status--completed {
+  background: rgba(16, 185, 129, 0.15);
+  color: #34d399;
+}
+
+.scoring-admin__status--abandoned {
+  background: rgba(113, 113, 122, 0.15);
+  color: #a1a1aa;
+}
+
+.scoring-admin__match-actions {
+  display: flex;
+  gap: 0.4rem;
+}
+
+/* ── Provider badges ────────────────────────────────────────────────────────── */
+
+.scoring-admin__provider-badges {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.scoring-admin__badge {
+  padding: 0.25rem 0.75rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: #71717a;
+}
+
+.scoring-admin__badge--active {
+  background: rgba(16, 185, 129, 0.1);
+  border-color: rgba(16, 185, 129, 0.3);
+  color: #34d399;
+}
+
+/* ── Ads ────────────────────────────────────────────────────────────────────── */
+
+.scoring-admin__ad-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.scoring-admin__ad-card {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.5rem 0.75rem;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 10px;
+}
+
+.scoring-admin__ad-preview {
+  width: 60px;
+  height: 36px;
+  object-fit: contain;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.3);
+}
+
+.scoring-admin__ad-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.scoring-admin__ad-name {
+  font-weight: 600;
+  font-size: 0.85rem;
+  color: #fafafa;
+}
+
+.scoring-admin__ad-meta {
+  font-size: 0.72rem;
+  color: #71717a;
+}
+
+.scoring-admin__ad-actions {
+  display: flex;
+  gap: 0.35rem;
+}
+
+/* ── Toggle Grid ────────────────────────────────────────────────────────────── */
+
+.scoring-admin__toggle-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.scoring-admin__toggle-label {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 0.85rem;
+  cursor: pointer;
+  padding: 0.4rem 0;
+}
+
+.scoring-admin__toggle-label input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: #fbbf24;
+}
+
+.scoring-admin__kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  padding: 0.1rem 0.4rem;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.06);
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  font-size: 0.72rem;
+  color: #a1a1aa;
+  margin-left: auto;
+}
+
+/* ── Questions List ─────────────────────────────────────────────────────────── */
+
+.scoring-admin__question-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin-top: 1rem;
+}
+
+.scoring-admin__question-card {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 8px;
+}
+
+.scoring-admin__question-num {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #fbbf24;
+  min-width: 28px;
+}
+
+.scoring-admin__question-text {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.scoring-admin__question-text strong {
+  font-size: 0.85rem;
+  color: #e4e4e7;
+}
+
+.scoring-admin__question-options {
+  font-size: 0.72rem;
+  color: #71717a;
+}
+
+.scoring-admin__question-duration {
+  font-size: 0.72rem;
+  color: #52525b;
+}
+
+/* ── Shortcuts Grid ─────────────────────────────────────────────────────────── */
+
+.scoring-admin__shortcuts-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 0.5rem;
+}
+
+.scoring-admin__shortcut-item {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.5rem 0.75rem;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 8px;
+  font-size: 0.8rem;
+  color: #a1a1aa;
+}
+
+/* ── Toast ───────────────────────────────────────────────────────────────────── */
+
+.scoring-admin__toast {
+  position: fixed;
+  bottom: 2rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 100;
+  padding: 0.6rem 1.5rem;
+  border-radius: 999px;
+  background: rgba(251, 191, 36, 0.2);
+  border: 1px solid rgba(251, 191, 36, 0.3);
+  color: #fbbf24;
+  font-size: 0.82rem;
+  font-weight: 500;
+  backdrop-filter: blur(12px);
+}
+
+/* ── Animations ─────────────────────────────────────────────────────────────── */
+
+@keyframes pulse-live {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+/* ── Responsive ─────────────────────────────────────────────────────────────── */
+
+@media (max-width: 640px) {
+  .scoring-admin__content {
+    padding: 1rem;
+  }
+
+  .scoring-admin__form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .scoring-admin__match-card {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .scoring-admin__shortcuts-grid {
+    grid-template-columns: 1fr;
+  }
+}

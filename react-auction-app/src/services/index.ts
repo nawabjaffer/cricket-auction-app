@@ -58,3 +58,7 @@ export {
   preloadImage,
   batchPreloadImages,
 } from './firebaseStorageService';
+
+// Scoring module
+export { scoringService } from './scoring';
+export type { ScoringService } from './scoring';

@@ -1,0 +1,645 @@
+/* ============================================================================
+   SCORE UPDATE PAGE — Ball-by-ball scoring interface
+   ============================================================================ */
+
+.score-update {
+  min-height: 100vh;
+  background: #0f0f1a;
+  color: #e4e4e7;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  display: flex;
+  flex-direction: column;
+  max-width: 520px;
+  margin: 0 auto;
+  padding-bottom: 2rem;
+}
+
+.score-update--loading,
+.score-update--error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  text-align: center;
+  padding: 3rem 1.5rem;
+}
+
+.score-update__spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid rgba(251, 191, 36, 0.2);
+  border-top-color: #fbbf24;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── Header ─────────────────────────────────────────────────────────────────── */
+
+.score-update__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75rem 1rem;
+  background: rgba(15, 15, 26, 0.95);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  position: sticky;
+  top: 0;
+  z-index: 20;
+}
+
+.score-update__match-title {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #fbbf24;
+  margin: 0;
+}
+
+.score-update__venue {
+  font-size: 0.7rem;
+  color: #71717a;
+  margin: 0;
+}
+
+.score-update__close-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #a1a1aa;
+  cursor: pointer;
+}
+
+.score-update__close-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+}
+
+/* ── Center Prompt (before innings start) ───────────────────────────────────── */
+
+.score-update__center-prompt {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  padding: 3rem 1.5rem;
+  text-align: center;
+}
+
+.score-update__center-prompt h2 {
+  font-size: 1.5rem;
+  color: #fafafa;
+  margin: 0;
+}
+
+.score-update__center-prompt p {
+  color: #71717a;
+  margin: 0;
+}
+
+/* ── Score Strip ────────────────────────────────────────────────────────────── */
+
+.score-update__score-strip {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75rem 1rem;
+  background: linear-gradient(135deg, rgba(124, 58, 237, 0.12), rgba(251, 191, 36, 0.08));
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.score-update__team-score {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+
+.score-update__team-label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #a1a1aa;
+}
+
+.score-update__runs {
+  font-size: 1.6rem;
+  font-weight: 800;
+  color: #fafafa;
+  letter-spacing: -0.02em;
+}
+
+.score-update__overs {
+  font-size: 0.75rem;
+  color: #71717a;
+}
+
+.score-update__rate-info {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.15rem;
+  font-size: 0.72rem;
+  color: #71717a;
+}
+
+/* ── Current Over ───────────────────────────────────────────────────────────── */
+
+.score-update__current-over {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  flex-wrap: wrap;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.score-update__over-label {
+  font-size: 0.7rem;
+  color: #52525b;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.score-update__ball-sequence {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.score-update__ball-chip {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  font-size: 0.72rem;
+  font-weight: 700;
+  background: rgba(255, 255, 255, 0.06);
+  color: #a1a1aa;
+}
+
+.score-update__ball-chip--dot { background: rgba(113, 113, 122, 0.2); color: #71717a; }
+.score-update__ball-chip--four { background: rgba(59, 130, 246, 0.2); color: #60a5fa; }
+.score-update__ball-chip--six { background: rgba(168, 85, 247, 0.2); color: #c084fc; }
+.score-update__ball-chip--wicket { background: rgba(239, 68, 68, 0.25); color: #f87171; }
+.score-update__ball-chip--extra { background: rgba(245, 158, 11, 0.15); color: #fbbf24; }
+.score-update__ball-chip--run { background: rgba(16, 185, 129, 0.15); color: #34d399; }
+
+.score-update__recent-overs {
+  display: flex;
+  gap: 0.3rem;
+  margin-left: auto;
+}
+
+.score-update__over-runs {
+  font-size: 0.65rem;
+  padding: 0.15rem 0.4rem;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.04);
+  color: #52525b;
+}
+
+/* ── Batsmen ────────────────────────────────────────────────────────────────── */
+
+.score-update__batsmen {
+  padding: 0.5rem 1rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.score-update__batsman {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.4rem 0.5rem;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.score-update__batsman:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.score-update__batsman--strike {
+  background: rgba(251, 191, 36, 0.06);
+}
+
+.score-update__bat-name {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #e4e4e7;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex: 1;
+}
+
+.score-update__strike-dot {
+  color: #fbbf24;
+  font-size: 0.6rem;
+}
+
+.score-update__bat-score {
+  font-size: 0.78rem;
+  color: #a1a1aa;
+  text-align: right;
+}
+
+.score-update__bat-sr {
+  font-size: 0.68rem;
+  color: #52525b;
+  min-width: 56px;
+  text-align: right;
+}
+
+.score-update__partnership {
+  font-size: 0.7rem;
+  color: #52525b;
+  text-align: center;
+  padding: 0.25rem 0;
+}
+
+/* ── Bowler ──────────────────────────────────────────────────────────────────── */
+
+.score-update__bowler {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.score-update__bowler:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.score-update__bowler-name {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #60a5fa;
+  flex: 1;
+}
+
+.score-update__bowler-figs {
+  font-size: 0.8rem;
+  color: #a1a1aa;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+}
+
+.score-update__bowler-eco {
+  font-size: 0.7rem;
+  color: #52525b;
+}
+
+/* ── Run Buttons Grid ───────────────────────────────────────────────────────── */
+
+.score-update__run-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+}
+
+.score-update__run-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 56px;
+  border: 2px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  font-size: 1.3rem;
+  font-weight: 800;
+  cursor: pointer;
+  transition: all 0.15s;
+  background: rgba(255, 255, 255, 0.03);
+  color: #e4e4e7;
+}
+
+.score-update__run-btn:hover:not(:disabled) {
+  transform: scale(1.05);
+}
+
+.score-update__run-btn:active:not(:disabled) {
+  transform: scale(0.95);
+}
+
+.score-update__run-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.score-update__run-btn--dot {
+  border-color: rgba(113, 113, 122, 0.3);
+  color: #71717a;
+}
+
+.score-update__run-btn--dot:hover:not(:disabled) {
+  background: rgba(113, 113, 122, 0.15);
+}
+
+.score-update__run-btn--single,
+.score-update__run-btn--double,
+.score-update__run-btn--triple {
+  border-color: rgba(16, 185, 129, 0.3);
+  color: #34d399;
+}
+
+.score-update__run-btn--single:hover:not(:disabled),
+.score-update__run-btn--double:hover:not(:disabled),
+.score-update__run-btn--triple:hover:not(:disabled) {
+  background: rgba(16, 185, 129, 0.15);
+}
+
+.score-update__run-btn--four {
+  border-color: rgba(59, 130, 246, 0.4);
+  color: #60a5fa;
+  background: rgba(59, 130, 246, 0.08);
+}
+
+.score-update__run-btn--four:hover:not(:disabled) {
+  background: rgba(59, 130, 246, 0.2);
+}
+
+.score-update__run-btn--six {
+  border-color: rgba(168, 85, 247, 0.4);
+  color: #c084fc;
+  background: rgba(168, 85, 247, 0.08);
+}
+
+.score-update__run-btn--six:hover:not(:disabled) {
+  background: rgba(168, 85, 247, 0.2);
+}
+
+/* ── Action Row (Wicket + Extras) ───────────────────────────────────────────── */
+
+.score-update__action-row {
+  display: flex;
+  gap: 0.35rem;
+  padding: 0 1rem;
+  flex-wrap: wrap;
+}
+
+.score-update__action-row .score-update__btn--wicket {
+  background: rgba(239, 68, 68, 0.15);
+  border-color: rgba(239, 68, 68, 0.3);
+  color: #f87171;
+  font-weight: 800;
+  font-size: 1rem;
+  min-width: 48px;
+  justify-content: center;
+}
+
+.score-update__action-row .score-update__btn--extra {
+  background: rgba(245, 158, 11, 0.08);
+  border-color: rgba(245, 158, 11, 0.2);
+  color: #fbbf24;
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+/* ── Controls (Undo, Swap, New Innings) ─────────────────────────────────────── */
+
+.score-update__controls {
+  display: flex;
+  gap: 0.4rem;
+  padding: 0.75rem 1rem;
+  flex-wrap: wrap;
+}
+
+/* ── Overlay Triggers ───────────────────────────────────────────────────────── */
+
+.score-update__overlay-triggers {
+  display: flex;
+  gap: 0.3rem;
+  padding: 0.5rem 1rem;
+  flex-wrap: wrap;
+  align-items: center;
+  border-top: 1px solid rgba(255, 255, 255, 0.04);
+  margin-top: 0.5rem;
+}
+
+.score-update__overlay-label {
+  font-size: 0.7rem;
+  color: #52525b;
+  font-weight: 600;
+  text-transform: uppercase;
+  margin-right: 0.25rem;
+}
+
+.score-update__overlay-btn {
+  padding: 0.25rem 0.5rem;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.03);
+  color: #71717a;
+  font-size: 0.68rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.score-update__overlay-btn:hover {
+  background: rgba(124, 58, 237, 0.12);
+  color: #a78bfa;
+}
+
+.score-update__overlay-btn--clear {
+  border-color: rgba(239, 68, 68, 0.2);
+  color: #f87171;
+}
+
+/* ── Buttons (shared) ───────────────────────────────────────────────────────── */
+
+.score-update__btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.45rem 0.8rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  color: #d4d4d8;
+  font-size: 0.78rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.score-update__btn:hover:not(:disabled) { background: rgba(255, 255, 255, 0.08); }
+.score-update__btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.score-update__btn--primary {
+  background: rgba(251, 191, 36, 0.15);
+  border-color: rgba(251, 191, 36, 0.3);
+  color: #fbbf24;
+}
+
+.score-update__btn--primary:hover:not(:disabled) { background: rgba(251, 191, 36, 0.25); }
+
+.score-update__btn--secondary {
+  background: rgba(255, 255, 255, 0.06);
+  color: #a1a1aa;
+}
+
+.score-update__btn--wicket {
+  background: rgba(239, 68, 68, 0.15);
+  border-color: rgba(239, 68, 68, 0.3);
+  color: #f87171;
+}
+
+.score-update__btn--undo {
+  background: rgba(245, 158, 11, 0.1);
+  border-color: rgba(245, 158, 11, 0.2);
+  color: #fbbf24;
+}
+
+.score-update__btn--lg {
+  padding: 0.65rem 1.5rem;
+  font-size: 0.9rem;
+}
+
+/* ── Modal ───────────────────────────────────────────────────────────────────── */
+
+.score-update__modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(6px);
+  padding: 1rem;
+}
+
+.score-update__modal {
+  background: #1a1a2e;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  padding: 1.5rem;
+  width: 100%;
+  max-width: 380px;
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+.score-update__modal--wide {
+  max-width: 500px;
+}
+
+.score-update__modal h3 {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #fafafa;
+  margin: 0 0 1rem;
+}
+
+.score-update__modal-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+}
+
+.score-update__modal-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  margin-bottom: 0.75rem;
+}
+
+.score-update__modal-field label {
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: #a1a1aa;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.score-update__select,
+.score-update__input {
+  padding: 0.5rem 0.75rem;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  color: #e4e4e7;
+  font-size: 0.85rem;
+}
+
+.score-update__select:focus,
+.score-update__input:focus {
+  outline: none;
+  border-color: rgba(251, 191, 36, 0.4);
+}
+
+.score-update__select option {
+  background: #1a1a2e;
+}
+
+.score-update__modal-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+/* ── Player list (picker modal) ─────────────────────────────────────────────── */
+
+.score-update__player-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.score-update__player-btn {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  color: #e4e4e7;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.score-update__player-btn:hover {
+  background: rgba(251, 191, 36, 0.1);
+}
+
+.score-update__player-role {
+  font-size: 0.7rem;
+  color: #52525b;
+}
+
+/* ── Responsive ─────────────────────────────────────────────────────────────── */
+
+@media (max-width: 400px) {
+  .score-update__run-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .score-update__run-btn {
+    height: 48px;
+    font-size: 1.1rem;
+  }
+
+  .score-update__modal-grid {
+    grid-template-columns: 1fr;
+  }
+}

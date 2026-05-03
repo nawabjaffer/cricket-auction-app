@@ -47,3 +47,6 @@ export { useAdminPlayersOverrides } from './useAdminPlayersOverrides';
 // V3 Premium Hooks
 export { usePremium } from './usePremium';
 export { useMotionSensor } from './useMotionSensor';
+
+// Scoring module hooks
+export { useScoringState } from './useScoringState';

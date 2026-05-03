@@ -1,0 +1,552 @@
+/* ============================================================================
+   SCORE OBS OVERLAY — Transparent background for OBS Studio browser source
+   Designed for 1920×1080 canvas. All elements positioned absolutely.
+   ============================================================================ */
+
+.score-obs {
+  position: relative;
+  width: 1920px;
+  height: 1080px;
+  background: transparent;
+  overflow: hidden;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  color: #fff;
+}
+
+/* ── Top Bar ────────────────────────────────────────────────────────────────── */
+
+.score-obs__top-bar {
+  position: absolute;
+  top: 20px;
+  left: 20px;
+  right: 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  z-index: 5;
+}
+
+.score-obs__top-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.score-obs__tournament-logo {
+  width: 48px;
+  height: 48px;
+  object-fit: contain;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.5);
+  padding: 4px;
+}
+
+.score-obs__tournament-name {
+  font-size: 18px;
+  font-weight: 700;
+  color: #fbbf24;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.6);
+}
+
+.score-obs__top-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.score-obs__live-badge {
+  padding: 4px 14px;
+  background: rgba(239, 68, 68, 0.9);
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  animation: obs-pulse 2s ease-in-out infinite;
+}
+
+@keyframes obs-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+.score-obs__partner-logo {
+  width: 40px;
+  height: 40px;
+  object-fit: contain;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.5);
+  padding: 4px;
+}
+
+.score-obs__partner-name {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.7);
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
+}
+
+/* ── Score Strip (bottom-center, always visible) ────────────────────────────── */
+
+.score-obs__score-strip {
+  position: absolute;
+  bottom: 30px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 10px 24px;
+  background: linear-gradient(135deg, rgba(15, 15, 30, 0.92), rgba(30, 30, 60, 0.92));
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 16px;
+  backdrop-filter: blur(16px);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  z-index: 10;
+  min-width: 700px;
+}
+
+.score-obs__team-box {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.score-obs__team-logo {
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  object-fit: contain;
+}
+
+.score-obs__team-short {
+  font-size: 16px;
+  font-weight: 700;
+  color: #e4e4e7;
+}
+
+.score-obs__score-main {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+}
+
+.score-obs__score-runs {
+  font-size: 36px;
+  font-weight: 900;
+  color: #fafafa;
+  letter-spacing: -0.02em;
+}
+
+.score-obs__score-overs {
+  font-size: 16px;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.score-obs__score-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.5);
+  border-left: 1px solid rgba(255, 255, 255, 0.1);
+  padding-left: 12px;
+}
+
+.score-obs__batsmen-mini {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  border-left: 1px solid rgba(255, 255, 255, 0.1);
+  padding-left: 12px;
+}
+
+.score-obs__bat-mini {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.score-obs__bat-mini--strike {
+  color: #fbbf24;
+  font-weight: 600;
+}
+
+.score-obs__over-balls {
+  display: flex;
+  gap: 4px;
+  border-left: 1px solid rgba(255, 255, 255, 0.1);
+  padding-left: 12px;
+}
+
+.score-obs__ball {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  font-size: 12px;
+  font-weight: 700;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.score-obs__ball--dot { background: rgba(113, 113, 122, 0.3); color: #71717a; }
+.score-obs__ball--four { background: rgba(59, 130, 246, 0.3); color: #60a5fa; }
+.score-obs__ball--six { background: rgba(168, 85, 247, 0.3); color: #c084fc; }
+.score-obs__ball--wicket { background: rgba(239, 68, 68, 0.35); color: #f87171; }
+
+/* ── Sponsor Strip ──────────────────────────────────────────────────────────── */
+
+.score-obs__sponsor-strip {
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 16px;
+  background: rgba(0, 0, 0, 0.5);
+  border-radius: 8px 8px 0 0;
+  z-index: 8;
+}
+
+.score-obs__sponsor-logo {
+  width: 24px;
+  height: 24px;
+  object-fit: contain;
+}
+
+.score-obs__sponsor-name {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+/* ── L-Banner (left side) ───────────────────────────────────────────────────── */
+
+.score-obs__l-banner {
+  position: absolute;
+  left: 0;
+  top: 100px;
+  bottom: 120px;
+  width: 200px;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.score-obs__l-banner-img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  border-radius: 0 12px 12px 0;
+  box-shadow: 4px 0 24px rgba(0, 0, 0, 0.5);
+}
+
+/* ── Overlay Cards (batsman, bowler, scorecard) ─────────────────────────────── */
+
+.score-obs__overlay-card {
+  position: absolute;
+  z-index: 20;
+}
+
+.score-obs__batsman-card,
+.score-obs__bowler-card {
+  right: 40px;
+  bottom: 120px;
+  min-width: 300px;
+  padding: 20px 24px;
+  background: linear-gradient(135deg, rgba(15, 15, 30, 0.95), rgba(30, 30, 60, 0.95));
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 16px;
+  backdrop-filter: blur(16px);
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.5);
+}
+
+.score-obs__bowler-card {
+  border-color: rgba(59, 130, 246, 0.3);
+}
+
+.score-obs__card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.score-obs__strike-indicator {
+  color: #fbbf24;
+  font-size: 14px;
+}
+
+.score-obs__card-name {
+  font-size: 20px;
+  font-weight: 700;
+  color: #fafafa;
+}
+
+.score-obs__card-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.score-obs__stat-main {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.score-obs__stat-value--big {
+  font-size: 42px;
+  font-weight: 900;
+  color: #fafafa;
+}
+
+.score-obs__stat-label {
+  font-size: 16px;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.score-obs__stat-row {
+  display: flex;
+  gap: 16px;
+}
+
+.score-obs__stat-item {
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+/* ── Full Scorecard ─────────────────────────────────────────────────────────── */
+
+.score-obs__scorecard {
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  min-width: 600px;
+  padding: 24px;
+  background: linear-gradient(135deg, rgba(15, 15, 30, 0.96), rgba(30, 30, 60, 0.96));
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 20px;
+  backdrop-filter: blur(20px);
+  box-shadow: 0 16px 64px rgba(0, 0, 0, 0.6);
+}
+
+.score-obs__scorecard-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-bottom: 12px;
+  margin-bottom: 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.score-obs__scorecard-team {
+  font-size: 18px;
+  font-weight: 700;
+  color: #fbbf24;
+}
+
+.score-obs__scorecard-score {
+  font-size: 24px;
+  font-weight: 900;
+  color: #fafafa;
+}
+
+.score-obs__scorecard-section {
+  margin-bottom: 12px;
+}
+
+.score-obs__scorecard-row {
+  display: grid;
+  grid-template-columns: 2fr repeat(5, 1fr);
+  gap: 8px;
+  padding: 6px 0;
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.8);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.score-obs__scorecard-row--header {
+  font-size: 12px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.4);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.score-obs__scorecard-footer {
+  display: flex;
+  gap: 16px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+/* ── Celebration Overlays ───────────────────────────────────────────────────── */
+
+.score-obs__celebration {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.score-obs__celebration-num {
+  font-size: 120px;
+  font-weight: 900;
+  line-height: 1;
+  text-shadow: 0 0 40px currentColor;
+}
+
+.score-obs__celebration-text {
+  font-size: 32px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  text-shadow: 0 4px 20px rgba(0, 0, 0, 0.6);
+}
+
+.score-obs__celebration-emoji {
+  font-size: 96px;
+  line-height: 1;
+}
+
+.score-obs__celebration-img {
+  max-width: 400px;
+  max-height: 300px;
+  object-fit: contain;
+  filter: drop-shadow(0 8px 24px rgba(0, 0, 0, 0.5));
+}
+
+/* Boundary Four */
+.score-obs__celebration--four {
+  color: #60a5fa;
+}
+
+.score-obs__celebration--four .score-obs__celebration-num {
+  background: linear-gradient(180deg, #60a5fa, #3b82f6);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Boundary Six */
+.score-obs__celebration--six {
+  color: #c084fc;
+}
+
+.score-obs__celebration--six .score-obs__celebration-num {
+  background: linear-gradient(180deg, #c084fc, #a855f7);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Wicket */
+.score-obs__celebration--wicket {
+  color: #f87171;
+}
+
+.score-obs__celebration--wicket .score-obs__celebration-num {
+  background: linear-gradient(180deg, #f87171, #ef4444);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Duck Out */
+.score-obs__celebration--duck {
+  color: #fbbf24;
+}
+
+/* Hat-Trick */
+.score-obs__celebration--hattrick {
+  color: #fbbf24;
+}
+
+.score-obs__celebration--hattrick .score-obs__celebration-text {
+  background: linear-gradient(90deg, #fbbf24, #f59e0b, #fbbf24);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  background-size: 200% 100%;
+  animation: obs-shimmer 2s linear infinite;
+}
+
+@keyframes obs-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* ── Question Overlay ───────────────────────────────────────────────────────── */
+
+.score-obs__question {
+  bottom: 120px;
+  left: 50%;
+  transform: translateX(-50%);
+  min-width: 500px;
+  max-width: 700px;
+  padding: 24px;
+  background: linear-gradient(135deg, rgba(15, 15, 30, 0.95), rgba(30, 30, 60, 0.95));
+  border: 1px solid rgba(251, 191, 36, 0.3);
+  border-radius: 16px;
+  backdrop-filter: blur(16px);
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.5);
+}
+
+.score-obs__question-text {
+  font-size: 22px;
+  font-weight: 700;
+  color: #fafafa;
+  margin-bottom: 16px;
+  text-align: center;
+}
+
+.score-obs__question-options {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.score-obs__question-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  font-size: 16px;
+  color: #e4e4e7;
+}
+
+.score-obs__question-letter {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  background: rgba(251, 191, 36, 0.2);
+  color: #fbbf24;
+  font-weight: 700;
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.score-obs__question-img {
+  max-width: 100%;
+  max-height: 200px;
+  object-fit: contain;
+  margin-top: 12px;
+  border-radius: 8px;
+}
