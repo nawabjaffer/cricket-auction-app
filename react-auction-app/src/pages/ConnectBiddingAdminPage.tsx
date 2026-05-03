@@ -8,11 +8,12 @@
 
 import { useState, useCallback, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { IoClose, IoShieldCheckmark, IoPeople } from 'react-icons/io5';
+import { IoClose, IoShieldCheckmark, IoPeople, IoShield } from 'react-icons/io5';
 import { GiCricketBat } from 'react-icons/gi';
 import { useRealtimeMobileSync } from '../hooks/useRealtimeSync';
 import { useAdminAuth } from '../hooks/useAdminAuth';
 import { authService, type AuthSession } from '../services/auth';
+import { featureFlagsService } from '../services/featureFlagsService';
 import { TeamLogo } from '../components/TeamLogo/TeamLogo';
 import { PlayerImage } from '../components/PlayerImage/PlayerImage';
 import { getRoleLabel, getRoleBadgeClass } from '../utils/playerStats';
@@ -29,6 +30,8 @@ export default function ConnectBiddingAdminPage() {
   // Admin login (for admin-only access)
   const { isAuthenticated, login: adminLogin, logout: adminLogout, loading: authLoading, error: authError } = useAdminAuth();
   const [email, setEmail] = useState('');
+  // Super admin mode (skip team login, control all teams)
+  const [superAdminMode, setSuperAdminMode] = useState(false);
   // Team login (for team selection)
   const [teamSession, setTeamSession] = useState<AuthSession | null>(authService.getSession());
   const [username, setUsername] = useState('');
@@ -37,6 +40,8 @@ export default function ConnectBiddingAdminPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [feedback, setFeedback] = useState<BidFeedback | null>(null);
   const [busyTeamId, setBusyTeamId] = useState<string | null>(null);
+
+  const superAdminEnabled = featureFlagsService.isEnabled('super-admin-bidding');
 
   const {
     currentPlayer,
@@ -211,12 +216,24 @@ export default function ConnectBiddingAdminPage() {
   }
 
   // ─── Team Login Screen ───
-  if (!teamSession) {
+  if (!teamSession && !superAdminMode) {
     return (
       <div className="cb-login-page" style={{ '--cb-primary': themePrimary, '--cb-secondary': themeSecondary } as React.CSSProperties}>
         <div className="cb-login-bg" />
         <div className="cb-login-scroll">
           <motion.div className="cb-login-card" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}>
+            {/* Super Admin Mode Button */}
+            {superAdminEnabled && (
+              <motion.button
+                type="button"
+                className="cb-login-btn"
+                onClick={() => setSuperAdminMode(true)}
+                whileTap={{ scale: 0.98 }}
+                style={{ marginBottom: '1rem', background: 'linear-gradient(135deg, #8b5cf6, #6d28d9)', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
+              >
+                <IoShield size={18} /> Super Admin — Control All Teams
+              </motion.button>
+            )}
             <div className="cb-login-brand">
               <motion.div className="cb-login-icon" initial={{ scale: 0.8 }} animate={{ scale: 1 }} transition={{ delay: 0.2, type: 'spring' }}>
                 <GiCricketBat size={44} color="#fff" />
@@ -282,6 +299,168 @@ export default function ConnectBiddingAdminPage() {
             <div className="cb-login-footer"><p>powered by <b>NJS Creative Labs</b></p></div>
           </motion.div>
         </div>
+      </div>
+    );
+  }
+
+  // ─── Super Admin Interface (all teams at once) ───
+  if (superAdminMode) {
+    return (
+      <div className="cb-login-page" style={{ '--cb-primary': themePrimary, '--cb-secondary': themeSecondary } as React.CSSProperties}>
+        <div className="cb-login-bg" />
+        <div className="cb-login-scroll">
+          {/* Header bar */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <IoShield size={20} color="#a78bfa" />
+              <span style={{ fontWeight: 700, fontSize: '0.95rem', color: '#a78bfa' }}>Super Admin</span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span className={`cb-status-pill ${isConnected ? 'live' : ''}`} style={{ margin: 0, padding: '0.25rem 0.75rem', fontSize: '0.7rem' }}>
+                <span className="cb-status-dot" />
+                {isConnected ? formattedTime : 'Offline'}
+              </span>
+              <motion.button className="cb-icon-btn" onClick={() => setSuperAdminMode(false)} whileTap={{ scale: 0.9 }} title="Exit Super Admin" style={{ background: 'rgba(255,255,255,0.1)', borderRadius: 8, width: 32, height: 32, border: 'none', color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <IoClose size={16} />
+              </motion.button>
+              <motion.button className="cb-icon-btn" onClick={() => adminLogout()} whileTap={{ scale: 0.9 }} title="Logout" style={{ background: 'rgba(239,68,68,0.2)', borderRadius: 8, width: 32, height: 32, border: 'none', color: '#f87171', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <IoClose size={16} />
+              </motion.button>
+            </div>
+          </div>
+
+          {/* Current Player Card */}
+          <motion.div className="cb-login-card" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}>
+            {currentPlayer ? (
+              <div className="cb-scout-live-highlight" style={{ margin: '0 -1rem', padding: '0.75rem 1rem' }}>
+                <span className="cb-scout-live-badge"><span className="cb-live-pulse" /> Now Bidding</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginTop: '0.5rem' }}>
+                  <div style={{ width: 60, height: 60, borderRadius: 12, overflow: 'hidden', flexShrink: 0 }}>
+                    <PlayerImage imageUrl={currentPlayer.imageUrl || ''} playerName={currentPlayer.name} size="md" className="cb-player-img" />
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <h2 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 700 }}>{currentPlayer.name}</h2>
+                    <span className={`cb-role-badge ${getRoleBadgeClass(currentPlayer.role)}`} style={{ marginTop: 4 }}>{getRoleLabel(currentPlayer.role)}</span>
+                    <div className="cb-scout-price-row" style={{ marginTop: 6 }}>
+                      <div><span>Base</span><strong>{formatLakhs(currentPlayer.basePrice)}</strong></div>
+                      <div><span>Current Bid</span><strong style={{ color: '#fbbf24', fontSize: '1.1rem' }}>{formatLakhs(currentBid)}</strong></div>
+                    </div>
+                  </div>
+                </div>
+                {selectedTeam && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, padding: '0.4rem 0.7rem', background: 'rgba(255,255,255,0.08)', borderRadius: 8 }}>
+                    {selectedTeam.logoUrl && <TeamLogo logoUrl={selectedTeam.logoUrl} teamName={selectedTeam.name} size="sm" />}
+                    <span style={{ fontWeight: 600, fontSize: '0.85rem' }}>{selectedTeam.name} is leading</span>
+                    <span style={{ marginLeft: 'auto', fontSize: '0.7rem', background: 'rgba(251,191,36,0.25)', color: '#fbbf24', padding: '2px 8px', borderRadius: 6, fontWeight: 700 }}>LEADING</span>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div style={{ textAlign: 'center', padding: '2rem 0', opacity: 0.5 }}>
+                <GiCricketBat size={40} color="rgba(255,255,255,0.3)" />
+                <p style={{ margin: '0.5rem 0 0', fontSize: '0.9rem' }}>Waiting for next player...</p>
+              </div>
+            )}
+          </motion.div>
+
+          {/* All Teams Grid */}
+          <motion.div className="cb-login-card" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, delay: 0.1 }} style={{ marginTop: '0.75rem' }}>
+            <h3 style={{ margin: '0 0 0.75rem', fontSize: '0.95rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6 }}>
+              <IoPeople size={16} /> All Teams — Bid Controls
+            </h3>
+
+            <div className="cb-team-card-grid">
+              {teams.map((team) => {
+                const isLeading = selectedTeam?.id === team.id;
+                const purseUsedPct = team.allocatedAmount
+                  ? Math.round(((team.allocatedAmount - team.remainingPurse) / team.allocatedAmount) * 100)
+                  : 0;
+                return (
+                  <div
+                    key={team.id}
+                    className={`cb-team-card-btn ${isLeading ? 'active' : ''}`}
+                    style={{ '--card-bg': team.primaryColor || '#3b82f6', '--card-bg2': team.secondaryColor || '#1e40af', cursor: 'default', position: 'relative' } as React.CSSProperties}
+                  >
+                    {isLeading && (
+                      <span style={{ position: 'absolute', top: 6, right: 8, fontSize: '0.55rem', background: 'rgba(251,191,36,0.9)', color: '#000', padding: '1px 6px', borderRadius: 4, fontWeight: 800, letterSpacing: 0.5 }}>LEADING</span>
+                    )}
+                    {team.logoUrl ? (
+                      <TeamLogo logoUrl={team.logoUrl} teamName={team.name} size="sm" className="cb-team-card-logo" />
+                    ) : (
+                      <div className="cb-team-card-initials">{team.name.slice(0, 2).toUpperCase()}</div>
+                    )}
+                    <span className="cb-team-card-name">{team.name}</span>
+                    <span className="cb-team-card-meta">
+                      {team.playersBought || 0}/{team.totalPlayerThreshold || 25} players
+                    </span>
+                    <span className="cb-team-card-meta" style={{ fontSize: '0.65rem' }}>
+                      {formatLakhs(team.remainingPurse)} left &middot; {purseUsedPct}% used
+                    </span>
+
+                    <div style={{ display: 'flex', gap: 6, width: '100%', marginTop: 6 }}>
+                      <motion.button
+                        whileTap={{ scale: 0.92 }}
+                        disabled={!currentPlayer || !isConnected || !auctionActive || !!busyTeamId}
+                        onClick={(e) => { e.stopPropagation(); handleRaiseBid(team.id, team.name); }}
+                        style={{
+                          flex: 1,
+                          padding: '0.5rem 0',
+                          borderRadius: 8,
+                          border: 'none',
+                          background: 'linear-gradient(135deg, #22c55e, #16a34a)',
+                          color: '#fff',
+                          fontWeight: 800,
+                          fontSize: '0.72rem',
+                          cursor: 'pointer',
+                          opacity: (!currentPlayer || !auctionActive) ? 0.4 : 1,
+                          letterSpacing: 0.5,
+                        }}
+                      >
+                        {busyTeamId === team.id ? '...' : `RAISE BID`}
+                      </motion.button>
+                      <motion.button
+                        whileTap={{ scale: 0.92 }}
+                        disabled={!currentPlayer || !isConnected || !isLeading || !!busyTeamId}
+                        onClick={(e) => { e.stopPropagation(); handlePass(team.id, team.name); }}
+                        style={{
+                          padding: '0.5rem 0.7rem',
+                          borderRadius: 8,
+                          border: '1px solid rgba(255,255,255,0.25)',
+                          background: 'transparent',
+                          color: '#fff',
+                          fontWeight: 700,
+                          fontSize: '0.72rem',
+                          cursor: 'pointer',
+                          opacity: !isLeading ? 0.3 : 1,
+                        }}
+                      >
+                        PASS
+                      </motion.button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </motion.div>
+
+          <div className="cb-login-footer" style={{ textAlign: 'center', padding: '1rem 0 2rem' }}>
+            <p style={{ margin: 0, opacity: 0.5, fontSize: '0.75rem' }}>powered by <b>NJS Creative Labs</b></p>
+          </div>
+        </div>
+
+        {/* Feedback toast */}
+        <AnimatePresence>
+          {feedback && (
+            <motion.div
+              className={`cb-toast cb-toast-${feedback.type}`}
+              initial={{ opacity: 0, y: 50 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 50 }}
+            >
+              {feedback.message}
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     );
   }

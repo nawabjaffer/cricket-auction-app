@@ -4,9 +4,10 @@
 //          Auction Breaks, Loading Screen, Team Owners, Iconic Players
 // ============================================================================
 
-import { useState, useEffect } from 'react';
-import { IoAdd, IoTrash, IoPlay, IoStop } from 'react-icons/io5';
+import { useState, useEffect, useRef } from 'react';
+import { IoAdd, IoTrash, IoPlay, IoStop, IoCloudUpload } from 'react-icons/io5';
 import { type AdminSettings, type SpecialCategory, type AuctionBreak, type BudgetRulesConfig, type LoadingScreenConfig, type TeamOwner } from '../../services/auctionPersistence';
+import { uploadFileToStorage } from '../../services';
 import type { Team } from '../../types';
 
 // All available player stat fields that can be toggled
@@ -427,38 +428,86 @@ export function ThemeSettingsExtended({ settings, onChange, teams }: ThemeSettin
             </div>
             <div className="admin-items-list">
               {(teamOwners[team.id] || []).map(owner => (
-                <div key={owner.id} className="admin-item-row">
-                  <input
-                    type="text"
-                    value={owner.name}
-                    onChange={e => updateOwner(team.id, owner.id, { name: e.target.value })}
-                    placeholder="Owner name"
-                    className="admin-input"
-                  />
-                  <input
-                    type="text"
-                    value={owner.designation || ''}
-                    onChange={e => updateOwner(team.id, owner.id, { designation: e.target.value })}
-                    placeholder="Designation"
-                    className="admin-input admin-input-sm"
-                  />
-                  <input
-                    type="text"
-                    value={owner.imageUrl || ''}
-                    onChange={e => updateOwner(team.id, owner.id, { imageUrl: e.target.value })}
-                    placeholder="Owner image URL"
-                    className="admin-input"
-                  />
-                  <input
-                    type="text"
-                    value={owner.brandImageUrl || ''}
-                    onChange={e => updateOwner(team.id, owner.id, { brandImageUrl: e.target.value })}
-                    placeholder="Brand image URL"
-                    className="admin-input"
-                  />
-                  <button onClick={() => removeOwner(team.id, owner.id)} className="admin-delete-btn" title="Remove">
-                    <IoTrash />
-                  </button>
+                <div key={owner.id} className="admin-item-row" style={{ flexDirection: 'column', gap: '0.5rem', alignItems: 'stretch' }}>
+                  <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                    <input
+                      type="text"
+                      value={owner.name}
+                      onChange={e => updateOwner(team.id, owner.id, { name: e.target.value })}
+                      placeholder="Owner name"
+                      className="admin-input"
+                    />
+                    <input
+                      type="text"
+                      value={owner.designation || ''}
+                      onChange={e => updateOwner(team.id, owner.id, { designation: e.target.value })}
+                      placeholder="Designation"
+                      className="admin-input admin-input-sm"
+                    />
+                    <button onClick={() => removeOwner(team.id, owner.id)} className="admin-delete-btn" title="Remove">
+                      <IoTrash />
+                    </button>
+                  </div>
+                  <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                    <input
+                      type="text"
+                      value={owner.imageUrl || ''}
+                      onChange={e => updateOwner(team.id, owner.id, { imageUrl: e.target.value })}
+                      placeholder="Owner image URL"
+                      className="admin-input"
+                      style={{ flex: 1 }}
+                    />
+                    <label className="admin-upload-btn" title="Upload owner image">
+                      <IoCloudUpload />
+                      <input
+                        type="file"
+                        accept="image/*"
+                        style={{ display: 'none' }}
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          if (!file) return;
+                          if (file.size > 5 * 1024 * 1024) { alert('Image too large. Max 5MB.'); return; }
+                          try {
+                            const url = await uploadFileToStorage(file, `media/owners/${team.id}/${owner.id}-photo-${Date.now()}`);
+                            updateOwner(team.id, owner.id, { imageUrl: url });
+                          } catch { alert('Upload failed'); }
+                        }}
+                      />
+                    </label>
+                    {owner.imageUrl && (
+                      <img src={owner.imageUrl} alt="" style={{ width: 32, height: 32, borderRadius: 6, objectFit: 'cover' }} />
+                    )}
+                  </div>
+                  <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                    <input
+                      type="text"
+                      value={owner.brandImageUrl || ''}
+                      onChange={e => updateOwner(team.id, owner.id, { brandImageUrl: e.target.value })}
+                      placeholder="Brand image URL"
+                      className="admin-input"
+                      style={{ flex: 1 }}
+                    />
+                    <label className="admin-upload-btn" title="Upload brand image">
+                      <IoCloudUpload />
+                      <input
+                        type="file"
+                        accept="image/*"
+                        style={{ display: 'none' }}
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          if (!file) return;
+                          if (file.size > 5 * 1024 * 1024) { alert('Image too large. Max 5MB.'); return; }
+                          try {
+                            const url = await uploadFileToStorage(file, `media/owners/${team.id}/${owner.id}-brand-${Date.now()}`);
+                            updateOwner(team.id, owner.id, { brandImageUrl: url });
+                          } catch { alert('Upload failed'); }
+                        }}
+                      />
+                    </label>
+                    {owner.brandImageUrl && (
+                      <img src={owner.brandImageUrl} alt="" style={{ width: 32, height: 32, borderRadius: 6, objectFit: 'cover' }} />
+                    )}
+                  </div>
                 </div>
               ))}
               {(!teamOwners[team.id] || teamOwners[team.id].length === 0) && (

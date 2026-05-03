@@ -102,6 +102,20 @@ const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
     description: 'Log all admin actions for audit trail',
     category: 'analytics',
     updatedAt: Date.now()
+  },
+  'owner-overlay-in-break': {
+    name: 'Owner Overlay in Break',
+    enabled: false,
+    description: 'Show team owner images with brand identity during auction breaks',
+    category: 'ui',
+    updatedAt: Date.now()
+  },
+  'super-admin-bidding': {
+    name: 'Super Admin Bidding',
+    enabled: true,
+    description: 'Enable super admin mode in bid controller to bid for all teams without team login',
+    category: 'bidding',
+    updatedAt: Date.now()
   }
 };
 

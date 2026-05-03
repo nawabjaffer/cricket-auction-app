@@ -526,6 +526,142 @@
 }
 
 /* ═══════════ HINT ═══════════ */
+/* ═══════════ OWNER OVERLAY ═══════════ */
+.break-ov__owners {
+  position: absolute;
+  bottom: 5rem;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 90%;
+  max-width: 1200px;
+  z-index: 10;
+}
+
+.break-ov__owners-grid {
+  display: flex;
+  justify-content: center;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+}
+
+.break-ov__owner-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 1.25rem 1rem 1rem;
+  min-width: 140px;
+  max-width: 180px;
+  background: linear-gradient(
+    145deg,
+    rgba(255, 255, 255, 0.06) 0%,
+    rgba(255, 255, 255, 0.02) 100%
+  );
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 1rem;
+  backdrop-filter: blur(16px);
+  overflow: hidden;
+}
+
+.break-ov__owner-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: var(--owner-team-color, #3b82f6);
+  border-radius: 1rem 1rem 0 0;
+}
+
+.break-ov__owner-brand {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  opacity: 0.06;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.break-ov__owner-brand-img {
+  width: 80%;
+  height: 80%;
+  object-fit: contain;
+}
+
+.break-ov__owner-photo-wrap {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  overflow: hidden;
+  border: 2px solid var(--owner-team-color, #3b82f6);
+  box-shadow: 0 0 20px rgba(0, 0, 0, 0.5), 0 0 8px var(--owner-team-color, #3b82f6);
+  margin-bottom: 0.5rem;
+  flex-shrink: 0;
+}
+
+.break-ov__owner-photo {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.break-ov__owner-photo-placeholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.1);
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.break-ov__owner-info {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  text-align: center;
+}
+
+.break-ov__owner-name {
+  font-weight: 700;
+  font-size: 0.8rem;
+  color: #fff;
+  line-height: 1.2;
+}
+
+.break-ov__owner-designation {
+  font-size: 0.65rem;
+  color: rgba(255, 255, 255, 0.5);
+  font-style: italic;
+}
+
+.break-ov__owner-team {
+  font-size: 0.6rem;
+  font-weight: 600;
+  color: var(--owner-team-color, #60a5fa);
+  margin-top: 2px;
+  letter-spacing: 0.03em;
+}
+
+.break-ov__owner-team-logo {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 22px;
+  height: 22px;
+  object-fit: contain;
+  opacity: 0.7;
+  border-radius: 4px;
+}
+
 .break-ov__hint {
   position: absolute;
   bottom: 0.75rem;

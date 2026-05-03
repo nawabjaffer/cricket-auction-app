@@ -10,7 +10,14 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { SponsorRecord } from '../../services/auctionPersistence';
+import type { TeamOwner } from '../../services/auctionPersistence';
 import './BreakOverlay.css';
+
+interface OwnerWithTeam extends TeamOwner {
+  teamName: string;
+  teamLogo?: string;
+  teamColor?: string;
+}
 
 interface BreakOverlayProps {
   readonly isVisible: boolean;
@@ -20,6 +27,8 @@ interface BreakOverlayProps {
   readonly organizerLogo?: string;
   readonly auctionTitle?: string;
   readonly onClose: () => void;
+  readonly teamOwners?: OwnerWithTeam[];
+  readonly showOwnerOverlay?: boolean;
 }
 
 export function BreakOverlay({
@@ -30,6 +39,8 @@ export function BreakOverlay({
   organizerLogo,
   auctionTitle,
   onClose,
+  teamOwners = [],
+  showOwnerOverlay = false,
 }: BreakOverlayProps) {
   const [timeLeft, setTimeLeft] = useState(durationSeconds);
   const [activeSponsorIndex, setActiveSponsorIndex] = useState(0);
@@ -307,6 +318,53 @@ export function BreakOverlay({
           </motion.div>
 
           {/* ═══ BOTTOM: Logo Train Carousel (B&W → color zoom at center) ═══ */}
+          {/* ═══ OWNER SHOWCASE (when feature flag enabled) ═══ */}
+          {showOwnerOverlay && teamOwners.length > 0 && (
+            <motion.div
+              className="break-ov__owners"
+              initial={{ y: 30, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              transition={{ delay: 0.5, duration: 0.6 }}
+            >
+              <div className="break-ov__owners-grid">
+                {teamOwners.map((owner, idx) => (
+                  <motion.div
+                    key={owner.id}
+                    className="break-ov__owner-card"
+                    initial={{ opacity: 0, scale: 0.8 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ delay: 0.6 + idx * 0.1, type: 'spring', stiffness: 200 }}
+                    style={{ '--owner-team-color': owner.teamColor || '#3b82f6' } as React.CSSProperties}
+                  >
+                    {owner.brandImageUrl && (
+                      <div className="break-ov__owner-brand">
+                        <img src={owner.brandImageUrl} alt="" className="break-ov__owner-brand-img" />
+                      </div>
+                    )}
+                    <div className="break-ov__owner-photo-wrap">
+                      {owner.imageUrl ? (
+                        <img src={owner.imageUrl} alt={owner.name} className="break-ov__owner-photo" />
+                      ) : (
+                        <div className="break-ov__owner-photo-placeholder">
+                          {owner.name.charAt(0).toUpperCase()}
+                        </div>
+                      )}
+                    </div>
+                    <div className="break-ov__owner-info">
+                      <span className="break-ov__owner-name">{owner.name}</span>
+                      {owner.designation && (
+                        <span className="break-ov__owner-designation">{owner.designation}</span>
+                      )}
+                      <span className="break-ov__owner-team">{owner.teamName}</span>
+                    </div>
+                    {owner.teamLogo && (
+                      <img src={owner.teamLogo} alt="" className="break-ov__owner-team-logo" />
+                    )}
+                  </motion.div>
+                ))}
+              </div>
+            </motion.div>
+          )}
           {trainLogos.length > 0 && (
             <motion.div
               className="break-ov__train"

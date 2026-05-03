@@ -2441,13 +2441,7 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
                     >
                       <IoRefresh size={18} /> {isMigratingMedia ? 'Migrating Media...' : 'Migrate Drive Media to Storage'}
                     </button>
-                    <button
-                      className="admin-btn admin-btn-warning"
-                      onClick={handleImportPlayersFromSheets}
-                      disabled={isSaving}
-                    >
-                      <IoRefresh size={18} /> Import from Sheets
-                    </button>
+
                     <button
                       className="admin-btn admin-btn-secondary"
                       onClick={() => csvFileInputRef.current?.click()}

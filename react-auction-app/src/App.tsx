@@ -62,6 +62,7 @@ import {
 import { useRealtimeDesktopSync, useRealtimeMobileSync } from './hooks/useRealtimeSync';
 import { audioService, imageCacheService } from './services';
 import { auctionPersistence, type SponsorRecord, type AdminSettings } from './services/auctionPersistence';
+import { featureFlagsService } from './services/featureFlagsService';
 import { ALL_PLAYER_STAT_FIELDS } from './components/AdminPanel/ThemeSettingsExtended';
 import { auctionRules } from './services/auctionRules';
 import { realtimeSync } from './services/realtimeSync';
@@ -1808,6 +1809,20 @@ function AuctionApp({ mirrorMode = false }: { mirrorMode?: boolean }) {
         }
         organizerLogo={adminSettings?.organizerLogo}
         onClose={() => setShowBreakOverlay(false)}
+        showOwnerOverlay={featureFlagsService.isEnabled('owner-overlay-in-break')}
+        teamOwners={(() => {
+          const owners = adminSettings?.teamOwners;
+          if (!owners) return [];
+          const result: { id: string; name: string; imageUrl?: string; brandImageUrl?: string; designation?: string; teamName: string; teamLogo?: string; teamColor?: string }[] = [];
+          for (const [teamId, ownerList] of Object.entries(owners)) {
+            const team = allTeams.find(t => t.id === teamId);
+            if (!team || !ownerList) continue;
+            for (const owner of ownerList) {
+              result.push({ ...owner, teamName: team.name, teamLogo: team.logoUrl, teamColor: team.primaryColor });
+            }
+          }
+          return result;
+        })()}
       />
 
       {/* ═══════ TOP PICKS OVERLAY (press "/") ═══════ */}

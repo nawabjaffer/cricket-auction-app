@@ -177,6 +177,25 @@
   background: rgba(239, 68, 68, 0.2);
 }
 
+.admin-upload-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  border-radius: 6px;
+  background: rgba(59, 130, 246, 0.1);
+  border: 1px solid rgba(59, 130, 246, 0.2);
+  color: #60a5fa;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-size: 14px;
+}
+.admin-upload-btn:hover {
+  background: rgba(59, 130, 246, 0.2);
+}
+
 /* Radio groups */
 .admin-radio-group {
   display: flex;

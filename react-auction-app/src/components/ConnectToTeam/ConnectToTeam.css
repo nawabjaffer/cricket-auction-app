@@ -260,7 +260,7 @@
 .connect-empty {
   text-align: center;
   padding: 2rem;
-  color: rgba(255, 255, 255, 0.5);
+  color: rgba(255, 255, 255, 0.05);
 }
 
 /* Responsive */

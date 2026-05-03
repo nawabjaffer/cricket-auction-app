@@ -9,6 +9,8 @@ import { IoVideocam, IoRadio, IoSettings, IoPlay, IoStop } from 'react-icons/io5
 import { useLiveStreamingStore } from '../../store/liveStreamingStore';
 import { obsService } from '../../services/obsService';
 import { premiumService } from '../../services/premiumService';
+import { featureFlagsService } from '../../services/featureFlagsService';
+import { useFeatureFlags } from '../../hooks/useFeatureFlags';
 import type { PremiumTier } from '../../types/premium';
 import type { OBSConnectionState, SuccessAnimationType } from '../../types/streaming';
 
@@ -18,6 +20,10 @@ interface StreamingTabProps {
 
 export default function StreamingTab({ onClose }: StreamingTabProps) {
   const navigate = useNavigate();
+  
+  // Feature flags
+  const { isEnabled } = useFeatureFlags();
+  const ownerOverlayEnabled = isEnabled('owner-overlay-in-break');
   
   // Store state
   const {
@@ -316,7 +322,7 @@ export default function StreamingTab({ onClose }: StreamingTabProps) {
           flexDirection: 'column',
           gap: '1rem',
           fontSize: '0.85rem',
-          color: 'rgba(255, 255, 255, 0.8)',
+          color: 'rgba(0, 0, 0, 0.8)',
         }}>
           {/* Step 1 */}
           <div style={{ display: 'flex', gap: '0.75rem' }}>
@@ -326,7 +332,7 @@ export default function StreamingTab({ onClose }: StreamingTabProps) {
               height: 24,
               borderRadius: '50%',
               background: '#3b82f6',
-              color: '#fff',
+              color: '#000',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -334,8 +340,8 @@ export default function StreamingTab({ onClose }: StreamingTabProps) {
               fontWeight: 700,
             }}>1</span>
             <div>
-              <strong style={{ color: '#fff' }}>Enable OBS WebSocket</strong>
-              <p style={{ margin: '0.25rem 0 0', fontSize: '0.78rem', color: 'rgba(255, 255, 255, 0.6)', lineHeight: 1.5 }}>
+              <strong style={{ color: '#000' }}>Enable OBS WebSocket</strong>
+              <p style={{ margin: '0.25rem 0 0', fontSize: '0.78rem', color: 'rgba(0, 0, 0, 0.6)', lineHeight: 1.5 }}>
                 In OBS Studio, go to <strong>Tools → WebSocket Server Settings</strong>. Enable the server, set the port to <code style={{ background: 'rgba(255,255,255,0.08)', padding: '1px 5px', borderRadius: 4, fontSize: '0.75rem' }}>4455</code> (default), and optionally set a password. Click <em>Apply</em>.
               </p>
             </div>
@@ -349,7 +355,7 @@ export default function StreamingTab({ onClose }: StreamingTabProps) {
               height: 24,
               borderRadius: '50%',
               background: '#3b82f6',
-              color: '#fff',
+              color: '#000',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -357,8 +363,8 @@ export default function StreamingTab({ onClose }: StreamingTabProps) {
               fontWeight: 700,
             }}>2</span>
             <div>
-              <strong style={{ color: '#fff' }}>Connect from This App</strong>
-              <p style={{ margin: '0.25rem 0 0', fontSize: '0.78rem', color: 'rgba(255, 255, 255, 0.6)', lineHeight: 1.5 }}>
+              <strong style={{ color: '#000' }}>Connect from This App</strong>
+              <p style={{ margin: '0.25rem 0 0', fontSize: '0.78rem', color: 'rgba(0, 0, 0, 0.6)', lineHeight: 1.5 }}>
                 Enter the host, port, and password above, then click <em>Connect</em>. The status dot turns green when connected.
               </p>
             </div>
@@ -372,7 +378,7 @@ export default function StreamingTab({ onClose }: StreamingTabProps) {
               height: 24,
               borderRadius: '50%',
               background: '#3b82f6',
-              color: '#fff',
+              color: '#000',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -380,8 +386,8 @@ export default function StreamingTab({ onClose }: StreamingTabProps) {
               fontWeight: 700,
             }}>3</span>
             <div>
-              <strong style={{ color: '#fff' }}>Add Browser Source for Live View</strong>
-              <p style={{ margin: '0.25rem 0 0', fontSize: '0.78rem', color: 'rgba(255, 255, 255, 0.6)', lineHeight: 1.5 }}>
+              <strong style={{ color: '#000' }}>Add Browser Source for Live View</strong>
+              <p style={{ margin: '0.25rem 0 0', fontSize: '0.78rem', color: 'rgba(0, 0, 0, 0.6)', lineHeight: 1.5 }}>
                 In OBS, click <strong>Sources → + → Browser</strong>. Set the URL to:
               </p>
               <code style={{
@@ -396,7 +402,7 @@ export default function StreamingTab({ onClose }: StreamingTabProps) {
                 wordBreak: 'break-all',
                 userSelect: 'all',
               }}>{window.location.origin}/live</code>
-              <p style={{ margin: '0.25rem 0 0', fontSize: '0.78rem', color: 'rgba(255, 255, 255, 0.6)', lineHeight: 1.5 }}>
+              <p style={{ margin: '0.25rem 0 0', fontSize: '0.78rem', color: 'rgba(0, 0, 0, 0.6)', lineHeight: 1.5 }}>
                 Set resolution to <strong>1920 × 1080</strong>. This captures the full broadcast view (camera + overlays).
               </p>
             </div>
@@ -410,7 +416,7 @@ export default function StreamingTab({ onClose }: StreamingTabProps) {
               height: 24,
               borderRadius: '50%',
               background: '#8b5cf6',
-              color: '#fff',
+              color: '#000',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -418,8 +424,8 @@ export default function StreamingTab({ onClose }: StreamingTabProps) {
               fontWeight: 700,
             }}>4</span>
             <div>
-              <strong style={{ color: '#fff' }}>Add Transparent Overlay (Optional)</strong>
-              <p style={{ margin: '0.25rem 0 0', fontSize: '0.78rem', color: 'rgba(255, 255, 255, 0.6)', lineHeight: 1.5 }}>
+              <strong style={{ color: '#000' }}>Add Transparent Overlay (Optional)</strong>
+              <p style={{ margin: '0.25rem 0 0', fontSize: '0.78rem', color: 'rgba(0, 0, 0, 0.6)', lineHeight: 1.5 }}>
                 For compositing over your own camera in OBS, add a <strong>second Browser Source</strong> with:
               </p>
               <code style={{
@@ -434,7 +440,7 @@ export default function StreamingTab({ onClose }: StreamingTabProps) {
                 wordBreak: 'break-all',
                 userSelect: 'all',
               }}>{window.location.origin}/obs-overlay</code>
-              <p style={{ margin: '0.25rem 0 0', fontSize: '0.78rem', color: 'rgba(255, 255, 255, 0.6)', lineHeight: 1.5 }}>
+              <p style={{ margin: '0.25rem 0 0', fontSize: '0.78rem', color: 'rgba(0, 0, 0, 0.6)', lineHeight: 1.5 }}>
                 This shows only player info, bid ticker, and sold animation on a transparent background — perfect for layering over your camera feed.
               </p>
             </div>
@@ -448,7 +454,7 @@ export default function StreamingTab({ onClose }: StreamingTabProps) {
               height: 24,
               borderRadius: '50%',
               background: '#8b5cf6',
-              color: '#fff',
+              color: '#000',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -456,8 +462,8 @@ export default function StreamingTab({ onClose }: StreamingTabProps) {
               fontWeight: 700,
             }}>5</span>
             <div>
-              <strong style={{ color: '#fff' }}>Add Control Dock (Optional)</strong>
-              <p style={{ margin: '0.25rem 0 0', fontSize: '0.78rem', color: 'rgba(255, 255, 255, 0.6)', lineHeight: 1.5 }}>
+              <strong style={{ color: '#000' }}>Add Control Dock (Optional)</strong>
+              <p style={{ margin: '0.25rem 0 0', fontSize: '0.78rem', color: 'rgba(0, 0, 0, 0.6)', lineHeight: 1.5 }}>
                 In OBS, go to <strong>Docks → Custom Browser Docks</strong>. Add a new dock with URL:
               </p>
               <code style={{
@@ -472,7 +478,7 @@ export default function StreamingTab({ onClose }: StreamingTabProps) {
                 wordBreak: 'break-all',
                 userSelect: 'all',
               }}>{window.location.origin}/obs-dock</code>
-              <p style={{ margin: '0.25rem 0 0', fontSize: '0.78rem', color: 'rgba(255, 255, 255, 0.6)', lineHeight: 1.5 }}>
+              <p style={{ margin: '0.25rem 0 0', fontSize: '0.78rem', color: 'rgba(0, 0, 0, 0.6)', lineHeight: 1.5 }}>
                 This adds a dockable panel inside OBS for switching scenes, controlling streams, and monitoring auction state — all without leaving OBS.
               </p>
             </div>
@@ -486,22 +492,22 @@ export default function StreamingTab({ onClose }: StreamingTabProps) {
             border: '1px solid rgba(255, 255, 255, 0.08)',
             borderRadius: '0.5rem',
           }}>
-            <div style={{ fontWeight: 700, fontSize: '0.78rem', color: '#fff', marginBottom: '0.5rem' }}>Quick Reference URLs</div>
+            <div style={{ fontWeight: 700, fontSize: '0.78rem', color: '#000', marginBottom: '0.5rem' }}>Quick Reference URLs</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', fontSize: '0.75rem' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: 'rgba(255,255,255,0.5)' }}>Full broadcast:</span>
+                <span style={{ color: 'rgba(0,0,0,0.5)' }}>Full broadcast:</span>
                 <code style={{ color: '#60a5fa' }}>/live</code>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: 'rgba(255,255,255,0.5)' }}>Transparent overlay:</span>
+                <span style={{ color: 'rgba(0,0,0,0.5)' }}>Transparent overlay:</span>
                 <code style={{ color: '#a78bfa' }}>/obs-overlay</code>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: 'rgba(255,255,255,0.5)' }}>OBS dock panel:</span>
+                <span style={{ color: 'rgba(0,0,0,0.5)' }}>OBS dock panel:</span>
                 <code style={{ color: '#a78bfa' }}>/obs-dock</code>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: 'rgba(255,255,255,0.5)' }}>Admin controls:</span>
+                <span style={{ color: 'rgba(0,0,0,0.5)' }}>Admin controls:</span>
                 <code style={{ color: '#60a5fa' }}>/live-admin</code>
               </div>
             </div>
@@ -572,12 +578,34 @@ export default function StreamingTab({ onClose }: StreamingTabProps) {
             Show Bid Overlay (bottom right corner)
           </label>
 
+          <label className="admin-panel__checkbox-label">
+            <input
+              type="checkbox"
+              checked={ownerOverlayEnabled}
+              onChange={async () => {
+                await featureFlagsService.toggleFeature('owner-overlay-in-break', !ownerOverlayEnabled);
+              }}
+            />
+            Show Owner Images in Break Overlay
+          </label>
+
+          <label className="admin-panel__checkbox-label">
+            <input
+              type="checkbox"
+              checked={isEnabled('super-admin-bidding')}
+              onChange={async () => {
+                await featureFlagsService.toggleFeature('super-admin-bidding', !isEnabled('super-admin-bidding'));
+              }}
+            />
+            Super Admin Bidding (control all teams without team login)
+          </label>
+
           <div>
             <label
               style={{
                 display: 'block',
                 fontSize: '0.875rem',
-                color: 'rgba(255, 255, 255, 0.7)',
+                color: 'rgba(0, 0, 0, 0.7)',
                 marginBottom: '0.5rem',
               }}
             >
@@ -609,14 +637,14 @@ export default function StreamingTab({ onClose }: StreamingTabProps) {
             borderRadius: '0.5rem',
           }}
         >
-          <p style={{ margin: 0, fontSize: '0.875rem', color: 'rgba(255, 255, 255, 0.7)' }}>
-            Your plan supports up to <strong style={{ color: '#fff' }}>{maxCameras} cameras</strong>.
+          <p style={{ margin: 0, fontSize: '0.875rem', color: 'rgba(0, 0, 0, 0.7)' }}>
+            Your plan supports up to <strong style={{ color: '#000' }}>{maxCameras} cameras</strong>.
           </p>
           <p
             style={{
               margin: '0.5rem 0 0',
               fontSize: '0.75rem',
-              color: 'rgba(255, 255, 255, 0.5)',
+              color: 'rgba(0, 0, 0, 0.5)',
             }}
           >
             Use keyboard shortcuts 1-4 to switch between cameras during broadcast.
