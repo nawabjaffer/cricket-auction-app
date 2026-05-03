@@ -35,6 +35,7 @@ export function BreakOverlay({
   const [activeSponsorIndex, setActiveSponsorIndex] = useState(0);
   const videoRef = useRef<HTMLVideoElement>(null);
   const endsAtRef = useRef<number>(0);
+  const sponsorRotationRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Reset + start the countdown the instant the overlay becomes visible.
   // We use a deadline-based clock so the timer is robust against tab throttling
@@ -74,16 +75,35 @@ export function BreakOverlay({
     [sponsors],
   );
 
-  // Rotate center content
+  // Rotate center content — robust timer that never stalls
   useEffect(() => {
     if (!isVisible || centerSponsors.length <= 1) return;
     const current = centerSponsors[activeSponsorIndex];
     if (current?.videoUrl) return; // video controls its own rotation via onEnded
-    const timer = setTimeout(() => {
+
+    // Clear any stale timer
+    if (sponsorRotationRef.current) clearTimeout(sponsorRotationRef.current);
+
+    sponsorRotationRef.current = setTimeout(() => {
       setActiveSponsorIndex((prev) => (prev + 1) % centerSponsors.length);
     }, sponsorDisplayDuration * 1000);
-    return () => clearTimeout(timer);
+
+    return () => {
+      if (sponsorRotationRef.current) {
+        clearTimeout(sponsorRotationRef.current);
+        sponsorRotationRef.current = null;
+      }
+    };
   }, [isVisible, activeSponsorIndex, centerSponsors, sponsorDisplayDuration]);
+
+  // Ensure video plays when sponsor cycles to a video entry
+  useEffect(() => {
+    const current = centerSponsors[activeSponsorIndex];
+    if (current?.videoUrl && videoRef.current) {
+      videoRef.current.currentTime = 0;
+      videoRef.current.play().catch(() => {});
+    }
+  }, [activeSponsorIndex, centerSponsors]);
 
   const handleVideoEnded = useCallback(() => {
     if (centerSponsors.length > 1) {
@@ -91,7 +111,15 @@ export function BreakOverlay({
     }
   }, [centerSponsors.length]);
 
-  // ESC / B to close, N to next sponsor
+  const cycleSponsor = useCallback((delta: number) => {
+    if (centerSponsors.length <= 1) return;
+    setActiveSponsorIndex((prev) => {
+      const len = centerSponsors.length;
+      return (prev + delta + len) % len;
+    });
+  }, [centerSponsors.length]);
+
+  // ESC / B to close, N/Right to next sponsor, P/Left to previous sponsor
   useEffect(() => {
     if (!isVisible) return;
     const handleKey = (e: KeyboardEvent) => {
@@ -99,14 +127,18 @@ export function BreakOverlay({
         e.preventDefault();
         onClose();
       }
-      if ((e.key === 'n' || e.key === 'N') && centerSponsors.length > 1) {
+      if (e.key === 'n' || e.key === 'N' || e.key === 'ArrowRight') {
         e.preventDefault();
-        setActiveSponsorIndex((prev) => (prev + 1) % centerSponsors.length);
+        cycleSponsor(1);
+      }
+      if (e.key === 'p' || e.key === 'P' || e.key === 'ArrowLeft') {
+        e.preventDefault();
+        cycleSponsor(-1);
       }
     };
     globalThis.addEventListener('keydown', handleKey);
     return () => globalThis.removeEventListener('keydown', handleKey);
-  }, [isVisible, onClose, centerSponsors.length]);
+  }, [isVisible, onClose, cycleSponsor]);
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);

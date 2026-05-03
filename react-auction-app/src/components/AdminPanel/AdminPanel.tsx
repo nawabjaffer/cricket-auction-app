@@ -7,13 +7,14 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 import { IoClose, IoSave, IoRefresh, IoDownload, IoVideocam, IoAdd, IoTrash, IoArrowUp, IoArrowDown, IoSearch, IoStatsChart, IoCloudUpload } from 'react-icons/io5';
-import { auctionPersistence, type AdminSettings, type SponsorRecord, type SpecialCategory } from '../../services/auctionPersistence';
+import { auctionPersistence, type AdminSettings, type SponsorRecord, type SpecialCategory, type BidIncrementRange } from '../../services/auctionPersistence';
 import { realtimeSync } from '../../services/realtimeSync';
 import { googleSheetsService, imagePreloaderService, resolveMediaToStorage, uploadFileToStorage } from '../../services';
 import AdminImageBulkUpload from './AdminImageBulkUpload';
 import { ThemeSettingsExtended } from './ThemeSettingsExtended';
 import '../../components/AdminPanel/ThemeSettingsExtended.css';
 import { useAuctionStore } from '../../store/auctionStore';
+import { activeConfig } from '../../config';
 import { exportSoldPlayers, downloadPlayersTemplate, downloadScoresTemplate } from '../../utils/exportData';
 import FeatureFlagsTab from './FeatureFlagsTab';
 import StreamingTab from './StreamingTab';
@@ -129,8 +130,11 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
   // Easy login mode for /connect-bidding — true = tap team card, false = username/password
   const [easyLoginMode, setEasyLoginMode] = useState(true);
 
+  // Bid increment ranges
+  const [bidIncrementRanges, setBidIncrementRanges] = useState<BidIncrementRange[]>([]);
+
   // Store
-  const { teams, setTeams, soldPlayers, originalPlayers, setAdminPlayerOverrides, reconcilePlayerPools } = useAuctionStore();
+  const { teams, setTeams, soldPlayers, setSoldPlayers, originalPlayers, setAdminPlayerOverrides, reconcilePlayerPools } = useAuctionStore();
   const [editingTeams, setEditingTeams] = useState<Team[]>([]);
   const [editingSponsors, setEditingSponsors] = useState<SponsorRecord[]>([]);
   const [teamLogoSources, setTeamLogoSources] = useState<Record<string, LogoSourceMode>>({});
@@ -177,6 +181,10 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
   const [iconPlayerSearch, setIconPlayerSearch] = useState('');
   const [showIconPlayerPicker, setShowIconPlayerPicker] = useState(false);
   const iconPickerRef = useRef<HTMLDivElement>(null);
+
+  // Sold player edit state
+  const [editingSoldPlayerId, setEditingSoldPlayerId] = useState<string | null>(null);
+  const [soldPlayerDraft, setSoldPlayerDraft] = useState<{ teamId: string; teamName: string; soldAmount: number } | null>(null);
 
   const showUploadFeedback = (message: string, type: 'success' | 'error' = 'success') => {
     setUploadFeedback({ message, type });
@@ -302,6 +310,10 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
             setAuctionRoleOrder(settings.auctionRoleOrder);
           }
           setEasyLoginMode(settings.easyLoginMode !== false); // default true
+          if (settings.bidIncrementRanges?.length) {
+            setBidIncrementRanges(settings.bidIncrementRanges);
+            useAuctionStore.getState().setBidIncrementRanges(settings.bidIncrementRanges);
+          }
         }
       } catch (error) {
         console.error('[AdminPanel] Failed to load settings:', error);
@@ -395,6 +407,7 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
         updatedAt: Date.now(),
         auctionRoleOrder,
         easyLoginMode,
+        bidIncrementRanges: bidIncrementRanges.length > 0 ? bidIncrementRanges : undefined,
         // Merge in extended settings (player stats, categories, budget, breaks, etc.)
         ...extendedSettingsRef.current,
       };
@@ -411,6 +424,7 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
       document.documentElement.style.setProperty('--color-secondary', secondaryColor);
       document.documentElement.style.setProperty('--color-accent', accentColor);
       useAuctionStore.getState().setMaxUnsoldRounds(maxUnsoldRounds);
+      useAuctionStore.getState().setBidIncrementRanges(bidIncrementRanges);
       useAuctionStore.getState().setAuctionRoleOrder(auctionRoleOrder);
 
       setSaveStatus('success');
@@ -515,6 +529,113 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
     if (!confirmed) return;
 
     setEditingPlayers((current) => current.filter((player) => player.id !== playerId));
+  };
+
+  const handleDeleteAllPlayers = async () => {
+    if (editingPlayers.length === 0) return;
+    const confirmed = globalThis.confirm(
+      `Delete ALL ${editingPlayers.length} players? They will need to be re-imported via bulk import.`
+    );
+    if (!confirmed) return;
+
+    try {
+      setIsSaving(true);
+      await auctionPersistence.clearAdminPlayers();
+      setEditingPlayers([]);
+      setAdminPlayerOverrides([]);
+      showUploadFeedback('All players deleted. Re-import when ready.');
+    } catch (err) {
+      showUploadFeedback(`Failed to delete players: ${(err as Error).message}`, 'error');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleEditSoldPlayer = (player: SoldPlayer) => {
+    setEditingSoldPlayerId(player.id);
+    setSoldPlayerDraft({ teamId: player.teamId, teamName: player.teamName, soldAmount: player.soldAmount });
+  };
+
+  const handleSaveSoldPlayerEdit = async () => {
+    if (!editingSoldPlayerId || !soldPlayerDraft) return;
+    const player = soldPlayers.find(p => p.id === editingSoldPlayerId);
+    if (!player) return;
+
+    try {
+      setIsSaving(true);
+      const updatedPlayer: SoldPlayer = {
+        ...player,
+        teamId: soldPlayerDraft.teamId,
+        teamName: soldPlayerDraft.teamName,
+        soldAmount: soldPlayerDraft.soldAmount,
+      };
+
+      // Update the soldPlayers list in store
+      const updatedList = soldPlayers.map(p => p.id === editingSoldPlayerId ? updatedPlayer : p);
+      setSoldPlayers(updatedList);
+
+      // Persist to Firebase
+      await auctionPersistence.saveSoldPlayer(updatedPlayer, soldPlayerDraft.teamName);
+
+      // Update team budgets if team or amount changed
+      if (player.teamId !== soldPlayerDraft.teamId || player.soldAmount !== soldPlayerDraft.soldAmount) {
+        const updatedTeams = teams.map(t => {
+          if (t.id === player.teamId && player.teamId !== soldPlayerDraft.teamId) {
+            // Old team: refund the player
+            return { ...t, remainingPurse: t.remainingPurse + player.soldAmount, playersBought: Math.max(0, t.playersBought - 1) };
+          }
+          if (t.id === soldPlayerDraft.teamId && player.teamId !== soldPlayerDraft.teamId) {
+            // New team: deduct the amount
+            return { ...t, remainingPurse: t.remainingPurse - soldPlayerDraft.soldAmount, playersBought: t.playersBought + 1 };
+          }
+          if (t.id === soldPlayerDraft.teamId && player.teamId === soldPlayerDraft.teamId && player.soldAmount !== soldPlayerDraft.soldAmount) {
+            // Same team but amount changed: adjust purse
+            return { ...t, remainingPurse: t.remainingPurse + player.soldAmount - soldPlayerDraft.soldAmount };
+          }
+          return t;
+        });
+        setTeams(updatedTeams);
+        await auctionPersistence.saveTeams(updatedTeams);
+      }
+
+      setEditingSoldPlayerId(null);
+      setSoldPlayerDraft(null);
+      showUploadFeedback(`Updated ${player.name} successfully.`);
+    } catch (err) {
+      showUploadFeedback(`Failed to update: ${(err as Error).message}`, 'error');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleUndoSoldPlayer = async (player: SoldPlayer) => {
+    const confirmed = globalThis.confirm(`Undo sale of ${player.name} (₹${player.soldAmount}L) from ${player.teamName}? This will return them to the available pool.`);
+    if (!confirmed) return;
+
+    try {
+      setIsSaving(true);
+
+      // Remove from sold players
+      const updatedSold = soldPlayers.filter(p => p.id !== player.id);
+      setSoldPlayers(updatedSold);
+      await auctionPersistence.removeSoldPlayer(player.id);
+
+      // Refund team budget
+      const updatedTeams = teams.map(t => {
+        if (t.id === player.teamId) {
+          return { ...t, remainingPurse: t.remainingPurse + player.soldAmount, playersBought: Math.max(0, t.playersBought - 1) };
+        }
+        return t;
+      });
+      setTeams(updatedTeams);
+      await auctionPersistence.saveTeams(updatedTeams);
+
+      showUploadFeedback(`Undid sale of ${player.name}. Player returned to available pool.`);
+    } catch (err) {
+      showUploadFeedback(`Failed to undo sale: ${(err as Error).message}`, 'error');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const openTeamEditor = (teamId: string) => {
@@ -1453,49 +1574,6 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
     }
   };
 
-  const handleResetAuction = async () => {
-    const confirmed = globalThis.confirm(
-      'Are you sure you want to reset the auction? This will clear all sold and unsold players and restore the initial snapshot.'
-    );
-
-    if (!confirmed) return;
-
-    try {
-      setIsSaving(true);
-
-      // Clear auction data
-      await auctionPersistence.clearAuctionData();
-
-      // Get initial snapshot
-      const snapshot = await auctionPersistence.getInitialSnapshot();
-      if (snapshot) {
-        // Restore from snapshot
-        useAuctionStore.getState().setPlayers(snapshot.players);
-        useAuctionStore.getState().setTeams(snapshot.teams);
-        useAuctionStore.getState().setSoldPlayers([]);
-        useAuctionStore.getState().setUnsoldPlayers([]);
-        useAuctionStore.getState().resetAuction();
-
-        setSaveStatus('success');
-        setTimeout(() => {
-          setSaveStatus('idle');
-          onClose();
-          globalThis.location.reload();
-        }, 2000);
-      } else {
-        console.error('[AdminPanel] No initial snapshot found');
-        setSaveStatus('error');
-        setTimeout(() => setSaveStatus('idle'), 2000);
-      }
-    } catch (error) {
-      console.error('[AdminPanel] Failed to reset auction:', error);
-      setSaveStatus('error');
-      setTimeout(() => setSaveStatus('idle'), 2000);
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
   // Soft reset — clears all auction progress but keeps current player data (no sheets reload)
   const handleSoftResetAuction = async () => {
     const confirmed = globalThis.confirm(
@@ -1767,6 +1845,69 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
                       </div>
                     )}
                   </div>
+
+                  <h3 style={{ marginTop: '2rem' }}>Bid Increment Ranges</h3>
+                  <small style={{ color: '#6b7280', display: 'block', marginBottom: '0.75rem' }}>
+                    Configure bid increments based on current bid amount. If empty, default increment ({activeConfig.auction.bidIncrements.default}L) is used.
+                  </small>
+                  {bidIncrementRanges.map((range, index) => (
+                    <div key={index} style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginBottom: '0.5rem' }}>
+                      <input
+                        type="number"
+                        value={range.minAmount}
+                        onChange={(e) => {
+                          const updated = [...bidIncrementRanges];
+                          updated[index] = { ...updated[index], minAmount: Number(e.target.value) };
+                          setBidIncrementRanges(updated);
+                        }}
+                        placeholder="Min"
+                        style={{ width: '5rem' }}
+                        step={0.5}
+                      />
+                      <span>–</span>
+                      <input
+                        type="number"
+                        value={range.maxAmount}
+                        onChange={(e) => {
+                          const updated = [...bidIncrementRanges];
+                          updated[index] = { ...updated[index], maxAmount: Number(e.target.value) };
+                          setBidIncrementRanges(updated);
+                        }}
+                        placeholder="Max"
+                        style={{ width: '5rem' }}
+                        step={0.5}
+                      />
+                      <span>→ ₹</span>
+                      <input
+                        type="number"
+                        value={range.increment}
+                        onChange={(e) => {
+                          const updated = [...bidIncrementRanges];
+                          updated[index] = { ...updated[index], increment: Number(e.target.value) };
+                          setBidIncrementRanges(updated);
+                        }}
+                        placeholder="Increment"
+                        style={{ width: '5rem' }}
+                        step={0.5}
+                        min={0.5}
+                      />
+                      <span>L</span>
+                      <button
+                        type="button"
+                        className="admin-btn admin-btn-danger admin-btn-sm"
+                        onClick={() => setBidIncrementRanges(bidIncrementRanges.filter((_, i) => i !== index))}
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ))}
+                  <button
+                    type="button"
+                    className="admin-btn admin-btn-secondary admin-btn-sm"
+                    onClick={() => setBidIncrementRanges([...bidIncrementRanges, { minAmount: 0, maxAmount: 100, increment: 0.5 }])}
+                  >
+                    + Add Range
+                  </button>
 
                   <h3 style={{ marginTop: '2rem' }}>Auction Role Order</h3>
                   <small style={{ color: '#6b7280', display: 'block', marginBottom: '0.75rem' }}>
@@ -2346,6 +2487,14 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
                     >
                       <IoDownload size={18} /> Scores Template
                     </button>
+                    <button
+                      className="admin-btn admin-btn-danger"
+                      onClick={handleDeleteAllPlayers}
+                      disabled={isSaving || editingPlayers.length === 0}
+                      title="Delete all players — will need to be re-imported via bulk import"
+                    >
+                      <IoTrash size={18} /> Delete All Players
+                    </button>
                     <label className="admin-page-size">
                       <span>Rows per page</span>
                       <select
@@ -2469,6 +2618,7 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
                             <th>Team</th>
                             <th>Sold (₹L)</th>
                             <th>Base (₹L)</th>
+                            <th>Actions</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -2481,9 +2631,45 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
                                 {formatRoleDisplay(p.role)}
                               </td>
                               <td>{p.age ?? 'N/A'}</td>
-                              <td>{p.teamName}</td>
-                              <td className="admin-export-amount">₹{p.soldAmount}</td>
+                              <td>
+                                {editingSoldPlayerId === p.id ? (
+                                  <select
+                                    value={soldPlayerDraft?.teamId || ''}
+                                    onChange={(e) => {
+                                      const t = teams.find(tm => tm.id === e.target.value);
+                                      if (t) setSoldPlayerDraft(prev => prev ? { ...prev, teamId: t.id, teamName: t.name } : prev);
+                                    }}
+                                  >
+                                    {teams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                                  </select>
+                                ) : p.teamName}
+                              </td>
+                              <td className="admin-export-amount">
+                                {editingSoldPlayerId === p.id ? (
+                                  <input
+                                    type="number"
+                                    value={soldPlayerDraft?.soldAmount ?? 0}
+                                    onChange={(e) => setSoldPlayerDraft(prev => prev ? { ...prev, soldAmount: Number(e.target.value) } : prev)}
+                                    style={{ width: '5rem' }}
+                                    step={0.5}
+                                    min={0}
+                                  />
+                                ) : `₹${p.soldAmount}`}
+                              </td>
                               <td>₹{p.basePrice}</td>
+                              <td>
+                                {editingSoldPlayerId === p.id ? (
+                                  <>
+                                    <button className="admin-btn admin-btn-success admin-btn-sm" onClick={handleSaveSoldPlayerEdit} disabled={isSaving}>Save</button>
+                                    <button className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => { setEditingSoldPlayerId(null); setSoldPlayerDraft(null); }} style={{ marginLeft: 4 }}>Cancel</button>
+                                  </>
+                                ) : (
+                                  <>
+                                    <button className="admin-btn admin-btn-warning admin-btn-sm" onClick={() => handleEditSoldPlayer(p)} disabled={isSaving} title="Edit team/amount">Edit</button>
+                                    <button className="admin-btn admin-btn-danger admin-btn-sm" onClick={() => handleUndoSoldPlayer(p)} disabled={isSaving} title="Undo sale" style={{ marginLeft: 4 }}>Undo</button>
+                                  </>
+                                )}
+                              </td>
                             </tr>
                           ))}
                         </tbody>

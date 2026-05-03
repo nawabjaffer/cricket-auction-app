@@ -160,6 +160,16 @@ export function TeamSquadView({
       });
   }, [soldPlayers, activeTeam, allPlayers]);
 
+  // Eagerly preload all player images into browser cache for instant display
+  useEffect(() => {
+    for (const player of teamPlayers) {
+      if (player.imageUrl) {
+        const img = new Image();
+        img.src = player.imageUrl;
+      }
+    }
+  }, [teamPlayers]);
+
   const playerPlaceholderImage = '/assets/squadPlaceholder.png';
 
   const teamLogoForDisplay = teamLogoFailed
@@ -404,7 +414,7 @@ export function TeamSquadView({
                       className="tsv-player-item"
                       initial={{ scale: 0.9, opacity: 0 }}
                       animate={{ scale: 1, opacity: 1 }}
-                      transition={{ duration: 0.3, delay: 0.35 + index * 0.03 }}
+                      transition={{ duration: 0.25, delay: Math.min(0.3 + index * 0.015, 0.6) }}
                     >
                       <div className="tsv-player-card">
                         {teamLogoForDisplay && (
@@ -415,22 +425,25 @@ export function TeamSquadView({
                             onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
                           />
                         )}
-                        <PlayerImage
-                          imageUrl={slot.kind === 'player' ? slot.player.imageUrl : playerPlaceholderImage}
-                          playerName={slot.kind === 'player' ? slot.player.name : 'Placeholder player'}
-                          size="full"
+                        <img
+                          src={slot.kind === 'player' ? (slot.player.imageUrl || playerPlaceholderImage) : playerPlaceholderImage}
+                          alt={slot.kind === 'player' ? slot.player.name : 'Placeholder player'}
                           className="tsv-player-image"
-                          fallbackSrc={playerPlaceholderImage}
+                          loading="eager"
+                          onError={(e) => { (e.target as HTMLImageElement).src = playerPlaceholderImage; }}
                         />
                         <div className="tsv-player-overlay" />
                         <div className="tsv-player-footer">
                           <span className="tsv-player-role">{slot.kind === 'player' ? slot.player.role : 'Open Slot'}</span>
                           <span className="tsv-player-name">{slot.kind === 'player' ? slot.player.name : `Slot ${index + 1}`}</span>
-                          <span className="tsv-player-meta">
-                            {playerMetaText}
-                            <span className="tsv-player-meta-divider" />
-                            {slot.kind === 'player' ? `₹${slot.player.soldAmount.toFixed(2)}L` : 'Pending'}
-                          </span>
+                          <div className="tsv-player-meta-row">
+                            <span className="tsv-player-meta">
+                              {playerMetaText}
+                            </span>
+                            <span className="tsv-player-amount">
+                              {slot.kind === 'player' ? `₹${slot.player.soldAmount}L` : '—'}
+                            </span>
+                          </div>
                         </div>
                       </div>
                     </motion.div>

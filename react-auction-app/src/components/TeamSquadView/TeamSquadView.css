@@ -272,7 +272,7 @@
 /* Players Grid - 5 Column Layout for 15 players */
 .tsv-players-grid {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(8, minmax(0, 1fr));
   gap: 0.75rem;
   width: 100%;
   padding: 0.25rem;
@@ -401,11 +401,9 @@
 }
 
 .tsv-player-meta {
-  width: fit-content;
   display: inline-flex;
   gap: 0.35rem;
   align-items: center;
-  align-self: flex-start;
   padding: 0.2rem 0.5rem;
   border-radius: 999px;
   background: rgba(0, 0, 0, 0.55);
@@ -414,6 +412,26 @@
   font-size: 0.6rem;
   font-weight: 600;
   letter-spacing: 0.05em;
+}
+
+.tsv-player-meta-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.tsv-player-amount {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.2rem 0.5rem;
+  border-radius: 999px;
+  background: linear-gradient(135deg, rgba(251, 191, 36, 0.25), rgba(245, 158, 11, 0.35));
+  border: 1px solid rgba(251, 191, 36, 0.4);
+  color: #fbbf24;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
 }
 
 .tsv-player-meta-divider {

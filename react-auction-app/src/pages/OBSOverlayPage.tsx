@@ -250,6 +250,14 @@ export default function OBSOverlayPage({ browserMode = false }: { readonly brows
               setOverlaySnapshot({ player: s.currentPlayer, team: s.selectedTeam ?? null, bid: s.currentBid });
             }
             setActiveOverlay(ov);
+            // Safety timeout: force-clear if animation hangs
+            setTimeout(() => {
+              if (animatingRef.current) {
+                animatingRef.current = false;
+                setActiveOverlay(null);
+                setOverlaySnapshot(null);
+              }
+            }, 8000);
           }
         } else if (!ov) {
           // Desktop cleared the overlay — reset state

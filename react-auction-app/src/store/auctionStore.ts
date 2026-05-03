@@ -131,6 +131,9 @@ interface AuctionStore {
   // Auction role ordering
   auctionRoleOrder: AuctionRoleCategory[];
 
+  // Bid increment ranges (from admin settings)
+  bidIncrementRanges: { minAmount: number; maxAmount: number; increment: number }[];
+
   // Organizer branding
   organizerLogo: string;
   organizerName: string;
@@ -145,6 +148,7 @@ interface AuctionStore {
   setTeams: (teams: Team[]) => void;
   setSoldPlayers: (players: SoldPlayer[]) => void;
   setUnsoldPlayers: (players: UnsoldPlayer[]) => void;
+  setBidIncrementRanges: (ranges: { minAmount: number; maxAmount: number; increment: number }[]) => void;
   reconcilePlayerPools: () => void;
   
   // Player selection
@@ -244,6 +248,7 @@ export const useAuctionStore = create<AuctionStore>()(
         isRound2Active: false,
         maxUnsoldRounds: 1,
         auctionRoleOrder: [...DEFAULT_AUCTION_ROLE_ORDER],
+        bidIncrementRanges: [],
         organizerLogo: _cachedOrganizerLogo,
         organizerName: _cachedOrganizerName,
         auctionState: initialAuctionState,
@@ -315,6 +320,8 @@ export const useAuctionStore = create<AuctionStore>()(
         setSoldPlayers: (players) => set({ soldPlayers: players }),
         
         setUnsoldPlayers: (players) => set({ unsoldPlayers: players }),
+
+        setBidIncrementRanges: (ranges) => set({ bidIncrementRanges: ranges }),
 
         reconcilePlayerPools: () => {
           const { availablePlayers, soldPlayers, unsoldPlayers, currentPlayer, teams } = get();
@@ -644,9 +651,16 @@ export const useAuctionStore = create<AuctionStore>()(
             return false;
           }
 
-          const increment = activeConfig.auction.bidIncrements.default;
+          // First bid: confirm the base price without increment
+          const isFirstBid = bidHistory.length === 0;
+          const ranges = get().bidIncrementRanges;
+          let increment = activeConfig.auction.bidIncrements.default;
+          if (ranges.length > 0) {
+            const matched = ranges.find(r => currentBid >= r.minAmount && currentBid < r.maxAmount);
+            if (matched) increment = matched.increment;
+          }
           const safeSteps = Math.max(1, Math.floor(steps));
-          const newBid = currentBid + increment * safeSteps;
+          const newBid = isFirstBid ? currentBid : currentBid + increment * safeSteps;
 
           const rulesService = new AuctionRulesService();
           const maxBid = rulesService.calculateMaxBid(team);
@@ -697,7 +711,12 @@ export const useAuctionStore = create<AuctionStore>()(
           }
 
           const { currentBid } = get();
-          const increment = activeConfig.auction.bidIncrements.default;
+          const ranges = get().bidIncrementRanges;
+          let increment = activeConfig.auction.bidIncrements.default;
+          if (ranges.length > 0) {
+            const matched = ranges.find(r => currentBid >= r.minAmount && currentBid < r.maxAmount);
+            if (matched) increment = matched.increment;
+          }
           const newBid = currentBid + increment;
 
           set({

@@ -140,6 +140,19 @@ function AuctionApp({ mirrorMode = false }: { mirrorMode?: boolean }) {
   // Break overlay state
   const [showBreakOverlay, setShowBreakOverlay] = useState(false);
   const breakDurationSeconds = 120; // 2 minutes default
+  const breakStartedAtRef = useRef<number | null>(null);
+
+  // Capture a stable start timestamp for the current break session so
+  // broadcast refreshes don't reset timers on mirror/OBS clients.
+  useEffect(() => {
+    if (showBreakOverlay) {
+      if (!breakStartedAtRef.current) {
+        breakStartedAtRef.current = Date.now();
+      }
+      return;
+    }
+    breakStartedAtRef.current = null;
+  }, [showBreakOverlay]);
   
   // Top 3 Buys carousel state
   const [showTopBuysOverlay, setShowTopBuysOverlay] = useState(false);
@@ -339,10 +352,19 @@ function AuctionApp({ mirrorMode = false }: { mirrorMode?: boolean }) {
     else if (showTeamStandingsOverlay) mode = 'teamStandings';
     else if (showTeamOverlay) mode = 'standings';
 
+    if (mode === 'break' && !breakStartedAtRef.current) {
+      breakStartedAtRef.current = Date.now();
+    }
+
     const payload = {
       mode,
       lastUpdate: Date.now(),
-      ...(mode === 'break' ? { breakDuration: breakDurationSeconds, breakStartedAt: Date.now() } : {}),
+      ...(mode === 'break'
+        ? {
+            breakDuration: breakDurationSeconds,
+            breakStartedAt: breakStartedAtRef.current ?? Date.now(),
+          }
+        : {}),
       ...(mode === 'teamSquad' ? { teamSquadTeamId: selectedTeamForSquad || null } : {}),
       ...(mode === 'standings' ? { selectedTeamId: selectedTeam?.id || allTeams[0]?.id || null } : {}),
       ...(mode === 'topPicks' ? { topBuysIndex } : {}),
@@ -909,7 +931,7 @@ function AuctionApp({ mirrorMode = false }: { mirrorMode?: boolean }) {
 
   // Loading state
   if (isLoading) {
-    return <LoadingScreen />;
+    return <LoadingScreen label={isMirrorMode ? 'Connecting to live auction...' : undefined} />;
   }
 
   // Error state
@@ -919,7 +941,7 @@ function AuctionApp({ mirrorMode = false }: { mirrorMode?: boolean }) {
 
   // Block main UI until media is warmed in local cache for smooth live auction
   if (!bootPreload.done) {
-    return <LoadingScreen progress={bootPreload.progress} loaded={bootPreload.loaded} total={bootPreload.total} />;
+    return <LoadingScreen progress={bootPreload.progress} loaded={bootPreload.loaded} total={bootPreload.total} label={isMirrorMode ? 'Preloading media for mirror...' : undefined} />;
   }
 
   return (
@@ -2029,7 +2051,7 @@ function AuctionApp({ mirrorMode = false }: { mirrorMode?: boolean }) {
 }
 
 // Loading Screen — cinematic broadcast-style transition
-function LoadingScreen({ progress, loaded, total }: { readonly progress?: number; readonly loaded?: number; readonly total?: number } = {}) {
+function LoadingScreen({ progress, loaded, total, label }: { readonly progress?: number; readonly loaded?: number; readonly total?: number; readonly label?: string } = {}) {
   const hasProgress = typeof progress === 'number' && typeof total === 'number' && total > 0;
   const pct = hasProgress ? Math.min(100, Math.round((progress as number) * 100)) : 0;
 
@@ -2121,8 +2143,13 @@ function LoadingScreen({ progress, loaded, total }: { readonly progress?: number
               <div style={{ width: `${pct}%`, height: '100%', background: 'linear-gradient(90deg,#fbbf24,#f97316)', transition: 'width 180ms ease-out' }} />
             </div>
             <div style={{ marginTop: 10, fontSize: 13, letterSpacing: 2 }}>
-              PRELOADING MEDIA · {loaded}/{total}
+              {label || `PRELOADING MEDIA · ${loaded}/${total}`}
             </div>
+          </div>
+        )}
+        {!hasProgress && label && (
+          <div style={{ marginTop: 24, textAlign: 'center', color: 'rgba(255,255,255,0.7)', fontSize: 13, letterSpacing: 2 }}>
+            {label}
           </div>
         )}
       </motion.div>

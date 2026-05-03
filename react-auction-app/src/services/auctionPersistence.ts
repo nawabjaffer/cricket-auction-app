@@ -274,6 +274,14 @@ export interface AdminSettings {
   maxIconicPlayers?: number;
   // Default country code for WhatsApp links (e.g. '91' for India)
   defaultCountryCode?: string;
+  // Configurable bid increment ranges (e.g. 0-500 → 50, 500-1000 → 100)
+  bidIncrementRanges?: BidIncrementRange[];
+}
+
+export interface BidIncrementRange {
+  minAmount: number;
+  maxAmount: number;
+  increment: number;
 }
 
 class AuctionPersistenceService {
@@ -322,6 +330,12 @@ class AuctionPersistenceService {
 
     const data = snapshot.val();
     return Object.values(data) as SoldPlayerRecord[];
+  }
+
+  async removeSoldPlayer(playerId: string): Promise<void> {
+    if (!this.db) throw new Error('Database not initialized');
+    const soldPlayerRef = ref(this.db, `${DB_PATHS.SOLD_PLAYERS}/${playerId}`);
+    await set(soldPlayerRef, null);
   }
 
   // ==================== UNSOLD PLAYERS ====================
