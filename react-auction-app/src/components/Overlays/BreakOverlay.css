@@ -538,9 +538,9 @@
 }
 
 .break-ov__owners--side {
-  left: auto;
-  right: 0;
-  top: 50%;
+  right: auto;
+  left: 0;
+  top: 32%;
   bottom: auto;
   transform: translateY(-50%);
   width: auto;
@@ -564,17 +564,13 @@
 }
 
 .break-ov__owner-avatar {
-  width: 56px;
-  height: 56px;
-  border-radius: 50%;
+  width: 480px;
+  height: 640px;
   overflow: hidden;
-  border: 2px solid var(--owner-team-color, #3b82f6);
-  box-shadow: 0 0 16px rgba(0, 0, 0, 0.3), 0 0 6px var(--owner-team-color, #3b82f6);
   flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(255, 255, 255, 0.05);
 }
 
 .break-ov__owner-avatar-img {
@@ -753,6 +749,289 @@
   font-family: monospace;
 }
 
+/* ═══════════ CENTER WITH SIDE PANEL ═══════════ */
+.break-ov__center--with-side {
+  margin-right: 320px;
+}
+
+/* ═══════════ OWNER SHOWCASE (center gallery mode) ═══════════ */
+.break-ov__owners-showcase {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.5rem;
+  width: 100%;
+  max-width: 1100px;
+  padding: 1rem 2rem;
+}
+
+.break-ov__owners-showcase-title {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.85);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.break-ov__owners-showcase-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 1.25rem;
+  width: 100%;
+  max-height: 65vh;
+  overflow-y: auto;
+  padding: 0.5rem;
+}
+
+.break-ov__owner-showcase-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 1.5rem 1rem 1.25rem;
+  background: linear-gradient(
+    160deg,
+    rgba(255, 255, 255, 0.06) 0%,
+    rgba(255, 255, 255, 0.01) 100%
+  );
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 1.25rem;
+  backdrop-filter: blur(20px);
+  overflow: hidden;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.break-ov__owner-showcase-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4), 0 0 20px var(--owner-team-color, rgba(59, 130, 246, 0.2));
+}
+
+.break-ov__owner-showcase-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, transparent, var(--owner-team-color, #3b82f6), transparent);
+}
+
+/* Brand watermark in showcase card */
+.break-ov__owner-showcase-brand-bg {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  opacity: 0.04;
+}
+
+.break-ov__owner-showcase-brand-bg img {
+  width: 85%;
+  height: 85%;
+  object-fit: contain;
+}
+
+/* Owner photo (showcase) */
+.break-ov__owner-showcase-photo {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  overflow: hidden;
+  border: 3px solid var(--owner-team-color, #3b82f6);
+  box-shadow:
+    0 0 24px rgba(0, 0, 0, 0.5),
+    0 0 12px var(--owner-team-color, rgba(59, 130, 246, 0.4));
+  margin-bottom: 0.75rem;
+  background: rgba(0, 0, 0, 0.3);
+  flex-shrink: 0;
+}
+
+.break-ov__owner-showcase-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.break-ov__owner-showcase-initials {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2rem;
+  font-weight: 800;
+  color: rgba(255, 255, 255, 0.5);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.break-ov__owner-showcase-team-logo {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 26px;
+  height: 26px;
+  object-fit: contain;
+  opacity: 0.7;
+  border-radius: 4px;
+}
+
+.break-ov__owner-showcase-info {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  text-align: center;
+}
+
+.break-ov__owner-showcase-name {
+  font-weight: 700;
+  font-size: 0.88rem;
+  color: #fff;
+  line-height: 1.2;
+}
+
+.break-ov__owner-showcase-team {
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+}
+
+.break-ov__owner-showcase-designation {
+  font-size: 0.62rem;
+  color: rgba(255, 255, 255, 0.45);
+  font-style: italic;
+  margin-top: 2px;
+}
+
+/* ═══════════ SIDE PANEL (improved) ═══════════ */
+.break-ov__owners-side-panel {
+  position: absolute;
+  right: 0;
+  top: 80px;
+  bottom: 140px;
+  width: 300px;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1.25rem 1rem;
+  overflow-y: auto;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.4) 0%, rgba(0, 0, 0, 0.2) 100%);
+  backdrop-filter: blur(12px);
+  border-left: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 1rem 0 0 1rem;
+}
+
+.break-ov__owners-side-title {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.4);
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.break-ov__owner-side-card {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.65rem 0.75rem;
+  border-radius: 0.75rem;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  overflow: hidden;
+  transition: background 0.2s;
+}
+
+.break-ov__owner-side-card:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+/* Brand watermark (side) */
+.break-ov__owner-side-brand-bg {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  pointer-events: none;
+  opacity: 0.04;
+  padding-right: 0.5rem;
+}
+
+.break-ov__owner-side-brand-bg img {
+  width: 50px;
+  height: 50px;
+  object-fit: contain;
+}
+
+/* Photo (side) */
+.break-ov__owner-side-photo {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  overflow: hidden;
+  border: 2px solid var(--owner-team-color, #3b82f6);
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.4), 0 0 6px var(--owner-team-color, rgba(59, 130, 246, 0.3));
+  flex-shrink: 0;
+  background: rgba(0, 0, 0, 0.3);
+}
+
+.break-ov__owner-side-photo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.break-ov__owner-side-initials {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.5);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.break-ov__owner-side-info {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  flex: 1;
+  min-width: 0;
+}
+
+.break-ov__owner-side-name {
+  font-weight: 700;
+  font-size: 0.82rem;
+  color: #fff;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.break-ov__owner-side-team {
+  font-size: 0.65rem;
+  font-weight: 600;
+  color: var(--owner-team-color, #60a5fa);
+  letter-spacing: 0.03em;
+}
+
+.break-ov__owner-side-team-badge {
+  width: 22px;
+  height: 22px;
+  object-fit: contain;
+  opacity: 0.6;
+  flex-shrink: 0;
+}
+
 /* ═══════════ RESPONSIVE ═══════════ */
 @media (max-width: 768px) {
   .break-ov__header {
@@ -778,5 +1057,18 @@
 
   .break-ov__train {
     height: 100px;
+  }
+
+  .break-ov__center--with-side {
+    margin-right: 0;
+  }
+
+  .break-ov__owners-side-panel {
+    display: none;
+  }
+
+  .break-ov__owners-showcase-grid {
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 0.75rem;
   }
 }

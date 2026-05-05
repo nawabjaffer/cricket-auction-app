@@ -6,6 +6,7 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { IoClose, IoTrophy } from 'react-icons/io5';
 import type { SoldPlayer, Team } from '../../types';
+import { useCurrencySuffix } from '../../store';
 import './TopPicksOverlay.css';
 
 interface TopBuyEntry extends SoldPlayer {
@@ -20,6 +21,7 @@ interface TopPicksOverlayProps {
 }
 
 export function TopPicksOverlay({ visible, onClose, topBuys, currentIndex }: TopPicksOverlayProps) {
+  const currencySuffix = useCurrencySuffix();
   if (!visible || topBuys.length === 0) return null;
 
   return (
@@ -95,7 +97,7 @@ export function TopPicksOverlay({ visible, onClose, topBuys, currentIndex }: Top
 
                     {/* Player info overlay at bottom */}
                     <div className="top-pick-info">
-                      <div className="top-pick-amount">₹{buy.soldAmount.toFixed(1)}L</div>
+                      <div className="top-pick-amount">₹{buy.soldAmount.toFixed(1)}{currencySuffix}</div>
                       <div className="top-pick-name">{buy.name}</div>
                       <div className="top-pick-team-name">
                         {buy.team?.logoUrl && (

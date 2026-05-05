@@ -5,7 +5,7 @@
 
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useSoldPlayers, useTeams } from '../../store';
+import { useSoldPlayers, useTeams, useCurrencySuffix } from '../../store';
 import { extractDriveFileId } from '../../utils/driveImage';
 import { formatRoleDisplay } from '../../utils/roleFormatter';
 import { getCachedStorageUrl, resolveImageAsync } from '../../services/firebaseStorageService';
@@ -22,11 +22,14 @@ const CELEBRATION_PARTICLES = Array.from({ length: 30 }, (_, i) => ({
 interface SoldOverlayProps {
   readonly isVisible: boolean;
   readonly onClose: () => void;
+  readonly titleSponsor?: { name: string; logoUrl?: string } | null;
+  readonly organizerName?: string;
 }
 
-export function SoldOverlay({ isVisible, onClose }: Readonly<SoldOverlayProps>) {
+export function SoldOverlay({ isVisible, onClose, titleSponsor, organizerName }: Readonly<SoldOverlayProps>) {
   const soldPlayers = useSoldPlayers();
   const teams = useTeams();
+  const currencySuffix = useCurrencySuffix();
   const lastSoldPlayer = soldPlayers.at(-1);
   const [imageError, setImageError] = useState(false);
 
@@ -194,7 +197,7 @@ export function SoldOverlay({ isVisible, onClose }: Readonly<SoldOverlayProps>) 
                   >
                     {lastSoldPlayer.soldAmount.toFixed(1)}
                   </motion.span>
-                  <span className="amount-unit">L</span>
+                  <span className="amount-unit">{currencySuffix}</span>
                 </div>
               </motion.div>
 
@@ -229,6 +232,19 @@ export function SoldOverlay({ isVisible, onClose }: Readonly<SoldOverlayProps>) 
             >
               Press <kbd>N</kbd> for next player
             </motion.div>
+
+            {/* Title Sponsor branding */}
+            {titleSponsor?.logoUrl && (
+              <motion.div
+                className="overlay-title-sponsor"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 1.0, duration: 0.4 }}
+              >
+                <img src={titleSponsor.logoUrl} alt={titleSponsor.name} className="overlay-sponsor-logo" />
+                {organizerName && <span className="overlay-sponsor-text">{organizerName}</span>}
+              </motion.div>
+            )}
           </motion.div>
 
           {/* ═══ Fly-to-team animation — player name plate shoots to team logo ═══ */}
@@ -253,7 +269,7 @@ export function SoldOverlay({ isVisible, onClose }: Readonly<SoldOverlayProps>) 
             )}
             <div className="sold-fly-info">
               <span className="sold-fly-name">{lastSoldPlayer.name}</span>
-              <span className="sold-fly-amount">₹{lastSoldPlayer.soldAmount.toFixed(1)}L</span>
+              <span className="sold-fly-amount">₹{lastSoldPlayer.soldAmount.toFixed(1)}{currencySuffix}</span>
             </div>
             {/* Trail particles */}
             <motion.div

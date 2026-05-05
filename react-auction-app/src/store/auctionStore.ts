@@ -134,6 +134,9 @@ interface AuctionStore {
   // Bid increment ranges (from admin settings)
   bidIncrementRanges: { minAmount: number; maxAmount: number; increment: number }[];
 
+  // Currency suffix (L = Lakhs, T = Thousands, K = K, etc.)
+  currencySuffix: string;
+
   // Organizer branding
   organizerLogo: string;
   organizerName: string;
@@ -149,6 +152,7 @@ interface AuctionStore {
   setSoldPlayers: (players: SoldPlayer[]) => void;
   setUnsoldPlayers: (players: UnsoldPlayer[]) => void;
   setBidIncrementRanges: (ranges: { minAmount: number; maxAmount: number; increment: number }[]) => void;
+  setCurrencySuffix: (suffix: string) => void;
   reconcilePlayerPools: () => void;
   
   // Player selection
@@ -249,6 +253,7 @@ export const useAuctionStore = create<AuctionStore>()(
         maxUnsoldRounds: 1,
         auctionRoleOrder: [...DEFAULT_AUCTION_ROLE_ORDER],
         bidIncrementRanges: [],
+        currencySuffix: 'L',
         organizerLogo: _cachedOrganizerLogo,
         organizerName: _cachedOrganizerName,
         auctionState: initialAuctionState,
@@ -322,6 +327,7 @@ export const useAuctionStore = create<AuctionStore>()(
         setUnsoldPlayers: (players) => set({ unsoldPlayers: players }),
 
         setBidIncrementRanges: (ranges) => set({ bidIncrementRanges: ranges }),
+        setCurrencySuffix: (suffix) => set({ currencySuffix: suffix }),
 
         reconcilePlayerPools: () => {
           const { availablePlayers, soldPlayers, unsoldPlayers, currentPlayer, teams } = get();
@@ -1300,3 +1306,4 @@ export const useCurrentRound = () => useAuctionStore((state) => state.currentRou
 export const useMaxUnsoldRounds = () => useAuctionStore((state) => state.maxUnsoldRounds);
 export const useOrganizerLogo = () => useAuctionStore((state) => state.organizerLogo);
 export const useOrganizerName = () => useAuctionStore((state) => state.organizerName);
+export const useCurrencySuffix = () => useAuctionStore((state) => state.currencySuffix);

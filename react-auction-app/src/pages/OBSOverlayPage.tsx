@@ -16,6 +16,7 @@ import { extractDriveFileId } from '../utils/driveImage';
 import SoldAnimation from '../components/Live/SoldAnimation';
 import { BreakOverlay } from '../components/Overlays/BreakOverlay';
 import { TeamStandingsOverlay } from '../components/Overlays/TeamStandingsOverlay';
+import { TopPicksOverlay } from '../components/Overlays/TopPicksOverlay';
 import type { Player, Team, PlayerRole } from '../types';
 import type { SponsorRecord, AdminSettings } from '../services/auctionPersistence';
 import { tenantPath } from '../services/tenantPath';
@@ -80,10 +81,10 @@ interface OverlayState {
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-const fmt = (n: number): string => {
+const fmtWithSuffix = (n: number, suffix: string): string => {
   const v = Number.isFinite(Number(n)) ? Number(n) : 0;
   if (v >= 10_000_000) return `₹${(v / 10_000_000).toFixed(2)} Cr`;
-  if (v >= 100_000)    return `₹${(v / 100_000).toFixed(2)}L`;
+  if (v >= 100_000)    return `₹${(v / 100_000).toFixed(2)}${suffix}`;
   return `₹${v.toLocaleString('en-IN')}`;
 };
 
@@ -209,6 +210,9 @@ export default function OBSOverlayPage({ browserMode = false }: { readonly brows
     player: OverlayPlayer; team: OverlayTeam | null; bid: number;
   } | null>(null);
 
+  // Dynamic currency format using admin-configured suffix
+  const fmt = (n: number) => fmtWithSuffix(n, adminSettings?.currencySuffix || 'L');
+
   // 'g' key to toggle TeamStandingsOverlay
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
@@ -318,7 +322,9 @@ export default function OBSOverlayPage({ browserMode = false }: { readonly brows
   const isBreak       = broadcastMode === 'break';
   const isStandings   = broadcastMode === 'standings';
   const isTeamSquad   = broadcastMode === 'teamSquad';
-  const overlayModeActive = isBreak || isStandings || isTeamSquad;
+  const isTeamStandings = broadcastMode === 'teamStandings';
+  const isTopPicks    = broadcastMode === 'topPicks';
+  const overlayModeActive = isBreak || isStandings || isTeamSquad || isTeamStandings || isTopPicks;
   const hasPlayer     = !!currentPlayer && !activeOverlay && !overlayModeActive;
 
   // Focused team for standings panel
@@ -334,6 +340,43 @@ export default function OBSOverlayPage({ browserMode = false }: { readonly brows
     const id = broadcastControl?.teamSquadTeamId;
     return teams.find((t) => t.id === id) ?? teams[0] ?? null;
   }, [isTeamSquad, broadcastControl?.teamSquadTeamId, teams]);
+
+  // Top picks computed from sold players
+  const topBuysObs = useMemo(() => {
+    return [...soldPlayersObs]
+      .sort((a, b) => (b.soldAmount ?? 0) - (a.soldAmount ?? 0))
+      .slice(0, 5)
+      .map(p => ({
+        id: p.id ?? '',
+        name: p.name ?? '',
+        role: 'Batsman' as PlayerRole,
+        imageUrl: '',
+        basePrice: 0,
+        age: p.age ?? null,
+        matches: '',
+        runs: '',
+        wickets: '',
+        battingBestFigures: '',
+        bowlingBestFigures: '',
+        soldAmount: p.soldAmount ?? 0,
+        teamName: p.teamName ?? '',
+        teamId: p.teamId,
+        soldDate: '',
+        team: teams.find(t => t.id === p.teamId) ?? undefined,
+      }));
+  }, [soldPlayersObs, teams]);
+
+  const [topBuysIndex, setTopBuysIndex] = useState(0);
+
+  // Auto-advance top picks index when in topPicks mode
+  useEffect(() => {
+    if (!isTopPicks || topBuysObs.length === 0) return;
+    setTopBuysIndex(0);
+    const interval = setInterval(() => {
+      setTopBuysIndex(prev => (prev + 1) % topBuysObs.length);
+    }, 4000);
+    return () => clearInterval(interval);
+  }, [isTopPicks, topBuysObs.length]);
 
   // ── Image resolution via Firebase Storage ─────────────────────────────────
   const playerStoragePath = currentPlayer
@@ -496,6 +539,7 @@ export default function OBSOverlayPage({ browserMode = false }: { readonly brows
             player={soldPlayer}
             team={soldTeam}
             amount={soldBid || 0}
+            currencySuffix={adminSettings?.currencySuffix || 'L'}
             onComplete={() => { animatingRef.current = false; setActiveOverlay(null); setOverlaySnapshot(null); }}
           />
         )}
@@ -520,6 +564,21 @@ export default function OBSOverlayPage({ browserMode = false }: { readonly brows
         organizerLogo={adminSettings?.organizerLogo}
         auctionTitle={adminSettings?.organizerName ? `${adminSettings.organizerName} AUCTION` : undefined}
         onClose={() => { /* OBS is read-only; actual close is driven by desktop */ }}
+        showOwnerOverlay={adminSettings?.branding?.showTeamOwnersInBreak !== false}
+        breakContentMode={adminSettings?.branding?.breakContentMode || 'sponsors'}
+        teamOwners={(() => {
+          const owners = adminSettings?.teamOwners;
+          if (!owners) return [];
+          const result: { id: string; name: string; imageUrl?: string; brandImageUrl?: string; designation?: string; teamName: string; teamLogo?: string; teamColor?: string }[] = [];
+          for (const [teamId, ownerList] of Object.entries(owners)) {
+            const team = teams.find(t => t.id === teamId);
+            if (!team || !ownerList) continue;
+            for (const owner of ownerList) {
+              result.push({ ...owner, teamName: team.name, teamLogo: team.logoUrl, teamColor: team.primaryColor });
+            }
+          }
+          return result;
+        })()}
       />
 
       {/* ── TEAM STATS PANEL (standings) ──────────────────────────────── */}
@@ -591,9 +650,9 @@ export default function OBSOverlayPage({ browserMode = false }: { readonly brows
         )}
       </AnimatePresence>
 
-      {/* ── TEAM STANDINGS OVERLAY (press 'g') ────────────────────────── */}
+      {/* ── TEAM STANDINGS OVERLAY (press 'g' or broadcastMode 'teamStandings') ── */}
       <TeamStandingsOverlay
-        visible={showTeamStandings}
+        visible={showTeamStandings || isTeamStandings}
         onClose={() => setShowTeamStandings(false)}
         teams={teams.map(t => ({
           id: t.id,
@@ -626,6 +685,14 @@ export default function OBSOverlayPage({ browserMode = false }: { readonly brows
           soldDate: ((p as Record<string, unknown>).timestamp as string) ?? '',
         }))}
         settings={adminSettings}
+      />
+
+      {/* ── TOP PICKS OVERLAY (broadcastMode 'topPicks') ──────────────── */}
+      <TopPicksOverlay
+        visible={isTopPicks}
+        onClose={() => {/* controlled by broadcast */}}
+        topBuys={topBuysObs}
+        currentIndex={topBuysIndex}
       />
     </div>
   );

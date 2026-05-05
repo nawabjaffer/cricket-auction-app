@@ -4,7 +4,7 @@
 // ============================================================================
 
 import { useMemo } from 'react';
-import { useSoldPlayers, useTeams, useAvailablePlayers, useUnsoldPlayers } from '../../store';
+import { useSoldPlayers, useTeams, useAvailablePlayers, useUnsoldPlayers, useCurrencySuffix } from '../../store';
 import { inferRoleCategoryFromPlayer } from '../../utils/roleFormatter';
 import './AnalyticsCarousel.css';
 
@@ -17,6 +17,7 @@ export function AnalyticsCarousel({ visible = true }: AnalyticsCarouselProps) {
   const teams = useTeams();
   const availablePlayers = useAvailablePlayers();
   const unsoldPlayers = useUnsoldPlayers();
+  const currencySuffix = useCurrencySuffix();
 
   // Calculate analytics and build marquee text
   const marqueeText = useMemo(() => {
@@ -29,31 +30,31 @@ export function AnalyticsCarousel({ visible = true }: AnalyticsCarouselProps) {
 
     // Total money spent
     const totalSpent = soldPlayers.reduce((sum, p) => sum + (p.soldAmount || 0), 0);
-    items.push(`Total: ₹${totalSpent.toFixed(1)}L Spent`);
+    items.push(`Total: ₹${totalSpent.toFixed(1)}${currencySuffix} Spent`);
 
     // Average price
     if (soldPlayers.length > 0) {
       const avgPrice = totalSpent / soldPlayers.length;
-      items.push(`Avg Price: ₹${avgPrice.toFixed(1)}L`);
+      items.push(`Avg Price: ₹${avgPrice.toFixed(1)}${currencySuffix}`);
     }
 
     // Top buy
     const sortedBySold = [...soldPlayers].sort((a, b) => (b.soldAmount || 0) - (a.soldAmount || 0));
     if (sortedBySold.length > 0) {
       const top = sortedBySold[0];
-      items.push(`Top Buy: ${top.name} (₹${top.soldAmount}L to ${top.teamName})`);
+      items.push(`Top Buy: ${top.name} (₹${top.soldAmount}${currencySuffix} to ${top.teamName})`);
     }
 
     // Second highest
     if (sortedBySold.length > 1) {
       const second = sortedBySold[1];
-      items.push(`#2: ${second.name} (₹${second.soldAmount}L)`);
+      items.push(`#2: ${second.name} (₹${second.soldAmount}${currencySuffix})`);
     }
 
     // Third highest
     if (sortedBySold.length > 2) {
       const third = sortedBySold[2];
-      items.push(`#3: ${third.name} (₹${third.soldAmount}L)`);
+      items.push(`#3: ${third.name} (₹${third.soldAmount}${currencySuffix})`);
     }
 
     // Team spending stats
@@ -69,7 +70,7 @@ export function AnalyticsCarousel({ visible = true }: AnalyticsCarouselProps) {
     // Top spender team
     if (teamSpending.length > 0 && teamSpending[0].spent > 0) {
       const top = teamSpending[0];
-      items.push(`Top Spender: ${top.name} (₹${top.spent.toFixed(1)}L for ${top.players} players)`);
+      items.push(`Top Spender: ${top.name} (₹${top.spent.toFixed(1)}${currencySuffix} for ${top.players} players)`);
     }
 
     // Team with most players
@@ -99,12 +100,12 @@ export function AnalyticsCarousel({ visible = true }: AnalyticsCarouselProps) {
     if (soldPlayers.length > 0) {
       const recent = soldPlayers.slice(-3).reverse();
       recent.forEach(p => {
-        items.push(`${p.name} → ${p.teamName} (₹${p.soldAmount}L)`);
+        items.push(`${p.name} → ${p.teamName} (₹${p.soldAmount}${currencySuffix})`);
       });
     }
 
     return items;
-  }, [soldPlayers, teams, availablePlayers, unsoldPlayers]);
+  }, [soldPlayers, teams, availablePlayers, unsoldPlayers, currencySuffix]);
 
   if (!visible) return null;
 

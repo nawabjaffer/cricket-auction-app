@@ -9,6 +9,7 @@ import type { Player, Team } from '../../types';
 import { formatRoleDisplay } from '../../utils/roleFormatter';
 import { extractDriveFileId } from '../../utils/driveImage';
 import { getCachedStorageUrl, resolveImageAsync } from '../../services/firebaseStorageService';
+import { useAuctionStore } from '../../store/auctionStore';
 import './SoldAnimation.css';
 
 interface SoldAnimationProps {
@@ -19,12 +20,13 @@ interface SoldAnimationProps {
   stampColor?: string;
   onComplete?: () => void;
   duration?: number;
+  currencySuffix?: string;
 }
 
-const formatCurrency = (amount: number): string => {
+const formatCurrency = (amount: number, suffix = 'L'): string => {
   const safeAmount = Number.isFinite(Number(amount)) ? Number(amount) : 0;
   if (safeAmount >= 10000000) return `₹${(safeAmount / 10000000).toFixed(2)} Cr`;
-  if (safeAmount >= 100000) return `₹${(safeAmount / 100000).toFixed(2)} L`;
+  if (safeAmount >= 100000) return `₹${(safeAmount / 100000).toFixed(2)} ${suffix}`;
   return `₹${safeAmount.toLocaleString('en-IN')}`;
 };
 
@@ -60,7 +62,9 @@ export default function SoldAnimation({
   stampColor,
   onComplete,
   duration = 3500,
+  currencySuffix: suffixProp,
 }: SoldAnimationProps) {
+  const suffix = suffixProp || useAuctionStore.getState().currencySuffix || 'L';
   const isSold = type === 'sold';
   const safePlayerName = typeof player?.name === 'string' && player.name.trim() ? player.name.trim() : 'Unknown Player';
   const safeTeamName = typeof team?.name === 'string' && team.name.trim() ? team.name.trim() : '';
@@ -235,7 +239,7 @@ export default function SoldAnimation({
                     animate={{ scale: 1, opacity: 1 }}
                     transition={{ type: 'spring', damping: 14, stiffness: 220, delay: 0.8 }}
                   >
-                    {formatCurrency(amount)}
+                    {formatCurrency(amount, suffix)}
                   </motion.div>
                 </motion.div>
               ) : null}

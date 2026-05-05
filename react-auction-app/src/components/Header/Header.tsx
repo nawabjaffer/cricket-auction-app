@@ -236,8 +236,12 @@ export function Header({ onRefresh, onResetAuction, onShowHelp, bidMultiplier = 
                 {/* Theme Info */}
                 <div className="menu-section">
                   <div className="menu-header">
-                    {activeTheme.seasonLogo && (
+                    {activeTheme.seasonLogo ? (
                       <img src={activeTheme.seasonLogo} alt="" className="menu-logo" />
+                    ) : (
+                      <div className="menu-logo menu-logo--placeholder">
+                        <span className="menu-logo-hint">No logo</span>
+                      </div>
                     )}
                     <div>
                       <div className="menu-title">{activeTheme.name}</div>

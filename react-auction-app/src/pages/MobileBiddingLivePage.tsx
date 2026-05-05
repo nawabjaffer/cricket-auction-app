@@ -24,6 +24,7 @@ import { getRoleBasedStats, getRoleLabel, getRoleBadgeClass } from '../utils/pla
 import { parseRoleDetails, getRoleBadgeColor } from '../utils/roleFormatter';
 import { TeamStandingsOverlay } from '../components/Overlays/TeamStandingsOverlay';
 import type { Player, Team, SoldPlayer } from '../types';
+import { useCurrencySuffix } from '../store';
 import '../components/MobileBidding/MobileBidding.css';
 
 interface BidFeedback {
@@ -49,6 +50,7 @@ const TAB_CONFIG: { key: MainTab; label: string; icon: typeof IoFlash }[] = [
 ];
 
 export function MobileBiddingLivePage() {
+  const currencySuffix = useCurrencySuffix();
   const [session, setSession] = useState<AuthSession | null>(authService.getSession());
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -418,7 +420,7 @@ export function MobileBiddingLivePage() {
     const newBid = currentBid + 100;
     submitBid(myTeam.id, newBid, 'raise');
     setBidCount(prev => prev + 1);
-    setFeedback({ type: 'success', message: `Gesture bid: ₹${newBid}L`, timestamp: Date.now() });
+    setFeedback({ type: 'success', message: `Gesture bid: ₹${newBid}${currencySuffix}`, timestamp: Date.now() });
   }, [myTeam, currentPlayer, currentBid, isConnected, submitBid]);
 
   const { isActive: motionActive } = useMotionSensor({
@@ -545,7 +547,7 @@ export function MobileBiddingLivePage() {
     return date.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
   }, [lastUpdate]);
 
-  const formatLakhs = (value: number) => `₹${Number.isFinite(value) ? value.toFixed(1) : '0.0'}L`;
+  const formatLakhs = (value: number) => `₹${Number.isFinite(value) ? value.toFixed(1) : '0.0'}${currencySuffix}`;
 
   // WhatsApp number formatter - prepend country code if number doesn't already have one
   const formatWhatsAppNumber = useCallback((rawNumber: string) => {

@@ -4,7 +4,7 @@
 // ============================================================================
 
 import { motion, AnimatePresence } from 'framer-motion';
-import { useSoldPlayers, useUnsoldPlayers, useTeams, useCurrentRound, useMaxUnsoldRounds } from '../../store';
+import { useSoldPlayers, useUnsoldPlayers, useTeams, useCurrentRound, useMaxUnsoldRounds, useCurrencySuffix } from '../../store';
 import { TeamLogo } from '../TeamLogo';
 
 interface EndOverlayProps {
@@ -21,6 +21,7 @@ export function EndOverlay({ isVisible, onClose, onStartRound2, onStartNextRound
   const teams = useTeams();
   const currentRound = useCurrentRound();
   const maxUnsoldRounds = useMaxUnsoldRounds();
+  const currencySuffix = useCurrencySuffix();
   const maxRound = 1 + maxUnsoldRounds;
 
   // Calculate summary stats
@@ -83,13 +84,13 @@ export function EndOverlay({ isVisible, onClose, onStartRound2, onStartNextRound
                 />
                 <StatCard 
                   label="Total Amount" 
-                  value={`₹${totalAmount.toFixed(1)}L`} 
+                  value={`₹${totalAmount.toFixed(1)}${currencySuffix}`} 
                   icon="💰" 
                   color="var(--theme-accent)"
                 />
                 <StatCard 
                   label="Avg. Price" 
-                  value={totalSold > 0 ? `₹${(totalAmount / totalSold).toFixed(2)}L` : 'N/A'} 
+                  value={totalSold > 0 ? `₹${(totalAmount / totalSold).toFixed(2)}${currencySuffix}` : 'N/A'} 
                   icon="📊" 
                   color="var(--theme-bid)"
                 />

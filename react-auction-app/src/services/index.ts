@@ -57,7 +57,14 @@ export {
   uploadFileToStorage,
   preloadImage,
   batchPreloadImages,
+  listStorageObjects,
+  deleteStorageObject,
+  deleteStorageObjects,
+  getImageIndexEntries,
+  removeImageIndexEntry,
+  clearStaleImageIndex,
 } from './firebaseStorageService';
+export type { StorageObject } from './firebaseStorageService';
 
 // Scoring module
 export { scoringService } from './scoring';

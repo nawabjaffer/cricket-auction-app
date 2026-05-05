@@ -17,6 +17,7 @@ import { authService, type AuthSession } from '../services/auth';
 import { TeamLogo } from '../components/TeamLogo/TeamLogo';
 import { PlayerImage } from '../components/PlayerImage/PlayerImage';
 import { getRoleLabel, getRoleBadgeClass } from '../utils/playerStats';
+import { useCurrencySuffix } from '../store';
 import '../components/MobileBidding/MobileBidding.css';
 
 interface BidFeedback {
@@ -26,6 +27,7 @@ interface BidFeedback {
 }
 
 export default function ConnectBiddingAdminPage() {
+  const currencySuffix = useCurrencySuffix();
 
   // Admin login (for admin-only access)
   const { isAuthenticated, login: adminLogin, logout: adminLogout, loading: authLoading, error: authError } = useAdminAuth();
@@ -159,7 +161,7 @@ export default function ConnectBiddingAdminPage() {
     }
   }, [currentPlayer, currentBid, isConnected, submitBid, busyTeamId]);
 
-  const formatLakhs = (v: number) => `₹${Number.isFinite(v) ? v.toFixed(1) : '0.0'}L`;
+  const formatLakhs = (v: number) => `₹${Number.isFinite(v) ? v.toFixed(1) : '0.0'}${currencySuffix}`;
 
   const formattedTime = useMemo(() => {
     if (!lastUpdate) return 'Never';
@@ -564,7 +566,7 @@ export default function ConnectBiddingAdminPage() {
                           letterSpacing: 0.5,
                         }}
                       >
-                        {busyTeamId === team.id ? '...' : `RAISE +₹100L`}
+                        {busyTeamId === team.id ? '...' : `RAISE +₹100${currencySuffix}`}
                       </motion.button>
                       <motion.button
                         whileTap={{ scale: 0.92 }}

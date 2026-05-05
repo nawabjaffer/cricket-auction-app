@@ -1059,6 +1059,39 @@ body {
   }
 }
 
+/* Placeholder sponsor cards — no image uploaded */
+.sponsor-card.placeholder {
+  border: 1px dashed rgba(228, 190, 117, 0.35);
+}
+
+.sponsor-no-image-hint {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  pointer-events: none;
+}
+
+.sponsor-no-image-hint span {
+  font-size: 0.6rem;
+  font-weight: 600;
+  color: rgba(245, 158, 11, 0.9);
+  background: rgba(0, 0, 0, 0.55);
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.sponsor-no-image-hint small {
+  font-size: 0.5rem;
+  color: rgba(255, 255, 255, 0.6);
+  background: rgba(0, 0, 0, 0.45);
+  padding: 1px 5px;
+  border-radius: 3px;
+}
+
 /* ============================================================================
    TYPOGRAPHY
    ============================================================================ */
@@ -1401,6 +1434,88 @@ button:focus-visible {
   height: 74px;
   object-fit: contain;
   border-radius: 10px;
+}
+
+/* Placeholder styles for missing logos */
+.empty-title-sponsor-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 92px;
+  height: 92px;
+  border-radius: 10px;
+  border: 2px dashed rgba(228, 190, 117, 0.4);
+  background: rgba(228, 190, 117, 0.06);
+}
+
+.empty-title-sponsor-placeholder .placeholder-label {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: #e4be75;
+  text-align: center;
+  line-height: 1.2;
+  max-width: 80px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.empty-epl-logo--placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 74px;
+  height: 74px;
+  border-radius: 10px;
+  border: 2px dashed rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.empty-epl-logo--placeholder .placeholder-initials {
+  font-size: 1.6rem;
+  font-weight: 800;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.placeholder-hint {
+  font-size: 0.55rem;
+  color: rgba(255, 255, 255, 0.35);
+  margin-top: 0.2rem;
+  text-align: center;
+}
+
+.club-logo--placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px dashed rgba(167, 240, 45, 0.3);
+  background: rgba(167, 240, 45, 0.05);
+}
+
+.club-logo--placeholder .club-logo-initials {
+  font-size: 1.4rem;
+  font-weight: 800;
+  color: rgba(167, 240, 45, 0.6);
+}
+
+.menu-logo--placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  border: 1.5px dashed rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.menu-logo--placeholder .menu-logo-hint {
+  font-size: 0.55rem;
+  color: rgba(255, 255, 255, 0.4);
+  text-align: center;
+  line-height: 1.1;
 }
 
 /* RIGHT COLUMN - Player Image & Animations */
@@ -3679,6 +3794,33 @@ button:focus-visible {
   font-weight: 600;
   color: rgba(255, 255, 255, 0.7);
   margin: 0 4px;
+}
+
+/* ── Title Sponsor branding in overlays ──────────────────────────────────── */
+.overlay-title-sponsor {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  padding: 0.75rem 1.2rem;
+  margin-top: 0.5rem;
+  background: linear-gradient(135deg, rgba(228, 190, 117, 0.06), rgba(228, 190, 117, 0.02));
+  border-top: 1px solid rgba(228, 190, 117, 0.15);
+  border-radius: 0 0 32px 32px;
+}
+
+.overlay-sponsor-logo {
+  max-width: 60px;
+  max-height: 28px;
+  object-fit: contain;
+  opacity: 0.85;
+}
+
+.overlay-sponsor-text {
+  font-size: 0.7rem;
+  color: rgba(228, 190, 117, 0.7);
+  font-weight: 500;
+  letter-spacing: 0.3px;
 }
 
 /* Celebration particles (sold) */

@@ -6,7 +6,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { IoCloseCircle } from 'react-icons/io5';
-import { useUnsoldPlayers } from '../../store';
+import { useUnsoldPlayers, useCurrencySuffix } from '../../store';
 import { extractDriveFileId } from '../../utils/driveImage';
 import { formatRoleDisplay } from '../../utils/roleFormatter';
 import { getCachedStorageUrl, resolveImageAsync } from '../../services/firebaseStorageService';
@@ -23,10 +23,13 @@ const FALLING_PARTICLES = Array.from({ length: 20 }, (_, i) => ({
 interface UnsoldOverlayProps {
   readonly isVisible: boolean;
   readonly onClose: () => void;
+  readonly titleSponsor?: { name: string; logoUrl?: string } | null;
+  readonly organizerName?: string;
 }
 
-export function UnsoldOverlay({ isVisible, onClose }: Readonly<UnsoldOverlayProps>) {
+export function UnsoldOverlay({ isVisible, onClose, titleSponsor, organizerName }: Readonly<UnsoldOverlayProps>) {
   const unsoldPlayers = useUnsoldPlayers();
+  const currencySuffix = useCurrencySuffix();
   const lastUnsoldPlayer = unsoldPlayers.at(-1);
   const [imageError, setImageError] = useState(false);
 
@@ -185,7 +188,7 @@ export function UnsoldOverlay({ isVisible, onClose }: Readonly<UnsoldOverlayProp
                 <div className="amount-value strikethrough">
                   <span className="currency">₹</span>
                   <span className="amount-number">{lastUnsoldPlayer.basePrice.toFixed(1)}</span>
-                  <span className="amount-unit">L</span>
+                  <span className="amount-unit">{currencySuffix}</span>
                 </div>
               </motion.div>
 
@@ -210,6 +213,19 @@ export function UnsoldOverlay({ isVisible, onClose }: Readonly<UnsoldOverlayProp
             >
               Press <kbd>N</kbd> for next player
             </motion.div>
+
+            {/* Title Sponsor branding */}
+            {titleSponsor?.logoUrl && (
+              <motion.div
+                className="overlay-title-sponsor"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 1.0, duration: 0.4 }}
+              >
+                <img src={titleSponsor.logoUrl} alt={titleSponsor.name} className="overlay-sponsor-logo" />
+                {organizerName && <span className="overlay-sponsor-text">{organizerName}</span>}
+              </motion.div>
+            )}
           </motion.div>
 
           {/* Falling particles */}

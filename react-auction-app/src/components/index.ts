@@ -18,6 +18,7 @@ export { ConnectToTeam } from './ConnectToTeam';
 export { AnalyticsCarousel } from './AnalyticsCarousel';
 export { TeamLogo } from './TeamLogo';
 export { PlayerImage } from './PlayerImage';
+export { ImageLightbox } from './ImageLightbox';
 export { AdminLogin } from './AdminLogin';
 export { SponsorShowcase } from './SponsorShowcase';
 export type { SponsorItem } from './SponsorShowcase';

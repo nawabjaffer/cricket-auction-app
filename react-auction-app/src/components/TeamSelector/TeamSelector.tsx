@@ -7,6 +7,7 @@ import type { Team } from '../../types';
 import { useAuction } from '../../hooks';
 import { AuctionRulesService } from '../../services';
 import { useTeams } from '../../store';
+import { useCurrencySuffix } from '../../store';
 
 interface TeamSelectorProps {
   readonly onTeamSelect?: (team: Team) => void;
@@ -16,6 +17,7 @@ interface TeamSelectorProps {
 export function TeamSelector({ onTeamSelect, showStats = true }: TeamSelectorProps) {
   const teams = useTeams();
   const { selectTeam, selectedTeam } = useAuction();
+  const currencySuffix = useCurrencySuffix();
   const rulesService = new AuctionRulesService();
   const selectedTeamId = selectedTeam?.id ?? '';
 
@@ -55,9 +57,9 @@ export function TeamSelector({ onTeamSelect, showStats = true }: TeamSelectorPro
 
         {selectedTeam && showStats && (
           <div className="mt-3 grid grid-cols-2 gap-2 text-[11px] text-white/70">
-            <CompactStat label="Purse" value={`₹${selectedTeam.remainingPurse.toFixed(2)}L`} />
+            <CompactStat label="Purse" value={`₹${selectedTeam.remainingPurse.toFixed(2)}${currencySuffix}`} />
             <CompactStat label="Players" value={`${selectedTeam.playersBought}/${selectedTeam.totalPlayerThreshold}`} />
-            <CompactStat label="Max Bid" value={`₹${rulesService.calculateMaxBid(selectedTeam).toFixed(2)}L`} />
+            <CompactStat label="Max Bid" value={`₹${rulesService.calculateMaxBid(selectedTeam).toFixed(2)}${currencySuffix}`} />
             <CompactStat label="Captain" value={selectedTeam.captain || '—'} />
           </div>
         )}

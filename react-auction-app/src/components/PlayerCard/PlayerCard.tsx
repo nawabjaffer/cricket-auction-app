@@ -13,6 +13,8 @@ import { formatRoleDisplay, getRoleCategory, getRoleBadgeColor as getRoleBadgeHe
 import { getCachedStorageUrl, resolveImageAsync } from '../../services/firebaseStorageService';
 import { extractDriveFileId } from '../../utils/driveImage';
 import { getLiveBlobUrl } from '../../services/mediaBlobCache';
+import { useCurrencySuffix } from '../../store';
+import { ImageLightbox } from '../ImageLightbox';
 
 interface PlayerCardProps {
   player: Player;
@@ -31,6 +33,8 @@ export function PlayerCard({
   onClick,
   size = 'large',
 }: PlayerCardProps) {
+  const currencySuffix = useCurrencySuffix();
+  const [lightboxOpen, setLightboxOpen] = useState(false);
   const getRoleIcon = (role: Player['role']) => {
     const category = getRoleCategory(role);
     switch (category) {
@@ -106,7 +110,10 @@ export function PlayerCard({
       `}
     >
       {/* Player Image Section */}
-      <div className={`relative ${imageSizeClasses[size]} bg-gradient-to-b from-[var(--theme-gradient-start)] to-[var(--theme-gradient-end)]`}>
+      <div
+        className={`relative ${imageSizeClasses[size]} bg-gradient-to-b from-[var(--theme-gradient-start)] to-[var(--theme-gradient-end)] cursor-pointer`}
+        onClick={(e) => { e.stopPropagation(); setLightboxOpen(true); }}
+      >
         <img
           src={resolvedImg}
           alt={player.name}
@@ -116,6 +123,14 @@ export function PlayerCard({
             (e.target as HTMLImageElement).src = '/assets/man.jpg';
           }}
         />
+
+        {/* No image uploaded indicator */}
+        {!player.imageUrl && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/40 pointer-events-none">
+            <span className="text-amber-400 text-xs font-semibold px-2 py-0.5 bg-black/60 rounded">No Photo</span>
+            <span className="text-white/60 text-[0.6rem] mt-1">Upload via Admin</span>
+          </div>
+        )}
         
         {/* Player ID Badge */}
         <div className="absolute top-2 left-2 bg-black/70 text-white px-2 py-1 rounded text-xs font-mono">
@@ -176,19 +191,27 @@ export function PlayerCard({
             <div className="text-center">
               <div className="text-xs text-[var(--theme-text-secondary)]">Current Bid</div>
               <div className="text-2xl font-bold text-[var(--theme-bid)]">
-                ₹{currentBid.toFixed(2)}L
+                ₹{currentBid.toFixed(2)}{currencySuffix}
               </div>
             </div>
           ) : (
             <div className="text-center">
               <div className="text-xs text-[var(--theme-text-secondary)]">Base Price</div>
               <div className="text-xl font-bold text-[var(--theme-accent)]">
-                ₹{player.basePrice.toFixed(2)}L
+                ₹{player.basePrice.toFixed(2)}{currencySuffix}
               </div>
             </div>
           )}
         </div>
       </div>
+
+      {/* Full-view lightbox */}
+      <ImageLightbox
+        src={resolvedImg}
+        alt={player.name}
+        isOpen={lightboxOpen}
+        onClose={() => setLightboxOpen(false)}
+      />
     </motion.div>
   );
 }

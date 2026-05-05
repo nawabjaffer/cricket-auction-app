@@ -6,6 +6,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useRealtimeMobileSync } from '../hooks';
+import { useCurrencySuffix } from '../store';
 import { obsService } from '../services/obsService';
 import { obsIntegrationPlugin } from '../services/obsIntegrationPlugin';
 import type { OBSConnectionState } from '../types/streaming';
@@ -13,6 +14,7 @@ import './OBSDockPage.css';
 
 export default function OBSDockPage() {
   const { currentPlayer, currentBid, selectedTeam } = useRealtimeMobileSync();
+  const currencySuffix = useCurrencySuffix();
 
   // Connection state
   const [host, setHost] = useState('localhost');
@@ -305,7 +307,7 @@ export default function OBSDockPage() {
                   <span>{currentPlayer.role}</span>
                 </div>
                 <div className="obs-dock__bid-badge">
-                  {currentBid > 0 ? `₹${currentBid.toFixed(1)}L` : 'Base'}
+                  {currentBid > 0 ? `₹${currentBid.toFixed(1)}${currencySuffix}` : 'Base'}
                 </div>
               </div>
             ) : (

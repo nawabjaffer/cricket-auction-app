@@ -29,6 +29,8 @@ interface BreakOverlayProps {
   readonly onClose: () => void;
   readonly teamOwners?: OwnerWithTeam[];
   readonly showOwnerOverlay?: boolean;
+  /** Controls what content is displayed: sponsors center, teamOwners gallery, or both */
+  readonly breakContentMode?: 'sponsors' | 'teamOwners' | 'both';
 }
 
 export function BreakOverlay({
@@ -41,6 +43,7 @@ export function BreakOverlay({
   onClose,
   teamOwners = [],
   showOwnerOverlay = false,
+  breakContentMode = 'sponsors',
 }: BreakOverlayProps) {
   const [timeLeft, setTimeLeft] = useState(durationSeconds);
   const [activeSponsorIndex, setActiveSponsorIndex] = useState(0);
@@ -163,6 +166,13 @@ export function BreakOverlay({
 
   const currentSponsor = centerSponsors[activeSponsorIndex];
 
+  // Determine if we should show owners in center (full gallery mode)
+  const showOwnersCenter = breakContentMode === 'teamOwners' && teamOwners.length > 0;
+  // Determine if we should show owners on the side panel
+  const showOwnersSide = (breakContentMode === 'both' || showOwnerOverlay) && teamOwners.length > 0;
+  // Whether center sponsors should display
+  const showSponsorCenter = breakContentMode === 'sponsors' || breakContentMode === 'both';
+
   // Double the logos array for seamless infinite scroll
   const trainLogos = useMemo(() => {
     if (allLogoSponsors.length === 0) return [];
@@ -242,74 +252,127 @@ export function BreakOverlay({
             </div>
           </motion.header>
 
-          {/* ═══ CENTER: Sponsor Video / Brochure Playback ═══ */}
+          {/* ═══ CENTER: Sponsor Video / Brochure OR Owner Gallery ═══ */}
           <motion.div
-            className="break-ov__center"
+            className={`break-ov__center ${showOwnersSide ? 'break-ov__center--with-side' : ''}`}
             initial={{ scale: 0.9, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             transition={{ delay: 0.4, duration: 0.5 }}
           >
-            <AnimatePresence mode="wait">
-              {currentSponsor?.videoUrl ? (
-                <motion.div
-                  key={`video-${currentSponsor.id}`}
-                  className="break-ov__media-wrap"
-                  initial={{ opacity: 0, scale: 0.95 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.95 }}
-                  transition={{ duration: 0.6 }}
-                >
-                  <video
-                    ref={videoRef}
-                    src={currentSponsor.videoUrl}
-                    autoPlay
-                    muted
-                    onEnded={handleVideoEnded}
-                    className="break-ov__video"
-                  />
-                  <div className="break-ov__media-badge">
-                    <span className="break-ov__media-badge-dot" />
-                    {currentSponsor.name}
-                  </div>
-                </motion.div>
-              ) : currentSponsor?.logoUrl ? (
-                <motion.div
-                  key={`logo-${currentSponsor.id}`}
-                  className="break-ov__media-wrap break-ov__media-wrap--poster"
-                  initial={{ opacity: 0, y: 30 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -30 }}
-                  transition={{ duration: 0.5 }}
-                >
-                  <img
-                    src={currentSponsor.logoUrl}
-                    alt={currentSponsor.name}
-                    className="break-ov__poster"
-                  />
-                  <div className="break-ov__poster-info">
-                    <span className="break-ov__poster-name">{currentSponsor.name}</span>
-                    {currentSponsor.tier && (
-                      <span className="break-ov__poster-tier">{currentSponsor.tier} Sponsor</span>
-                    )}
-                  </div>
-                </motion.div>
-              ) : (
-                <motion.div
-                  key="break-default"
-                  className="break-ov__default-center"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                >
-                  <div className="break-ov__default-icon">☕</div>
-                  <h3 className="break-ov__default-text">Break Time</h3>
-                  <p className="break-ov__default-sub">Auction will resume shortly</p>
-                </motion.div>
-              )}
-            </AnimatePresence>
+            {/* Team Owners Full Gallery (center mode) */}
+            {showOwnersCenter && (
+              <div className="break-ov__owners-showcase">
+                <h3 className="break-ov__owners-showcase-title">Team Owners & Brand Partners</h3>
+                <div className="break-ov__owners-showcase-grid">
+                  {teamOwners.map((owner, idx) => (
+                    <motion.div
+                      key={owner.id}
+                      className="break-ov__owner-showcase-card"
+                      initial={{ opacity: 0, y: 40, scale: 0.9 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      transition={{ delay: 0.5 + idx * 0.1, type: 'spring', stiffness: 180 }}
+                      style={{ '--owner-team-color': owner.teamColor || '#3b82f6' } as React.CSSProperties}
+                    >
+                      {/* Brand bg watermark */}
+                      {owner.brandImageUrl && (
+                        <div className="break-ov__owner-showcase-brand-bg">
+                          <img src={owner.brandImageUrl} alt="" />
+                        </div>
+                      )}
+                      {/* Owner Photo */}
+                      <div className="break-ov__owner-showcase-photo">
+                        {owner.imageUrl ? (
+                          <img src={owner.imageUrl} alt={owner.name} className="break-ov__owner-showcase-img" />
+                        ) : (
+                          <div className="break-ov__owner-showcase-initials">
+                            {owner.name.charAt(0).toUpperCase()}
+                          </div>
+                        )}
+                      </div>
+                      {/* Team logo chip */}
+                      {owner.teamLogo && (
+                        <img src={owner.teamLogo} alt={owner.teamName} className="break-ov__owner-showcase-team-logo" />
+                      )}
+                      {/* Info */}
+                      <div className="break-ov__owner-showcase-info">
+                        <span className="break-ov__owner-showcase-name">{owner.name}</span>
+                        <span className="break-ov__owner-showcase-team" style={{ color: owner.teamColor || '#60a5fa' }}>
+                          {owner.teamName}
+                        </span>
+                        {owner.designation && (
+                          <span className="break-ov__owner-showcase-designation">{owner.designation}</span>
+                        )}
+                      </div>
+                    </motion.div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Sponsor Center Content */}
+            {showSponsorCenter && !showOwnersCenter && (
+              <AnimatePresence mode="wait">
+                {currentSponsor?.videoUrl ? (
+                  <motion.div
+                    key={`video-${currentSponsor.id}`}
+                    className="break-ov__media-wrap"
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.95 }}
+                    transition={{ duration: 0.6 }}
+                  >
+                    <video
+                      ref={videoRef}
+                      src={currentSponsor.videoUrl}
+                      autoPlay
+                      muted
+                      onEnded={handleVideoEnded}
+                      className="break-ov__video"
+                    />
+                    <div className="break-ov__media-badge">
+                      <span className="break-ov__media-badge-dot" />
+                      {currentSponsor.name}
+                    </div>
+                  </motion.div>
+                ) : currentSponsor?.logoUrl ? (
+                  <motion.div
+                    key={`logo-${currentSponsor.id}`}
+                    className="break-ov__media-wrap break-ov__media-wrap--poster"
+                    initial={{ opacity: 0, y: 30 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -30 }}
+                    transition={{ duration: 0.5 }}
+                  >
+                    <img
+                      src={currentSponsor.logoUrl}
+                      alt={currentSponsor.name}
+                      className="break-ov__poster"
+                    />
+                    <div className="break-ov__poster-info">
+                      <span className="break-ov__poster-name">{currentSponsor.name}</span>
+                      {currentSponsor.tier && (
+                        <span className="break-ov__poster-tier">{currentSponsor.tier} Sponsor</span>
+                      )}
+                    </div>
+                  </motion.div>
+                ) : (
+                  <motion.div
+                    key="break-default"
+                    className="break-ov__default-center"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                  >
+                    <div className="break-ov__default-icon">☕</div>
+                    <h3 className="break-ov__default-text">Break Time</h3>
+                    <p className="break-ov__default-sub">Auction will resume shortly</p>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            )}
 
             {/* Dot indicator */}
-            {centerSponsors.length > 1 && (
+            {showSponsorCenter && !showOwnersCenter && centerSponsors.length > 1 && (
               <div className="break-ov__dots">
                 {centerSponsors.map((s, i) => (
                   <div
@@ -321,37 +384,44 @@ export function BreakOverlay({
             )}
           </motion.div>
 
-          {/* ═══ BOTTOM: Logo Train Carousel (B&W → color zoom at center) ═══ */}
-          {/* ═══ OWNER SHOWCASE (when feature flag enabled) ═══ */}
-          {showOwnerOverlay && teamOwners.length > 0 && (
+          {/* ═══ SIDE PANEL: Owner portraits (when mode=both or legacy flag) ═══ */}
+          {showOwnersSide && (
             <motion.div
-              className="break-ov__owners break-ov__owners--side"
-              initial={{ x: 60, opacity: 0 }}
+              className="break-ov__owners-side-panel"
+              initial={{ x: 80, opacity: 0 }}
               animate={{ x: 0, opacity: 1 }}
               transition={{ delay: 0.5, duration: 0.6, type: 'spring', stiffness: 150 }}
             >
+              <div className="break-ov__owners-side-title">Team Owners</div>
               {teamOwners.map((owner, idx) => (
                 <motion.div
                   key={owner.id}
-                  className="break-ov__owner-row"
+                  className="break-ov__owner-side-card"
                   initial={{ opacity: 0, x: 30 }}
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ delay: 0.6 + idx * 0.08, type: 'spring', stiffness: 200 }}
                   style={{ '--owner-team-color': owner.teamColor || '#3b82f6' } as React.CSSProperties}
                 >
-                  <div className="break-ov__owner-avatar">
+                  {/* Brand watermark behind */}
+                  {owner.brandImageUrl && (
+                    <div className="break-ov__owner-side-brand-bg">
+                      <img src={owner.brandImageUrl} alt="" />
+                    </div>
+                  )}
+                  <div className="break-ov__owner-side-photo">
                     {owner.imageUrl ? (
-                      <img src={owner.imageUrl} alt={owner.name} className="break-ov__owner-avatar-img" />
-                    ) : owner.teamLogo ? (
-                      <img src={owner.teamLogo} alt={owner.teamName} className="break-ov__owner-avatar-img" />
+                      <img src={owner.imageUrl} alt={owner.name} />
                     ) : (
-                      <span className="break-ov__owner-avatar-letter">{owner.name.charAt(0).toUpperCase()}</span>
+                      <span className="break-ov__owner-side-initials">{owner.name.charAt(0).toUpperCase()}</span>
                     )}
                   </div>
-                  <div className="break-ov__owner-text">
-                    <span className="break-ov__owner-name">{owner.name}</span>
-                    <span className="break-ov__owner-team">{owner.teamName}</span>
+                  <div className="break-ov__owner-side-info">
+                    <span className="break-ov__owner-side-name">{owner.name}</span>
+                    <span className="break-ov__owner-side-team">{owner.teamName}</span>
                   </div>
+                  {owner.teamLogo && (
+                    <img src={owner.teamLogo} alt="" className="break-ov__owner-side-team-badge" />
+                  )}
                 </motion.div>
               ))}
             </motion.div>

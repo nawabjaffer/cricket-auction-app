@@ -63,11 +63,11 @@ import { useRealtimeDesktopSync, useRealtimeMobileSync } from './hooks/useRealti
 import { audioService, imageCacheService } from './services';
 import { auctionPersistence, type SponsorRecord, type AdminSettings } from './services/auctionPersistence';
 import { featureFlagsService } from './services/featureFlagsService';
-import { ALL_PLAYER_STAT_FIELDS } from './components/AdminPanel/ThemeSettingsExtended';
+import { ALL_PLAYER_STAT_FIELDS } from './config/playerStatFields';
 import { auctionRules } from './services/auctionRules';
 import { realtimeSync } from './services/realtimeSync';
 import { getCachedStorageUrl, resolveImageAsync } from './services/firebaseStorageService';
-import { useActiveOverlay, useNotification, useCurrentPlayer, useSoldPlayers, useAvailablePlayers, useOriginalPlayers, useTeams, useOrganizerLogo, useOrganizerName } from './store';
+import { useActiveOverlay, useNotification, useCurrentPlayer, useSoldPlayers, useAvailablePlayers, useOriginalPlayers, useTeams, useOrganizerLogo, useOrganizerName, useCurrencySuffix } from './store';
 import { useAuctionStore } from './store/auctionStore';
 import { extractDriveFileId } from './utils/driveImage';
 import { formatRoleDisplay, getRoleCategory, inferRoleCategoryFromPlayer, parseRoleDetails, getRoleBadgeColor } from './utils/roleFormatter';
@@ -225,6 +225,7 @@ function AuctionApp({ mirrorMode = false }: { mirrorMode?: boolean }) {
   const allTeams = useTeams();
   const organizerLogo = useOrganizerLogo();
   const organizerName = useOrganizerName();
+  const currencySuffix = useCurrencySuffix();
 
   // Mirror follower mode: hydrate local store from realtime desktop state
   // so this page stays in lockstep with the controlling laptop.
@@ -1048,7 +1049,13 @@ function AuctionApp({ mirrorMode = false }: { mirrorMode?: boolean }) {
                 }}
                 transition={{ duration: 0.5, ease: [0.32, 0.72, 0, 1] }}
               >
-                <img src={organizerLogo || '/assets/BCC Season 6.png'} alt={organizerName || 'Auction'} className="club-logo" />
+                {organizerLogo ? (
+                  <img src={organizerLogo} alt={organizerName || 'Auction'} className="club-logo" />
+                ) : (
+                  <div className="club-logo club-logo--placeholder" title="Upload organizer logo via Admin">
+                    <span className="club-logo-initials">{(organizerName || 'A').charAt(0)}</span>
+                  </div>
+                )}
                 <span>{organizerName || 'Auction'}</span>
               </motion.div>
               <motion.div 
@@ -1249,25 +1256,39 @@ function AuctionApp({ mirrorMode = false }: { mirrorMode?: boolean }) {
               exit={{ opacity: 0 }}
             >
               <div className="empty-home-logos">
-                {titleSponsor?.logoUrl && (
+                {titleSponsor && (
                   <div className="empty-title-sponsor-logo-wrap" title={`Title Sponsor: ${titleSponsor.name}`}>
-                    <img
-                      src={titleSponsor.logoUrl}
-                      alt={`${titleSponsor.name} logo`}
-                      className="empty-title-sponsor-logo"
-                    />
+                    {titleSponsor.logoUrl ? (
+                      <img
+                        src={titleSponsor.logoUrl}
+                        alt={`${titleSponsor.name} logo`}
+                        className="empty-title-sponsor-logo"
+                      />
+                    ) : (
+                      <div className="empty-title-sponsor-placeholder">
+                        <span className="placeholder-label">{titleSponsor.name}</span>
+                        <small className="placeholder-hint">Upload logo via Admin</small>
+                      </div>
+                    )}
                   </div>
                 )}
 
                 <div className="empty-epl-logo-wrap" title={organizerName || 'Auction'}>
-                  <img
-                    src={organizerLogo || '/assets/BCC Season 6.png'}
-                    alt="Organizer logo"
-                    className="empty-epl-logo"
-                    onError={(e) => {
-                      (e.currentTarget as HTMLImageElement).style.display = 'none';
-                    }}
-                  />
+                  {organizerLogo ? (
+                    <img
+                      src={organizerLogo}
+                      alt="Organizer logo"
+                      className="empty-epl-logo"
+                      onError={(e) => {
+                        (e.currentTarget as HTMLImageElement).style.display = 'none';
+                      }}
+                    />
+                  ) : (
+                    <div className="empty-epl-logo empty-epl-logo--placeholder">
+                      <span className="placeholder-initials">{(organizerName || 'A').charAt(0)}</span>
+                      <small className="placeholder-hint">Upload logo via Admin</small>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -1363,9 +1384,9 @@ function AuctionApp({ mirrorMode = false }: { mirrorMode?: boolean }) {
                     animate={{ scale: 1, color: '#ffffff' }}
                     transition={{ type: 'spring', stiffness: 300, damping: 15 }}
                   >
-                    ₹{Number(auction.currentBid).toFixed(2)}L
+                    ₹{Number(auction.currentBid).toFixed(2)}{currencySuffix}
                   </motion.div>
-                  <div className="team-bid-max">Max: ₹{auction.getMaxBidForTeam(selectedTeam)?.toFixed(1)}L</div>
+                  <div className="team-bid-max">Max: ₹{auction.getMaxBidForTeam(selectedTeam)?.toFixed(1)}{currencySuffix}</div>
                 </div>
 
                 {/* Ripple burst on new bid */}
@@ -1644,7 +1665,7 @@ function AuctionApp({ mirrorMode = false }: { mirrorMode?: boolean }) {
                     <div className="team-meta">
                       <span className="meta-item">
                         <span className="meta-label">Budget</span>
-                        <span className="meta-value">₹{((selectedTeam.allocatedAmount || 0) - teamTotalSpend).toFixed(1)}L</span>
+                        <span className="meta-value">₹{((selectedTeam.allocatedAmount || 0) - teamTotalSpend).toFixed(1)}{currencySuffix}</span>
                       </span>
                       <span className="meta-divider">•</span>
                       <span className="meta-item">
@@ -1685,7 +1706,7 @@ function AuctionApp({ mirrorMode = false }: { mirrorMode?: boolean }) {
                       {teamTopBids.length > 0 ? teamTopBids.map((player, index) => (
                         <div key={player.id} className="analytics-list-item">
                           <span>#{index + 1} {player.name}</span>
-                          <strong>₹{player.soldAmount.toFixed(1)}L</strong>
+                          <strong>₹{player.soldAmount.toFixed(1)}{currencySuffix}</strong>
                         </div>
                       )) : <div className="analytics-empty">No picks yet</div>}
                     </div>
@@ -1694,15 +1715,15 @@ function AuctionApp({ mirrorMode = false }: { mirrorMode?: boolean }) {
                       <div className="analytics-card-title">Budget & Rules</div>
                       <div className="analytics-list-item">
                         <span>Total Spend</span>
-                        <strong>₹{teamTotalSpend.toFixed(1)}L</strong>
+                        <strong>₹{teamTotalSpend.toFixed(1)}{currencySuffix}</strong>
                       </div>
                       <div className="analytics-list-item">
                         <span>Remaining</span>
-                        <strong>₹{((selectedTeam.allocatedAmount || 0) - teamTotalSpend).toFixed(1)}L</strong>
+                        <strong>₹{((selectedTeam.allocatedAmount || 0) - teamTotalSpend).toFixed(1)}{currencySuffix}</strong>
                       </div>
                       <div className="analytics-list-item">
                         <span>Max Allowed Bid</span>
-                        <strong>₹{selectedTeamStatus.maxBid.toFixed(1)}L</strong>
+                        <strong>₹{selectedTeamStatus.maxBid.toFixed(1)}{currencySuffix}</strong>
                       </div>
                       <div className={`analytics-status-badge ${selectedTeamStatus.status}`}>
                         {selectedTeamStatus.status === 'danger' ? 'Budget Risk: High' : selectedTeamStatus.status === 'warning' ? 'Budget Risk: Warning' : 'Budget Risk: Safe'}
@@ -1785,11 +1806,15 @@ function AuctionApp({ mirrorMode = false }: { mirrorMode?: boolean }) {
       {/* Overlays */}
       <SoldOverlay 
         isVisible={activeOverlay === 'sold'} 
-        onClose={auction.closeOverlay} 
+        onClose={auction.closeOverlay}
+        titleSponsor={adminSettings?.branding?.showTitleSponsorOnOverlays !== false ? titleSponsor : null}
+        organizerName={adminSettings?.branding?.showBrandOnSoldOverlay !== false ? organizerName : undefined}
       />
       <UnsoldOverlay 
         isVisible={activeOverlay === 'unsold'} 
-        onClose={auction.closeOverlay} 
+        onClose={auction.closeOverlay}
+        titleSponsor={adminSettings?.branding?.showTitleSponsorOnOverlays !== false ? titleSponsor : null}
+        organizerName={adminSettings?.branding?.showBrandOnSoldOverlay !== false ? organizerName : undefined}
       />
       <EndOverlay 
         isVisible={activeOverlay === 'end'} 
@@ -1813,7 +1838,11 @@ function AuctionApp({ mirrorMode = false }: { mirrorMode?: boolean }) {
         }
         organizerLogo={adminSettings?.organizerLogo}
         onClose={() => setShowBreakOverlay(false)}
-        showOwnerOverlay={featureFlagsService.isEnabled('owner-overlay-in-break')}
+        showOwnerOverlay={
+          adminSettings?.branding?.showTeamOwnersInBreak !== false
+          && featureFlagsService.isEnabled('owner-overlay-in-break')
+        }
+        breakContentMode={adminSettings?.branding?.breakContentMode || 'sponsors'}
         teamOwners={(() => {
           const owners = adminSettings?.teamOwners;
           if (!owners) return [];
@@ -2042,6 +2071,9 @@ function AuctionApp({ mirrorMode = false }: { mirrorMode?: boolean }) {
           allPlayers={allPlayers}
           specialCategories={adminSettings?.specialCategories}
           teamOwners={adminSettings?.teamOwners}
+          titleSponsor={adminSettings?.branding?.showTitleSponsorInTeamView !== false ? titleSponsor : null}
+          reduceThresholdByIconPlayers={adminSettings?.branding?.reduceThresholdByIconPlayers !== false}
+          squadViewMode={adminSettings?.branding?.squadViewMode || 'iconPlayers'}
           onClose={() => {
             setShowTeamSquadView(false);
             setSelectedTeamForSquad('');

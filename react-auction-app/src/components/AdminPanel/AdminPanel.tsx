@@ -18,6 +18,8 @@ import { activeConfig } from '../../config';
 import { exportSoldPlayers, exportUnsoldPlayers, downloadPlayersTemplate, downloadScoresTemplate } from '../../utils/exportData';
 import FeatureFlagsTab from './FeatureFlagsTab';
 import StreamingTab from './StreamingTab';
+import { StorageManager } from './StorageManager';
+import '../AdminPanel/StorageManager.css';
 import './AdminPanel.css';
 import type { Team, Player, SoldPlayer, UnsoldPlayer, AuctionRoleCategory, BattingStats, BowlingStats } from '../../types';
 import { DEFAULT_AUCTION_ROLE_ORDER, createEmptyBattingStats, createEmptyBowlingStats } from '../../types';
@@ -112,7 +114,7 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
     }) ?? null;
   };
 
-  const [activeTab, setActiveTab] = useState<'theme' | 'teams' | 'sponsors' | 'players' | 'export' | 'features' | 'streaming' | 'reset'>('theme');
+  const [activeTab, setActiveTab] = useState<'theme' | 'teams' | 'sponsors' | 'players' | 'export' | 'features' | 'streaming' | 'storage' | 'reset'>('theme');
   const [isSaving, setIsSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'success' | 'error'>('idle');
 
@@ -129,6 +131,22 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
   const [auctionRoleOrder, setAuctionRoleOrder] = useState<AuctionRoleCategory[]>([...DEFAULT_AUCTION_ROLE_ORDER]);
   // Easy login mode for /connect-bidding — true = tap team card, false = username/password
   const [easyLoginMode, setEasyLoginMode] = useState(true);
+
+  // Branding placement controls
+  const [brandingSettings, setBrandingSettings] = useState({
+    showTitleSponsorOnOverlays: true,
+    showTitleSponsorInTeamView: true,
+    showBrandOnSoldOverlay: true,
+    showBrandInTeamHeader: true,
+    reduceThresholdByIconPlayers: true,
+    breakContentMode: 'sponsors' as 'sponsors' | 'teamOwners' | 'both',
+    showSponsorsInBreak: true,
+    showTeamOwnersInBreak: false,
+    squadViewMode: 'iconPlayers' as 'iconPlayers' | 'owners',
+  });
+
+  // Currency suffix (L = Lakhs, T = Thousands, etc.)
+  const [currencySuffix, setCurrencySuffix] = useState('L');
 
   // Bid increment ranges
   const [bidIncrementRanges, setBidIncrementRanges] = useState<BidIncrementRange[]>([]);
@@ -310,6 +328,13 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
             setAuctionRoleOrder(settings.auctionRoleOrder);
           }
           setEasyLoginMode(settings.easyLoginMode !== false); // default true
+          if (settings.branding) {
+            setBrandingSettings(prev => ({ ...prev, ...settings.branding }));
+          }
+          if (settings.currencySuffix) {
+            setCurrencySuffix(settings.currencySuffix);
+            useAuctionStore.getState().setCurrencySuffix(settings.currencySuffix);
+          }
           if (settings.bidIncrementRanges?.length) {
             setBidIncrementRanges(settings.bidIncrementRanges);
             useAuctionStore.getState().setBidIncrementRanges(settings.bidIncrementRanges);
@@ -408,6 +433,8 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
         auctionRoleOrder,
         easyLoginMode,
         bidIncrementRanges: bidIncrementRanges.length > 0 ? bidIncrementRanges : undefined,
+        currencySuffix: currencySuffix || 'L',
+        branding: brandingSettings,
         // Merge in extended settings (player stats, categories, budget, breaks, etc.)
         ...extendedSettingsRef.current,
       };
@@ -426,6 +453,7 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
       useAuctionStore.getState().setMaxUnsoldRounds(maxUnsoldRounds);
       useAuctionStore.getState().setBidIncrementRanges(bidIncrementRanges);
       useAuctionStore.getState().setAuctionRoleOrder(auctionRoleOrder);
+      useAuctionStore.getState().setCurrencySuffix(currencySuffix || 'L');
 
       setSaveStatus('success');
       setTimeout(() => setSaveStatus('idle'), 2000);
@@ -1875,6 +1903,13 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
           Streaming
         </button>
         <button
+          className={`admin-tab ${activeTab === 'storage' ? 'active' : ''}`}
+          onClick={() => setActiveTab('storage')}
+        >
+          <IoCloudUpload style={{ marginRight: 4 }} />
+          Storage
+        </button>
+        <button
           className={`admin-tab ${activeTab === 'reset' ? 'active' : ''}`}
           onClick={() => setActiveTab('reset')}
         >
@@ -1967,9 +2002,29 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
                     )}
                   </div>
 
+                  <h3 style={{ marginTop: '2rem' }}>Currency Display</h3>
+                  <small style={{ color: '#6b7280', display: 'block', marginBottom: '0.75rem' }}>
+                    Set the suffix shown after bid amounts (e.g. "L" for Lakhs, "T" for Thousands, "K" for K).
+                  </small>
+                  <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginBottom: '1rem' }}>
+                    <label style={{ fontSize: '0.85rem', color: '#e2e8f0' }}>Suffix:</label>
+                    <select
+                      value={currencySuffix}
+                      onChange={(e) => setCurrencySuffix(e.target.value)}
+                      style={{ padding: '0.4rem 0.75rem', borderRadius: '6px', background: '#1e293b', color: '#e2e8f0', border: '1px solid rgba(255,255,255,0.1)' }}
+                    >
+                      <option value="L">L (Lakhs)</option>
+                      <option value="T">T (Thousands)</option>
+                      <option value="K">K (Thousands)</option>
+                      <option value="Cr">Cr (Crores)</option>
+                    </select>
+                    <span style={{ fontSize: '0.8rem', color: '#64748b' }}>Preview: ₹10.00{currencySuffix}</span>
+                  </div>
+
                   <h3 style={{ marginTop: '2rem' }}>Bid Increment Ranges</h3>
                   <small style={{ color: '#6b7280', display: 'block', marginBottom: '0.75rem' }}>
-                    Configure bid increments based on current bid amount. If empty, default increment ({activeConfig.auction.bidIncrements.default}L) is used.
+                    Configure bid increments based on current bid amount. If empty, default increment ({activeConfig.auction.bidIncrements.default}{currencySuffix}) is used.
+                    The Q/W keys multiply bids by the configured increment for faster bidding.
                   </small>
                   {bidIncrementRanges.map((range, index) => (
                     <div key={index} style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginBottom: '0.5rem' }}>
@@ -2153,6 +2208,154 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
                       teams={editingTeams}
                       onChange={(partial) => { extendedSettingsRef.current = partial; }}
                     />
+                  </div>
+
+                  {/* Branding & Placement Controls */}
+                  <div style={{ marginTop: '2rem', borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '2rem' }}>
+                    <h3 style={{ marginBottom: '1rem' }}>Branding & Display Controls</h3>
+                    <p style={{ color: '#64748b', fontSize: '0.82rem', marginBottom: '1rem' }}>
+                      Control where title sponsor logos, brand names, and owners appear in the auction UI.
+                    </p>
+
+                    <div className="admin-branding-controls">
+                      <label className="admin-branding-toggle">
+                        <input
+                          type="checkbox"
+                          checked={brandingSettings.showTitleSponsorOnOverlays}
+                          onChange={(e) => setBrandingSettings(prev => ({ ...prev, showTitleSponsorOnOverlays: e.target.checked }))}
+                        />
+                        <span className="admin-branding-toggle-label">Show title sponsor on sold/unsold overlays</span>
+                      </label>
+
+                      <label className="admin-branding-toggle">
+                        <input
+                          type="checkbox"
+                          checked={brandingSettings.showTitleSponsorInTeamView}
+                          onChange={(e) => setBrandingSettings(prev => ({ ...prev, showTitleSponsorInTeamView: e.target.checked }))}
+                        />
+                        <span className="admin-branding-toggle-label">Show title sponsor in team squad view</span>
+                      </label>
+
+                      <label className="admin-branding-toggle">
+                        <input
+                          type="checkbox"
+                          checked={brandingSettings.showBrandOnSoldOverlay}
+                          onChange={(e) => setBrandingSettings(prev => ({ ...prev, showBrandOnSoldOverlay: e.target.checked }))}
+                        />
+                        <span className="admin-branding-toggle-label">Show brand owner on sold overlay</span>
+                      </label>
+
+                      <label className="admin-branding-toggle">
+                        <input
+                          type="checkbox"
+                          checked={brandingSettings.showBrandInTeamHeader}
+                          onChange={(e) => setBrandingSettings(prev => ({ ...prev, showBrandInTeamHeader: e.target.checked }))}
+                        />
+                        <span className="admin-branding-toggle-label">Show brand owner in team header</span>
+                      </label>
+
+                      <label className="admin-branding-toggle">
+                        <input
+                          type="checkbox"
+                          checked={brandingSettings.reduceThresholdByIconPlayers}
+                          onChange={(e) => setBrandingSettings(prev => ({ ...prev, reduceThresholdByIconPlayers: e.target.checked }))}
+                        />
+                        <span className="admin-branding-toggle-label">Auto-reduce player slots by icon player count</span>
+                        <small className="admin-branding-hint">When enabled, iconic players don't count against auction slots</small>
+                      </label>
+
+                      {/* Break Content Section */}
+                      <div className="admin-branding-section-divider" />
+                      <h4 className="admin-branding-section-title">Break Overlay Content</h4>
+                      <p style={{ color: '#64748b', fontSize: '0.78rem', marginBottom: '0.75rem' }}>
+                        Choose what to display during auction breaks — sponsor images, team owner images, or both.
+                      </p>
+
+                      <label className="admin-branding-toggle">
+                        <input
+                          type="checkbox"
+                          checked={brandingSettings.showSponsorsInBreak}
+                          onChange={(e) => setBrandingSettings(prev => ({ ...prev, showSponsorsInBreak: e.target.checked }))}
+                        />
+                        <span className="admin-branding-toggle-label">Show sponsor images/videos during break</span>
+                        <small className="admin-branding-hint">Displays sponsor brochures, videos, and logo carousel</small>
+                      </label>
+
+                      <label className="admin-branding-toggle">
+                        <input
+                          type="checkbox"
+                          checked={brandingSettings.showTeamOwnersInBreak}
+                          onChange={(e) => setBrandingSettings(prev => ({ ...prev, showTeamOwnersInBreak: e.target.checked }))}
+                        />
+                        <span className="admin-branding-toggle-label">Show team owner/brand images during break</span>
+                        <small className="admin-branding-hint">Displays owner portraits and brand logos in a showcase gallery</small>
+                      </label>
+
+                      <div className="admin-branding-radio-group">
+                        <span className="admin-branding-radio-title">Break display layout</span>
+                        <label className="admin-branding-radio">
+                          <input
+                            type="radio"
+                            name="breakContentMode"
+                            value="sponsors"
+                            checked={brandingSettings.breakContentMode === 'sponsors'}
+                            onChange={() => setBrandingSettings(prev => ({ ...prev, breakContentMode: 'sponsors' }))}
+                          />
+                          <span>Sponsors only (center stage)</span>
+                        </label>
+                        <label className="admin-branding-radio">
+                          <input
+                            type="radio"
+                            name="breakContentMode"
+                            value="teamOwners"
+                            checked={brandingSettings.breakContentMode === 'teamOwners'}
+                            onChange={() => setBrandingSettings(prev => ({ ...prev, breakContentMode: 'teamOwners' }))}
+                          />
+                          <span>Team owners only (full gallery)</span>
+                        </label>
+                        <label className="admin-branding-radio">
+                          <input
+                            type="radio"
+                            name="breakContentMode"
+                            value="both"
+                            checked={brandingSettings.breakContentMode === 'both'}
+                            onChange={() => setBrandingSettings(prev => ({ ...prev, breakContentMode: 'both' }))}
+                          />
+                          <span>Both (sponsors center + owners side panel)</span>
+                        </label>
+                      </div>
+
+                      {/* Squad View Mode */}
+                      <div className="admin-branding-section-divider" />
+                      <h4 className="admin-branding-section-title">Team Squad View - Right Panel</h4>
+                      <p style={{ color: '#64748b', fontSize: '0.78rem', marginBottom: '0.75rem' }}>
+                        Choose what to display in the right panel of the team squad view.
+                      </p>
+
+                      <div className="admin-branding-radio-group">
+                        <span className="admin-branding-radio-title">Show in squad view right panel</span>
+                        <label className="admin-branding-radio">
+                          <input
+                            type="radio"
+                            name="squadViewMode"
+                            value="iconPlayers"
+                            checked={brandingSettings.squadViewMode === 'iconPlayers'}
+                            onChange={() => setBrandingSettings(prev => ({ ...prev, squadViewMode: 'iconPlayers' }))}
+                          />
+                          <span>Icon Players (captain / star players)</span>
+                        </label>
+                        <label className="admin-branding-radio">
+                          <input
+                            type="radio"
+                            name="squadViewMode"
+                            value="owners"
+                            checked={brandingSettings.squadViewMode === 'owners'}
+                            onChange={() => setBrandingSettings(prev => ({ ...prev, squadViewMode: 'owners' }))}
+                          />
+                          <span>Brand Owners (owner photos & brand images)</span>
+                        </label>
+                      </div>
+                    </div>
                   </div>
 
                   <button
@@ -2899,6 +3102,17 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
               {/* Streaming Tab - V3 Premium */}
               {activeTab === 'streaming' && (
                 <StreamingTab onClose={onClose} />
+              )}
+
+              {/* Storage Tab */}
+              {activeTab === 'storage' && (
+                <div className="admin-section">
+                  <h3>Storage Management</h3>
+                  <p style={{ color: '#64748b', fontSize: '0.85rem', marginBottom: '1rem' }}>
+                    Browse, manage, and clean up Firebase Storage objects. Identify unused files to free up space.
+                  </p>
+                  <StorageManager />
+                </div>
               )}
 
               {/* Reset Tab */}

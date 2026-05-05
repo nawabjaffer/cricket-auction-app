@@ -5,6 +5,7 @@
 
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuction } from '../../hooks';
+import { useCurrencySuffix } from '../../store';
 
 interface BidDisplayProps {
 }
@@ -14,6 +15,7 @@ export function BidDisplay({}: BidDisplayProps) {
     currentBid, 
     previousBid, 
   } = useAuction();
+  const currencySuffix = useCurrencySuffix();
 
   return (
     <div className="bid-container">
@@ -32,7 +34,7 @@ export function BidDisplay({}: BidDisplayProps) {
           >
             <span className="bid-currency">₹</span>
             <span className="bid-value">{currentBid.toFixed(2)}</span>
-            <span className="bid-unit">L</span>
+            <span className="bid-unit">{currencySuffix}</span>
           </motion.div>
         </AnimatePresence>
 
@@ -43,7 +45,7 @@ export function BidDisplay({}: BidDisplayProps) {
             animate={{ opacity: 1 }}
             className="bid-previous"
           >
-            was ₹{previousBid.toFixed(2)}L
+            was ₹{previousBid.toFixed(2)}{currencySuffix}
           </motion.div>
         )}
       </div>

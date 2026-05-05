@@ -276,10 +276,33 @@ export interface AdminSettings {
   defaultCountryCode?: string;
   // Configurable bid increment ranges (e.g. 0-500 → 50, 500-1000 → 100)
   bidIncrementRanges?: BidIncrementRange[];
+  // Currency suffix displayed after amounts (default 'L' for Lakhs, can be 'T' for Thousands etc.)
+  currencySuffix?: string;
   // Custom player placeholder image URL (default /placeholder_player.png)
   playerPlaceholderImage?: string;
   // When true, mirror screen preload persists across sessions (localStorage) for faster reload
   mirrorPreloadPersist?: boolean;
+  // Branding placement controls
+  branding?: {
+    /** Show title sponsor logo on sold/unsold overlays */
+    showTitleSponsorOnOverlays?: boolean;
+    /** Show title sponsor logo in team squad view */
+    showTitleSponsorInTeamView?: boolean;
+    /** Show brand owner name on sold overlay */
+    showBrandOnSoldOverlay?: boolean;
+    /** Show brand owner name on team view header */
+    showBrandInTeamHeader?: boolean;
+    /** Auto-reduce player threshold by iconic player count */
+    reduceThresholdByIconPlayers?: boolean;
+    /** Break overlay content mode: 'sponsors' | 'teamOwners' | 'both' */
+    breakContentMode?: 'sponsors' | 'teamOwners' | 'both';
+    /** Show sponsor images during break */
+    showSponsorsInBreak?: boolean;
+    /** Show team owner images during break */
+    showTeamOwnersInBreak?: boolean;
+    /** Squad view right panel: 'iconPlayers' | 'owners' */
+    squadViewMode?: 'iconPlayers' | 'owners';
+  };
 }
 
 export interface BidIncrementRange {

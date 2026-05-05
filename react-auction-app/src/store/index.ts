@@ -20,4 +20,5 @@ export {
   useMaxUnsoldRounds,
   useOrganizerLogo,
   useOrganizerName,
+  useCurrencySuffix,
 } from './auctionStore';

@@ -22,13 +22,18 @@ import {
   ref as storageRef,
   uploadBytes,
   getDownloadURL,
+  listAll as fbListAll,
+  deleteObject as fbDeleteObject,
+  getMetadata,
   type FirebaseStorage,
+  type StorageReference,
 } from 'firebase/storage';
 import {
   getDatabase,
   ref as dbRef,
   get,
   set,
+  remove,
   type Database,
 } from 'firebase/database';
 
@@ -383,4 +388,129 @@ export async function batchPreloadImages(
 
   const workers = Array.from({ length: Math.min(maxConcurrent, pending.length) }, worker);
   await Promise.all(workers);
+}
+
+// ── Storage Management API ────────────────────────────────────────────────────
+
+export interface StorageObject {
+  name: string;
+  fullPath: string;
+  size: number;
+  contentType: string;
+  timeCreated: string;
+  updated: string;
+  downloadUrl: string;
+}
+
+/**
+ * Lists all objects in a given storage folder (recursively).
+ * Returns metadata + download URLs for display in admin UI.
+ */
+export async function listStorageObjects(
+  folder: string = ''
+): Promise<StorageObject[]> {
+  const storage = getStorageInstance();
+  const folderRef = storageRef(storage, folder);
+  const result = await fbListAll(folderRef);
+  const objects: StorageObject[] = [];
+
+  // Recurse into prefixes (subfolders)
+  for (const prefix of result.prefixes) {
+    const subObjects = await listStorageObjects(prefix.fullPath);
+    objects.push(...subObjects);
+  }
+
+  // Process items in this folder
+  const itemPromises = result.items.map(async (itemRef: StorageReference) => {
+    try {
+      const meta = await getMetadata(itemRef);
+      const url = await getDownloadURL(itemRef);
+      return {
+        name: meta.name,
+        fullPath: meta.fullPath,
+        size: meta.size,
+        contentType: meta.contentType || 'application/octet-stream',
+        timeCreated: meta.timeCreated,
+        updated: meta.updated,
+        downloadUrl: url,
+      } satisfies StorageObject;
+    } catch {
+      return null;
+    }
+  });
+
+  const resolved = await Promise.all(itemPromises);
+  objects.push(...resolved.filter((o): o is StorageObject => o !== null));
+  return objects;
+}
+
+/**
+ * Deletes a single object from Firebase Storage by its full path.
+ */
+export async function deleteStorageObject(fullPath: string): Promise<void> {
+  const storage = getStorageInstance();
+  const objRef = storageRef(storage, fullPath);
+  await fbDeleteObject(objRef);
+}
+
+/**
+ * Deletes multiple storage objects by their full paths.
+ * Returns an array of paths that failed to delete.
+ */
+export async function deleteStorageObjects(fullPaths: string[]): Promise<string[]> {
+  const failed: string[] = [];
+  for (const path of fullPaths) {
+    try {
+      await deleteStorageObject(path);
+    } catch {
+      failed.push(path);
+    }
+  }
+  return failed;
+}
+
+/**
+ * Gets the list of URLs referenced in the RTDB imageIndex.
+ * Used to cross-reference with actual storage objects to find orphans.
+ */
+export async function getImageIndexEntries(): Promise<Record<string, string>> {
+  const db = getDbInstance();
+  const snap = await get(dbRef(db, RTDB_IMAGE_INDEX));
+  if (!snap.exists()) return {};
+  return snap.val() as Record<string, string>;
+}
+
+/**
+ * Removes an entry from the RTDB image index and local cache.
+ */
+export async function removeImageIndexEntry(key: string): Promise<void> {
+  const db = getDbInstance();
+  await remove(dbRef(db, `${RTDB_IMAGE_INDEX}/${key}`));
+  // Also remove from localStorage
+  try {
+    const raw = localStorage.getItem(LS_KEY);
+    if (raw) {
+      const map: Record<string, string> = JSON.parse(raw);
+      delete map[key];
+      localStorage.setItem(LS_KEY, JSON.stringify(map));
+    }
+  } catch { /* ignore */ }
+}
+
+/**
+ * Clears stale entries from the RTDB image index that point to URLs
+ * no longer present in storage. Safe operation — only removes index entries.
+ */
+export async function clearStaleImageIndex(
+  activeStorageUrls: Set<string>
+): Promise<number> {
+  const entries = await getImageIndexEntries();
+  let cleared = 0;
+  for (const [key, url] of Object.entries(entries)) {
+    if (!activeStorageUrls.has(url)) {
+      await removeImageIndexEntry(key);
+      cleared++;
+    }
+  }
+  return cleared;
 }

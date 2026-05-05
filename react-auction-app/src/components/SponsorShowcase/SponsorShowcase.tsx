@@ -28,7 +28,8 @@ export function SponsorShowcase({ sponsors }: SponsorShowcaseProps) {
 
   const displaySponsors = useMemo(() => sponsors.slice(0, 20), [sponsors]);
 
-  const gridSponsors = useMemo(() => displaySponsors.slice(0, 8), [displaySponsors]);
+  // Show all sponsors in the grid (no arbitrary cap of 8)
+  const gridSponsors = displaySponsors;
   const activeSponsor = gridSponsors[activeIndex] || gridSponsors[0] || null;
 
   useEffect(() => {
@@ -54,14 +55,17 @@ export function SponsorShowcase({ sponsors }: SponsorShowcaseProps) {
             const isActive = index === activeIndex;
             const isVisible = index < revealedCount;
             const accent = sponsor.brandColor || '#E4BE75';
-            const src = sponsor.logoUrl && !failedLogos[sponsor.id]
-              ? sponsor.logoUrl
+            const hasRealLogo = Boolean(sponsor.logoUrl && !failedLogos[sponsor.id]);
+            const src = hasRealLogo
+              ? sponsor.logoUrl!
               : buildDummyLogoUrl(sponsor.name);
+
+            const placeholderClass = hasRealLogo ? '' : 'placeholder';
 
             return (
               <motion.div
                 key={sponsor.id}
-                className={`sponsor-card ${isActive ? 'active' : 'logo-only'}`}
+                className={`sponsor-card ${isActive ? 'active' : 'logo-only'} ${placeholderClass}`}
                 initial={{ opacity: 0, y: 16, scale: 0.92 }}
                 animate={{
                   scale: isActive ? 1.08 : 0.95,
@@ -87,6 +91,14 @@ export function SponsorShowcase({ sponsors }: SponsorShowcaseProps) {
                   }}
                   transition={{ duration: 0.35 }}
                 />
+
+                {/* Show "No image uploaded" indicator for placeholder logos */}
+                {!hasRealLogo && isActive && (
+                  <div className="sponsor-no-image-hint">
+                    <span>No logo uploaded</span>
+                    <small>Upload via Admin → Sponsors</small>
+                  </div>
+                )}
 
                 <AnimatePresence>
                   {isActive && (
