@@ -161,14 +161,14 @@ export default function ScoreOBSControlDock() {
           </div>
           <div className="score-dock__batsmen">
             <span className="score-dock__batsman">
-              🏏 {liveScore.currentBatsmen[0]?.name || '—'} {liveScore.currentBatsmen[0]?.runs || 0}*({liveScore.currentBatsmen[0]?.balls || 0})
+              🏏 {liveScore.currentBatsmen[0]?.playerName || '—'} {liveScore.currentBatsmen[0]?.runs || 0}*({liveScore.currentBatsmen[0]?.balls || 0})
             </span>
             <span className="score-dock__batsman">
-              {liveScore.currentBatsmen[1]?.name || '—'} {liveScore.currentBatsmen[1]?.runs || 0}({liveScore.currentBatsmen[1]?.balls || 0})
+              {liveScore.currentBatsmen[1]?.playerName || '—'} {liveScore.currentBatsmen[1]?.runs || 0}({liveScore.currentBatsmen[1]?.balls || 0})
             </span>
           </div>
           <div className="score-dock__bowler-info">
-            ⚾ {liveScore.currentBowler?.name || '—'} {liveScore.currentBowler?.wickets || 0}/{liveScore.currentBowler?.runs || 0}
+            ⚾ {liveScore.currentBowler?.playerName || '—'} {liveScore.currentBowler?.wickets || 0}/{liveScore.currentBowler?.runs || 0}
           </div>
           <div className="score-dock__this-over">
             {liveScore.currentOverBalls?.map((b, i) => (

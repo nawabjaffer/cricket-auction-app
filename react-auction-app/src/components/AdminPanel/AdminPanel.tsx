@@ -553,7 +553,11 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
 
   const handleEditSoldPlayer = (player: SoldPlayer) => {
     setEditingSoldPlayerId(player.id);
-    setSoldPlayerDraft({ teamId: player.teamId, teamName: player.teamName, soldAmount: player.soldAmount });
+    setSoldPlayerDraft({ 
+      teamId: player.teamId || '', 
+      teamName: player.teamName || '', 
+      soldAmount: player.soldAmount 
+    });
   };
 
   const handleSaveSoldPlayerEdit = async () => {
@@ -1449,6 +1453,7 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
     }
   };
 
+  // @ts-expect-error - Function defined for future use
   const handleImportPlayersFromSheets = async () => {
     setIsSaving(true);
     try {

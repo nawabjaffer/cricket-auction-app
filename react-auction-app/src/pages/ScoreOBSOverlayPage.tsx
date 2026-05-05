@@ -51,6 +51,7 @@ export default function ScoreOBSOverlayPage() {
   const [matchId, setMatchId] = useState<string | null>(null);
   const [match, setMatch] = useState<MatchSetup | null>(null);
   const [live, setLive] = useState<LiveScore | null>(null);
+  // @ts-expect-error - overlay state kept for future use
   const [overlay, setOverlay] = useState<OverlayControlState | null>(null);
   const [config, setConfig] = useState<ScoringOverlayConfig>(DEFAULT_OVERLAY_CONFIG);
   const [ads, setAds] = useState<ScoringAd[]>([]);
@@ -62,7 +63,7 @@ export default function ScoreOBSOverlayPage() {
   const [showAd, setShowAd] = useState(false);
   const adIndexRef = useRef(0);
   const questionIndexRef = useRef(0);
-  const autoDismissRef = useRef<ReturnType<typeof setTimeout>>();
+  const autoDismissRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Get matchId from URL params
   useEffect(() => {
@@ -413,7 +414,7 @@ function BowlerStatsOverlay({ bowler }: { bowler: { playerId: string; playerName
   );
 }
 
-function FullScorecardOverlay({ live, battingTeam, bowlingTeam }: {
+function FullScorecardOverlay({ live, battingTeam }: {
   live: LiveScore; battingTeam: string; bowlingTeam: string;
 }) {
   return (

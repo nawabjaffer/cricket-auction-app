@@ -4,6 +4,7 @@
 // ============================================================================
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { getDatabase } from 'firebase/database';
 import { tenantPath } from '../services/tenantPath';
 import { realtimeSync } from '../services/realtimeSync';
 import { scoringService } from '../services/scoring';

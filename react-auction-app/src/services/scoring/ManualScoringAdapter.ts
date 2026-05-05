@@ -7,7 +7,7 @@ import { ref, get, set, onValue, push, type Database } from 'firebase/database';
 import type {
   IScoringAdapter, MatchScore, PlayerMatchStats, LiveScore,
   BallEvent, BallOutcome, WicketDetail, LiveBatsman, LiveBowler,
-  BatsmanInnings, BowlerInnings, Over, Innings, Extras, FallOfWicket,
+  Innings,
 } from '../../types/scoring';
 
 interface BallInput {
@@ -323,7 +323,7 @@ export class ManualScoringAdapter implements IScoringAdapter {
     batsmen: [LiveBatsman, LiveBatsman],
     batsmanRuns: number,
     isLegal: boolean,
-    wicket?: WicketDetail,
+    _wicket?: WicketDetail,
     swapStrike?: boolean,
   ): [LiveBatsman, LiveBatsman] {
     const [striker, nonStriker] = batsmen;

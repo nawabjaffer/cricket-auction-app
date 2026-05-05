@@ -166,7 +166,7 @@ function AuctionApp({ mirrorMode = false }: { mirrorMode?: boolean }) {
   const [adminSettings, setAdminSettings] = useState<AdminSettings | null>(null);
   
   // Player placeholder image — configurable from admin Theme & Settings
-  const playerPlaceholder = adminSettings?.playerPlaceholderImage || playerPlaceholder;
+  const playerPlaceholder = adminSettings?.playerPlaceholderImage || '/placeholder_player.png';
 
   // Image loading state
   const [imageLoadingState, setImageLoadingState] = useState<'loading' | 'loaded' | 'error'>('loading');
@@ -1479,7 +1479,7 @@ function AuctionApp({ mirrorMode = false }: { mirrorMode?: boolean }) {
               )}
               {!currentPlayer && (
                 <img 
-                  src=playerPlaceholder 
+                  src={playerPlaceholder}
                   alt="Player placeholder"
                   className="placeholder-image"
                 />

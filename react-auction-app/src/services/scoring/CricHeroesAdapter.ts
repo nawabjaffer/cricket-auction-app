@@ -15,6 +15,7 @@ export class CricHeroesAdapter implements IScoringAdapter {
   readonly provider = 'cricheroes' as const;
 
   private apiKey: string;
+  // @ts-expect-error - baseUrl kept for future CricHeroes API integration
   private baseUrl: string;
   private pollIntervalMs: number;
 
@@ -40,7 +41,7 @@ export class CricHeroesAdapter implements IScoringAdapter {
     throw new Error(`CricHeroes fetchPlayerMatchStats not yet implemented for match ${externalMatchId}`);
   }
 
-  syncLiveScore(externalMatchId: string, callback: (score: LiveScore) => void): () => void {
+  syncLiveScore(externalMatchId: string, _callback: (score: LiveScore) => void): () => void {
     if (!this.isConfigured()) {
       console.warn('[CricHeroes] Not configured — live sync not available');
       return () => {};

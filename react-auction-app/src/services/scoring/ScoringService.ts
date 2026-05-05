@@ -9,9 +9,9 @@ import { ManualScoringAdapter } from './ManualScoringAdapter';
 import { CricHeroesAdapter } from './CricHeroesAdapter';
 import type {
   IScoringAdapter, ScoringProvider, MatchSetup, MatchScoringConfig,
-  LiveScore, MatchScore, PlayerMatchStats, PlayerCareerStats,
+  LiveScore, PlayerMatchStats, PlayerCareerStats,
   ScoringOverlayConfig, ScoringAd, OverlayControlState, MatchLineup,
-  PreMatchState, TossConfig,
+  PreMatchState,
 } from '../../types/scoring';
 import { createEmptyCareerStats } from '../../types/scoring';
 

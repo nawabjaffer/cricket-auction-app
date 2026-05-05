@@ -4,7 +4,7 @@
 //          Auction Breaks, Loading Screen, Team Owners, Iconic Players
 // ============================================================================
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { IoAdd, IoTrash, IoPlay, IoStop, IoCloudUpload } from 'react-icons/io5';
 import { type AdminSettings, type SpecialCategory, type AuctionBreak, type BudgetRulesConfig, type LoadingScreenConfig, type TeamOwner } from '../../services/auctionPersistence';
 import { uploadFileToStorage } from '../../services';

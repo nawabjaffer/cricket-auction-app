@@ -3,11 +3,11 @@
 // Squad display, toss animation (chroma key), squad reveal, impact players
 // ============================================================================
 
-import { useEffect, useState, useRef, useCallback } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type {
   MatchSetup, MatchLineup, PreMatchState, ScoringOverlayConfig,
-  TossConfig, ImpactPlayer, MatchSquadPlayer,
+  ImpactPlayer,
 } from '../types/scoring';
 import './PreMatchOverlay.css';
 
@@ -216,7 +216,7 @@ function TossResultOverlay({ match, preMatch, config }: {
   if (!preMatch.tossResult) return null;
 
   const winner = preMatch.tossResult.wonBy === match.teamA.id ? match.teamA : match.teamB;
-  const loser = preMatch.tossResult.wonBy === match.teamA.id ? match.teamB : match.teamA;
+  // const loser = preMatch.tossResult.wonBy === match.teamA.id ? match.teamB : match.teamA;
 
   return (
     <motion.div
@@ -251,7 +251,7 @@ function SquadRevealOverlay({ team, lineup, revealedIds, revealConfig }: {
   revealConfig: PreMatchState['squadRevealConfig'];
 }) {
   const [localRevealed, setLocalRevealed] = useState<string[]>(revealedIds);
-  const timerRef = useRef<ReturnType<typeof setInterval>>();
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Auto-reveal animation
   useEffect(() => {
@@ -265,7 +265,7 @@ function SquadRevealOverlay({ team, lineup, revealedIds, revealConfig }: {
 
     timerRef.current = setInterval(() => {
       if (idx >= allIds.length) {
-        clearInterval(timerRef.current);
+        if (timerRef.current !== null) clearInterval(timerRef.current);
         return;
       }
       setLocalRevealed(prev => [...prev, allIds[idx]]);
