@@ -4,8 +4,8 @@
 // ============================================================================
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { getDatabase } from 'firebase/database';
 import { tenantPath } from '../services/tenantPath';
+import { realtimeSync } from '../services/realtimeSync';
 import { scoringService } from '../services/scoring';
 import { ManualScoringAdapter } from '../services/scoring/ManualScoringAdapter';
 import type {
@@ -41,7 +41,8 @@ export function useScoringState(matchId: string | undefined) {
   // Initialize
   useEffect(() => {
     if (!matchId) return;
-    const db = getDatabase();
+    const db = realtimeSync.getDatabase();
+    if (!db) { setState(s => ({ ...s, loading: false, error: 'Database not ready' })); return; }
     const basePath = tenantPath('scoring');
 
     try {
@@ -162,7 +163,7 @@ export function useScoringState(matchId: string | undefined) {
     try {
       await scoringService.setOverlayControl(matchId, {
         activeOverlay: overlayType,
-        activeOverlayData: data,
+        ...(data ? { activeOverlayData: data } : {}),
         lastUpdated: Date.now(),
       });
     } catch (err) {

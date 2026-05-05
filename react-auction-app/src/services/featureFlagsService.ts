@@ -174,7 +174,21 @@ class FeatureFlagsService {
       const snapshot = await get(ref(this.db, FEATURE_FLAGS_PATH()));
       
       if (snapshot.exists()) {
-        this.flags = snapshot.val();
+        const stored = snapshot.val() as FeatureFlags;
+        // Merge defaults with stored — new defaults get added, existing stay
+        const merged = { ...DEFAULT_FEATURE_FLAGS };
+        for (const key of Object.keys(stored)) {
+          merged[key] = stored[key];
+        }
+        this.flags = merged;
+        // Persist any newly-added defaults back to Firebase
+        const newKeys = Object.keys(DEFAULT_FEATURE_FLAGS).filter(k => !stored[k]);
+        if (newKeys.length > 0) {
+          const patch: Record<string, FeatureFlag> = {};
+          newKeys.forEach(k => { patch[k] = DEFAULT_FEATURE_FLAGS[k]; });
+          await update(ref(this.db, FEATURE_FLAGS_PATH()), patch);
+          console.log(`[FeatureFlagsService] Synced ${newKeys.length} new default flag(s):`, newKeys);
+        }
       } else {
         // Initialize with defaults if not in Firebase
         this.flags = DEFAULT_FEATURE_FLAGS;

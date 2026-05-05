@@ -11,6 +11,7 @@ import type {
   IScoringAdapter, ScoringProvider, MatchSetup, MatchScoringConfig,
   LiveScore, MatchScore, PlayerMatchStats, PlayerCareerStats,
   ScoringOverlayConfig, ScoringAd, OverlayControlState, MatchLineup,
+  PreMatchState, TossConfig,
 } from '../../types/scoring';
 import { createEmptyCareerStats } from '../../types/scoring';
 
@@ -38,6 +39,21 @@ export class ScoringService {
   private ensureDb(): Database {
     if (!this.db) throw new Error('ScoringService not initialized');
     return this.db;
+  }
+
+  private stripUndefinedDeep<T>(value: T): T {
+    if (Array.isArray(value)) {
+      return value.map((item) => this.stripUndefinedDeep(item)) as T;
+    }
+    if (value && typeof value === 'object') {
+      const out: Record<string, unknown> = {};
+      for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+        if (v === undefined) continue;
+        out[k] = this.stripUndefinedDeep(v);
+      }
+      return out as T;
+    }
+    return value;
   }
 
   // ── Adapter Selection ──────────────────────────────────────────────────────
@@ -68,7 +84,7 @@ export class ScoringService {
 
   async createMatch(match: MatchSetup): Promise<string> {
     const db = this.ensureDb();
-    await set(ref(db, `${this.basePath}/matches/${match.id}/setup`), match);
+    await set(ref(db, `${this.basePath}/matches/${match.id}/setup`), this.stripUndefinedDeep(match));
     return match.id;
   }
 
@@ -77,11 +93,11 @@ export class ScoringService {
     const snapshot = await get(ref(db, `${this.basePath}/matches/${matchId}/setup`));
     if (!snapshot.exists()) throw new Error('Match not found');
     const existing = snapshot.val();
-    await set(ref(db, `${this.basePath}/matches/${matchId}/setup`), {
+    await set(ref(db, `${this.basePath}/matches/${matchId}/setup`), this.stripUndefinedDeep({
       ...existing,
       ...updates,
       updatedAt: Date.now(),
-    });
+    }));
   }
 
   async getMatch(matchId: string): Promise<MatchSetup | null> {
@@ -123,7 +139,7 @@ export class ScoringService {
 
   async configureMatchScoring(matchId: string, config: MatchScoringConfig): Promise<void> {
     const db = this.ensureDb();
-    await set(ref(db, `${this.basePath}/matches/${matchId}/config`), config);
+    await set(ref(db, `${this.basePath}/matches/${matchId}/config`), this.stripUndefinedDeep(config));
   }
 
   async getMatchConfig(matchId: string): Promise<MatchScoringConfig | null> {
@@ -136,7 +152,7 @@ export class ScoringService {
 
   async saveLineup(matchId: string, lineup: MatchLineup): Promise<void> {
     const db = this.ensureDb();
-    await set(ref(db, `${this.basePath}/matches/${matchId}/lineups/${lineup.teamId}`), lineup);
+    await set(ref(db, `${this.basePath}/matches/${matchId}/lineups/${lineup.teamId}`), this.stripUndefinedDeep(lineup));
   }
 
   async getLineup(matchId: string, teamId: string): Promise<MatchLineup | null> {
@@ -160,11 +176,11 @@ export class ScoringService {
     const db = this.ensureDb();
     const current = await get(ref(db, `${this.basePath}/matches/${matchId}/overlay`));
     const existing = current.exists() ? current.val() : { activeOverlay: 'none' };
-    await set(ref(db, `${this.basePath}/matches/${matchId}/overlay`), {
+    await set(ref(db, `${this.basePath}/matches/${matchId}/overlay`), this.stripUndefinedDeep({
       ...existing,
       ...control,
       lastUpdated: Date.now(),
-    });
+    }));
   }
 
   subscribeOverlayControl(matchId: string, callback: (control: OverlayControlState) => void): () => void {
@@ -178,7 +194,7 @@ export class ScoringService {
 
   async saveAd(ad: ScoringAd): Promise<void> {
     const db = this.ensureDb();
-    await set(ref(db, `${this.basePath}/ads/${ad.id}`), ad);
+    await set(ref(db, `${this.basePath}/ads/${ad.id}`), this.stripUndefinedDeep(ad));
   }
 
   async deleteAd(adId: string): Promise<void> {
@@ -207,7 +223,7 @@ export class ScoringService {
 
   async saveOverlayConfig(config: ScoringOverlayConfig): Promise<void> {
     const db = this.ensureDb();
-    await set(ref(db, `${this.basePath}/overlayConfig`), config);
+    await set(ref(db, `${this.basePath}/overlayConfig`), this.stripUndefinedDeep(config));
   }
 
   async getOverlayConfig(): Promise<ScoringOverlayConfig | null> {
@@ -223,6 +239,49 @@ export class ScoringService {
     });
   }
 
+  // ── Pre-Match State ─────────────────────────────────────────────────────
+
+  async savePreMatchState(matchId: string, state: PreMatchState): Promise<void> {
+    const db = this.ensureDb();
+    await set(ref(db, `${this.basePath}/matches/${matchId}/preMatch`), this.stripUndefinedDeep(state));
+  }
+
+  async getPreMatchState(matchId: string): Promise<PreMatchState | null> {
+    const db = this.ensureDb();
+    const snapshot = await get(ref(db, `${this.basePath}/matches/${matchId}/preMatch`));
+    return snapshot.exists() ? snapshot.val() : null;
+  }
+
+  subscribePreMatchState(matchId: string, callback: (state: PreMatchState) => void): () => void {
+    const db = this.ensureDb();
+    return onValue(ref(db, `${this.basePath}/matches/${matchId}/preMatch`), (snapshot) => {
+      if (snapshot.exists()) callback(snapshot.val());
+    });
+  }
+
+  async updatePreMatchPhase(matchId: string, phase: PreMatchState['phase']): Promise<void> {
+    const db = this.ensureDb();
+    const snapshot = await get(ref(db, `${this.basePath}/matches/${matchId}/preMatch`));
+    if (!snapshot.exists()) return;
+    const existing = snapshot.val();
+    await set(ref(db, `${this.basePath}/matches/${matchId}/preMatch`), this.stripUndefinedDeep({
+      ...existing,
+      phase,
+      lastUpdated: Date.now(),
+    }));
+  }
+
+  async revealPlayer(matchId: string, team: 'teamA' | 'teamB', playerId: string): Promise<void> {
+    const db = this.ensureDb();
+    const snapshot = await get(ref(db, `${this.basePath}/matches/${matchId}/preMatch`));
+    if (!snapshot.exists()) return;
+    const state = snapshot.val() as PreMatchState;
+    const key = team === 'teamA' ? 'revealedPlayersTeamA' : 'revealedPlayersTeamB';
+    const list = state[key] || [];
+    if (!list.includes(playerId)) list.push(playerId);
+    await set(ref(db, `${this.basePath}/matches/${matchId}/preMatch/${key}`), list);
+  }
+
   // ── Career Stats Aggregation ───────────────────────────────────────────────
 
   async aggregatePlayerCareerStats(playerId: string): Promise<PlayerCareerStats> {
@@ -236,7 +295,7 @@ export class ScoringService {
 
   async saveCareerStats(playerId: string, stats: PlayerCareerStats): Promise<void> {
     const db = this.ensureDb();
-    await set(ref(db, `${this.basePath}/playerStats/${playerId}/career`), stats);
+    await set(ref(db, `${this.basePath}/playerStats/${playerId}/career`), this.stripUndefinedDeep(stats));
   }
 
   async getCareerStats(playerId: string): Promise<PlayerCareerStats | null> {

@@ -209,6 +209,78 @@
   object-fit: contain;
 }
 
+.cb-team-bid-grid {
+  grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+  gap: 0.8rem;
+}
+
+.cb-team-bid-card {
+  min-height: 148px;
+  justify-content: center;
+  gap: 0.65rem;
+  padding: 1rem 0.8rem;
+  text-align: center;
+  border-width: 1px;
+}
+
+.cb-team-bid-card:disabled {
+  opacity: 0.45;
+}
+
+.cb-team-bid-card.active {
+  border-color: rgba(251,191,36,0.9);
+  box-shadow: 0 0 18px rgba(251,191,36,0.18);
+}
+
+.cb-team-bid-badge {
+  position: absolute;
+  top: 0.65rem;
+  right: 0.65rem;
+  font-size: 0.55rem;
+  background: rgba(251,191,36,0.95);
+  color: #111827;
+  padding: 0.18rem 0.45rem;
+  border-radius: 999px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+}
+
+.cb-team-bid-logo-wrap {
+  width: 68px;
+  height: 68px;
+  border-radius: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255,255,255,0.12);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.12);
+}
+
+.cb-team-bid-logo-wrap img {
+  width: 42px !important;
+  height: 42px !important;
+  max-width: 42px;
+  max-height: 42px;
+}
+
+.cb-team-bid-initials {
+  width: 42px;
+  height: 42px;
+  font-size: 0.95rem;
+  margin: 0;
+}
+
+.cb-team-bid-name {
+  font-size: 0.86rem;
+}
+
+.cb-team-bid-hint {
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: rgba(255,255,255,0.72);
+  letter-spacing: 0.01em;
+}
+
 /* ── Login Form ── */
 .cb-manual-login {
   margin-top: 0.75rem;

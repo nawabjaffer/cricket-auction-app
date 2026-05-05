@@ -47,6 +47,9 @@ export function BreakOverlay({
   const videoRef = useRef<HTMLVideoElement>(null);
   const endsAtRef = useRef<number>(0);
   const sponsorRotationRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Stable ref for onClose to avoid restarting timer when parent re-renders
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
 
   // Reset + start the countdown the instant the overlay becomes visible.
   // We use a deadline-based clock so the timer is robust against tab throttling
@@ -61,14 +64,15 @@ export function BreakOverlay({
       const remaining = Math.max(0, Math.ceil((endsAtRef.current - Date.now()) / 1000));
       setTimeLeft(remaining);
       if (remaining <= 0) {
-        onClose();
+        onCloseRef.current();
       }
     };
     // Fire immediately for snappy feel, then every 250ms.
     tick();
     const interval = setInterval(tick, 250);
     return () => clearInterval(interval);
-  }, [isVisible, durationSeconds, onClose]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isVisible, durationSeconds]);
 
   // Categorize sponsors
   const titleSponsors = useMemo(
@@ -136,7 +140,7 @@ export function BreakOverlay({
     const handleKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape' || e.key === 'b' || e.key === 'B') {
         e.preventDefault();
-        onClose();
+        onCloseRef.current();
       }
       if (e.key === 'n' || e.key === 'N' || e.key === 'ArrowRight') {
         e.preventDefault();
@@ -149,7 +153,7 @@ export function BreakOverlay({
     };
     globalThis.addEventListener('keydown', handleKey);
     return () => globalThis.removeEventListener('keydown', handleKey);
-  }, [isVisible, onClose, cycleSponsor]);
+  }, [isVisible, cycleSponsor]);
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -321,48 +325,35 @@ export function BreakOverlay({
           {/* ═══ OWNER SHOWCASE (when feature flag enabled) ═══ */}
           {showOwnerOverlay && teamOwners.length > 0 && (
             <motion.div
-              className="break-ov__owners"
-              initial={{ y: 30, opacity: 0 }}
-              animate={{ y: 0, opacity: 1 }}
-              transition={{ delay: 0.5, duration: 0.6 }}
+              className="break-ov__owners break-ov__owners--side"
+              initial={{ x: 60, opacity: 0 }}
+              animate={{ x: 0, opacity: 1 }}
+              transition={{ delay: 0.5, duration: 0.6, type: 'spring', stiffness: 150 }}
             >
-              <div className="break-ov__owners-grid">
-                {teamOwners.map((owner, idx) => (
-                  <motion.div
-                    key={owner.id}
-                    className="break-ov__owner-card"
-                    initial={{ opacity: 0, scale: 0.8 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    transition={{ delay: 0.6 + idx * 0.1, type: 'spring', stiffness: 200 }}
-                    style={{ '--owner-team-color': owner.teamColor || '#3b82f6' } as React.CSSProperties}
-                  >
-                    {owner.brandImageUrl && (
-                      <div className="break-ov__owner-brand">
-                        <img src={owner.brandImageUrl} alt="" className="break-ov__owner-brand-img" />
-                      </div>
+              {teamOwners.map((owner, idx) => (
+                <motion.div
+                  key={owner.id}
+                  className="break-ov__owner-row"
+                  initial={{ opacity: 0, x: 30 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: 0.6 + idx * 0.08, type: 'spring', stiffness: 200 }}
+                  style={{ '--owner-team-color': owner.teamColor || '#3b82f6' } as React.CSSProperties}
+                >
+                  <div className="break-ov__owner-avatar">
+                    {owner.imageUrl ? (
+                      <img src={owner.imageUrl} alt={owner.name} className="break-ov__owner-avatar-img" />
+                    ) : owner.teamLogo ? (
+                      <img src={owner.teamLogo} alt={owner.teamName} className="break-ov__owner-avatar-img" />
+                    ) : (
+                      <span className="break-ov__owner-avatar-letter">{owner.name.charAt(0).toUpperCase()}</span>
                     )}
-                    <div className="break-ov__owner-photo-wrap">
-                      {owner.imageUrl ? (
-                        <img src={owner.imageUrl} alt={owner.name} className="break-ov__owner-photo" />
-                      ) : (
-                        <div className="break-ov__owner-photo-placeholder">
-                          {owner.name.charAt(0).toUpperCase()}
-                        </div>
-                      )}
-                    </div>
-                    <div className="break-ov__owner-info">
-                      <span className="break-ov__owner-name">{owner.name}</span>
-                      {owner.designation && (
-                        <span className="break-ov__owner-designation">{owner.designation}</span>
-                      )}
-                      <span className="break-ov__owner-team">{owner.teamName}</span>
-                    </div>
-                    {owner.teamLogo && (
-                      <img src={owner.teamLogo} alt="" className="break-ov__owner-team-logo" />
-                    )}
-                  </motion.div>
-                ))}
-              </div>
+                  </div>
+                  <div className="break-ov__owner-text">
+                    <span className="break-ov__owner-name">{owner.name}</span>
+                    <span className="break-ov__owner-team">{owner.teamName}</span>
+                  </div>
+                </motion.div>
+              ))}
             </motion.div>
           )}
           {trainLogos.length > 0 && (

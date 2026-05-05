@@ -85,15 +85,13 @@ export type AuctionRoleCategory =
   | 'Wicket Keeper Batsman'
   | 'Batsman'
   | 'Bowler'
-  | 'All-Rounder'
-  | 'Uncategorized';
+  | 'All-Rounder';
 
 export const DEFAULT_AUCTION_ROLE_ORDER: AuctionRoleCategory[] = [
   'Wicket Keeper Batsman',
   'Batsman',
   'Bowler',
   'All-Rounder',
-  'Uncategorized',
 ];
 
 export interface SoldPlayer extends Player {

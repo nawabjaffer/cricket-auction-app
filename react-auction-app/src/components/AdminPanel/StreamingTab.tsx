@@ -3,9 +3,12 @@
 // Admin panel tab for configuring OBS, cameras, and broadcast settings
 // ============================================================================
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useTenantNavigate as useNavigate } from '../../hooks/useTenantNavigate';
+import { getTenantSlugFromPath } from '../../hooks/useTenantNavigate';
 import { IoVideocam, IoRadio, IoSettings, IoPlay, IoStop } from 'react-icons/io5';
+import { GiCricketBat } from 'react-icons/gi';
+import { useLocation } from 'react-router-dom';
 import { useLiveStreamingStore } from '../../store/liveStreamingStore';
 import { obsService } from '../../services/obsService';
 import { premiumService } from '../../services/premiumService';
@@ -20,10 +23,21 @@ interface StreamingTabProps {
 
 export default function StreamingTab({ onClose }: StreamingTabProps) {
   const navigate = useNavigate();
+  const location = useLocation();
+  const tenantSlug = getTenantSlugFromPath(location.pathname);
+  const baseUrl = window.location.origin + (tenantSlug ? `/${tenantSlug}` : '');
   
   // Feature flags
   const { isEnabled } = useFeatureFlags();
   const ownerOverlayEnabled = isEnabled('owner-overlay-in-break');
+  const superAdminEnabled = isEnabled('super-admin-bidding');
+
+  // Save feedback
+  const [saveFeedback, setSaveFeedback] = useState<string | null>(null);
+  const showSaveFeedback = useCallback((msg: string) => {
+    setSaveFeedback(msg);
+    setTimeout(() => setSaveFeedback(null), 3000);
+  }, []);
   
   // Store state
   const {
@@ -164,10 +178,10 @@ export default function StreamingTab({ onClose }: StreamingTabProps) {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
-              <span style={{ fontWeight: 600, color: '#fff' }}>Subscription Status</span>
+              <span style={{ fontWeight: 600, color: '#000' }}>Subscription Status</span>
               {tierBadge(currentTier)}
             </div>
-            <p style={{ fontSize: '0.875rem', color: 'rgba(255, 255, 255, 0.6)', margin: 0 }}>
+            <p style={{ fontSize: '0.875rem', color: 'rgba(0, 0, 0, 0.6)', margin: 0 }}>
               {isPremium
                 ? `Up to ${maxCameras} cameras • OBS Integration • RTMP Streaming`
                 : 'Upgrade to access live streaming features'}
@@ -219,7 +233,7 @@ export default function StreamingTab({ onClose }: StreamingTabProps) {
         >
           <IoPlay /> Open Live Broadcast View
         </button>
-        <p style={{ fontSize: '0.75rem', color: 'rgba(255, 255, 255, 0.5)', marginTop: '0.5rem' }}>
+        <p style={{ fontSize: '0.75rem', color: 'rgba(0, 0, 0, 0.5)', marginTop: '0.5rem' }}>
           Opens the full-screen broadcast view at /live
         </p>
       </div>
@@ -584,6 +598,7 @@ export default function StreamingTab({ onClose }: StreamingTabProps) {
               checked={ownerOverlayEnabled}
               onChange={async () => {
                 await featureFlagsService.toggleFeature('owner-overlay-in-break', !ownerOverlayEnabled);
+                showSaveFeedback(`Owner Overlay ${!ownerOverlayEnabled ? 'enabled' : 'disabled'}`);
               }}
             />
             Show Owner Images in Break Overlay
@@ -592,13 +607,43 @@ export default function StreamingTab({ onClose }: StreamingTabProps) {
           <label className="admin-panel__checkbox-label">
             <input
               type="checkbox"
-              checked={isEnabled('super-admin-bidding')}
+              checked={superAdminEnabled}
               onChange={async () => {
-                await featureFlagsService.toggleFeature('super-admin-bidding', !isEnabled('super-admin-bidding'));
+                await featureFlagsService.toggleFeature('super-admin-bidding', !superAdminEnabled);
+                showSaveFeedback(`Super Admin Bidding ${!superAdminEnabled ? 'enabled' : 'disabled'}`);
               }}
             />
             Super Admin Bidding (control all teams without team login)
           </label>
+          {superAdminEnabled && (
+            <div style={{
+              marginLeft: '1.5rem',
+              padding: '0.75rem',
+              background: 'rgba(139, 92, 246, 0.08)',
+              border: '1px solid rgba(139, 92, 246, 0.2)',
+              borderRadius: '0.5rem',
+              fontSize: '0.8rem',
+            }}>
+              <p style={{ margin: 0, color: 'rgba(0,0,0,0.7)' }}>
+                <strong style={{ color: '#8b5cf6' }}>Super Admin is ON</strong> — Open the Bid Controller page to control bids for all teams:
+              </p>
+              <code style={{
+                display: 'block',
+                marginTop: '0.35rem',
+                padding: '0.35rem 0.6rem',
+                background: 'rgba(139, 92, 246, 0.1)',
+                border: '1px solid rgba(139, 92, 246, 0.25)',
+                borderRadius: 6,
+                fontSize: '0.78rem',
+                color: '#a78bfa',
+                wordBreak: 'break-all',
+                userSelect: 'all',
+                cursor: 'pointer',
+              }}
+                onClick={() => { if (onClose) onClose(); navigate('/connect-bidding-admin'); }}
+              >{baseUrl}/connect-bidding-admin</code>
+            </div>
+          )}
 
           <div>
             <label
@@ -651,6 +696,85 @@ export default function StreamingTab({ onClose }: StreamingTabProps) {
           </p>
         </div>
       </div>
+
+      {/* ── Scoring Section ── */}
+      <div className="admin-panel__section">
+        <h3 className="admin-panel__section-title">
+          <GiCricketBat /> Scoring
+        </h3>
+        <p style={{ fontSize: '0.8rem', color: 'rgba(0,0,0,0.55)', margin: '0 0 0.75rem' }}>
+          Manage live match scoring, OBS overlays, and scorecard updates.
+        </p>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+          {/* Scoring Admin */}
+          <button
+            onClick={() => { if (onClose) onClose(); navigate('/scoring/admin'); }}
+            className="admin-panel__btn admin-panel__btn--primary"
+            style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '0.75rem' }}
+          >
+            <GiCricketBat size={16} /> Open Scoring Admin
+          </button>
+
+          {/* Score Update Page */}
+          <button
+            onClick={() => { if (onClose) onClose(); navigate('/match/score/update'); }}
+            className="admin-panel__btn admin-panel__btn--secondary"
+            style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
+          >
+            Update Scorecard
+          </button>
+        </div>
+
+        {/* Scoring URLs reference */}
+        <div style={{
+          marginTop: '0.75rem',
+          padding: '0.75rem',
+          background: 'rgba(255, 255, 255, 0.03)',
+          border: '1px solid rgba(255, 255, 255, 0.08)',
+          borderRadius: '0.5rem',
+        }}>
+          <div style={{ fontWeight: 700, fontSize: '0.78rem', color: '#000', marginBottom: '0.5rem' }}>Scoring URLs</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', fontSize: '0.75rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <span style={{ color: 'rgba(0,0,0,0.5)' }}>Scoring admin:</span>
+              <code style={{ color: '#60a5fa', cursor: 'pointer' }} onClick={() => { if (onClose) onClose(); navigate('/scoring/admin'); }}>/scoring/admin</code>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <span style={{ color: 'rgba(0,0,0,0.5)' }}>Update scorecard:</span>
+              <code style={{ color: '#60a5fa', cursor: 'pointer' }} onClick={() => { if (onClose) onClose(); navigate('/match/score/update'); }}>/match/score/update</code>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <span style={{ color: 'rgba(0,0,0,0.5)' }}>Score OBS overlay:</span>
+              <code style={{ color: '#a78bfa' }}>/obs-overlay?mode=scoring&amp;matchId=MATCH_ID</code>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <span style={{ color: 'rgba(0,0,0,0.5)' }}>Bid controller:</span>
+              <code style={{ color: '#60a5fa', cursor: 'pointer' }} onClick={() => { if (onClose) onClose(); navigate('/connect-bidding-admin'); }}>/connect-bidding-admin</code>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Save Feedback Toast */}
+      {saveFeedback && (
+        <div style={{
+          position: 'fixed',
+          bottom: 24,
+          left: '50%',
+          transform: 'translateX(-50%)',
+          padding: '0.6rem 1.25rem',
+          background: '#22c55e',
+          color: '#fff',
+          borderRadius: '0.5rem',
+          fontWeight: 600,
+          fontSize: '0.85rem',
+          boxShadow: '0 4px 16px rgba(0,0,0,0.3)',
+          zIndex: 9999,
+        }}>
+          ✓ {saveFeedback}
+        </div>
+      )}
     </div>
   );
 }

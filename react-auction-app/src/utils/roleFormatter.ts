@@ -16,6 +16,13 @@ const ROLE_TO_CATEGORY: Record<string, AuctionRoleCategory> = {
   'all-rounder': 'All-Rounder',
   'allrounder': 'All-Rounder',
   'all rounder': 'All-Rounder',
+  'all_rounder': 'All-Rounder',
+  'batting all_rounder': 'All-Rounder',
+  'batting all-rounder': 'All-Rounder',
+  'batting allrounder': 'All-Rounder',
+  'bowling all_rounder': 'All-Rounder',
+  'bowling all-rounder': 'All-Rounder',
+  'bowling allrounder': 'All-Rounder',
   'wicket-keeper': 'Wicket Keeper Batsman',
   'wicket keeper': 'Wicket Keeper Batsman',
   'wicket keeper batsman': 'Wicket Keeper Batsman',
@@ -39,8 +46,8 @@ export function getRoleCategory(role: string | undefined | null): AuctionRoleCat
   if (ROLE_TO_CATEGORY[key]) return ROLE_TO_CATEGORY[key];
 
   // Partial match heuristics
-  if (/wicket[\s-]*keep/i.test(key) || /^wk/i.test(key)) return 'Wicket Keeper Batsman';
-  if (/all[\s-]*round/i.test(key)) return 'All-Rounder';
+  if (/wicket[\s_-]*keep/i.test(key) || /^wk/i.test(key)) return 'Wicket Keeper Batsman';
+  if (/all[\s_-]*round/i.test(key)) return 'All-Rounder';
   if (/bowl/i.test(key)) return 'Bowler';
   if (/bat/i.test(key)) return 'Batsman';
 
@@ -166,9 +173,11 @@ export function formatRoleDisplay(rawRole: string | PlayerRole | undefined | nul
 
   // Normalize stray hyphens and double spaces
   cleaned = cleaned
-    .replace(/All[\s-]*Rounder/gi, 'All-Rounder')
-    .replace(/WK[\s-]*Batsman/gi, 'WK-Batsman')
-    .replace(/Wicket[\s-]*Keep(?:er)?[\s-]*(?:Batsman)?/gi, 'WK-Batsman')
+    .replace(/All[\s_-]*Rounder/gi, 'All-Rounder')
+    .replace(/Batting[\s_-]*All[\s_-]*Rounder/gi, 'All-Rounder')
+    .replace(/Bowling[\s_-]*All[\s_-]*Rounder/gi, 'All-Rounder')
+    .replace(/WK[\s_-]*Batsman/gi, 'WK-Batsman')
+    .replace(/Wicket[\s_-]*Keep(?:er)?[\s_-]*(?:Batsman)?/gi, 'WK-Batsman')
     .replace(/\s+/g, ' ')
     .trim();
 

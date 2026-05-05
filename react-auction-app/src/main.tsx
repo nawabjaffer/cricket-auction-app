@@ -13,7 +13,7 @@ import AdminPage from './pages/AdminPage'
 import CameraPage from './pages/CameraPage'
 import LivePage from './pages/LivePage'
 import LiveAdminPage from './pages/LiveAdminPage'
-import OBSOverlayPage from './pages/OBSOverlayPage'
+import OBSOverlayRouterPage from './pages/OBSOverlayRouterPage'
 import OBSDockPage from './pages/OBSDockPage'
 import MirrorPage from './pages/MirrorPage'
 import ConnectBiddingAdminPage from './pages/ConnectBiddingAdminPage'
@@ -21,6 +21,7 @@ import PlatformAdminPage from './pages/PlatformAdminPage'
 import ScoringAdminPage from './pages/ScoringAdminPage'
 import ScoreUpdatePage from './pages/ScoreUpdatePage'
 import ScoreOBSOverlayPage from './pages/ScoreOBSOverlayPage'
+import ScoreOBSControlDock from './pages/ScoreOBSControlDock'
 import { TenantGate } from './components/TenantGate/TenantGate'
 import './index.css'
 
@@ -78,13 +79,14 @@ createRoot(document.getElementById('root')!).render(
             <Route path="/camera" element={<CameraPage />} />
             <Route path="/live" element={<LivePage />} />
             <Route path="/live-admin" element={<LiveAdminPage />} />
-            <Route path="/obs-overlay" element={<OBSOverlayPage />} />
+            <Route path="/obs-overlay" element={<OBSOverlayRouterPage />} />
             <Route path="/obs-dock" element={<OBSDockPage />} />
             <Route path="/mirror" element={<MirrorPage />} />
             <Route path="/connect-bidding-admin" element={<ConnectBiddingAdminPage />} />
             <Route path="/scoring/admin" element={<ScoringAdminPage />} />
             <Route path="/match/score/update" element={<ScoreUpdatePage />} />
             <Route path="/score/obs-overlay" element={<ScoreOBSOverlayPage />} />
+            <Route path="/score/obs-dock" element={<ScoreOBSControlDock />} />
             {/* Super-admin portal — manage tournaments (tenants) */}
             <Route path="/platform-admin" element={<PlatformAdminPage />} />
 
@@ -98,13 +100,14 @@ createRoot(document.getElementById('root')!).render(
             <Route path="/:tenantSlug/camera" element={<TenantGate><CameraPage /></TenantGate>} />
             <Route path="/:tenantSlug/live" element={<TenantGate><LivePage /></TenantGate>} />
             <Route path="/:tenantSlug/live-admin" element={<TenantGate><LiveAdminPage /></TenantGate>} />
-            <Route path="/:tenantSlug/obs-overlay" element={<TenantGate><OBSOverlayPage /></TenantGate>} />
+            <Route path="/:tenantSlug/obs-overlay" element={<TenantGate><OBSOverlayRouterPage /></TenantGate>} />
             <Route path="/:tenantSlug/obs-dock" element={<TenantGate><OBSDockPage /></TenantGate>} />
             <Route path="/:tenantSlug/mirror" element={<TenantGate><MirrorPage /></TenantGate>} />
             <Route path="/:tenantSlug/connect-bidding-admin" element={<TenantGate><ConnectBiddingAdminPage /></TenantGate>} />
             <Route path="/:tenantSlug/scoring/admin" element={<TenantGate><ScoringAdminPage /></TenantGate>} />
             <Route path="/:tenantSlug/match/score/update" element={<TenantGate><ScoreUpdatePage /></TenantGate>} />
             <Route path="/:tenantSlug/score/obs-overlay" element={<TenantGate><ScoreOBSOverlayPage /></TenantGate>} />
+            <Route path="/:tenantSlug/score/obs-dock" element={<TenantGate><ScoreOBSControlDock /></TenantGate>} />
           </Routes>
         </BrowserRouter>
       </QueryClientProvider>

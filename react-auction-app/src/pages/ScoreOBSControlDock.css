@@ -1,0 +1,298 @@
+/* ═══════════════════════════════════════════════════════════════════════════════
+   SCORE OBS CONTROL DOCK — Compact dock panel for scoring overlay controls
+   ═══════════════════════════════════════════════════════════════════════════════ */
+
+.score-dock {
+  min-height: 100vh;
+  background: #0f0f1a;
+  color: #e2e8f0;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  font-size: 13px;
+  padding: 0;
+  user-select: none;
+}
+
+/* Header */
+.score-dock__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  background: rgba(255, 255, 255, 0.03);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.score-dock__title {
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  background: linear-gradient(135deg, #3b82f6, #a855f7);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.score-dock__live-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #475569;
+}
+
+.score-dock__live-dot.active {
+  background: #22c55e;
+  box-shadow: 0 0 6px rgba(34, 197, 94, 0.5);
+  animation: pulse-dot 2s infinite;
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+/* Sections */
+.score-dock__section {
+  padding: 10px 14px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.score-dock__section-label {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: rgba(255, 255, 255, 0.35);
+  margin-bottom: 8px;
+}
+
+/* Select */
+.score-dock__select {
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.05);
+  color: #e2e8f0;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.score-dock__select:focus {
+  outline: none;
+  border-color: rgba(59, 130, 246, 0.4);
+}
+
+/* Score Preview */
+.score-dock__score-preview {
+  padding: 10px 14px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  background: rgba(59, 130, 246, 0.04);
+}
+
+.score-dock__score-teams {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.score-dock__batting-team {
+  font-size: 11px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.score-dock__score-value {
+  font-size: 20px;
+  font-weight: 800;
+  color: #fff;
+}
+
+.score-dock__overs {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.score-dock__batsmen {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 4px;
+}
+
+.score-dock__batsman {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.score-dock__bowler-info {
+  font-size: 11px;
+  color: rgba(168, 85, 247, 0.7);
+  margin-bottom: 6px;
+}
+
+.score-dock__this-over {
+  display: flex;
+  gap: 4px;
+}
+
+.score-dock__ball {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 700;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.score-dock__ball.wicket {
+  background: rgba(239, 68, 68, 0.2);
+  color: #ef4444;
+}
+
+.score-dock__ball.four {
+  background: rgba(59, 130, 246, 0.2);
+  color: #3b82f6;
+}
+
+.score-dock__ball.six {
+  background: rgba(168, 85, 247, 0.2);
+  color: #a855f7;
+}
+
+/* Overlay Grid */
+.score-dock__overlay-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.score-dock__overlay-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 8px 4px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+  color: rgba(255, 255, 255, 0.6);
+  cursor: pointer;
+  transition: all 0.15s;
+  position: relative;
+}
+
+.score-dock__overlay-btn:hover {
+  background: color-mix(in srgb, var(--btn-color, #3b82f6) 12%, transparent);
+  border-color: color-mix(in srgb, var(--btn-color, #3b82f6) 30%, transparent);
+}
+
+.score-dock__overlay-btn.active {
+  background: color-mix(in srgb, var(--btn-color, #3b82f6) 20%, transparent);
+  border-color: var(--btn-color, #3b82f6);
+  color: #fff;
+  box-shadow: 0 0 10px color-mix(in srgb, var(--btn-color, #3b82f6) 25%, transparent);
+}
+
+.score-dock__overlay-icon {
+  font-size: 16px;
+  line-height: 1;
+}
+
+.score-dock__overlay-label {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+}
+
+.score-dock__kbd {
+  font-size: 8px;
+  padding: 1px 4px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.35);
+  font-family: monospace;
+}
+
+/* Clear Button */
+.score-dock__clear-btn {
+  width: 100%;
+  padding: 8px;
+  border-radius: 8px;
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  background: rgba(239, 68, 68, 0.06);
+  color: rgba(239, 68, 68, 0.7);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.score-dock__clear-btn:hover {
+  background: rgba(239, 68, 68, 0.12);
+  border-color: rgba(239, 68, 68, 0.3);
+  color: #ef4444;
+}
+
+/* Active Indicator */
+.score-dock__active-indicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  background: rgba(34, 197, 94, 0.08);
+  border-bottom: 1px solid rgba(34, 197, 94, 0.15);
+  font-size: 11px;
+  font-weight: 700;
+  color: #22c55e;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.score-dock__active-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #22c55e;
+  animation: pulse-dot 1s infinite;
+}
+
+/* Feedback */
+.score-dock__feedback {
+  padding: 6px 14px;
+  background: rgba(59, 130, 246, 0.1);
+  color: #93c5fd;
+  font-size: 11px;
+  font-weight: 500;
+  text-align: center;
+  animation: feedbackSlide 0.2s ease-out;
+}
+
+@keyframes feedbackSlide {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Shortcuts */
+.score-dock__shortcuts {
+  background: rgba(255, 255, 255, 0.01);
+}
+
+.score-dock__shortcut-list {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px 12px;
+}
+
+.score-dock__shortcut-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.4);
+}

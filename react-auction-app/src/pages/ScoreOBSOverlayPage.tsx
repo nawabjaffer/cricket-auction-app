@@ -16,8 +16,23 @@ import { tenantPath } from '../services/tenantPath';
 import type {
   LiveScore, OverlayControlState, OverlayType,
   ScoringOverlayConfig, ScoringAd, MatchSetup, LiveQuestion,
+  PreMatchState, MatchLineup,
 } from '../types/scoring';
+import PreMatchOverlay from './PreMatchOverlay';
 import './ScoreOBSOverlayPage.css';
+
+const DEFAULT_OVERLAY_CONFIG: ScoringOverlayConfig = {
+  showLiveBadge: true,
+  enableBoundaryAnimation: true,
+  enableWicketAnimation: true,
+  enableDuckOutAnimation: true,
+  enableHatTrickAnimation: true,
+  enableSixerAnimation: true,
+  enableKeyboardShortcuts: true,
+  autoOverlayEnabled: true,
+  autoOverlayIntervalSeconds: 30,
+  liveQuestions: [],
+};
 
 // ── Firebase: module-level synchronous init (dedicated app) ──────────────────
 const FB_CONFIG = {
@@ -37,8 +52,10 @@ export default function ScoreOBSOverlayPage() {
   const [match, setMatch] = useState<MatchSetup | null>(null);
   const [live, setLive] = useState<LiveScore | null>(null);
   const [overlay, setOverlay] = useState<OverlayControlState | null>(null);
-  const [config, setConfig] = useState<ScoringOverlayConfig | null>(null);
+  const [config, setConfig] = useState<ScoringOverlayConfig>(DEFAULT_OVERLAY_CONFIG);
   const [ads, setAds] = useState<ScoringAd[]>([]);
+  const [preMatch, setPreMatch] = useState<PreMatchState | null>(null);
+  const [lineups, setLineups] = useState<{ teamA: MatchLineup | null; teamB: MatchLineup | null }>({ teamA: null, teamB: null });
 
   // Local overlay state (for keyboard-triggered overlays)
   const [localOverlay, setLocalOverlay] = useState<OverlayType>('none');
@@ -82,7 +99,11 @@ export default function ScoreOBSOverlayPage() {
 
     // Overlay config (branding)
     unsubs.push(onValue(ref(obsDb, `${basePath}/overlayConfig`), snap => {
-      if (snap.exists()) setConfig(snap.val());
+      if (snap.exists()) {
+        setConfig({ ...DEFAULT_OVERLAY_CONFIG, ...snap.val() });
+      } else {
+        setConfig(DEFAULT_OVERLAY_CONFIG);
+      }
     }));
 
     // Ads
@@ -90,6 +111,24 @@ export default function ScoreOBSOverlayPage() {
       if (!snap.exists()) { setAds([]); return; }
       const data = snap.val() as Record<string, ScoringAd>;
       setAds(Object.values(data).filter(a => a.active).sort((a, b) => a.order - b.order));
+    }));
+
+    // Pre-match state
+    unsubs.push(onValue(ref(obsDb, `${basePath}/matches/${matchId}/preMatch`), snap => {
+      if (snap.exists()) setPreMatch(snap.val());
+      else setPreMatch(null);
+    }));
+
+    // Lineups (team A & B)
+    unsubs.push(onValue(ref(obsDb, `${basePath}/matches/${matchId}/lineups`), snap => {
+      if (snap.exists()) {
+        const data = snap.val() as Record<string, MatchLineup>;
+        const values = Object.values(data);
+        setLineups({
+          teamA: values[0] || null,
+          teamB: values[1] || null,
+        });
+      }
     }));
 
     return () => unsubs.forEach(u => u());
@@ -107,11 +146,12 @@ export default function ScoreOBSOverlayPage() {
   // Keyboard shortcuts
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
+      if (!config.enableKeyboardShortcuts) return;
       const key = e.key;
       if (key === 'f' || key === 'F') triggerOverlay('full_scorecard');
       else if (key === '[') triggerOverlay('batsman_striker', 6000);
       else if (key === ']') triggerOverlay('batsman_nonstriker', 6000);
-      else if (key === ';') triggerOverlay('bowler', 6000);
+      else if (key === ';' || key === "'") triggerOverlay('bowler', 6000);
       else if (key === '4') triggerOverlay('boundary_four', 4000);
       else if (key === '6') triggerOverlay('boundary_six', 5000);
       else if (key === 'w' || key === 'W') triggerOverlay('wicket', 5000);
@@ -127,6 +167,19 @@ export default function ScoreOBSOverlayPage() {
     return () => window.removeEventListener('keydown', handleKey);
   }, [triggerOverlay, config]);
 
+  // Auto-rotate full scorecard + player/bowler stat overlays
+  useEffect(() => {
+    if (!live || !config.autoOverlayEnabled) return;
+    const sequence: OverlayType[] = ['full_scorecard', 'batsman_striker', 'batsman_nonstriker', 'bowler'];
+    let idx = 0;
+    const intervalMs = Math.max(10, config.autoOverlayIntervalSeconds || 30) * 1000;
+    const timer = setInterval(() => {
+      triggerOverlay(sequence[idx], sequence[idx] === 'full_scorecard' ? 7000 : 5000);
+      idx = (idx + 1) % sequence.length;
+    }, intervalMs);
+    return () => clearInterval(timer);
+  }, [live, config.autoOverlayEnabled, config.autoOverlayIntervalSeconds, triggerOverlay]);
+
   // L-banner ad rotation
   useEffect(() => {
     if (ads.length === 0) return;
@@ -140,7 +193,30 @@ export default function ScoreOBSOverlayPage() {
     return () => clearInterval(interval);
   }, [ads]);
 
-  if (!matchId || !live) return null;
+  if (!matchId) return null;
+
+  // Pre-match overlay (before live score exists)
+  const isPreMatch = preMatch && preMatch.phase !== 'idle' && preMatch.phase !== 'match_ready';
+  if (isPreMatch && match) {
+    return (
+      <div className="score-obs">
+        {/* Top bar during pre-match */}
+        <div className="score-obs__top-bar">
+          <div className="score-obs__top-left">
+            {config.tournamentLogo && <img src={config.tournamentLogo} alt="" className="score-obs__tournament-logo" />}
+            {config.tournamentName && <span className="score-obs__tournament-name">{config.tournamentName}</span>}
+          </div>
+          <div className="score-obs__top-right">
+            {config.broadcastPartnerLogo && <img src={config.broadcastPartnerLogo} alt="" className="score-obs__partner-logo" />}
+            {config.broadcastPartnerName && <span className="score-obs__partner-name">{config.broadcastPartnerName}</span>}
+          </div>
+        </div>
+        <PreMatchOverlay match={match} preMatch={preMatch} config={config} lineups={lineups} />
+      </div>
+    );
+  }
+
+  if (!live) return null;
 
   const effectiveOverlay = localOverlay;
   const lBannerAds = ads.filter(a => a.position === 'l-banner');
@@ -161,21 +237,21 @@ export default function ScoreOBSOverlayPage() {
       {/* ── Top Bar: Tournament + LIVE + Broadcast Partner ──────────── */}
       <div className="score-obs__top-bar">
         <div className="score-obs__top-left">
-          {config?.tournamentLogo && (
+          {config.tournamentLogo && (
             <img src={config.tournamentLogo} alt="" className="score-obs__tournament-logo" />
           )}
-          {config?.tournamentName && (
+          {config.tournamentName && (
             <span className="score-obs__tournament-name">{config.tournamentName}</span>
           )}
         </div>
         <div className="score-obs__top-right">
-          {config?.showLiveBadge && (
+          {config.showLiveBadge && (
             <span className="score-obs__live-badge">● LIVE</span>
           )}
-          {config?.broadcastPartnerLogo && (
+          {config.broadcastPartnerLogo && (
             <img src={config.broadcastPartnerLogo} alt="" className="score-obs__partner-logo" />
           )}
-          {config?.broadcastPartnerName && (
+          {config.broadcastPartnerName && (
             <span className="score-obs__partner-name">{config.broadcastPartnerName}</span>
           )}
         </div>
@@ -211,7 +287,7 @@ export default function ScoreOBSOverlayPage() {
       </div>
 
       {/* ── Title Sponsor Strip ────────────────────────────────────── */}
-      {config?.titleSponsorLogo && (
+      {config.titleSponsorLogo && (
         <div className="score-obs__sponsor-strip">
           <img src={config.titleSponsorLogo} alt="" className="score-obs__sponsor-logo" />
           {config.titleSponsorName && <span className="score-obs__sponsor-name">{config.titleSponsorName}</span>}
@@ -247,19 +323,19 @@ export default function ScoreOBSOverlayPage() {
         {effectiveOverlay === 'full_scorecard' && (
           <FullScorecardOverlay live={live} battingTeam={battingTeamName} bowlingTeam={bowlingTeamName} />
         )}
-        {effectiveOverlay === 'boundary_four' && config?.enableBoundaryAnimation && (
+        {effectiveOverlay === 'boundary_four' && config.enableBoundaryAnimation && (
           <BoundaryOverlay type="four" />
         )}
-        {effectiveOverlay === 'boundary_six' && config?.enableSixerAnimation && (
+        {effectiveOverlay === 'boundary_six' && config.enableSixerAnimation && (
           <BoundaryOverlay type="six" />
         )}
-        {effectiveOverlay === 'wicket' && config?.enableWicketAnimation && (
+        {effectiveOverlay === 'wicket' && config.enableWicketAnimation && (
           <WicketOverlay imageUrl={config.wicketImageUrl} />
         )}
-        {effectiveOverlay === 'duck_out' && config?.enableDuckOutAnimation && (
+        {effectiveOverlay === 'duck_out' && config.enableDuckOutAnimation && (
           <DuckOutOverlay imageUrl={config.duckOutImageUrl} />
         )}
-        {effectiveOverlay === 'hat_trick' && config?.enableHatTrickAnimation && (
+        {effectiveOverlay === 'hat_trick' && config.enableHatTrickAnimation && (
           <HatTrickOverlay imageUrl={config.hatTrickImageUrl} />
         )}
         {effectiveOverlay === 'live_question' && currentQuestion && (

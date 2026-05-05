@@ -1,0 +1,478 @@
+/* ============================================================================
+   PRE-MATCH OBS OVERLAY — Transparent background for OBS browser source
+   Squad display, toss animation, squad reveal, impact players
+   ============================================================================ */
+
+.prematch-overlay {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 100;
+}
+
+/* ── Squad Display (both teams side by side) ── */
+
+.prematch-squad-display {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 40px 60px;
+}
+
+.prematch-squad-display__header {
+  text-align: center;
+  margin-bottom: 24px;
+}
+
+.prematch-squad-display__logo {
+  width: 56px;
+  height: 56px;
+  object-fit: contain;
+  margin-bottom: 8px;
+}
+
+.prematch-squad-display__title {
+  font-size: 28px;
+  font-weight: 800;
+  color: #fff;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  text-shadow: 0 2px 12px rgba(0,0,0,0.6);
+}
+
+.prematch-squad-display__vs {
+  color: #fbbf24;
+  font-size: 20px;
+  margin: 0 12px;
+}
+
+.prematch-squad-display__venue {
+  color: rgba(255,255,255,0.7);
+  font-size: 14px;
+  margin-top: 4px;
+}
+
+.prematch-squad-display__teams {
+  display: flex;
+  flex: 1;
+  gap: 0;
+  width: 100%;
+  max-width: 1100px;
+}
+
+.prematch-squad-display__divider {
+  width: 2px;
+  background: linear-gradient(180deg, transparent, rgba(255,255,255,0.3), transparent);
+  margin: 0 20px;
+}
+
+/* ── Squad Column ── */
+
+.prematch-squad-col {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.prematch-squad-col__header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 2px solid var(--team-color, #3b82f6);
+}
+
+.prematch-squad-col__logo {
+  width: 36px;
+  height: 36px;
+  object-fit: contain;
+  border-radius: 6px;
+}
+
+.prematch-squad-col__name {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--team-color, #3b82f6);
+  text-transform: uppercase;
+}
+
+.prematch-squad-col__players {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.prematch-squad-col__player {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: rgba(0,0,0,0.45);
+  border-radius: 6px;
+  border-left: 3px solid var(--team-color, #3b82f6);
+}
+
+.prematch-squad-col__num {
+  font-size: 12px;
+  font-weight: 700;
+  color: rgba(255,255,255,0.5);
+  width: 20px;
+  text-align: center;
+}
+
+.prematch-squad-col__pname {
+  flex: 1;
+  font-size: 14px;
+  font-weight: 600;
+  color: #fff;
+}
+
+.prematch-squad-col__badge {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 700;
+  color: #fbbf24;
+  background: rgba(251,191,36,0.15);
+  padding: 1px 5px;
+  border-radius: 3px;
+  margin-left: 6px;
+}
+
+.prematch-squad-col__role {
+  font-size: 11px;
+  color: rgba(255,255,255,0.5);
+  text-transform: capitalize;
+}
+
+.prematch-squad-col__empty {
+  color: rgba(255,255,255,0.4);
+  font-style: italic;
+  font-size: 13px;
+}
+
+/* ── Toss Animation ── */
+
+.prematch-toss {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.prematch-toss__title {
+  font-size: 36px;
+  font-weight: 900;
+  color: #fbbf24;
+  text-transform: uppercase;
+  letter-spacing: 4px;
+  margin-bottom: 24px;
+  text-shadow: 0 2px 20px rgba(251,191,36,0.5);
+}
+
+.prematch-toss__video {
+  width: 400px;
+  height: 400px;
+  object-fit: contain;
+  border-radius: 50%;
+}
+
+.prematch-toss__coin-fallback {
+  perspective: 600px;
+  margin-bottom: 24px;
+}
+
+.prematch-toss__coin {
+  width: 150px;
+  height: 150px;
+  position: relative;
+  transform-style: preserve-3d;
+}
+
+.prematch-toss__coin-face {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 60px;
+  font-weight: 900;
+  border-radius: 50%;
+  backface-visibility: hidden;
+}
+
+.prematch-toss__coin-heads {
+  background: linear-gradient(135deg, #fbbf24, #f59e0b);
+  color: #92400e;
+}
+
+.prematch-toss__coin-tails {
+  background: linear-gradient(135deg, #a3a3a3, #737373);
+  color: #1f2937;
+  transform: rotateY(180deg);
+}
+
+.prematch-toss__teams {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 20px;
+  font-weight: 700;
+  margin-top: 20px;
+}
+
+.prematch-toss__vs {
+  color: rgba(255,255,255,0.5);
+  font-size: 14px;
+}
+
+/* ── Toss Result ── */
+
+.prematch-toss-result {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.prematch-toss-result__logo {
+  width: 48px;
+  height: 48px;
+  object-fit: contain;
+  margin-bottom: 16px;
+}
+
+.prematch-toss-result__winner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 32px 48px;
+  background: rgba(0,0,0,0.6);
+  border-radius: 16px;
+  border: 2px solid rgba(251,191,36,0.3);
+  backdrop-filter: blur(12px);
+}
+
+.prematch-toss-result__team-logo {
+  width: 64px;
+  height: 64px;
+  object-fit: contain;
+  margin-bottom: 12px;
+}
+
+.prematch-toss-result__team-name {
+  font-size: 28px;
+  font-weight: 800;
+  text-transform: uppercase;
+  margin: 0;
+}
+
+.prematch-toss-result__choice {
+  font-size: 16px;
+  color: rgba(255,255,255,0.8);
+  margin-top: 8px;
+}
+
+.prematch-toss-result__choice strong {
+  color: #fbbf24;
+  font-size: 20px;
+}
+
+/* ── Squad Reveal ── */
+
+.prematch-reveal {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 40px 80px;
+}
+
+.prematch-reveal__header {
+  text-align: center;
+  margin-bottom: 24px;
+}
+
+.prematch-reveal__logo {
+  width: 48px;
+  height: 48px;
+  object-fit: contain;
+  margin-bottom: 8px;
+}
+
+.prematch-reveal__title {
+  font-size: 28px;
+  font-weight: 800;
+  color: var(--team-color, #3b82f6);
+  text-transform: uppercase;
+  margin: 0;
+}
+
+.prematch-reveal__subtitle {
+  font-size: 14px;
+  color: rgba(255,255,255,0.6);
+  margin-top: 4px;
+  text-transform: uppercase;
+  letter-spacing: 3px;
+}
+
+.prematch-reveal__grid {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  max-width: 600px;
+}
+
+.prematch-reveal__player {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  background: rgba(0,0,0,0.5);
+  border-radius: 8px;
+  border-left: 4px solid var(--team-color, #3b82f6);
+  backdrop-filter: blur(8px);
+}
+
+.prematch-reveal__player-num {
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--team-color, #3b82f6);
+  width: 28px;
+  text-align: center;
+}
+
+.prematch-reveal__player-info {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.prematch-reveal__player-name {
+  font-size: 16px;
+  font-weight: 700;
+  color: #fff;
+}
+
+.prematch-reveal__badge {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 700;
+  color: #fbbf24;
+  background: rgba(251,191,36,0.15);
+  padding: 2px 6px;
+  border-radius: 4px;
+  margin-left: 8px;
+}
+
+.prematch-reveal__player-role {
+  font-size: 12px;
+  color: rgba(255,255,255,0.5);
+  text-transform: capitalize;
+}
+
+/* ── Impact Players (right side panel) ── */
+
+.prematch-impact {
+  position: absolute;
+  top: 80px;
+  right: 20px;
+  width: 280px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.prematch-impact__title {
+  font-size: 14px;
+  font-weight: 800;
+  color: #fbbf24;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  text-align: center;
+  padding: 8px 16px;
+  background: rgba(0,0,0,0.6);
+  border-radius: 8px;
+  border: 1px solid rgba(251,191,36,0.3);
+}
+
+.prematch-impact__team {
+  background: rgba(0,0,0,0.5);
+  border-radius: 10px;
+  padding: 12px;
+  border: 1px solid rgba(255,255,255,0.08);
+  backdrop-filter: blur(8px);
+}
+
+.prematch-impact__team-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  padding-bottom: 6px;
+  border-bottom: 2px solid var(--team-color, #3b82f6);
+}
+
+.prematch-impact__team-logo {
+  width: 24px;
+  height: 24px;
+  object-fit: contain;
+  border-radius: 4px;
+}
+
+.prematch-impact__team-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--team-color, #3b82f6);
+  text-transform: uppercase;
+}
+
+.prematch-impact__player {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 8px;
+  border-radius: 4px;
+  background: rgba(255,255,255,0.04);
+  margin-top: 4px;
+}
+
+.prematch-impact__player-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: #fff;
+}
+
+.prematch-impact__player-role {
+  font-size: 11px;
+  color: rgba(255,255,255,0.5);
+  text-transform: capitalize;
+}
+
+/* ── ScoringAdminPage pre-match specific ── */
+
+.scoring-admin__impact-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.scoring-admin__impact-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px;
+  background: rgba(255,255,255,0.05);
+  border-radius: 6px;
+  font-size: 0.85rem;
+  color: rgba(255,255,255,0.9);
+}

@@ -60,6 +60,21 @@ export class ManualScoringAdapter implements IScoringAdapter {
     return 'Manual Scoring';
   }
 
+  private stripUndefinedDeep<T>(value: T): T {
+    if (Array.isArray(value)) {
+      return value.map((item) => this.stripUndefinedDeep(item)) as T;
+    }
+    if (value && typeof value === 'object') {
+      const out: Record<string, unknown> = {};
+      for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+        if (v === undefined) continue;
+        out[k] = this.stripUndefinedDeep(v);
+      }
+      return out as T;
+    }
+    return value;
+  }
+
   // ── Ball-by-ball Entry Methods ─────────────────────────────────────────────
 
   /**
@@ -163,10 +178,10 @@ export class ManualScoringAdapter implements IScoringAdapter {
     };
 
     // Write to Firebase
-    await set(ref(this.db, `${this.basePath}/matches/${matchId}/live`), updatedLive);
+    await set(ref(this.db, `${this.basePath}/matches/${matchId}/live`), this.stripUndefinedDeep(updatedLive));
 
     // Store ball event in history
-    await set(ref(this.db, `${this.basePath}/matches/${matchId}/balls/${ballEvent.id}`), ballEvent);
+    await set(ref(this.db, `${this.basePath}/matches/${matchId}/balls/${ballEvent.id}`), this.stripUndefinedDeep(ballEvent));
 
     return { updatedLive, ballEvent };
   }
@@ -218,7 +233,7 @@ export class ManualScoringAdapter implements IScoringAdapter {
       lastUpdated: Date.now(),
     };
 
-    await set(ref(this.db, `${this.basePath}/matches/${matchId}/live`), live);
+    await set(ref(this.db, `${this.basePath}/matches/${matchId}/live`), this.stripUndefinedDeep(live));
     return live;
   }
 
@@ -226,24 +241,24 @@ export class ManualScoringAdapter implements IScoringAdapter {
    * Write overlay control (which overlay to show).
    */
   async setOverlayControl(matchId: string, overlay: { activeOverlay: string; activeOverlayData?: Record<string, unknown>; liveQuestion?: unknown }): Promise<void> {
-    await set(ref(this.db, `${this.basePath}/matches/${matchId}/overlay`), {
+    await set(ref(this.db, `${this.basePath}/matches/${matchId}/overlay`), this.stripUndefinedDeep({
       ...overlay,
       lastUpdated: Date.now(),
-    });
+    }));
   }
 
   /**
    * Save completed match scorecard.
    */
   async saveMatchScore(matchId: string, score: MatchScore): Promise<void> {
-    await set(ref(this.db, `${this.basePath}/matches/${matchId}/final`), score);
+    await set(ref(this.db, `${this.basePath}/matches/${matchId}/final`), this.stripUndefinedDeep(score));
   }
 
   /**
    * Save player match stats.
    */
   async savePlayerStats(matchId: string, playerId: string, stats: PlayerMatchStats): Promise<void> {
-    await set(ref(this.db, `${this.basePath}/playerStats/${playerId}/matches/${matchId}`), stats);
+    await set(ref(this.db, `${this.basePath}/playerStats/${playerId}/matches/${matchId}`), this.stripUndefinedDeep(stats));
   }
 
   // ── Private Helpers ────────────────────────────────────────────────────────

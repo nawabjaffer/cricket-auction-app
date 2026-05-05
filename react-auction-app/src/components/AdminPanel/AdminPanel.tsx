@@ -15,11 +15,11 @@ import { ThemeSettingsExtended } from './ThemeSettingsExtended';
 import '../../components/AdminPanel/ThemeSettingsExtended.css';
 import { useAuctionStore } from '../../store/auctionStore';
 import { activeConfig } from '../../config';
-import { exportSoldPlayers, downloadPlayersTemplate, downloadScoresTemplate } from '../../utils/exportData';
+import { exportSoldPlayers, exportUnsoldPlayers, downloadPlayersTemplate, downloadScoresTemplate } from '../../utils/exportData';
 import FeatureFlagsTab from './FeatureFlagsTab';
 import StreamingTab from './StreamingTab';
 import './AdminPanel.css';
-import type { Team, Player, AuctionRoleCategory, BattingStats, BowlingStats } from '../../types';
+import type { Team, Player, SoldPlayer, UnsoldPlayer, AuctionRoleCategory, BattingStats, BowlingStats } from '../../types';
 import { DEFAULT_AUCTION_ROLE_ORDER, createEmptyBattingStats, createEmptyBowlingStats } from '../../types';
 import { formatRoleDisplay, getRoleCategory, getRoleBadgeColor } from '../../utils/roleFormatter';
 import { localImageCacheService } from '../../services/localImageCache';
@@ -134,7 +134,7 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
   const [bidIncrementRanges, setBidIncrementRanges] = useState<BidIncrementRange[]>([]);
 
   // Store
-  const { teams, setTeams, soldPlayers, setSoldPlayers, originalPlayers, setAdminPlayerOverrides, reconcilePlayerPools } = useAuctionStore();
+  const { teams, setTeams, soldPlayers, setSoldPlayers, unsoldPlayers, setUnsoldPlayers, originalPlayers, setAdminPlayerOverrides, reconcilePlayerPools } = useAuctionStore();
   const [editingTeams, setEditingTeams] = useState<Team[]>([]);
   const [editingSponsors, setEditingSponsors] = useState<SponsorRecord[]>([]);
   const [teamLogoSources, setTeamLogoSources] = useState<Record<string, LogoSourceMode>>({});
@@ -638,6 +638,113 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
     }
   };
 
+  const handleUndoUnsoldPlayer = async (player: UnsoldPlayer) => {
+    const confirmed = globalThis.confirm(`Undo unsold status of ${player.name}? This will return them to the available pool.`);
+    if (!confirmed) return;
+
+    try {
+      setIsSaving(true);
+
+      // Remove from unsold players in store
+      const updatedUnsold = unsoldPlayers.filter(p => p.id !== player.id);
+      setUnsoldPlayers(updatedUnsold);
+
+      // Remove from Firebase
+      await auctionPersistence.removeUnsoldPlayer(player.id);
+
+      // Reconcile player pools so the player appears in available again
+      reconcilePlayerPools();
+
+      showUploadFeedback(`Undid unsold status of ${player.name}. Player returned to available pool.`);
+    } catch (err) {
+      showUploadFeedback(`Failed to undo unsold: ${(err as Error).message}`, 'error');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // Unsold → Sold: move an unsold player directly to a team
+  const [editingUnsoldPlayerId, setEditingUnsoldPlayerId] = useState<string | null>(null);
+  const [unsoldSellDraft, setUnsoldSellDraft] = useState<{ teamId: string; teamName: string; soldAmount: number } | null>(null);
+
+  const handleEditUnsoldPlayer = (player: UnsoldPlayer) => {
+    setEditingUnsoldPlayerId(player.id);
+    setUnsoldSellDraft({ teamId: teams[0]?.id || '', teamName: teams[0]?.name || '', soldAmount: player.basePrice });
+  };
+
+  const handleSaveUnsoldToSold = async () => {
+    if (!editingUnsoldPlayerId || !unsoldSellDraft) return;
+    const player = unsoldPlayers.find(p => p.id === editingUnsoldPlayerId);
+    if (!player) return;
+
+    try {
+      setIsSaving(true);
+
+      const soldPlayer: SoldPlayer = {
+        ...player,
+        soldAmount: unsoldSellDraft.soldAmount,
+        teamName: unsoldSellDraft.teamName,
+        teamId: unsoldSellDraft.teamId,
+        soldDate: new Date().toISOString(),
+      };
+
+      // Remove from unsold
+      const updatedUnsold = unsoldPlayers.filter(p => p.id !== player.id);
+      setUnsoldPlayers(updatedUnsold);
+      await auctionPersistence.removeUnsoldPlayer(player.id);
+
+      // Add to sold
+      const updatedSold = [...soldPlayers, soldPlayer];
+      setSoldPlayers(updatedSold);
+      await auctionPersistence.saveSoldPlayer(soldPlayer, unsoldSellDraft.teamName);
+
+      // Update team budget
+      const updatedTeams = teams.map(t => {
+        if (t.id === unsoldSellDraft.teamId) {
+          return {
+            ...t,
+            playersBought: t.playersBought + 1,
+            remainingPurse: t.remainingPurse - unsoldSellDraft.soldAmount,
+            highestBid: Math.max(t.highestBid, unsoldSellDraft.soldAmount),
+          };
+        }
+        return t;
+      });
+      setTeams(updatedTeams);
+      await auctionPersistence.saveTeams(updatedTeams);
+
+      setEditingUnsoldPlayerId(null);
+      setUnsoldSellDraft(null);
+      showUploadFeedback(`${player.name} moved to ${unsoldSellDraft.teamName} for ₹${unsoldSellDraft.soldAmount}L`);
+    } catch (err) {
+      showUploadFeedback(`Failed to move player: ${(err as Error).message}`, 'error');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleExportUnsoldPlayers = () => {
+    if (unsoldPlayers.length === 0) {
+      alert('No unsold players to export');
+      return;
+    }
+
+    const records = unsoldPlayers.map(player => ({
+      id: player.id,
+      name: player.name,
+      role: player.role,
+      age: player.age ?? null,
+      matches: player.matches ?? '',
+      bowlingBest: player.bowlingBestFigures || 'N/A',
+      basePrice: player.basePrice ?? 0,
+      round: player.round,
+      timestamp: player.unsoldDate ? new Date(player.unsoldDate).getTime() : Date.now(),
+      imageUrl: player.imageUrl ?? '',
+    }));
+
+    exportUnsoldPlayers(records);
+  };
+
   const openTeamEditor = (teamId: string) => {
     const targetTeam = editingTeams.find((team) => team.id === teamId);
     if (!targetTeam) return;
@@ -751,15 +858,24 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
     let updatedTeams = editingTeams.map(t => {
       // Clear this player from any team they were previously icon for
       if (t.captain?.trim().toLowerCase() === oldName) {
-        return { ...t, captain: '' };
+        const filteredIconics = (t.iconicPlayers || []).filter(
+          n => n.trim().toLowerCase() !== oldName
+        );
+        return { ...t, captain: filteredIconics[0] || '', iconicPlayers: filteredIconics };
       }
       return t;
     });
     // Now assign to the selected team if icon player is enabled
     if (isIconPlayer && iconTeamId) {
-      updatedTeams = updatedTeams.map(t =>
-        t.id === iconTeamId ? { ...t, captain: playerDraft.name } : t
-      );
+      updatedTeams = updatedTeams.map(t => {
+        if (t.id !== iconTeamId) return t;
+        const currentIconics = t.iconicPlayers || (t.captain ? [t.captain] : []);
+        const alreadyExists = currentIconics.some(
+          n => n.trim().toLowerCase() === playerDraft.name.trim().toLowerCase()
+        );
+        const updatedIconics = alreadyExists ? currentIconics : [...currentIconics, playerDraft.name];
+        return { ...t, captain: updatedIconics[0] || '', iconicPlayers: updatedIconics };
+      });
     }
     setEditingTeams(updatedTeams);
 
@@ -2682,6 +2798,90 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
                     style={{ marginTop: '1rem' }}
                   >
                     <IoDownload size={18} /> Export Sold Players CSV
+                  </button>
+
+                  {/* ── Unsold Players Section ── */}
+                  <hr style={{ border: 'none', borderTop: '1px solid rgba(255,255,255,0.1)', margin: '2rem 0 1.5rem' }} />
+                  <h3>Unsold Players</h3>
+                  <div className="export-info">
+                    <p>Total Unsold Players: <strong>{unsoldPlayers.length}</strong></p>
+                  </div>
+
+                  {unsoldPlayers.length > 0 && (
+                    <div className="admin-export-table-wrapper">
+                      <table className="admin-export-table">
+                        <thead>
+                          <tr>
+                            <th>#</th>
+                            <th>Player</th>
+                            <th>Role</th>
+                            <th>Age</th>
+                            <th>Base (₹L)</th>
+                            <th>Round</th>
+                            <th>Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {unsoldPlayers.map((p, i) => (
+                            <tr key={p.id}>
+                              <td>{i + 1}</td>
+                              <td>{p.name}</td>
+                              <td>
+                                <span className="admin-role-dot" style={{ background: getRoleBadgeColor(p.role) }} />
+                                {formatRoleDisplay(p.role)}
+                              </td>
+                              <td>{p.age ?? 'N/A'}</td>
+                              <td>₹{p.basePrice}</td>
+                              <td>{p.round}</td>
+                              <td>
+                                {editingUnsoldPlayerId === p.id ? (
+                                  <>
+                                    <select
+                                      value={unsoldSellDraft?.teamId || ''}
+                                      onChange={(e) => {
+                                        const t = teams.find(tm => tm.id === e.target.value);
+                                        if (t) setUnsoldSellDraft(prev => prev ? { ...prev, teamId: t.id, teamName: t.name } : prev);
+                                      }}
+                                      style={{ marginRight: 4 }}
+                                    >
+                                      {teams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                                    </select>
+                                    <input
+                                      type="number"
+                                      value={unsoldSellDraft?.soldAmount ?? 0}
+                                      onChange={(e) => setUnsoldSellDraft(prev => prev ? { ...prev, soldAmount: Number(e.target.value) } : prev)}
+                                      style={{ width: '5rem', marginRight: 4 }}
+                                      step={0.5}
+                                      min={0}
+                                    />
+                                    <button className="admin-btn admin-btn-success admin-btn-sm" onClick={handleSaveUnsoldToSold} disabled={isSaving}>Sell</button>
+                                    <button className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => { setEditingUnsoldPlayerId(null); setUnsoldSellDraft(null); }} style={{ marginLeft: 4 }}>Cancel</button>
+                                  </>
+                                ) : (
+                                  <>
+                                    <button className="admin-btn admin-btn-warning admin-btn-sm" onClick={() => handleEditUnsoldPlayer(p)} disabled={isSaving} title="Move to sold (assign to team)">Sell</button>
+                                    <button className="admin-btn admin-btn-danger admin-btn-sm" onClick={() => handleUndoUnsoldPlayer(p)} disabled={isSaving} title="Undo unsold - return to available" style={{ marginLeft: 4 }}>Undo</button>
+                                  </>
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+
+                  {unsoldPlayers.length === 0 && (
+                    <div className="admin-empty-state">No unsold players. Unsold players will appear here as the auction progresses.</div>
+                  )}
+
+                  <button
+                    className="admin-btn admin-btn-success"
+                    onClick={handleExportUnsoldPlayers}
+                    disabled={unsoldPlayers.length === 0}
+                    style={{ marginTop: '1rem' }}
+                  >
+                    <IoDownload size={18} /> Export Unsold Players CSV
                   </button>
                 </div>
               )}

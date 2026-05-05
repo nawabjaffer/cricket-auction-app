@@ -125,6 +125,10 @@ export function TeamSquadView({
       'wicket keeper': 1,
       'wicket keeper batsman': 1,
       'all-rounder': 2,
+      'batting all_rounder': 2,
+      'batting all-rounder': 2,
+      'bowling all_rounder': 2,
+      'bowling all-rounder': 2,
       bowler: 3,
     };
 

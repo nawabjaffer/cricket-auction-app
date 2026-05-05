@@ -3,7 +3,7 @@
 // Generate downloadable CSV/Excel files from auction data
 // ============================================================================
 
-import type { SoldPlayerRecord } from '../services/auctionPersistence';
+import type { SoldPlayerRecord, UnsoldPlayerRecord } from '../services/auctionPersistence';
 import type { Player } from '../types';
 
 const escapeCsvCell = (cell: unknown): string => `"${String(cell ?? '').replace(/"/g, '""')}"`;
@@ -351,4 +351,52 @@ export function downloadPlayersTemplate(players: Player[] = []): void {
 export function downloadScoresTemplate(): void {
   const csv = generateScoresCSVTemplate();
   downloadCSV(csv, 'scores-template.csv');
+}
+
+/**
+ * Convert unsold players to CSV format
+ */
+export function generateUnsoldPlayersCSV(players: UnsoldPlayerRecord[]): string {
+  const headers = [
+    'ID',
+    'Player Name',
+    'Age',
+    'Player Role',
+    'Player Image URL',
+    'Base Price',
+    'Matches',
+    'Bowling Best',
+    'Unsold Round',
+    'Unsold Timestamp',
+  ];
+
+  const rows = players.map(player => [
+    player.id,
+    player.name,
+    player.age?.toString() || 'N/A',
+    player.role,
+    player.imageUrl,
+    player.basePrice.toString(),
+    player.matches,
+    player.bowlingBest,
+    player.round,
+    player.timestamp ? new Date(player.timestamp).toISOString() : 'N/A',
+  ]);
+
+  const csvContent = [
+    headers.join(','),
+    ...rows.map(row => row.map(escapeCsvCell).join(',')),
+  ].join('\n');
+
+  return csvContent;
+}
+
+/**
+ * Export unsold players as CSV
+ */
+export function exportUnsoldPlayers(players: UnsoldPlayerRecord[]): void {
+  const csv = generateUnsoldPlayersCSV(players);
+  const timestamp = new Date().toISOString().split('T')[0];
+  const filename = `auction-unsold-players-${timestamp}.csv`;
+  downloadCSV(csv, filename);
 }

@@ -337,12 +337,17 @@ export interface ScoringOverlayConfig {
   enableDuckOutAnimation: boolean;
   enableHatTrickAnimation: boolean;
   enableSixerAnimation: boolean;
+  enableKeyboardShortcuts: boolean;
+  autoOverlayEnabled: boolean;
+  autoOverlayIntervalSeconds: number;
   // Custom animation assets (optional image/video URLs)
   duckOutImageUrl?: string;
   hatTrickImageUrl?: string;
   wicketImageUrl?: string;
   // Live questions queue
   liveQuestions: LiveQuestion[];
+  // Toss animation config
+  tossConfig?: TossConfig;
 }
 
 // ── Scoring Adapter Interface ──
@@ -392,4 +397,52 @@ export function createEmptyCareerStats(playerId: string): PlayerCareerStats {
     fielding: { catches: 0, runOuts: 0, stumpings: 0 },
     lastUpdated: Date.now(),
   };
+}
+
+// ── Pre-Match Overlay Types ──
+
+export type PreMatchPhase =
+  | 'idle'
+  | 'squad_display'       // Show both teams' full squads
+  | 'toss_animation'      // Coin flip video (head / tail)
+  | 'toss_result'         // Show who won toss & elected to bat/bowl
+  | 'squad_reveal_teamA'  // Animated reveal of Team A playing XI
+  | 'squad_reveal_teamB'  // Animated reveal of Team B playing XI
+  | 'impact_players'      // Show 4 impact sub players per team
+  | 'match_ready';        // Transition to live scoring
+
+export interface ImpactPlayer {
+  playerId: string;
+  playerName: string;
+  role: string;            // 'batsman' | 'bowler' | 'all-rounder' | 'wicket-keeper'
+  imageUrl?: string;
+}
+
+export interface TossConfig {
+  headsVideoUrl?: string;   // Video file for heads animation
+  tailsVideoUrl?: string;   // Video file for tails animation
+  chromaKeyEnabled: boolean; // Apply chroma green matte effect
+  chromaKeyColor: string;    // Default '#00FF00'
+}
+
+export interface PreMatchState {
+  matchId: string;
+  phase: PreMatchPhase;
+  tossResult?: {
+    wonBy: string;           // team ID
+    elected: 'bat' | 'bowl';
+    coinSide: 'heads' | 'tails';
+  };
+  squadRevealConfig: {
+    autoReveal: boolean;
+    delayAfterTossSeconds: number;  // seconds before auto-reveal starts
+    playerRevealIntervalMs: number; // ms between each player reveal
+  };
+  impactPlayers: {
+    teamA: ImpactPlayer[];   // up to 4
+    teamB: ImpactPlayer[];   // up to 4
+  };
+  revealedPlayersTeamA: string[];   // player IDs revealed so far
+  revealedPlayersTeamB: string[];
+  lastUpdated: number;
 }

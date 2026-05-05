@@ -99,6 +99,16 @@ export function ThemeSettingsExtended({ settings, onChange, teams }: ThemeSettin
     settings?.defaultCountryCode ?? '91'
   );
 
+  // Player placeholder image
+  const [playerPlaceholderImage, setPlayerPlaceholderImage] = useState<string>(
+    settings?.playerPlaceholderImage ?? '/placeholder_player.png'
+  );
+
+  // Mirror preload persist
+  const [mirrorPreloadPersist, setMirrorPreloadPersist] = useState<boolean>(
+    settings?.mirrorPreloadPersist ?? false
+  );
+
   // Sync when settings change externally
   useEffect(() => {
     if (!settings) return;
@@ -111,6 +121,8 @@ export function ThemeSettingsExtended({ settings, onChange, teams }: ThemeSettin
     if (settings.teamOwners) setTeamOwners(settings.teamOwners);
     if (settings.maxIconicPlayers != null) setMaxIconicPlayers(settings.maxIconicPlayers);
     if (settings.defaultCountryCode != null) setDefaultCountryCode(settings.defaultCountryCode);
+    if (settings.playerPlaceholderImage != null) setPlayerPlaceholderImage(settings.playerPlaceholderImage);
+    if (settings.mirrorPreloadPersist != null) setMirrorPreloadPersist(settings.mirrorPreloadPersist);
   }, [settings]);
 
   // Notify parent of every change so it can merge on the single "Save Settings" click
@@ -125,9 +137,11 @@ export function ThemeSettingsExtended({ settings, onChange, teams }: ThemeSettin
       teamOwners,
       maxIconicPlayers,
       defaultCountryCode,
+      playerPlaceholderImage: playerPlaceholderImage || undefined,
+      mirrorPreloadPersist,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [playerStatsFields, specialCategories, budgetRules, auctionBreaks, currentBreakId, loadingScreen, teamOwners, maxIconicPlayers, defaultCountryCode]);
+  }, [playerStatsFields, specialCategories, budgetRules, auctionBreaks, currentBreakId, loadingScreen, teamOwners, maxIconicPlayers, defaultCountryCode, playerPlaceholderImage, mirrorPreloadPersist]);
 
   // ─── Player Stats Fields ─────────────────────────────────────────────────
   const toggleStatField = (key: string) => {
@@ -535,7 +549,33 @@ export function ThemeSettingsExtended({ settings, onChange, teams }: ThemeSettin
         </div>
       </div>
 
-      {/* ─── Section 8: WhatsApp Country Code ──────────────────────────────── */}
+      {/* ─── Section 8: Player Placeholder Image ──────────────────────────── */}
+      <div className="admin-section-card">
+        <h3 className="admin-section-title">🖼️ Player Placeholder Image</h3>
+        <p className="admin-section-desc">URL for the default player image shown when a player has no photo. Place the file in <code>/public/</code> folder or use a full URL.</p>
+        <div className="admin-form-field">
+          <label>Placeholder Image URL</label>
+          <input
+            type="text"
+            value={playerPlaceholderImage}
+            onChange={e => setPlayerPlaceholderImage(e.target.value.trim())}
+            placeholder="/placeholder_player.png"
+            className="admin-input"
+          />
+        </div>
+        {playerPlaceholderImage && (
+          <div style={{ marginTop: '0.5rem' }}>
+            <img
+              src={playerPlaceholderImage}
+              alt="Placeholder preview"
+              style={{ width: 64, height: 64, objectFit: 'cover', borderRadius: 8, border: '1px solid rgba(255,255,255,0.1)' }}
+              onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+            />
+          </div>
+        )}
+      </div>
+
+      {/* ─── Section 9: WhatsApp Country Code ──────────────────────────────── */}
       <div className="admin-section-card">
         <h3 className="admin-section-title">📱 WhatsApp Settings</h3>
         <p className="admin-section-desc">Default country code prepended to player phone numbers for WhatsApp links. Use without + (e.g. 91 for India, 1 for US).</p>
@@ -549,6 +589,38 @@ export function ThemeSettingsExtended({ settings, onChange, teams }: ThemeSettin
             className="admin-input admin-input-sm"
           />
         </div>
+      </div>
+
+      {/* ─── Section 10: Mirror Screen Preload ─────────────────────────────── */}
+      <div className="admin-section-card">
+        <h3 className="admin-section-title">🖥️ Mirror Screen Preload</h3>
+        <p className="admin-section-desc">
+          When enabled, the mirror screen caches all player images, team logos, and sponsor media persistently across browser sessions. Open the mirror screen once before the auction to warm the cache — subsequent loads will be instant.
+        </p>
+        <div className="admin-form-field">
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <input
+              type="checkbox"
+              checked={mirrorPreloadPersist}
+              onChange={e => setMirrorPreloadPersist(e.target.checked)}
+            />
+            Persist preloaded media across sessions
+          </label>
+        </div>
+        <button
+          type="button"
+          className="admin-btn admin-btn-sm"
+          style={{ marginTop: 8 }}
+          onClick={() => {
+            try {
+              sessionStorage.removeItem('bootPreloadDone_v1');
+              localStorage.removeItem('bootPreloadDone_persist_v1');
+              alert('Preload cache cleared. Next mirror load will re-download all media.');
+            } catch { /* ignore */ }
+          }}
+        >
+          Clear Preload Cache
+        </button>
       </div>
     </div>
   );

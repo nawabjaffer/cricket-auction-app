@@ -5,20 +5,23 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { IoAdd, IoTrash, IoSave, IoRefresh, IoClose, IoPlay, IoStop, IoTrophy, IoSettings, IoImage, IoFlash, IoHelp } from 'react-icons/io5';
+import { IoAdd, IoTrash, IoSave, IoClose, IoPlay, IoStop, IoTrophy, IoSettings, IoImage, IoFlash, IoVideocam, IoLink, IoDesktop, IoPencil, IoPeople, IoGameController } from 'react-icons/io5';
 import { GiCricketBat } from 'react-icons/gi';
 import { useAdminAuth } from '../hooks/useAdminAuth';
 import { useTenantNavigate as useNavigate } from '../hooks/useTenantNavigate';
+import { getTenantSlugFromPath } from '../hooks/useTenantNavigate';
+import { useLocation } from 'react-router-dom';
 import { useInitialData, useAuctionDataLoader } from '../hooks';
-import { useTeams } from '../store';
-import { getDatabase } from 'firebase/database';
+import { useTeams, useSoldPlayers } from '../store';
 import { tenantPath } from '../services/tenantPath';
+import { realtimeSync } from '../services/realtimeSync';
 import { scoringService } from '../services/scoring';
 import { uploadFileToStorage } from '../services';
-import type { MatchSetup, ScoringAd, ScoringOverlayConfig, LiveQuestion, MatchScoringConfig } from '../types/scoring';
+import type { MatchSetup, ScoringAd, ScoringOverlayConfig, LiveQuestion, MatchScoringConfig, PreMatchState, ImpactPlayer, TossConfig, MatchLineup } from '../types/scoring';
+import type { SoldPlayer } from '../types';
 import './ScoringAdminPage.css';
 
-type Tab = 'matches' | 'provider' | 'ads' | 'overlay' | 'animations';
+type Tab = 'matches' | 'provider' | 'ads' | 'overlay' | 'animations' | 'prematch';
 
 const DEFAULT_OVERLAY_CONFIG: ScoringOverlayConfig = {
   showLiveBadge: true,
@@ -27,11 +30,17 @@ const DEFAULT_OVERLAY_CONFIG: ScoringOverlayConfig = {
   enableDuckOutAnimation: true,
   enableHatTrickAnimation: true,
   enableSixerAnimation: true,
+  enableKeyboardShortcuts: true,
+  autoOverlayEnabled: true,
+  autoOverlayIntervalSeconds: 30,
   liveQuestions: [],
 };
 
 export default function ScoringAdminPage() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const tenantSlug = getTenantSlugFromPath(location.pathname);
+  const baseUrl = window.location.origin + (tenantSlug ? `/${tenantSlug}` : '');
   const { isAuthenticated, extendSession } = useAdminAuth();
   const [activeTab, setActiveTab] = useState<Tab>('matches');
 
@@ -39,13 +48,26 @@ export default function ScoringAdminPage() {
   useAuctionDataLoader();
 
   const allTeams = useTeams();
+  const soldPlayers = useSoldPlayers();
+
+  const [scoringReady, setScoringReady] = useState(false);
 
   // Initialize scoring service
   useEffect(() => {
-    try {
-      const db = getDatabase();
-      scoringService.initialize(db, tenantPath('scoring'));
-    } catch { /* already initialized */ }
+    const initScoring = async () => {
+      try {
+        await realtimeSync.ensureInitialized();
+        const db = realtimeSync.getDatabase();
+        if (db) {
+          scoringService.initialize(db, tenantPath('scoring'));
+          setScoringReady(true);
+        }
+      } catch {
+        // already initialized
+        setScoringReady(true);
+      }
+    };
+    initScoring();
   }, []);
 
   // Auth check
@@ -63,8 +85,9 @@ export default function ScoringAdminPage() {
   const [saving, setSaving] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
 
-  // Load data
+  // Load data (after scoring service is ready)
   useEffect(() => {
+    if (!scoringReady) return;
     const unsubs: (() => void)[] = [];
     try {
       unsubs.push(scoringService.subscribeMatches(setMatches));
@@ -72,7 +95,7 @@ export default function ScoringAdminPage() {
       unsubs.push(scoringService.subscribeOverlayConfig((cfg) => setOverlayConfig(cfg)));
     } catch { /* service not initialized yet */ }
     return () => unsubs.forEach(u => u());
-  }, []);
+  }, [scoringReady]);
 
   const showFeedback = useCallback((msg: string) => {
     setFeedback(msg);
@@ -99,6 +122,22 @@ export default function ScoringAdminPage() {
         </button>
       </header>
 
+      {/* Quick Actions Bar */}
+      <div className="scoring-admin__quick-actions">
+        <button className="scoring-admin__quick-btn" onClick={() => navigate('/match/score/update')}>
+          <IoPencil size={14} /> Update Scorecard
+        </button>
+        <button className="scoring-admin__quick-btn" onClick={() => window.open(`${baseUrl}/obs-overlay?mode=scoring`, '_blank')}>
+          <IoDesktop size={14} /> OBS Overlay
+        </button>
+        <button className="scoring-admin__quick-btn" onClick={() => window.open(`${baseUrl}/score/obs-dock`, '_blank')}>
+          <IoGameController size={14} /> OBS Control Dock
+        </button>
+        <button className="scoring-admin__quick-btn" onClick={() => navigate('/admin')}>
+          <IoSettings size={14} /> Auction Admin
+        </button>
+      </div>
+
       {/* Tabs */}
       <nav className="scoring-admin__tabs">
         {([
@@ -107,6 +146,7 @@ export default function ScoringAdminPage() {
           { key: 'ads', icon: <IoImage size={16} />, label: 'Ads' },
           { key: 'overlay', icon: <IoPlay size={16} />, label: 'Overlay' },
           { key: 'animations', icon: <IoFlash size={16} />, label: 'Animations' },
+          { key: 'prematch', icon: <IoVideocam size={16} />, label: 'Pre-Match' },
         ] as { key: Tab; icon: React.ReactNode; label: string }[]).map(tab => (
           <button
             key={tab.key}
@@ -124,9 +164,12 @@ export default function ScoringAdminPage() {
           <MatchesTab
             matches={matches}
             teams={allTeams}
+            soldPlayers={soldPlayers}
             onFeedback={showFeedback}
             saving={saving}
             setSaving={setSaving}
+            navigate={navigate}
+            baseUrl={baseUrl}
           />
         )}
         {activeTab === 'provider' && (
@@ -155,6 +198,14 @@ export default function ScoringAdminPage() {
             onFeedback={showFeedback}
           />
         )}
+        {activeTab === 'prematch' && (
+          <PreMatchTab
+            matches={matches}
+            config={overlayConfig}
+            setConfig={setOverlayConfig}
+            onFeedback={showFeedback}
+          />
+        )}
       </div>
 
       {/* Feedback toast */}
@@ -178,15 +229,19 @@ export default function ScoringAdminPage() {
 // MATCHES TAB
 // ═══════════════════════════════════════════════════════════════════════════════
 
-function MatchesTab({ matches, teams, onFeedback, saving, setSaving }: {
+function MatchesTab({ matches, teams, soldPlayers, onFeedback, saving, setSaving, navigate, baseUrl }: {
   matches: MatchSetup[];
   teams: { id: string; name: string; logoUrl?: string; primaryColor?: string }[];
+  soldPlayers: SoldPlayer[];
   onFeedback: (msg: string) => void;
   saving: boolean;
   setSaving: (v: boolean) => void;
+  navigate: (to: string) => void;
+  baseUrl: string;
 }) {
   const [showForm, setShowForm] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
+  const [squadMatchId, setSquadMatchId] = useState<string | null>(null);
   const [form, setForm] = useState({
     teamAId: '', teamBId: '', venue: '', date: '', maxOvers: 20, tossWonBy: '', tossElected: '' as '' | 'bat' | 'bowl',
   });
@@ -226,7 +281,7 @@ function MatchesTab({ matches, teams, onFeedback, saving, setSaving }: {
       onFeedback(editId ? 'Match updated' : 'Match created');
       resetForm();
     } catch (err) {
-      onFeedback('Failed to save match');
+      onFeedback(`Failed to save match: ${String(err)}`);
     } finally {
       setSaving(false);
     }
@@ -347,7 +402,30 @@ function MatchesTab({ matches, teams, onFeedback, saving, setSaving }: {
               <span>{match.maxOvers} overs</span>
               <span className={`scoring-admin__status scoring-admin__status--${match.status}`}>{match.status}</span>
             </div>
+            {/* Match ID & Quick Links */}
+            <div className="scoring-admin__match-id-row">
+              <span className="scoring-admin__match-id" title="Click to copy" onClick={() => { navigator.clipboard.writeText(match.id); onFeedback('Match ID copied'); }}>
+                ID: {match.id}
+              </span>
+            </div>
+            <div className="scoring-admin__match-links">
+              <button className="scoring-admin__link-btn" onClick={() => navigate(`/match/score/update?matchId=${match.id}`)} title="Update Scorecard">
+                <IoPencil size={13} /> Scorecard
+              </button>
+              <button className="scoring-admin__link-btn" onClick={() => window.open(`${baseUrl}/obs-overlay?mode=scoring&matchId=${match.id}`, '_blank')} title="Open OBS Overlay">
+                <IoDesktop size={13} /> OBS Overlay
+              </button>
+              <button className="scoring-admin__link-btn" onClick={() => { navigator.clipboard.writeText(`${baseUrl}/obs-overlay?mode=scoring&matchId=${match.id}`); onFeedback('OBS URL copied'); }} title="Copy OBS URL">
+                <IoLink size={13} /> Copy URL
+              </button>
+              <button className="scoring-admin__link-btn" onClick={() => window.open(`${baseUrl}/score/obs-dock?matchId=${match.id}`, '_blank')} title="OBS Control Dock">
+                <IoGameController size={13} /> Control Dock
+              </button>
+            </div>
             <div className="scoring-admin__match-actions">
+              <button className="scoring-admin__btn scoring-admin__btn--sm scoring-admin__btn--primary" onClick={() => setSquadMatchId(match.id)}>
+                <IoPeople size={14} /> Squad
+              </button>
               {match.status === 'scheduled' && (
                 <button className="scoring-admin__btn scoring-admin__btn--sm scoring-admin__btn--success" onClick={() => handleStatusChange(match.id, 'live')}>
                   <IoPlay size={14} /> Start
@@ -366,6 +444,31 @@ function MatchesTab({ matches, teams, onFeedback, saving, setSaving }: {
           </div>
         ))}
       </div>
+
+      {/* Squad Selection Modal */}
+      <AnimatePresence>
+        {squadMatchId && (() => {
+          const sqMatch = matches.find(m => m.id === squadMatchId);
+          if (!sqMatch) return null;
+          return (
+            <SquadSelectionModal
+              match={sqMatch}
+              soldPlayers={soldPlayers}
+              onSave={async (matchId, lineupA, lineupB) => {
+                try {
+                  await scoringService.saveLineup(matchId, lineupA);
+                  await scoringService.saveLineup(matchId, lineupB);
+                  onFeedback('Squad saved successfully');
+                  setSquadMatchId(null);
+                } catch (err) {
+                  onFeedback(`Failed to save squad: ${err}`);
+                }
+              }}
+              onClose={() => setSquadMatchId(null)}
+            />
+          );
+        })()}
+      </AnimatePresence>
     </div>
   );
 }
@@ -614,8 +717,8 @@ function OverlayTab({ config, setConfig, onFeedback }: {
     try {
       await scoringService.saveOverlayConfig(config);
       onFeedback('Overlay config saved');
-    } catch {
-      onFeedback('Failed to save overlay config');
+    } catch (err) {
+      onFeedback(`Failed to save overlay config: ${String(err)}`);
     }
   };
 
@@ -702,6 +805,29 @@ function OverlayTab({ config, setConfig, onFeedback }: {
               <input type="checkbox" checked={config.showLiveBadge} onChange={e => setConfig({ ...config, showLiveBadge: e.target.checked })} />
               Show LIVE badge
             </label>
+          </div>
+          <div className="scoring-admin__field">
+            <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <input type="checkbox" checked={config.enableKeyboardShortcuts} onChange={e => setConfig({ ...config, enableKeyboardShortcuts: e.target.checked })} />
+              Enable overlay keyboard shortcuts
+            </label>
+          </div>
+          <div className="scoring-admin__field">
+            <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <input type="checkbox" checked={config.autoOverlayEnabled} onChange={e => setConfig({ ...config, autoOverlayEnabled: e.target.checked })} />
+              Auto-rotate scorecard/stats overlays
+            </label>
+          </div>
+          <div className="scoring-admin__field">
+            <label>Auto-rotate interval (seconds)</label>
+            <input
+              type="number"
+              min={10}
+              max={120}
+              value={config.autoOverlayIntervalSeconds}
+              onChange={e => setConfig({ ...config, autoOverlayIntervalSeconds: Number(e.target.value) || 30 })}
+              className="scoring-admin__input"
+            />
           </div>
         </div>
       </div>
@@ -865,7 +991,7 @@ function AnimationsTab({ config, setConfig, onFeedback }: {
             { key: 'F', desc: 'Full Scorecard' },
             { key: '[', desc: 'Facing Batsman Stats' },
             { key: ']', desc: 'Non-Striker Stats' },
-            { key: ';', desc: 'Current Bowler Stats' },
+            { key: '; / \'', desc: 'Current Bowler Stats' },
             { key: '4', desc: 'Boundary Animation' },
             { key: '6', desc: 'Sixer Animation' },
             { key: 'W', desc: 'Wicket Alert' },
@@ -882,5 +1008,623 @@ function AnimationsTab({ config, setConfig, onFeedback }: {
         </div>
       </div>
     </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// PRE-MATCH TAB — Toss videos, squad reveal, impact players
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function PreMatchTab({ matches, config, setConfig, onFeedback }: {
+  matches: MatchSetup[];
+  config: ScoringOverlayConfig;
+  setConfig: (c: ScoringOverlayConfig) => void;
+  onFeedback: (msg: string) => void;
+}) {
+  const [selectedMatchId, setSelectedMatchId] = useState<string>('');
+  const [preMatchState, setPreMatchState] = useState<PreMatchState | null>(null);
+  const [lineups, setLineups] = useState<{ teamA: MatchLineup | null; teamB: MatchLineup | null }>({ teamA: null, teamB: null });
+  const [saving, setSaving] = useState(false);
+
+  // Toss config state
+  const [tossConfig, setTossConfig] = useState<TossConfig>({
+    chromaKeyEnabled: true,
+    chromaKeyColor: '#00FF00',
+  });
+
+  // Squad reveal config
+  const [autoReveal, setAutoReveal] = useState(true);
+  const [delayAfterToss, setDelayAfterToss] = useState(10);
+  const [playerRevealInterval, setPlayerRevealInterval] = useState(2000);
+
+  // Impact players
+  const [impactPlayersA, setImpactPlayersA] = useState<ImpactPlayer[]>([]);
+  const [impactPlayersB, setImpactPlayersB] = useState<ImpactPlayer[]>([]);
+
+  const selectedMatch = matches.find(m => m.id === selectedMatchId);
+
+  // Load pre-match state and lineups when match is selected
+  useEffect(() => {
+    if (!selectedMatchId) return;
+    const unsubs: (() => void)[] = [];
+
+    try {
+      unsubs.push(scoringService.subscribePreMatchState(selectedMatchId, (state) => {
+        setPreMatchState(state);
+        if (state.squadRevealConfig) {
+          setAutoReveal(state.squadRevealConfig.autoReveal);
+          setDelayAfterToss(state.squadRevealConfig.delayAfterTossSeconds);
+          setPlayerRevealInterval(state.squadRevealConfig.playerRevealIntervalMs);
+        }
+        if (state.impactPlayers) {
+          setImpactPlayersA(state.impactPlayers.teamA || []);
+          setImpactPlayersB(state.impactPlayers.teamB || []);
+        }
+      }));
+    } catch { /* not initialized */ }
+
+    // Load lineups
+    const loadLineups = async () => {
+      if (!selectedMatch) return;
+      try {
+        const [lineupA, lineupB] = await Promise.all([
+          scoringService.getLineup(selectedMatchId, selectedMatch.teamA.id),
+          scoringService.getLineup(selectedMatchId, selectedMatch.teamB.id),
+        ]);
+        setLineups({ teamA: lineupA, teamB: lineupB });
+      } catch { /* ignore */ }
+    };
+    loadLineups();
+
+    return () => unsubs.forEach(u => u());
+  }, [selectedMatchId, selectedMatch]);
+
+  // Load toss config from overlay config
+  useEffect(() => {
+    if (config.tossConfig) {
+      setTossConfig(config.tossConfig);
+    }
+  }, [config.tossConfig]);
+
+  const handleSaveTossConfig = async () => {
+    setSaving(true);
+    try {
+      await scoringService.saveOverlayConfig({ ...config, tossConfig });
+      setConfig({ ...config, tossConfig });
+      onFeedback('Toss video config saved');
+    } catch { onFeedback('Failed to save toss config'); }
+    finally { setSaving(false); }
+  };
+
+  const handleUploadVideo = async (file: File, field: 'headsVideoUrl' | 'tailsVideoUrl') => {
+    try {
+      const url = await uploadFileToStorage(file, `media/scoring/toss/${field}-${Date.now()}`);
+      setTossConfig(prev => ({ ...prev, [field]: url }));
+      onFeedback(`${field === 'headsVideoUrl' ? 'Heads' : 'Tails'} video uploaded`);
+    } catch { onFeedback('Upload failed'); }
+  };
+
+  const handleSavePreMatch = async () => {
+    if (!selectedMatchId || !selectedMatch) { onFeedback('Select a match first'); return; }
+    setSaving(true);
+    try {
+      const state: PreMatchState = {
+        matchId: selectedMatchId,
+        phase: preMatchState?.phase || 'idle',
+        tossResult: preMatchState?.tossResult,
+        squadRevealConfig: {
+          autoReveal,
+          delayAfterTossSeconds: delayAfterToss,
+          playerRevealIntervalMs: playerRevealInterval,
+        },
+        impactPlayers: {
+          teamA: impactPlayersA.slice(0, 4),
+          teamB: impactPlayersB.slice(0, 4),
+        },
+        revealedPlayersTeamA: preMatchState?.revealedPlayersTeamA || [],
+        revealedPlayersTeamB: preMatchState?.revealedPlayersTeamB || [],
+        lastUpdated: Date.now(),
+      };
+      await scoringService.savePreMatchState(selectedMatchId, state);
+      onFeedback('Pre-match config saved');
+    } catch { onFeedback('Failed to save pre-match config'); }
+    finally { setSaving(false); }
+  };
+
+  const handleTriggerPhase = async (phase: PreMatchState['phase']) => {
+    if (!selectedMatchId) { onFeedback('Select a match first'); return; }
+    try {
+      await scoringService.updatePreMatchPhase(selectedMatchId, phase);
+      onFeedback(`Phase: ${phase}`);
+    } catch { onFeedback('Failed to update phase'); }
+  };
+
+  const handleSetTossResult = async (wonBy: string, elected: 'bat' | 'bowl', coinSide: 'heads' | 'tails') => {
+    if (!selectedMatchId || !preMatchState) return;
+    try {
+      await scoringService.savePreMatchState(selectedMatchId, {
+        ...preMatchState,
+        tossResult: { wonBy, elected, coinSide },
+        phase: 'toss_animation',
+        lastUpdated: Date.now(),
+      });
+      // Also update the match setup
+      await scoringService.updateMatch(selectedMatchId, { tossWonBy: wonBy, tossElected: elected });
+      onFeedback('Toss result set');
+    } catch { onFeedback('Failed to save toss result'); }
+  };
+
+  const addImpactPlayer = (team: 'A' | 'B', player: ImpactPlayer) => {
+    if (team === 'A') {
+      if (impactPlayersA.length >= 4) { onFeedback('Maximum 4 impact players per team'); return; }
+      setImpactPlayersA(prev => [...prev, player]);
+    } else {
+      if (impactPlayersB.length >= 4) { onFeedback('Maximum 4 impact players per team'); return; }
+      setImpactPlayersB(prev => [...prev, player]);
+    }
+  };
+
+  const removeImpactPlayer = (team: 'A' | 'B', playerId: string) => {
+    if (team === 'A') setImpactPlayersA(prev => prev.filter(p => p.playerId !== playerId));
+    else setImpactPlayersB(prev => prev.filter(p => p.playerId !== playerId));
+  };
+
+  return (
+    <div className="scoring-admin__section">
+      <div className="scoring-admin__section-header">
+        <h2>Pre-Match Setup</h2>
+        <button className="scoring-admin__btn scoring-admin__btn--primary" onClick={handleSavePreMatch} disabled={saving}>
+          <IoSave size={16} /> Save All
+        </button>
+      </div>
+
+      {/* Match Selector */}
+      <div className="scoring-admin__form-card">
+        <h3 className="scoring-admin__subsection-title">🏏 Select Match</h3>
+        <div className="scoring-admin__field" style={{ maxWidth: 500 }}>
+          <select value={selectedMatchId} onChange={e => setSelectedMatchId(e.target.value)} className="scoring-admin__select">
+            <option value="">Select a match...</option>
+            {matches.map(m => (
+              <option key={m.id} value={m.id}>{m.teamA.name} vs {m.teamB.name} — {new Date(m.date).toLocaleDateString()}</option>
+            ))}
+          </select>
+        </div>
+        {preMatchState && (
+          <div style={{ marginTop: '0.75rem' }}>
+            <span className="scoring-admin__hint">Current phase: <strong>{preMatchState.phase}</strong></span>
+          </div>
+        )}
+      </div>
+
+      {/* Phase Controls */}
+      {selectedMatchId && (
+        <div className="scoring-admin__form-card">
+          <h3 className="scoring-admin__subsection-title">🎬 Overlay Phase Controls</h3>
+          <p className="scoring-admin__hint">Trigger each phase manually for the OBS overlay. Phases play in sequence on the broadcast.</p>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginTop: '0.75rem' }}>
+            {([
+              { phase: 'squad_display' as const, label: 'Show Squads', color: '#3b82f6' },
+              { phase: 'toss_animation' as const, label: 'Toss Animation', color: '#f59e0b' },
+              { phase: 'toss_result' as const, label: 'Toss Result', color: '#10b981' },
+              { phase: 'squad_reveal_teamA' as const, label: 'Reveal Team A', color: '#8b5cf6' },
+              { phase: 'squad_reveal_teamB' as const, label: 'Reveal Team B', color: '#ec4899' },
+              { phase: 'impact_players' as const, label: 'Impact Players', color: '#ef4444' },
+              { phase: 'match_ready' as const, label: 'Match Ready', color: '#22c55e' },
+              { phase: 'idle' as const, label: 'Reset (Idle)', color: '#6b7280' },
+            ]).map(item => (
+              <button
+                key={item.phase}
+                className="scoring-admin__btn scoring-admin__btn--sm"
+                style={{ background: preMatchState?.phase === item.phase ? item.color : undefined, color: preMatchState?.phase === item.phase ? '#fff' : undefined }}
+                onClick={() => handleTriggerPhase(item.phase)}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Toss Video Config */}
+      <div className="scoring-admin__form-card">
+        <h3 className="scoring-admin__subsection-title">🪙 Toss Animation Videos</h3>
+        <p className="scoring-admin__hint">Upload coin flip videos. A chroma green matte filter will be applied in the overlay for transparent background.</p>
+        <div className="scoring-admin__form-grid">
+          <div className="scoring-admin__field">
+            <label>Heads Video</label>
+            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+              <input type="text" value={tossConfig.headsVideoUrl || ''} onChange={e => setTossConfig(prev => ({ ...prev, headsVideoUrl: e.target.value }))} placeholder="Video URL" className="scoring-admin__input" style={{ flex: 1 }} />
+              <label className="scoring-admin__btn scoring-admin__btn--secondary" style={{ cursor: 'pointer' }}>
+                Upload
+                <input type="file" accept="video/*" style={{ display: 'none' }} onChange={e => { if (e.target.files?.[0]) handleUploadVideo(e.target.files[0], 'headsVideoUrl'); }} />
+              </label>
+            </div>
+          </div>
+          <div className="scoring-admin__field">
+            <label>Tails Video</label>
+            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+              <input type="text" value={tossConfig.tailsVideoUrl || ''} onChange={e => setTossConfig(prev => ({ ...prev, tailsVideoUrl: e.target.value }))} placeholder="Video URL" className="scoring-admin__input" style={{ flex: 1 }} />
+              <label className="scoring-admin__btn scoring-admin__btn--secondary" style={{ cursor: 'pointer' }}>
+                Upload
+                <input type="file" accept="video/*" style={{ display: 'none' }} onChange={e => { if (e.target.files?.[0]) handleUploadVideo(e.target.files[0], 'tailsVideoUrl'); }} />
+              </label>
+            </div>
+          </div>
+          <div className="scoring-admin__field">
+            <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <input type="checkbox" checked={tossConfig.chromaKeyEnabled} onChange={e => setTossConfig(prev => ({ ...prev, chromaKeyEnabled: e.target.checked }))} />
+              Enable Chroma Key (Green Screen)
+            </label>
+          </div>
+          <div className="scoring-admin__field">
+            <label>Chroma Key Color</label>
+            <input type="color" value={tossConfig.chromaKeyColor} onChange={e => setTossConfig(prev => ({ ...prev, chromaKeyColor: e.target.value }))} />
+          </div>
+        </div>
+        <div className="scoring-admin__form-actions">
+          <button className="scoring-admin__btn scoring-admin__btn--primary" onClick={handleSaveTossConfig} disabled={saving}>
+            <IoSave size={16} /> Save Toss Config
+          </button>
+        </div>
+      </div>
+
+      {/* Toss Result */}
+      {selectedMatch && (
+        <div className="scoring-admin__form-card">
+          <h3 className="scoring-admin__subsection-title">🏆 Set Toss Result</h3>
+          {preMatchState?.tossResult ? (
+            <div className="scoring-admin__hint" style={{ marginBottom: '0.75rem' }}>
+              Toss won by: <strong>{preMatchState.tossResult.wonBy === selectedMatch.teamA.id ? selectedMatch.teamA.name : selectedMatch.teamB.name}</strong> —
+              Elected to <strong>{preMatchState.tossResult.elected}</strong> —
+              Coin: <strong>{preMatchState.tossResult.coinSide}</strong>
+            </div>
+          ) : (
+            <p className="scoring-admin__hint">Select who won the toss and their choice.</p>
+          )}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+            {[selectedMatch.teamA, selectedMatch.teamB].map(team => (
+              ['bat' as const, 'bowl' as const].map(choice => (
+                ['heads' as const, 'tails' as const].map(coin => (
+                  <button
+                    key={`${team.id}-${choice}-${coin}`}
+                    className="scoring-admin__btn scoring-admin__btn--sm"
+                    style={{ fontSize: '0.75rem' }}
+                    onClick={() => handleSetTossResult(team.id, choice, coin)}
+                  >
+                    {team.name} — {choice} ({coin})
+                  </button>
+                ))
+              ))
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Squad Reveal Config */}
+      <div className="scoring-admin__form-card">
+        <h3 className="scoring-admin__subsection-title">👥 Squad Reveal Config</h3>
+        <div className="scoring-admin__form-grid">
+          <div className="scoring-admin__field">
+            <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <input type="checkbox" checked={autoReveal} onChange={e => setAutoReveal(e.target.checked)} />
+              Auto-reveal squad after toss
+            </label>
+          </div>
+          <div className="scoring-admin__field">
+            <label>Delay after toss (seconds)</label>
+            <input type="number" min={1} max={120} value={delayAfterToss} onChange={e => setDelayAfterToss(Number(e.target.value))} className="scoring-admin__input" />
+          </div>
+          <div className="scoring-admin__field">
+            <label>Player reveal interval (ms)</label>
+            <input type="number" min={500} max={5000} step={100} value={playerRevealInterval} onChange={e => setPlayerRevealInterval(Number(e.target.value))} className="scoring-admin__input" />
+          </div>
+        </div>
+      </div>
+
+      {/* Impact Players */}
+      {selectedMatch && (
+        <div className="scoring-admin__form-card">
+          <h3 className="scoring-admin__subsection-title">⚡ Impact Players (4 per team)</h3>
+          <p className="scoring-admin__hint">Impact substitute players shown on the right side of the broadcast at match start.</p>
+
+          {/* Team A Impact Players */}
+          <div style={{ marginTop: '1rem' }}>
+            <h4 style={{ color: selectedMatch.teamA.primaryColor || '#3b82f6', margin: '0 0 0.5rem' }}>{selectedMatch.teamA.name}</h4>
+            <div className="scoring-admin__impact-list">
+              {impactPlayersA.map(p => (
+                <div key={p.playerId} className="scoring-admin__impact-item">
+                  <span>{p.playerName} ({p.role})</span>
+                  <button className="scoring-admin__btn scoring-admin__btn--sm scoring-admin__btn--danger" onClick={() => removeImpactPlayer('A', p.playerId)}>
+                    <IoTrash size={14} />
+                  </button>
+                </div>
+              ))}
+              {impactPlayersA.length < 4 && lineups.teamA && (
+                <select
+                  className="scoring-admin__select"
+                  onChange={e => {
+                    const player = lineups.teamA?.players.find(p => p.playerId === e.target.value);
+                    if (player) {
+                      addImpactPlayer('A', { playerId: player.playerId, playerName: player.playerName, role: player.role });
+                      e.target.value = '';
+                    }
+                  }}
+                  defaultValue=""
+                >
+                  <option value="">+ Add impact player...</option>
+                  {lineups.teamA.players
+                    .filter(p => !impactPlayersA.some(ip => ip.playerId === p.playerId))
+                    .map(p => <option key={p.playerId} value={p.playerId}>{p.playerName} ({p.role})</option>)}
+                </select>
+              )}
+              {!lineups.teamA && <span className="scoring-admin__hint">No lineup saved for this team. Save lineup in the score update page first.</span>}
+            </div>
+          </div>
+
+          {/* Team B Impact Players */}
+          <div style={{ marginTop: '1rem' }}>
+            <h4 style={{ color: selectedMatch.teamB.primaryColor || '#ef4444', margin: '0 0 0.5rem' }}>{selectedMatch.teamB.name}</h4>
+            <div className="scoring-admin__impact-list">
+              {impactPlayersB.map(p => (
+                <div key={p.playerId} className="scoring-admin__impact-item">
+                  <span>{p.playerName} ({p.role})</span>
+                  <button className="scoring-admin__btn scoring-admin__btn--sm scoring-admin__btn--danger" onClick={() => removeImpactPlayer('B', p.playerId)}>
+                    <IoTrash size={14} />
+                  </button>
+                </div>
+              ))}
+              {impactPlayersB.length < 4 && lineups.teamB && (
+                <select
+                  className="scoring-admin__select"
+                  onChange={e => {
+                    const player = lineups.teamB?.players.find(p => p.playerId === e.target.value);
+                    if (player) {
+                      addImpactPlayer('B', { playerId: player.playerId, playerName: player.playerName, role: player.role });
+                      e.target.value = '';
+                    }
+                  }}
+                  defaultValue=""
+                >
+                  <option value="">+ Add impact player...</option>
+                  {lineups.teamB.players
+                    .filter(p => !impactPlayersB.some(ip => ip.playerId === p.playerId))
+                    .map(p => <option key={p.playerId} value={p.playerId}>{p.playerName} ({p.role})</option>)}
+                </select>
+              )}
+              {!lineups.teamB && <span className="scoring-admin__hint">No lineup saved for this team. Save lineup in the score update page first.</span>}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Pre-Match Sequence Info */}
+      <div className="scoring-admin__form-card">
+        <h3 className="scoring-admin__subsection-title">📋 Broadcast Sequence</h3>
+        <div className="scoring-admin__shortcuts-grid">
+          {[
+            { step: '1', desc: 'Squad Display — Show both teams\' full squads' },
+            { step: '2', desc: 'Toss Animation — Coin flip video with chroma key' },
+            { step: '3', desc: 'Toss Result — Winner & batting/bowling choice' },
+            { step: '4', desc: 'Squad Reveal (Team A) — Animated player-by-player' },
+            { step: '5', desc: 'Squad Reveal (Team B) — Animated player-by-player' },
+            { step: '6', desc: 'Impact Players — 4 per team on right side' },
+            { step: '7', desc: 'Match Ready — Transition to live scoring' },
+          ].map(s => (
+            <div key={s.step} className="scoring-admin__shortcut-item">
+              <kbd className="scoring-admin__kbd">{s.step}</kbd>
+              <span>{s.desc}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// SQUAD SELECTION MODAL — Pick Playing XI from auctioned players
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function SquadSelectionModal({ match, soldPlayers, onSave, onClose }: {
+  match: MatchSetup;
+  soldPlayers: SoldPlayer[];
+  onSave: (matchId: string, lineupA: MatchLineup, lineupB: MatchLineup) => void;
+  onClose: () => void;
+}) {
+  const [activeTeam, setActiveTeam] = useState<'A' | 'B'>('A');
+  const [selectedA, setSelectedA] = useState<string[]>([]);
+  const [selectedB, setSelectedB] = useState<string[]>([]);
+  const [captainA, setCaptainA] = useState('');
+  const [captainB, setCaptainB] = useState('');
+  const [wkA, setWkA] = useState('');
+  const [wkB, setWkB] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [loadedExisting, setLoadedExisting] = useState(false);
+
+  const teamAPlayers = soldPlayers.filter(p => p.teamId === match.teamA.id || p.teamName === match.teamA.name);
+  const teamBPlayers = soldPlayers.filter(p => p.teamId === match.teamB.id || p.teamName === match.teamB.name);
+
+  // Load existing lineups
+  useEffect(() => {
+    if (loadedExisting) return;
+    const loadLineups = async () => {
+      try {
+        const [la, lb] = await Promise.all([
+          scoringService.getLineup(match.id, match.teamA.id),
+          scoringService.getLineup(match.id, match.teamB.id),
+        ]);
+        if (la) {
+          setSelectedA(la.players.map(p => p.playerId));
+          const cap = la.players.find(p => p.isCaptain);
+          const wk = la.players.find(p => p.isWicketKeeper);
+          if (cap) setCaptainA(cap.playerId);
+          if (wk) setWkA(wk.playerId);
+        }
+        if (lb) {
+          setSelectedB(lb.players.map(p => p.playerId));
+          const cap = lb.players.find(p => p.isCaptain);
+          const wk = lb.players.find(p => p.isWicketKeeper);
+          if (cap) setCaptainB(cap.playerId);
+          if (wk) setWkB(wk.playerId);
+        }
+      } catch { /* no existing lineups */ }
+      setLoadedExisting(true);
+    };
+    loadLineups();
+  }, [match.id, match.teamA.id, match.teamB.id, loadedExisting]);
+
+  const togglePlayer = (playerId: string, team: 'A' | 'B') => {
+    const setter = team === 'A' ? setSelectedA : setSelectedB;
+    const selected = team === 'A' ? selectedA : selectedB;
+    if (selected.includes(playerId)) {
+      setter(selected.filter(id => id !== playerId));
+      if (team === 'A' && captainA === playerId) setCaptainA('');
+      if (team === 'A' && wkA === playerId) setWkA('');
+      if (team === 'B' && captainB === playerId) setCaptainB('');
+      if (team === 'B' && wkB === playerId) setWkB('');
+    } else if (selected.length < 11) {
+      setter([...selected, playerId]);
+    }
+  };
+
+  const selectAll = (team: 'A' | 'B') => {
+    const players = team === 'A' ? teamAPlayers : teamBPlayers;
+    const setter = team === 'A' ? setSelectedA : setSelectedB;
+    setter(players.slice(0, 11).map(p => p.id));
+  };
+
+  const buildLineup = (teamId: string, players: SoldPlayer[], selected: string[], captain: string, wk: string): MatchLineup => ({
+    matchId: match.id,
+    teamId,
+    players: selected.map((id, idx) => {
+      const p = players.find(pl => pl.id === id);
+      return {
+        playerId: id,
+        playerName: p?.name || 'Unknown',
+        role: p?.role || 'Uncategorized',
+        battingOrder: idx + 1,
+        isCaptain: id === captain,
+        isWicketKeeper: id === wk,
+      };
+    }),
+  });
+
+  const handleSave = async () => {
+    if (selectedA.length === 0 && selectedB.length === 0) return;
+    setSaving(true);
+    const lineupA = buildLineup(match.teamA.id, teamAPlayers, selectedA, captainA, wkA);
+    const lineupB = buildLineup(match.teamB.id, teamBPlayers, selectedB, captainB, wkB);
+    await onSave(match.id, lineupA, lineupB);
+    setSaving(false);
+  };
+
+  const renderTeamSquad = (team: 'A' | 'B') => {
+    const teamInfo = team === 'A' ? match.teamA : match.teamB;
+    const players = team === 'A' ? teamAPlayers : teamBPlayers;
+    const selected = team === 'A' ? selectedA : selectedB;
+    const captain = team === 'A' ? captainA : captainB;
+    const wk = team === 'A' ? wkA : wkB;
+    const setCaptain = team === 'A' ? setCaptainA : setCaptainB;
+    const setWk = team === 'A' ? setWkA : setWkB;
+
+    return (
+      <div className="squad-modal__team">
+        <div className="squad-modal__team-header" style={{ borderColor: teamInfo.primaryColor || '#3b82f6' }}>
+          {teamInfo.logoUrl && <img src={teamInfo.logoUrl} alt="" className="squad-modal__team-logo" />}
+          <div>
+            <h3 className="squad-modal__team-name" style={{ color: teamInfo.primaryColor || '#3b82f6' }}>{teamInfo.name}</h3>
+            <span className="squad-modal__count">{selected.length}/11 selected · {players.length} available</span>
+          </div>
+          {players.length >= 11 && selected.length === 0 && (
+            <button className="scoring-admin__btn scoring-admin__btn--sm" onClick={() => selectAll(team)}>Select All 11</button>
+          )}
+        </div>
+
+        <div className="squad-modal__players">
+          {players.map(p => {
+            const isSelected = selected.includes(p.id);
+            const isCap = captain === p.id;
+            const isWk = wk === p.id;
+            return (
+              <div
+                key={p.id}
+                className={`squad-modal__player ${isSelected ? 'squad-modal__player--selected' : ''}`}
+                onClick={() => togglePlayer(p.id, team)}
+              >
+                <div className="squad-modal__player-check">
+                  {isSelected ? '✓' : ''}
+                </div>
+                <div className="squad-modal__player-info">
+                  <span className="squad-modal__player-name">{p.name}</span>
+                  <span className="squad-modal__player-role">{p.role}</span>
+                </div>
+                <div className="squad-modal__player-badges">
+                  {isCap && <span className="squad-modal__badge squad-modal__badge--cap">C</span>}
+                  {isWk && <span className="squad-modal__badge squad-modal__badge--wk">WK</span>}
+                </div>
+                {isSelected && (
+                  <div className="squad-modal__player-actions" onClick={e => e.stopPropagation()}>
+                    <button
+                      className={`squad-modal__role-btn ${isCap ? 'active' : ''}`}
+                      onClick={() => setCaptain(isCap ? '' : p.id)}
+                      title="Captain"
+                    >C</button>
+                    <button
+                      className={`squad-modal__role-btn ${isWk ? 'active' : ''}`}
+                      onClick={() => setWk(isWk ? '' : p.id)}
+                      title="Wicket Keeper"
+                    >WK</button>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+          {players.length === 0 && (
+            <div className="squad-modal__empty">No sold players found for this team. Complete the auction first.</div>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <motion.div className="squad-modal__overlay" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose}>
+      <motion.div className="squad-modal" initial={{ scale: 0.9, y: 30 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.9, y: 30 }} onClick={e => e.stopPropagation()}>
+        <div className="squad-modal__header">
+          <div>
+            <h2 className="squad-modal__title">Select Playing XI</h2>
+            <p className="squad-modal__subtitle">{match.teamA.name} vs {match.teamB.name} · {match.venue}</p>
+          </div>
+          <button className="scoring-admin__close-btn" onClick={onClose}><IoClose size={20} /></button>
+        </div>
+
+        <div className="squad-modal__team-tabs">
+          <button className={`squad-modal__team-tab ${activeTeam === 'A' ? 'active' : ''}`} style={{ '--tab-color': match.teamA.primaryColor || '#3b82f6' } as React.CSSProperties} onClick={() => setActiveTeam('A')}>
+            {match.teamA.name} ({selectedA.length})
+          </button>
+          <button className={`squad-modal__team-tab ${activeTeam === 'B' ? 'active' : ''}`} style={{ '--tab-color': match.teamB.primaryColor || '#ef4444' } as React.CSSProperties} onClick={() => setActiveTeam('B')}>
+            {match.teamB.name} ({selectedB.length})
+          </button>
+        </div>
+
+        <div className="squad-modal__body">
+          <div className="squad-modal__desktop-grid">
+            {renderTeamSquad('A')}
+            <div className="squad-modal__divider" />
+            {renderTeamSquad('B')}
+          </div>
+          <div className="squad-modal__mobile-view">
+            {renderTeamSquad(activeTeam)}
+          </div>
+        </div>
+
+        <div className="squad-modal__footer">
+          <button className="scoring-admin__btn scoring-admin__btn--primary" onClick={handleSave} disabled={saving}>
+            <IoSave size={16} /> {saving ? 'Saving...' : 'Save Squad'}
+          </button>
+          <button className="scoring-admin__btn scoring-admin__btn--secondary" onClick={onClose}>Cancel</button>
+        </div>
+      </motion.div>
+    </motion.div>
   );
 }

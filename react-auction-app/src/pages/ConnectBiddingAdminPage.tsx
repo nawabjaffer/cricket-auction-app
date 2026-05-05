@@ -12,8 +12,8 @@ import { IoClose, IoShieldCheckmark, IoPeople, IoShield } from 'react-icons/io5'
 import { GiCricketBat } from 'react-icons/gi';
 import { useRealtimeMobileSync } from '../hooks/useRealtimeSync';
 import { useAdminAuth } from '../hooks/useAdminAuth';
+import { useFeatureFlags } from '../hooks/useFeatureFlags';
 import { authService, type AuthSession } from '../services/auth';
-import { featureFlagsService } from '../services/featureFlagsService';
 import { TeamLogo } from '../components/TeamLogo/TeamLogo';
 import { PlayerImage } from '../components/PlayerImage/PlayerImage';
 import { getRoleLabel, getRoleBadgeClass } from '../utils/playerStats';
@@ -41,7 +41,8 @@ export default function ConnectBiddingAdminPage() {
   const [feedback, setFeedback] = useState<BidFeedback | null>(null);
   const [busyTeamId, setBusyTeamId] = useState<string | null>(null);
 
-  const superAdminEnabled = featureFlagsService.isEnabled('super-admin-bidding');
+  const { isEnabled } = useFeatureFlags();
+  const superAdminEnabled = isEnabled('super-admin-bidding');
 
   const {
     currentPlayer,
@@ -365,79 +366,49 @@ export default function ConnectBiddingAdminPage() {
 
           {/* All Teams Grid */}
           <motion.div className="cb-login-card" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, delay: 0.1 }} style={{ marginTop: '0.75rem' }}>
-            <h3 style={{ margin: '0 0 0.75rem', fontSize: '0.95rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6 }}>
-              <IoPeople size={16} /> All Teams — Bid Controls
-            </h3>
+            <div style={{ marginBottom: '0.9rem' }}>
+              <h3 style={{ margin: '0 0 0.35rem', fontSize: '0.95rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6 }}>
+                <IoPeople size={16} /> All Teams — Bid Controls
+              </h3>
+              <p style={{ margin: 0, fontSize: '0.74rem', color: 'rgba(255,255,255,0.65)', lineHeight: 1.5 }}>
+                Tap a team logo to raise the bid instantly.
+              </p>
+            </div>
 
-            <div className="cb-team-card-grid">
+            <div className="cb-team-card-grid cb-team-bid-grid">
               {teams.map((team) => {
                 const isLeading = selectedTeam?.id === team.id;
-                const purseUsedPct = team.allocatedAmount
-                  ? Math.round(((team.allocatedAmount - team.remainingPurse) / team.allocatedAmount) * 100)
-                  : 0;
+                const canRaiseBid = !!currentPlayer && isConnected && auctionActive && !busyTeamId;
                 return (
-                  <div
+                  <motion.button
                     key={team.id}
-                    className={`cb-team-card-btn ${isLeading ? 'active' : ''}`}
-                    style={{ '--card-bg': team.primaryColor || '#3b82f6', '--card-bg2': team.secondaryColor || '#1e40af', cursor: 'default', position: 'relative' } as React.CSSProperties}
+                    type="button"
+                    className={`cb-team-card-btn cb-team-bid-card ${isLeading ? 'active' : ''}`}
+                    style={{
+                      '--card-bg': team.primaryColor || '#3b82f6',
+                      '--card-bg2': team.secondaryColor || '#1e40af',
+                      position: 'relative',
+                    } as React.CSSProperties}
+                    whileTap={{ scale: canRaiseBid ? 0.96 : 1 }}
+                    disabled={!canRaiseBid}
+                    onClick={() => handleRaiseBid(team.id, team.name)}
+                    aria-label={`Raise bid for ${team.name}`}
                   >
                     {isLeading && (
-                      <span style={{ position: 'absolute', top: 6, right: 8, fontSize: '0.55rem', background: 'rgba(251,191,36,0.9)', color: '#000', padding: '1px 6px', borderRadius: 4, fontWeight: 800, letterSpacing: 0.5 }}>LEADING</span>
+                      <span className="cb-team-bid-badge">LEADING</span>
                     )}
-                    {team.logoUrl ? (
-                      <TeamLogo logoUrl={team.logoUrl} teamName={team.name} size="sm" className="cb-team-card-logo" />
-                    ) : (
-                      <div className="cb-team-card-initials">{team.name.slice(0, 2).toUpperCase()}</div>
-                    )}
-                    <span className="cb-team-card-name">{team.name}</span>
-                    <span className="cb-team-card-meta">
-                      {team.playersBought || 0}/{team.totalPlayerThreshold || 25} players
-                    </span>
-                    <span className="cb-team-card-meta" style={{ fontSize: '0.65rem' }}>
-                      {formatLakhs(team.remainingPurse)} left &middot; {purseUsedPct}% used
-                    </span>
-
-                    <div style={{ display: 'flex', gap: 6, width: '100%', marginTop: 6 }}>
-                      <motion.button
-                        whileTap={{ scale: 0.92 }}
-                        disabled={!currentPlayer || !isConnected || !auctionActive || !!busyTeamId}
-                        onClick={(e) => { e.stopPropagation(); handleRaiseBid(team.id, team.name); }}
-                        style={{
-                          flex: 1,
-                          padding: '0.5rem 0',
-                          borderRadius: 8,
-                          border: 'none',
-                          background: 'linear-gradient(135deg, #22c55e, #16a34a)',
-                          color: '#fff',
-                          fontWeight: 800,
-                          fontSize: '0.72rem',
-                          cursor: 'pointer',
-                          opacity: (!currentPlayer || !auctionActive) ? 0.4 : 1,
-                          letterSpacing: 0.5,
-                        }}
-                      >
-                        {busyTeamId === team.id ? '...' : `RAISE BID`}
-                      </motion.button>
-                      <motion.button
-                        whileTap={{ scale: 0.92 }}
-                        disabled={!currentPlayer || !isConnected || !isLeading || !!busyTeamId}
-                        onClick={(e) => { e.stopPropagation(); handlePass(team.id, team.name); }}
-                        style={{
-                          padding: '0.5rem 0.7rem',
-                          borderRadius: 8,
-                          border: '1px solid rgba(255,255,255,0.25)',
-                          background: 'transparent',
-                          color: '#fff',
-                          fontWeight: 700,
-                          fontSize: '0.72rem',
-                          cursor: 'pointer',
-                          opacity: !isLeading ? 0.3 : 1,
-                        }}
-                      >
-                        PASS
-                      </motion.button>
+                    <div className="cb-team-bid-logo-wrap">
+                      {team.logoUrl ? (
+                        <TeamLogo logoUrl={team.logoUrl} teamName={team.name} size="sm" className="cb-team-card-logo cb-team-bid-logo" />
+                      ) : (
+                        <div className="cb-team-card-initials cb-team-bid-initials">{team.name.slice(0, 2).toUpperCase()}</div>
+                      )}
                     </div>
-                  </div>
+                    <span className="cb-team-card-name cb-team-bid-name">{team.name}</span>
+                    <span className="cb-team-bid-hint">
+                      {busyTeamId === team.id ? 'Placing bid...' : 'Tap logo to raise bid'}
+                    </span>
+                  </motion.button>
                 );
               })}
             </div>
@@ -472,7 +443,7 @@ export default function ConnectBiddingAdminPage() {
       <div className="cb-login-scroll">
         {/* Team session bar */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', marginBottom: 8 }}>
-          <span style={{ fontWeight: 600, fontSize: '0.9rem', marginRight: 12 }}>Team: {teamSession.teamName}</span>
+          <span style={{ fontWeight: 600, fontSize: '0.9rem', marginRight: 12 }}>Team: {teamSession?.teamName ?? 'Unknown Team'}</span>
           <motion.button className="cb-icon-btn" onClick={handleTeamLogout} whileTap={{ scale: 0.9 }} title="Logout Team" style={{ background: 'rgba(255,255,255,0.1)', borderRadius: 8, width: 32, height: 32, border: 'none', color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <IoClose size={16} />
           </motion.button>

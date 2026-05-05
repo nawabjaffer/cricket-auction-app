@@ -165,6 +165,9 @@ function AuctionApp({ mirrorMode = false }: { mirrorMode?: boolean }) {
   // Admin settings for configurable features
   const [adminSettings, setAdminSettings] = useState<AdminSettings | null>(null);
   
+  // Player placeholder image — configurable from admin Theme & Settings
+  const playerPlaceholder = adminSettings?.playerPlaceholderImage || playerPlaceholder;
+
   // Image loading state
   const [imageLoadingState, setImageLoadingState] = useState<'loading' | 'loaded' | 'error'>('loading');
   const [imgSrc, setImgSrc] = useState<string>('');
@@ -201,7 +204,8 @@ function AuctionApp({ mirrorMode = false }: { mirrorMode?: boolean }) {
 
   // Boot-time media preload — caches all player/team/sponsor images before
   // showing the main UI so subsequent transitions are instant.
-  const bootPreload = useBootPreload(!isLoading && !isError);
+  // When mirrorPreloadPersist is enabled, the cache survives across sessions.
+  const bootPreload = useBootPreload(!isLoading && !isError, isMirrorMode && !!adminSettings?.mirrorPreloadPersist);
 
   // Auction state
   const auction = useAuction();
@@ -927,7 +931,7 @@ function AuctionApp({ mirrorMode = false }: { mirrorMode?: boolean }) {
     if (!currentPlayerId) return;
     currentPlayerIdRef.current = currentPlayerId;
     setImageLoadingState('loading');
-    setImgSrc(transformedImageUrl || '/placeholder_player.png');
+    setImgSrc(transformedImageUrl || playerPlaceholder);
   }, [currentPlayerId, transformedImageUrl]);
 
   // Loading state
@@ -1444,14 +1448,14 @@ function AuctionApp({ mirrorMode = false }: { mirrorMode?: boolean }) {
                   {/* Actual Image */}
                   <img 
                     ref={imgRef}
-                    src={imageLoadingState === 'error' ? '/placeholder_player.png' : (imgSrc || '/placeholder_player.png')} 
+                    src={imageLoadingState === 'error' ? playerPlaceholder : (imgSrc || playerPlaceholder)} 
                     alt={currentPlayer.name}
                     className="placeholder-image"
                     loading="eager"
                     onLoad={(e) => {
                       const loadedUrl = (e.target as HTMLImageElement).src;
                       
-                      if (loadedUrl.includes('placeholder_player.png')) {
+                      if (loadedUrl === playerPlaceholder || loadedUrl.endsWith('placeholder_player.png')) {
                         onImageLoad();
                         return;
                       }
@@ -1464,18 +1468,18 @@ function AuctionApp({ mirrorMode = false }: { mirrorMode?: boolean }) {
                       const img = e.target as HTMLImageElement;
                       const failedUrl = img.src;
                       
-                      if (failedUrl.includes('placeholder_player.png')) return;
+                      if (failedUrl === playerPlaceholder || failedUrl.endsWith('placeholder_player.png')) return;
                       
                       imageCacheService.markAsFailed(failedUrl);
                       setImageLoadingState('error');
-                      setImgSrc('/placeholder_player.png');
+                      setImgSrc(playerPlaceholder);
                     }}
                   />
                 </>
               )}
               {!currentPlayer && (
                 <img 
-                  src="/placeholder_player.png" 
+                  src=playerPlaceholder 
                   alt="Player placeholder"
                   className="placeholder-image"
                 />
@@ -1725,7 +1729,7 @@ function AuctionApp({ mirrorMode = false }: { mirrorMode?: boolean }) {
                       >
                         <div className="player-avatar">
                           <img 
-                            src={player.imageUrl || '/placeholder_player.png'} 
+                            src={player.imageUrl || playerPlaceholder} 
                             alt={player.name}
                             loading="lazy"
                             onError={(e) => {
@@ -1737,7 +1741,7 @@ function AuctionApp({ mirrorMode = false }: { mirrorMode?: boolean }) {
                               // Prevent infinite loop - max 3 attempts
                               if (nextAttempt > 3) {
                                 console.warn('[SquadView] Max error attempts reached for', player.name);
-                                img.src = '/placeholder_player.png';
+                                img.src = playerPlaceholder;
                                 return;
                               }
                               
@@ -1745,13 +1749,13 @@ function AuctionApp({ mirrorMode = false }: { mirrorMode?: boolean }) {
                               if (nextAttempt === 1) {
                                 // Use placeholder image
                                 console.log('[SquadView] Trying placeholder for', player.name);
-                                img.src = '/placeholder_player.png';
+                                img.src = playerPlaceholder;
                                 return;
                               }
                               
                               // Final fallback
                               console.error('[SquadView] Image failed, using placeholder for', player.name);
-                              img.src = '/placeholder_player.png';
+                              img.src = playerPlaceholder;
                             }}
                           />
                         </div>

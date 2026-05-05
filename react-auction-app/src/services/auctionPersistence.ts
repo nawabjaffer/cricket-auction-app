@@ -276,6 +276,10 @@ export interface AdminSettings {
   defaultCountryCode?: string;
   // Configurable bid increment ranges (e.g. 0-500 → 50, 500-1000 → 100)
   bidIncrementRanges?: BidIncrementRange[];
+  // Custom player placeholder image URL (default /placeholder_player.png)
+  playerPlaceholderImage?: string;
+  // When true, mirror screen preload persists across sessions (localStorage) for faster reload
+  mirrorPreloadPersist?: boolean;
 }
 
 export interface BidIncrementRange {
