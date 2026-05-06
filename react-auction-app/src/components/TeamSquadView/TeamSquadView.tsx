@@ -206,11 +206,13 @@ export function TeamSquadView({
     }
 
     // Auto-reduce threshold by iconic player count (they're pre-allocated, not auctioned)
-    const iconicCount = reduceThresholdByIconPlayers
+    // BUT when in 'owners' mode, iconic players aren't displayed separately so keep full slots
+    const shouldReduceByIconic = reduceThresholdByIconPlayers && squadViewMode !== 'owners';
+    const iconicCountForSlots = shouldReduceByIconic
       ? (activeTeam.iconicPlayers?.length || (activeTeam.captain ? 1 : 0))
       : 0;
     const effectiveThreshold = Math.max(
-      (activeTeam.totalPlayerThreshold || teamPlayers.length) - iconicCount,
+      (activeTeam.totalPlayerThreshold || teamPlayers.length) - iconicCountForSlots,
       teamPlayers.length,
     );
 
@@ -229,7 +231,7 @@ export function TeamSquadView({
     }
 
     return slots;
-  }, [activeTeam, teamPlayers]);
+  }, [activeTeam, teamPlayers, squadViewMode]);
 
   const captainData = useMemo(() => {
     // Support multiple iconic players
@@ -595,26 +597,25 @@ export function TeamSquadView({
                         </div>
                       );
                     }
-                    return owners.map((owner, i) => (
-                      <div key={owner.id || i} className="tsv-owner-showcase-card">
-                        <div className="tsv-owner-showcase-photo">
-                          {owner.imageUrl ? (
-                            <img src={owner.imageUrl} alt={owner.name} className="tsv-owner-showcase-img" />
-                          ) : owner.brandImageUrl ? (
-                            <img src={owner.brandImageUrl} alt={owner.name} className="tsv-owner-showcase-img" />
-                          ) : (
-                            <span className="tsv-owner-showcase-initials">{owner.name.charAt(0).toUpperCase()}</span>
-                          )}
-                        </div>
-                        <div className="tsv-owner-showcase-info">
-                          <h3 className="tsv-owner-showcase-name">{owner.name}</h3>
-                          {owner.designation && <span className="tsv-owner-showcase-role">{owner.designation}</span>}
-                        </div>
-                        {owner.brandImageUrl && owner.imageUrl && (
-                          <img src={owner.brandImageUrl} alt="Brand" className="tsv-owner-showcase-brand" />
-                        )}
+                    return (
+                      <div className={`tsv-owners-big-grid ${owners.length === 1 ? 'single' : ''}`}>
+                        {owners.map((owner, i) => (
+                          <div key={owner.id || i} className="tsv-owner-big-card">
+                            <div className="tsv-owner-big-photo">
+                              {owner.imageUrl ? (
+                                <img src={owner.imageUrl} alt={owner.name} className="tsv-owner-big-img" />
+                              ) : owner.brandImageUrl ? (
+                                <img src={owner.brandImageUrl} alt={owner.name} className="tsv-owner-big-img" />
+                              ) : (
+                                <span className="tsv-owner-big-initials">{owner.name.charAt(0).toUpperCase()}</span>
+                              )}
+                            </div>
+                            <h3 className="tsv-owner-big-name">{owner.name}</h3>
+                            {owner.designation && <span className="tsv-owner-big-role">{owner.designation}</span>}
+                          </div>
+                        ))}
                       </div>
-                    ));
+                    );
                   })()}
                 </div>
               )}
@@ -656,19 +657,19 @@ export function TeamSquadView({
                   <span className="tsv-stat-label">Players Needed</span>
                 </div>
                 <div className="tsv-stat-item">
-                  <span className="tsv-stat-value">₹{highestBuy.toFixed(1)}L</span>
+                  <span className="tsv-stat-value">₹{highestBuy.toFixed(1)}{currencySuffix}</span>
                   <span className="tsv-stat-label">Highest Bid</span>
                 </div>
                 <div className="tsv-stat-item">
-                  <span className="tsv-stat-value">₹{remainingBudget.toFixed(1)}L</span>
+                  <span className="tsv-stat-value">₹{remainingBudget.toFixed(1)}{currencySuffix}</span>
                   <span className="tsv-stat-label">Remaining Budget</span>
                 </div>
                 <div className="tsv-stat-item">
-                  <span className="tsv-stat-value">₹{spentBudget.toFixed(1)}L</span>
+                  <span className="tsv-stat-value">₹{spentBudget.toFixed(1)}{currencySuffix}</span>
                   <span className="tsv-stat-label">Spent</span>
                 </div>
                 <div className="tsv-stat-item">
-                  <span className="tsv-stat-value">₹{totalBudget.toFixed(1)}L</span>
+                  <span className="tsv-stat-value">₹{totalBudget.toFixed(1)}{currencySuffix}</span>
                   <span className="tsv-stat-label">Total Budget</span>
                 </div>
                 <div className="tsv-stat-item">

@@ -789,31 +789,22 @@
   flex-direction: column;
   align-items: center;
   padding: 1.5rem 1rem 1.25rem;
-  background: linear-gradient(
-    160deg,
-    rgba(255, 255, 255, 0.06) 0%,
-    rgba(255, 255, 255, 0.01) 100%
-  );
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 1.25rem;
-  backdrop-filter: blur(20px);
-  overflow: hidden;
-  transition: transform 0.2s, box-shadow 0.2s;
+  /* No background, no border — clean transparent look for distance viewing */
+  background: none;
+  border: none;
+  border-radius: 0;
+  backdrop-filter: none;
+  overflow: visible;
+  transition: transform 0.2s;
 }
 
 .break-ov__owner-showcase-card:hover {
   transform: translateY(-4px);
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4), 0 0 20px var(--owner-team-color, rgba(59, 130, 246, 0.2));
+  box-shadow: none;
 }
 
 .break-ov__owner-showcase-card::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 3px;
-  background: linear-gradient(90deg, transparent, var(--owner-team-color, #3b82f6), transparent);
+  display: none;
 }
 
 /* Brand watermark in showcase card */
@@ -833,25 +824,28 @@
   object-fit: contain;
 }
 
-/* Owner photo (showcase) */
+/* Owner photo (showcase) — BIG, transparent, no border for far visibility */
 .break-ov__owner-showcase-photo {
-  width: 80px;
-  height: 80px;
-  border-radius: 50%;
-  overflow: hidden;
-  border: 3px solid var(--owner-team-color, #3b82f6);
-  box-shadow:
-    0 0 24px rgba(0, 0, 0, 0.5),
-    0 0 12px var(--owner-team-color, rgba(59, 130, 246, 0.4));
+  width: clamp(120px, 18vw, 220px);
+  height: clamp(120px, 18vw, 220px);
+  overflow: visible;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
   margin-bottom: 0.75rem;
-  background: rgba(0, 0, 0, 0.3);
+  background: none;
   flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .break-ov__owner-showcase-img {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
+  border-radius: 0;
+  filter: drop-shadow(0 4px 20px rgba(0, 0, 0, 0.6));
 }
 
 .break-ov__owner-showcase-initials {
@@ -887,9 +881,10 @@
 
 .break-ov__owner-showcase-name {
   font-weight: 700;
-  font-size: 0.88rem;
+  font-size: clamp(1rem, 1.8vw, 1.4rem);
   color: #fff;
   line-height: 1.2;
+  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.5);
 }
 
 .break-ov__owner-showcase-team {
