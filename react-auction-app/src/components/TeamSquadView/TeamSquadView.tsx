@@ -202,7 +202,7 @@ export function TeamSquadView({
 
   const displaySlots = useMemo(() => {
     if (!activeTeam) {
-      return [] as Array<{ kind: 'player'; player: SoldPlayer } | { kind: 'empty'; key: string }>;
+      return [] as Array<{ kind: 'player'; player: SoldPlayer } | { kind: 'iconic'; player: { name: string; imageUrl: string; role: string } } | { kind: 'empty'; key: string }>;
     }
 
     // Auto-reduce threshold by iconic player count (they're pre-allocated, not auctioned)
@@ -221,17 +221,43 @@ export function TeamSquadView({
       24,
     );
 
-    const slots: Array<{ kind: 'player'; player: SoldPlayer } | { kind: 'empty'; key: string }> = teamPlayers.map(player => ({
+    const slots: Array<{ kind: 'player'; player: SoldPlayer } | { kind: 'iconic'; player: { name: string; imageUrl: string; role: string } } | { kind: 'empty'; key: string }> = teamPlayers.map(player => ({
       kind: 'player',
       player,
     }));
 
-    for (let index = teamPlayers.length; index < targetSlots; index += 1) {
+    // In owners mode, add iconic players that aren't already in soldPlayers
+    if (squadViewMode === 'owners') {
+      const iconicNames = activeTeam.iconicPlayers?.length
+        ? activeTeam.iconicPlayers
+        : activeTeam.captain ? [activeTeam.captain] : [];
+
+      const normalizeName = (name: string) => name.toLowerCase().replace(/\./g, '').replace(/\s+/g, ' ').trim();
+      const existingNames = new Set(teamPlayers.map(p => normalizeName(p.name)));
+
+      for (const iconicName of iconicNames) {
+        if (!existingNames.has(normalizeName(iconicName))) {
+          // Resolve iconic player data from allPlayers
+          const fromAll = allPlayers.find(p => normalizeName(p.name) === normalizeName(iconicName));
+          slots.unshift({
+            kind: 'iconic',
+            player: {
+              name: fromAll?.name || iconicName,
+              imageUrl: fromAll?.imageUrl || '',
+              role: fromAll?.role || 'Icon Player',
+            },
+          });
+        }
+      }
+    }
+
+    // Fill remaining empty slots
+    for (let index = slots.length; index < targetSlots; index += 1) {
       slots.push({ kind: 'empty', key: `empty-${activeTeam.id}-${index}` });
     }
 
     return slots;
-  }, [activeTeam, teamPlayers, squadViewMode]);
+  }, [activeTeam, teamPlayers, squadViewMode, allPlayers]);
 
   const captainData = useMemo(() => {
     // Support multiple iconic players
@@ -449,12 +475,47 @@ export function TeamSquadView({
                     let playerMetaText = 'Team Strength';
                     if (slot.kind === 'player') {
                       playerMetaText = slot.player.age ? `Age ${slot.player.age}` : 'Age N/A';
+                    } else if (slot.kind === 'iconic') {
+                      playerMetaText = 'Icon Player';
                     }
+
+                    const slotKey = slot.kind === 'player'
+                      ? `${teamId}-${slot.player.id}-${index}`
+                      : slot.kind === 'iconic'
+                        ? `iconic-${slot.player.name}-${index}`
+                        : slot.key;
+
+                    const slotImage = slot.kind === 'player'
+                      ? (slot.player.imageUrl || playerPlaceholderImage)
+                      : slot.kind === 'iconic'
+                        ? (slot.player.imageUrl || playerPlaceholderImage)
+                        : playerPlaceholderImage;
+
+                    const slotName = slot.kind === 'player'
+                      ? slot.player.name
+                      : slot.kind === 'iconic'
+                        ? slot.player.name
+                        : `Slot ${index + 1}`;
+
+                    const slotRole = slot.kind === 'player'
+                      ? slot.player.role
+                      : slot.kind === 'iconic'
+                        ? slot.player.role
+                        : 'Open Slot';
+
+                    const slotAmount = slot.kind === 'player'
+                      ? `₹${slot.player.soldAmount}${currencySuffix}`
+                      : slot.kind === 'iconic'
+                        ? '★ Icon'
+                        : '—';
+
+                    const hasClickableImage = (slot.kind === 'player' && slot.player.imageUrl)
+                      || (slot.kind === 'iconic' && slot.player.imageUrl);
 
                     return (
                     <motion.div
-                      key={slot.kind === 'player' ? `${teamId}-${slot.player.id}-${index}` : slot.key}
-                      className="tsv-player-item"
+                      key={slotKey}
+                      className={`tsv-player-item ${slot.kind === 'iconic' ? 'tsv-player-item--iconic' : ''}`}
                       initial={{ scale: 0.9, opacity: 0 }}
                       animate={{ scale: 1, opacity: 1 }}
                       transition={{ duration: 0.25, delay: Math.min(0.3 + index * 0.015, 0.6) }}
@@ -469,29 +530,30 @@ export function TeamSquadView({
                           />
                         )}
                         <img
-                          src={slot.kind === 'player' ? (slot.player.imageUrl || playerPlaceholderImage) : playerPlaceholderImage}
-                          alt={slot.kind === 'player' ? slot.player.name : 'Placeholder player'}
+                          src={slotImage}
+                          alt={slotName}
                           className="tsv-player-image"
                           loading="eager"
-                          style={{ cursor: slot.kind === 'player' && slot.player.imageUrl ? 'pointer' : undefined }}
+                          style={{ cursor: hasClickableImage ? 'pointer' : undefined }}
                           onClick={(e) => {
-                            if (slot.kind === 'player' && slot.player.imageUrl) {
+                            if (hasClickableImage) {
                               e.stopPropagation();
-                              setLightboxSrc(slot.player.imageUrl);
+                              const imgUrl = slot.kind === 'player' ? slot.player.imageUrl : slot.kind === 'iconic' ? slot.player.imageUrl : '';
+                              if (imgUrl) setLightboxSrc(imgUrl);
                             }
                           }}
                           onError={(e) => { (e.target as HTMLImageElement).src = playerPlaceholderImage; }}
                         />
                         <div className="tsv-player-overlay" />
                         <div className="tsv-player-footer">
-                          <span className="tsv-player-role">{slot.kind === 'player' ? slot.player.role : 'Open Slot'}</span>
-                          <span className="tsv-player-name">{slot.kind === 'player' ? slot.player.name : `Slot ${index + 1}`}</span>
+                          <span className="tsv-player-role">{slotRole}</span>
+                          <span className="tsv-player-name">{slotName}</span>
                           <div className="tsv-player-meta-row">
                             <span className="tsv-player-meta">
                               {playerMetaText}
                             </span>
                             <span className="tsv-player-amount">
-                              {slot.kind === 'player' ? `₹${slot.player.soldAmount}${currencySuffix}` : '—'}
+                              {slotAmount}
                             </span>
                           </div>
                         </div>

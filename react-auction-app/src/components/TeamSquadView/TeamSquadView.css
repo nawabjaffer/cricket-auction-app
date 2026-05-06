@@ -1340,3 +1340,13 @@
   text-align: center;
   text-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
 }
+
+/* Iconic player slot highlight — subtle golden glow */
+.tsv-player-item--iconic .tsv-player-card {
+  box-shadow: 0 0 12px rgba(228, 190, 117, 0.3), inset 0 0 0 1px rgba(228, 190, 117, 0.25);
+}
+
+.tsv-player-item--iconic .tsv-player-amount {
+  color: #e4be75;
+  font-weight: 700;
+}
