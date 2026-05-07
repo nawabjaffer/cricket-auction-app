@@ -215,6 +215,21 @@ export interface BudgetRulesConfig {
   minPlayersRequired: number;
   maxPlayersAllowed: number;
   reservedFundPerRemainingPlayer: number;
+  /** 'constraint' blocks the bid; 'releaseRefund' prompts team to release a player */
+  budgetMode?: 'constraint' | 'releaseRefund';
+}
+
+/** A pending release request for a team to choose a player to drop */
+export interface ReleaseRequest {
+  teamId: string;
+  teamName: string;
+  reason: string;
+  requestedAt: string;
+  /** ID of the player being bid on (context) */
+  forPlayerId?: string;
+  /** Amount the team needs freed up */
+  requiredAmount?: number;
+  status: 'pending' | 'completed' | 'cancelled';
 }
 
 // Loading screen configuration
@@ -278,6 +293,8 @@ export interface AdminSettings {
   bidIncrementRanges?: BidIncrementRange[];
   // Currency suffix displayed after amounts (default 'L' for Lakhs, can be 'T' for Thousands etc.)
   currencySuffix?: string;
+  // Budget enforcement mode: 'constraint' blocks bids, 'releaseRefund' prompts player drop
+  budgetMode?: 'constraint' | 'releaseRefund';
   // Custom player placeholder image URL (default /placeholder_player.png)
   playerPlaceholderImage?: string;
   // When true, mirror screen preload persists across sessions (localStorage) for faster reload
@@ -309,6 +326,8 @@ export interface BidIncrementRange {
   minAmount: number;
   maxAmount: number;
   increment: number;
+  /** 'amount' adds the increment value; 'multiplier' multiplies currentBid by increment */
+  mode?: 'amount' | 'multiplier';
 }
 
 class AuctionPersistenceService {
@@ -363,6 +382,39 @@ class AuctionPersistenceService {
     if (!this.db) throw new Error('Database not initialized');
     const soldPlayerRef = ref(this.db, `${DB_PATHS.SOLD_PLAYERS}/${playerId}`);
     await set(soldPlayerRef, null);
+  }
+
+  // ==================== RELEASE REQUESTS ====================
+
+  /**
+   * Create a release request for a team (prompts them to drop a player)
+   */
+  async createReleaseRequest(request: ReleaseRequest): Promise<void> {
+    if (!this.db) throw new Error('Database not initialized');
+    const path = tenantPath(`auction/releaseRequests/${request.teamId}`);
+    await set(ref(this.db, path), request);
+  }
+
+  /**
+   * Clear a release request (after completion or cancellation)
+   */
+  async clearReleaseRequest(teamId: string): Promise<void> {
+    if (!this.db) throw new Error('Database not initialized');
+    const path = tenantPath(`auction/releaseRequests/${teamId}`);
+    await set(ref(this.db, path), null);
+  }
+
+  /**
+   * Listen to release requests for a specific team
+   */
+  onReleaseRequest(teamId: string, callback: (request: ReleaseRequest | null) => void): () => void {
+    if (!this.db) return () => {};
+    const path = tenantPath(`auction/releaseRequests/${teamId}`);
+    const requestRef = ref(this.db, path);
+    const unsub = onValue(requestRef, (snapshot) => {
+      callback(snapshot.exists() ? snapshot.val() as ReleaseRequest : null);
+    });
+    return unsub;
   }
 
   // ==================== UNSOLD PLAYERS ====================

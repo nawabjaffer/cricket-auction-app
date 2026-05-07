@@ -151,6 +151,9 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
   // Bid increment ranges
   const [bidIncrementRanges, setBidIncrementRanges] = useState<BidIncrementRange[]>([]);
 
+  // Budget enforcement mode
+  const [budgetMode, setBudgetMode] = useState<'constraint' | 'releaseRefund'>('constraint');
+
   // Store
   const { teams, setTeams, soldPlayers, setSoldPlayers, unsoldPlayers, setUnsoldPlayers, originalPlayers, setAdminPlayerOverrides, reconcilePlayerPools } = useAuctionStore();
   const [editingTeams, setEditingTeams] = useState<Team[]>([]);
@@ -339,6 +342,9 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
             setBidIncrementRanges(settings.bidIncrementRanges);
             useAuctionStore.getState().setBidIncrementRanges(settings.bidIncrementRanges);
           }
+          if (settings.budgetMode) {
+            setBudgetMode(settings.budgetMode);
+          }
         }
       } catch (error) {
         console.error('[AdminPanel] Failed to load settings:', error);
@@ -434,6 +440,7 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
         easyLoginMode,
         bidIncrementRanges: bidIncrementRanges.length > 0 ? bidIncrementRanges : undefined,
         currencySuffix: currencySuffix || 'L',
+        budgetMode: budgetMode,
         branding: brandingSettings,
         // Merge in extended settings (player stats, categories, budget, breaks, etc.)
         ...extendedSettingsRef.current,
@@ -2027,7 +2034,7 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
                     The Q/W keys multiply bids by the configured increment for faster bidding.
                   </small>
                   {bidIncrementRanges.map((range, index) => (
-                    <div key={index} style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginBottom: '0.5rem' }}>
+                    <div key={index} style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginBottom: '0.5rem', flexWrap: 'wrap' }}>
                       <input
                         type="number"
                         value={range.minAmount}
@@ -2053,7 +2060,7 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
                         style={{ width: '5rem' }}
                         step={0.5}
                       />
-                      <span>→ ₹</span>
+                      <span>→</span>
                       <input
                         type="number"
                         value={range.increment}
@@ -2064,10 +2071,35 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
                         }}
                         placeholder="Increment"
                         style={{ width: '5rem' }}
-                        step={0.5}
-                        min={0.5}
+                        step={0.1}
+                        min={0.1}
                       />
-                      <span>L</span>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', fontSize: '0.78rem', cursor: 'pointer' }}>
+                        <input
+                          type="radio"
+                          name={`increment-mode-${index}`}
+                          checked={(range as { mode?: string }).mode !== 'multiplier'}
+                          onChange={() => {
+                            const updated = [...bidIncrementRanges];
+                            updated[index] = { ...updated[index], mode: 'amount' } as typeof updated[number];
+                            setBidIncrementRanges(updated);
+                          }}
+                        />
+                        +₹{currencySuffix}
+                      </label>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', fontSize: '0.78rem', cursor: 'pointer' }}>
+                        <input
+                          type="radio"
+                          name={`increment-mode-${index}`}
+                          checked={(range as { mode?: string }).mode === 'multiplier'}
+                          onChange={() => {
+                            const updated = [...bidIncrementRanges];
+                            updated[index] = { ...updated[index], mode: 'multiplier' } as typeof updated[number];
+                            setBidIncrementRanges(updated);
+                          }}
+                        />
+                        ×(multiplier)
+                      </label>
                       <button
                         type="button"
                         className="admin-btn admin-btn-danger admin-btn-sm"
@@ -2084,6 +2116,31 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
                   >
                     + Add Range
                   </button>
+
+                  <h3 style={{ marginTop: '2rem' }}>Budget Enforcement Mode</h3>
+                  <small style={{ color: '#6b7280', display: 'block', marginBottom: '0.75rem' }}>
+                    Choose how the system handles bids that exceed a team's budget.
+                  </small>
+                  <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.85rem', cursor: 'pointer', color: '#e2e8f0' }}>
+                      <input
+                        type="radio"
+                        name="budgetMode"
+                        checked={budgetMode !== 'releaseRefund'}
+                        onChange={() => setBudgetMode('constraint')}
+                      />
+                      Block Bid (constraint)
+                    </label>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.85rem', cursor: 'pointer', color: '#e2e8f0' }}>
+                      <input
+                        type="radio"
+                        name="budgetMode"
+                        checked={budgetMode === 'releaseRefund'}
+                        onChange={() => setBudgetMode('releaseRefund')}
+                      />
+                      Release & Refund (prompt team to drop a player)
+                    </label>
+                  </div>
 
                   <h3 style={{ marginTop: '2rem' }}>Auction Role Order</h3>
                   <small style={{ color: '#6b7280', display: 'block', marginBottom: '0.75rem' }}>

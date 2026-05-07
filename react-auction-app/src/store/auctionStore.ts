@@ -132,7 +132,10 @@ interface AuctionStore {
   auctionRoleOrder: AuctionRoleCategory[];
 
   // Bid increment ranges (from admin settings)
-  bidIncrementRanges: { minAmount: number; maxAmount: number; increment: number }[];
+  bidIncrementRanges: { minAmount: number; maxAmount: number; increment: number; mode?: 'amount' | 'multiplier' }[];
+
+  // Budget enforcement mode
+  budgetMode: 'constraint' | 'releaseRefund';
 
   // Currency suffix (L = Lakhs, T = Thousands, K = K, etc.)
   currencySuffix: string;
@@ -151,7 +154,8 @@ interface AuctionStore {
   setTeams: (teams: Team[]) => void;
   setSoldPlayers: (players: SoldPlayer[]) => void;
   setUnsoldPlayers: (players: UnsoldPlayer[]) => void;
-  setBidIncrementRanges: (ranges: { minAmount: number; maxAmount: number; increment: number }[]) => void;
+  setBidIncrementRanges: (ranges: { minAmount: number; maxAmount: number; increment: number; mode?: 'amount' | 'multiplier' }[]) => void;
+  setBudgetMode: (mode: 'constraint' | 'releaseRefund') => void;
   setCurrencySuffix: (suffix: string) => void;
   reconcilePlayerPools: () => void;
   
@@ -178,6 +182,7 @@ interface AuctionStore {
   markAsSold: () => void;
   markAsUnsold: () => void;
   moveUnsoldToSold: (player: UnsoldPlayer, team: Team, amount: number) => void;
+  releasePlayer: (playerId: string, teamId: string) => void;
   clearBidState: () => void;
   
   // UI state
@@ -253,6 +258,7 @@ export const useAuctionStore = create<AuctionStore>()(
         maxUnsoldRounds: 1,
         auctionRoleOrder: [...DEFAULT_AUCTION_ROLE_ORDER],
         bidIncrementRanges: [],
+        budgetMode: 'constraint',
         currencySuffix: 'L',
         organizerLogo: _cachedOrganizerLogo,
         organizerName: _cachedOrganizerName,
@@ -327,6 +333,7 @@ export const useAuctionStore = create<AuctionStore>()(
         setUnsoldPlayers: (players) => set({ unsoldPlayers: players }),
 
         setBidIncrementRanges: (ranges) => set({ bidIncrementRanges: ranges }),
+        setBudgetMode: (mode) => set({ budgetMode: mode }),
         setCurrencySuffix: (suffix) => set({ currencySuffix: suffix }),
 
         reconcilePlayerPools: () => {
@@ -661,23 +668,59 @@ export const useAuctionStore = create<AuctionStore>()(
           const isFirstBid = bidHistory.length === 0;
           const ranges = get().bidIncrementRanges;
           let increment = activeConfig.auction.bidIncrements.default;
+          let isMultiplier = false;
           if (ranges.length > 0) {
             const matched = ranges.find(r => currentBid >= r.minAmount && currentBid < r.maxAmount);
-            if (matched) increment = matched.increment;
+            if (matched) {
+              increment = matched.increment;
+              isMultiplier = matched.mode === 'multiplier';
+            }
           }
           const safeSteps = Math.max(1, Math.floor(steps));
-          const newBid = isFirstBid ? currentBid : currentBid + increment * safeSteps;
+          let newBid: number;
+          if (isFirstBid) {
+            newBid = currentBid;
+          } else if (isMultiplier) {
+            // Multiplier mode: multiply currentBid by increment for each step
+            newBid = currentBid * Math.pow(increment, safeSteps);
+            // Round to 1 decimal place for Lakhs
+            newBid = Math.round(newBid * 10) / 10;
+          } else {
+            newBid = currentBid + increment * safeSteps;
+          }
 
           const rulesService = new AuctionRulesService();
           const maxBid = rulesService.calculateMaxBid(team);
 
           if (newBid > maxBid) {
-            set({
-              notification: {
-                type: 'warning',
-                message: `${team.name} cannot bid more than ₹${maxBid.toFixed(2)}L`,
-              },
-            });
+            const { budgetMode } = get();
+            if (budgetMode === 'releaseRefund') {
+              // Create a release request for the team instead of blocking
+              auctionPersistence.createReleaseRequest({
+                teamId: team.id,
+                teamName: team.name,
+                reason: `Budget exceeded. Need ₹${(newBid - maxBid).toFixed(2)}L more. Release a player to free funds.`,
+                requestedAt: new Date().toISOString(),
+                forPlayerId: currentPlayer?.id,
+                requiredAmount: newBid - maxBid,
+                status: 'pending',
+              }).catch(err => {
+                console.error('[Store] Failed to create release request:', err);
+              });
+              set({
+                notification: {
+                  type: 'warning',
+                  message: `${team.name} budget exceeded. Release request sent to team.`,
+                },
+              });
+            } else {
+              set({
+                notification: {
+                  type: 'warning',
+                  message: `${team.name} cannot bid more than ₹${maxBid.toFixed(2)}L`,
+                },
+              });
+            }
             return false;
           }
 
@@ -719,11 +762,17 @@ export const useAuctionStore = create<AuctionStore>()(
           const { currentBid } = get();
           const ranges = get().bidIncrementRanges;
           let increment = activeConfig.auction.bidIncrements.default;
+          let isMultiplier = false;
           if (ranges.length > 0) {
             const matched = ranges.find(r => currentBid >= r.minAmount && currentBid < r.maxAmount);
-            if (matched) increment = matched.increment;
+            if (matched) {
+              increment = matched.increment;
+              isMultiplier = matched.mode === 'multiplier';
+            }
           }
-          const newBid = currentBid + increment;
+          const newBid = isMultiplier
+            ? Math.round(currentBid * increment * 10) / 10
+            : currentBid + increment;
 
           set({
             previousBid: currentBid,
@@ -993,6 +1042,74 @@ export const useAuctionStore = create<AuctionStore>()(
             notification: { 
               type: 'success', 
               message: `${player.name} moved to ${team.name} for ₹${amount}L` 
+            },
+          });
+        },
+
+        releasePlayer: (playerId, teamId) => {
+          const { soldPlayers, teams, availablePlayers } = get();
+          const soldPlayer = soldPlayers.find(p => p.id === playerId && p.teamId === teamId);
+          if (!soldPlayer) {
+            set({ notification: { type: 'error', message: 'Player not found in team roster.' } });
+            return;
+          }
+
+          const refundAmount = soldPlayer.soldAmount;
+
+          // Remove from soldPlayers in Firebase
+          auctionPersistence.removeSoldPlayer(playerId).catch(err => {
+            console.error('[Store] Failed to remove released player from Firebase:', err);
+          });
+
+          // Clear release request
+          auctionPersistence.clearReleaseRequest(teamId).catch(err => {
+            console.error('[Store] Failed to clear release request:', err);
+          });
+
+          // Update team: refund budget, decrement playersBought
+          const updatedTeams = teams.map(t => {
+            if (t.id === teamId) {
+              const newPlayersBought = Math.max(0, t.playersBought - 1);
+              return {
+                ...t,
+                playersBought: newPlayersBought,
+                remainingPlayers: t.totalPlayerThreshold - newPlayersBought,
+                remainingPurse: t.remainingPurse + refundAmount,
+              };
+            }
+            return t;
+          });
+
+          // Save updated teams to Firebase
+          auctionPersistence.saveTeams(updatedTeams).catch(err => {
+            console.error('[Store] Failed to save teams after release:', err);
+          });
+
+          // Put player back in available pool
+          const releasedAsAvailable = {
+            id: soldPlayer.id,
+            name: soldPlayer.name,
+            role: soldPlayer.role,
+            age: soldPlayer.age ?? null,
+            basePrice: soldPlayer.basePrice ?? soldPlayer.soldAmount,
+            imageUrl: soldPlayer.imageUrl || '',
+            matches: soldPlayer.matches || '',
+            battingAverage: soldPlayer.battingAverage || '',
+            bowlingAverage: soldPlayer.bowlingAverage || '',
+            strikeRate: soldPlayer.strikeRate || '',
+            economyRate: soldPlayer.economyRate || '',
+            bowlingBestFigures: soldPlayer.bowlingBestFigures || '',
+          };
+
+          const updatedSold = soldPlayers.filter(p => p.id !== playerId);
+
+          set({
+            soldPlayers: updatedSold,
+            availablePlayers: [...availablePlayers, releasedAsAvailable],
+            teams: updatedTeams,
+            notification: {
+              type: 'success',
+              message: `${soldPlayer.name} released from ${soldPlayer.teamName}. ₹${refundAmount}L refunded.`,
             },
           });
         },

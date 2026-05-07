@@ -664,7 +664,19 @@ function AuctionApp({ mirrorMode = false }: { mirrorMode?: boolean }) {
         const db = realtimeSync.getDatabase();
         if (db) auctionPersistence.initialize(db);
         const settings = await auctionPersistence.getAdminSettings();
-        if (alive && settings) setAdminSettings(settings);
+        if (alive && settings) {
+          setAdminSettings(settings);
+          // Push bid increment ranges and currency suffix into the auction store
+          if (settings.bidIncrementRanges?.length) {
+            useAuctionStore.getState().setBidIncrementRanges(settings.bidIncrementRanges);
+          }
+          if (settings.currencySuffix) {
+            useAuctionStore.setState({ currencySuffix: settings.currencySuffix });
+          }
+          if (settings.budgetMode) {
+            useAuctionStore.getState().setBudgetMode(settings.budgetMode);
+          }
+        }
       } catch { /* ignore */ }
     };
     void load();

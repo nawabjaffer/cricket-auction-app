@@ -170,6 +170,11 @@ export function MobileBiddingLivePage() {
   const [wishlistBusy, setWishlistBusy] = useState<string | null>(null); // playerId currently being toggled
   const [imageOverlayUrl, setImageOverlayUrl] = useState<string | null>(null);
 
+  // Player release/refund state
+  const [releaseRequest, setReleaseRequest] = useState<import('../services/auctionPersistence').ReleaseRequest | null>(null);
+  const [showReleaseModal, setShowReleaseModal] = useState(false);
+  const [releasingPlayerId, setReleasingPlayerId] = useState<string | null>(null);
+
   useEffect(() => {
     if (runtimeCredentials.length > 0) {
       authService.setTeamCredentials(runtimeCredentials);
@@ -322,6 +327,27 @@ export function MobileBiddingLivePage() {
       unsubSold?.();
     };
   }, []);
+
+  // Real-time subscription for release requests (player drop notification)
+  useEffect(() => {
+    const teamId = session?.teamId;
+    if (!teamId) { setReleaseRequest(null); return; }
+    let unsub: (() => void) | null = null;
+    (async () => {
+      try {
+        await realtimeSync.ensureInitialized();
+        const db = realtimeSync.getDatabase();
+        if (!db) return;
+        unsub = auctionPersistence.onReleaseRequest(teamId, (req) => {
+          setReleaseRequest(req);
+          if (req && req.status === 'pending') {
+            setShowReleaseModal(true);
+          }
+        });
+      } catch { /* silent */ }
+    })();
+    return () => { unsub?.(); };
+  }, [session?.teamId]);
 
   // Real-time subscription for the logged-in team's wishlist (private)
   useEffect(() => {
@@ -2349,6 +2375,87 @@ export function MobileBiddingLivePage() {
             <button className="cb-image-overlay-close" onClick={() => setImageOverlayUrl(null)}>
               <IoClose size={24} />
             </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Player Release/Refund Modal */}
+      <AnimatePresence>
+        {showReleaseModal && releaseRequest && session && (
+          <motion.div
+            className="cb-release-overlay"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+          >
+            <motion.div
+              className="cb-release-modal"
+              initial={{ scale: 0.85, y: 30 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.85, y: 30 }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="cb-release-header">
+                <IoWallet size={22} color="#ef4444" />
+                <h3>Budget Exceeded — Release a Player</h3>
+              </div>
+              <p className="cb-release-reason">{releaseRequest.reason}</p>
+              <p className="cb-release-hint">Select a player to release. Their auction amount will be refunded to your team budget.</p>
+              <div className="cb-release-players">
+                {soldRecords
+                  .filter(s => s.teamName === (teams.find(t => t.id === session.teamId)?.name))
+                  .map(record => {
+                    const player = allPlayers.find(p => p.id === record.id);
+                    return (
+                      <div
+                        key={record.id}
+                        className={`cb-release-player-row ${releasingPlayerId === record.id ? 'releasing' : ''}`}
+                        onClick={() => setReleasingPlayerId(record.id)}
+                      >
+                        <PlayerImage
+                          imageUrl={player?.imageUrl || ''}
+                          playerName={player?.name || record.id}
+                          size="sm"
+                          fallbackSrc="/placeholder_player.png"
+                        />
+                        <div className="cb-release-player-info">
+                          <span className="cb-release-player-name">{player?.name || record.id}</span>
+                          <span className="cb-release-player-role">{player?.role || 'Unknown'}</span>
+                        </div>
+                        <span className="cb-release-player-amount">₹{record.soldAmount}{currencySuffix}</span>
+                      </div>
+                    );
+                  })}
+              </div>
+              <div className="cb-release-actions">
+                <button
+                  className="cb-release-btn-confirm"
+                  disabled={!releasingPlayerId}
+                  onClick={async () => {
+                    if (!releasingPlayerId || !session?.teamId) return;
+                    try {
+                      // Call releasePlayer via persistence (admin will sync via store)
+                      await auctionPersistence.removeSoldPlayer(releasingPlayerId);
+                      await auctionPersistence.clearReleaseRequest(session.teamId);
+                      setShowReleaseModal(false);
+                      setReleasingPlayerId(null);
+                      setReleaseRequest(null);
+                      setFeedback({ type: 'success', message: 'Player released! Budget refunded.', timestamp: Date.now() });
+                    } catch {
+                      setFeedback({ type: 'error', message: 'Failed to release player. Try again.', timestamp: Date.now() });
+                    }
+                  }}
+                >
+                  Release Player & Refund
+                </button>
+                <button
+                  className="cb-release-btn-cancel"
+                  onClick={() => { setShowReleaseModal(false); setReleasingPlayerId(null); }}
+                >
+                  Cancel
+                </button>
+              </div>
+            </motion.div>
           </motion.div>
         )}
       </AnimatePresence>

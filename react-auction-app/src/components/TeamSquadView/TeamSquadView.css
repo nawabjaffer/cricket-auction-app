@@ -1350,3 +1350,96 @@
   color: #e4be75;
   font-weight: 700;
 }
+
+/* ===== Iconic Players Section (above auction grid) ===== */
+.tsv-iconic-section {
+  padding: 0.75rem 1rem;
+  margin-bottom: 0.5rem;
+  border-radius: 12px;
+  background: linear-gradient(135deg, rgba(228, 190, 117, 0.08) 0%, rgba(228, 190, 117, 0.02) 100%);
+  border: 1px solid rgba(228, 190, 117, 0.18);
+}
+
+.tsv-iconic-section-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.6rem;
+}
+
+.tsv-iconic-section-badge {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #e4be75;
+  background: rgba(228, 190, 117, 0.12);
+  padding: 0.2rem 0.6rem;
+  border-radius: 4px;
+}
+
+.tsv-iconic-section-count {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.tsv-iconic-section-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+
+.tsv-iconic-slot {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.7rem;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(228, 190, 117, 0.15);
+  min-width: 160px;
+}
+
+.tsv-iconic-slot--in-auction {
+  border-color: rgba(100, 200, 130, 0.3);
+  background: rgba(100, 200, 130, 0.06);
+}
+
+.tsv-iconic-slot-img-wrap {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  overflow: hidden;
+  flex-shrink: 0;
+  border: 2px solid rgba(228, 190, 117, 0.35);
+}
+
+.tsv-iconic-slot-img-wrap .tsv-iconic-slot-img,
+.tsv-iconic-slot-img-wrap img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.tsv-iconic-slot-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  overflow: hidden;
+}
+
+.tsv-iconic-slot-name {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tsv-iconic-slot-role {
+  font-size: 0.65rem;
+  color: rgba(255, 255, 255, 0.5);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}

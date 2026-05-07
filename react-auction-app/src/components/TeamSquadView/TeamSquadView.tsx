@@ -200,19 +200,38 @@ export function TeamSquadView({
     ? ''
     : (brandLogoCandidates[brandLogoUrlIndex] || '');
 
+  // Iconic players that are NOT already in soldPlayers (pre-allocated, separate from auction)
+  const iconicSlotsData = useMemo(() => {
+    if (!activeTeam) return [];
+    const iconicNames = activeTeam.iconicPlayers?.length
+      ? activeTeam.iconicPlayers
+      : activeTeam.captain ? [activeTeam.captain] : [];
+
+    const normalizeName = (name: string) => name.toLowerCase().replace(/\./g, '').replace(/\s+/g, ' ').trim();
+    const existingNames = new Set(teamPlayers.map(p => normalizeName(p.name)));
+
+    return iconicNames.map(iconicName => {
+      const alreadyInTeam = existingNames.has(normalizeName(iconicName));
+      const fromAll = allPlayers.find(p => normalizeName(p.name) === normalizeName(iconicName));
+      const fromSold = teamPlayers.find(p => normalizeName(p.name) === normalizeName(iconicName));
+      return {
+        name: fromAll?.name || fromSold?.name || iconicName,
+        imageUrl: fromAll?.imageUrl || fromSold?.imageUrl || '',
+        role: fromAll?.role || fromSold?.role || 'Icon Player',
+        alreadyInTeam,
+      };
+    });
+  }, [activeTeam, teamPlayers, allPlayers]);
+
   const displaySlots = useMemo(() => {
     if (!activeTeam) {
-      return [] as Array<{ kind: 'player'; player: SoldPlayer } | { kind: 'iconic'; player: { name: string; imageUrl: string; role: string } } | { kind: 'empty'; key: string }>;
+      return [] as Array<{ kind: 'player'; player: SoldPlayer } | { kind: 'empty'; key: string }>;
     }
 
-    // Auto-reduce threshold by iconic player count (they're pre-allocated, not auctioned)
-    // BUT when in 'owners' mode, iconic players aren't displayed separately so keep full slots
-    const shouldReduceByIconic = reduceThresholdByIconPlayers && squadViewMode !== 'owners';
-    const iconicCountForSlots = shouldReduceByIconic
-      ? (activeTeam.iconicPlayers?.length || (activeTeam.captain ? 1 : 0))
-      : 0;
+    // Threshold for auction slots only (iconic players shown separately)
+    const iconicNotInAuction = iconicSlotsData.filter(p => !p.alreadyInTeam).length;
     const effectiveThreshold = Math.max(
-      (activeTeam.totalPlayerThreshold || teamPlayers.length) - iconicCountForSlots,
+      (activeTeam.totalPlayerThreshold || teamPlayers.length) - iconicNotInAuction,
       teamPlayers.length,
     );
 
@@ -221,35 +240,10 @@ export function TeamSquadView({
       24,
     );
 
-    const slots: Array<{ kind: 'player'; player: SoldPlayer } | { kind: 'iconic'; player: { name: string; imageUrl: string; role: string } } | { kind: 'empty'; key: string }> = teamPlayers.map(player => ({
+    const slots: Array<{ kind: 'player'; player: SoldPlayer } | { kind: 'empty'; key: string }> = teamPlayers.map(player => ({
       kind: 'player',
       player,
     }));
-
-    // In owners mode, add iconic players that aren't already in soldPlayers
-    if (squadViewMode === 'owners') {
-      const iconicNames = activeTeam.iconicPlayers?.length
-        ? activeTeam.iconicPlayers
-        : activeTeam.captain ? [activeTeam.captain] : [];
-
-      const normalizeName = (name: string) => name.toLowerCase().replace(/\./g, '').replace(/\s+/g, ' ').trim();
-      const existingNames = new Set(teamPlayers.map(p => normalizeName(p.name)));
-
-      for (const iconicName of iconicNames) {
-        if (!existingNames.has(normalizeName(iconicName))) {
-          // Resolve iconic player data from allPlayers
-          const fromAll = allPlayers.find(p => normalizeName(p.name) === normalizeName(iconicName));
-          slots.unshift({
-            kind: 'iconic',
-            player: {
-              name: fromAll?.name || iconicName,
-              imageUrl: fromAll?.imageUrl || '',
-              role: fromAll?.role || 'Icon Player',
-            },
-          });
-        }
-      }
-    }
 
     // Fill remaining empty slots
     for (let index = slots.length; index < targetSlots; index += 1) {
@@ -257,7 +251,7 @@ export function TeamSquadView({
     }
 
     return slots;
-  }, [activeTeam, teamPlayers, squadViewMode, allPlayers]);
+  }, [activeTeam, teamPlayers, iconicSlotsData]);
 
   const captainData = useMemo(() => {
     // Support multiple iconic players
@@ -462,7 +456,47 @@ export function TeamSquadView({
               </div>
             </motion.div>
 
-            {/* Players Grid */}
+            {/* Iconic Players Section — shown above auction grid */}
+            {iconicSlotsData.length > 0 && (
+              <motion.div
+                className="tsv-iconic-section"
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.4, delay: 0.25 }}
+              >
+                <div className="tsv-iconic-section-header">
+                  <span className="tsv-iconic-section-badge">★ ICON PLAYERS</span>
+                  <span className="tsv-iconic-section-count">{iconicSlotsData.length}</span>
+                </div>
+                <div className="tsv-iconic-section-grid">
+                  {iconicSlotsData.map((iconic, idx) => (
+                    <motion.div
+                      key={`iconic-${iconic.name}-${idx}`}
+                      className={`tsv-iconic-slot ${iconic.alreadyInTeam ? 'tsv-iconic-slot--in-auction' : ''}`}
+                      initial={{ scale: 0.9, opacity: 0 }}
+                      animate={{ scale: 1, opacity: 1 }}
+                      transition={{ duration: 0.25, delay: 0.3 + idx * 0.08 }}
+                    >
+                      <div className="tsv-iconic-slot-img-wrap">
+                        <PlayerImage
+                          imageUrl={iconic.imageUrl}
+                          playerName={iconic.name}
+                          size="md"
+                          className="tsv-iconic-slot-img"
+                          fallbackSrc="/placeholder_player.png"
+                        />
+                      </div>
+                      <div className="tsv-iconic-slot-info">
+                        <span className="tsv-iconic-slot-name">{iconic.name}</span>
+                        <span className="tsv-iconic-slot-role">{iconic.role}</span>
+                      </div>
+                    </motion.div>
+                  ))}
+                </div>
+              </motion.div>
+            )}
+
+            {/* Auction Players Grid */}
             <motion.div
               className="tsv-players-list"
               initial={{ opacity: 0 }}
@@ -472,50 +506,24 @@ export function TeamSquadView({
               {displaySlots.length > 0 ? (
                 <div className="tsv-players-grid">
                   {displaySlots.map((slot, index) => {
-                    let playerMetaText = 'Team Strength';
-                    if (slot.kind === 'player') {
-                      playerMetaText = slot.player.age ? `Age ${slot.player.age}` : 'Age N/A';
-                    } else if (slot.kind === 'iconic') {
-                      playerMetaText = 'Icon Player';
-                    }
-
-                    const slotKey = slot.kind === 'player'
+                    const isPlayer = slot.kind === 'player';
+                    const playerMetaText = isPlayer
+                      ? (slot.player.age ? `Age ${slot.player.age}` : 'Age N/A')
+                      : 'Open Slot';
+                    const slotKey = isPlayer
                       ? `${teamId}-${slot.player.id}-${index}`
-                      : slot.kind === 'iconic'
-                        ? `iconic-${slot.player.name}-${index}`
-                        : slot.key;
-
-                    const slotImage = slot.kind === 'player'
+                      : slot.key;
+                    const slotImage = isPlayer
                       ? (slot.player.imageUrl || playerPlaceholderImage)
-                      : slot.kind === 'iconic'
-                        ? (slot.player.imageUrl || playerPlaceholderImage)
-                        : playerPlaceholderImage;
-
-                    const slotName = slot.kind === 'player'
-                      ? slot.player.name
-                      : slot.kind === 'iconic'
-                        ? slot.player.name
-                        : `Slot ${index + 1}`;
-
-                    const slotRole = slot.kind === 'player'
-                      ? slot.player.role
-                      : slot.kind === 'iconic'
-                        ? slot.player.role
-                        : 'Open Slot';
-
-                    const slotAmount = slot.kind === 'player'
-                      ? `₹${slot.player.soldAmount}${currencySuffix}`
-                      : slot.kind === 'iconic'
-                        ? '★ Icon'
-                        : '—';
-
-                    const hasClickableImage = (slot.kind === 'player' && slot.player.imageUrl)
-                      || (slot.kind === 'iconic' && slot.player.imageUrl);
+                      : playerPlaceholderImage;
+                    const slotName = isPlayer ? slot.player.name : `Slot ${index + 1}`;
+                    const slotRole = isPlayer ? slot.player.role : 'Open Slot';
+                    const slotAmount = isPlayer ? `₹${slot.player.soldAmount}${currencySuffix}` : '—';
 
                     return (
                     <motion.div
                       key={slotKey}
-                      className={`tsv-player-item ${slot.kind === 'iconic' ? 'tsv-player-item--iconic' : ''}`}
+                      className="tsv-player-item"
                       initial={{ scale: 0.9, opacity: 0 }}
                       animate={{ scale: 1, opacity: 1 }}
                       transition={{ duration: 0.25, delay: Math.min(0.3 + index * 0.015, 0.6) }}
@@ -534,12 +542,11 @@ export function TeamSquadView({
                           alt={slotName}
                           className="tsv-player-image"
                           loading="eager"
-                          style={{ cursor: hasClickableImage ? 'pointer' : undefined }}
+                          style={{ cursor: isPlayer && slot.player.imageUrl ? 'pointer' : undefined }}
                           onClick={(e) => {
-                            if (hasClickableImage) {
+                            if (isPlayer && slot.player.imageUrl) {
                               e.stopPropagation();
-                              const imgUrl = slot.kind === 'player' ? slot.player.imageUrl : slot.kind === 'iconic' ? slot.player.imageUrl : '';
-                              if (imgUrl) setLightboxSrc(imgUrl);
+                              setLightboxSrc(slot.player.imageUrl);
                             }
                           }}
                           onError={(e) => { (e.target as HTMLImageElement).src = playerPlaceholderImage; }}
@@ -605,61 +612,13 @@ export function TeamSquadView({
               animate={{ x: 0, opacity: 1 }}
               transition={{ duration: 0.4, delay: 0.35 }}
             >
-              {/* Mode: Show icon players (default) */}
-              {squadViewMode === 'iconPlayers' && (
-                <>
-                  <div className="tsv-captain-image-wrapper">
-                    <CaptainImage captainData={captainData} teamPlayers={teamPlayers} />
-                  </div>
-
-                  <div className="tsv-captain-info">
-                    <span className="tsv-captain-badge">{allIconicData.length > 1 ? 'ICON PLAYERS' : 'ICON PLAYER'}</span>
-                    {allIconicData.length > 1 ? (
-                      <div className="tsv-iconic-list">
-                        {allIconicData.map((p, i) => (
-                          <div key={i} className="tsv-iconic-player-row">
-                            <div className="tsv-iconic-avatar">
-                              <PlayerImage
-                                imageUrl={p.imageUrl}
-                                playerName={p.name}
-                                size="sm"
-                                className="tsv-iconic-avatar-img"
-                                fallbackSrc="/placeholder_player.png"
-                              />
-                            </div>
-                            <div className="tsv-iconic-details">
-                              <h3 className="tsv-captain-name" style={i > 0 ? { fontSize: '0.85em', opacity: 0.85 } : undefined}>
-                                {p.name}
-                              </h3>
-                              {p.role && <span className="tsv-iconic-role">{p.role}</span>}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <h3 className="tsv-captain-name">
-                        {captainData?.name || activeTeam.captain || 'No Icon player'}
-                      </h3>
-                    )}
-                  </div>
-                </>
-              )}
-
-              {/* Mode: Show brand owners */}
-              {squadViewMode === 'owners' && (
-                <div className="tsv-owners-panel">
-                  <span className="tsv-captain-badge">BRAND OWNERS</span>
-                  {(() => {
-                    const owners = teamOwners[activeTeam.id];
-                    if (!owners?.length) {
-                      return (
-                        <div className="tsv-owners-empty">
-                          <span>No owner info configured</span>
-                          <small>Add via Admin → Teams → Owners</small>
-                        </div>
-                      );
-                    }
-                    return (
+              {/* Show brand owners if available, otherwise show icon players */}
+              {(() => {
+                const owners = teamOwners[activeTeam.id];
+                if (owners?.length) {
+                  return (
+                    <div className="tsv-owners-panel">
+                      <span className="tsv-captain-badge">BRAND OWNERS</span>
                       <div className={`tsv-owners-big-grid ${owners.length === 1 ? 'single' : ''}`}>
                         {owners.map((owner, i) => (
                           <div key={owner.id || i} className="tsv-owner-big-card">
@@ -677,10 +636,48 @@ export function TeamSquadView({
                           </div>
                         ))}
                       </div>
-                    );
-                  })()}
-                </div>
-              )}
+                    </div>
+                  );
+                }
+                // Fallback: show icon players in right panel
+                return (
+                  <>
+                    <div className="tsv-captain-image-wrapper">
+                      <CaptainImage captainData={captainData} teamPlayers={teamPlayers} />
+                    </div>
+                    <div className="tsv-captain-info">
+                      <span className="tsv-captain-badge">{allIconicData.length > 1 ? 'ICON PLAYERS' : 'ICON PLAYER'}</span>
+                      {allIconicData.length > 1 ? (
+                        <div className="tsv-iconic-list">
+                          {allIconicData.map((p, i) => (
+                            <div key={i} className="tsv-iconic-player-row">
+                              <div className="tsv-iconic-avatar">
+                                <PlayerImage
+                                  imageUrl={p.imageUrl}
+                                  playerName={p.name}
+                                  size="sm"
+                                  className="tsv-iconic-avatar-img"
+                                  fallbackSrc="/placeholder_player.png"
+                                />
+                              </div>
+                              <div className="tsv-iconic-details">
+                                <h3 className="tsv-captain-name" style={i > 0 ? { fontSize: '0.85em', opacity: 0.85 } : undefined}>
+                                  {p.name}
+                                </h3>
+                                {p.role && <span className="tsv-iconic-role">{p.role}</span>}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <h3 className="tsv-captain-name">
+                          {captainData?.name || activeTeam.captain || 'No Icon player'}
+                        </h3>
+                      )}
+                    </div>
+                  </>
+                );
+              })()}
             </motion.div>
 
             {/* Title Sponsor Badge */}
