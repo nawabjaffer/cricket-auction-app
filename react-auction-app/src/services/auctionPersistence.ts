@@ -276,6 +276,8 @@ export interface AdminSettings {
   playerStatsFields?: string[];
   // Feature 2: Custom special categories (replaces single underAgeThreshold)
   specialCategories?: SpecialCategory[];
+  // Whether special categories / under-age constraints are enabled
+  enableSpecialCategories?: boolean;
   // Feature 4: Budget rules configuration
   budgetRules?: BudgetRulesConfig;
   // Feature 5: Auction breaks

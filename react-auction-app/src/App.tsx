@@ -676,6 +676,7 @@ function AuctionApp({ mirrorMode = false }: { mirrorMode?: boolean }) {
           if (settings.budgetMode) {
             useAuctionStore.getState().setBudgetMode(settings.budgetMode);
           }
+          useAuctionStore.setState({ enableSpecialCategories: settings.enableSpecialCategories ?? false });
         }
       } catch { /* ignore */ }
     };

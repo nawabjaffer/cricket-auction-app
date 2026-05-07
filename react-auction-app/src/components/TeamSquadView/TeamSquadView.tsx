@@ -731,10 +731,12 @@ export function TeamSquadView({
                   <span className="tsv-stat-value">₹{totalBudget.toFixed(1)}{currencySuffix}</span>
                   <span className="tsv-stat-label">Total Budget</span>
                 </div>
-                <div className="tsv-stat-item">
-                  <span className="tsv-stat-value">{activeTeam.underAgePlayers || 0}</span>
-                  <span className="tsv-stat-label">Under-Age Players</span>
-                </div>
+                {specialCategories.length > 0 && (
+                  <div className="tsv-stat-item">
+                    <span className="tsv-stat-value">{activeTeam.underAgePlayers || 0}</span>
+                    <span className="tsv-stat-label">Under-Age Players</span>
+                  </div>
+                )}
                 {specialCategories.map(cat => {
                   const count = teamPlayers.filter(p => {
                     const age = typeof p.age === 'number' ? p.age : null;

@@ -36,6 +36,9 @@ export function ThemeSettingsExtended({ settings, onChange, teams }: ThemeSettin
   );
 
   // Special Categories
+  const [enableSpecialCategories, setEnableSpecialCategories] = useState<boolean>(
+    settings?.enableSpecialCategories ?? false
+  );
   const [specialCategories, setSpecialCategories] = useState<SpecialCategory[]>(
     settings?.specialCategories ?? [{ id: 'under-19', label: 'Under 19', ageMax: 19, color: '#f59e0b' }]
   );
@@ -85,6 +88,7 @@ export function ThemeSettingsExtended({ settings, onChange, teams }: ThemeSettin
   useEffect(() => {
     if (!settings) return;
     if (settings.playerStatsFields) setPlayerStatsFields(settings.playerStatsFields);
+    if (settings.enableSpecialCategories != null) setEnableSpecialCategories(settings.enableSpecialCategories);
     if (settings.specialCategories) setSpecialCategories(settings.specialCategories);
     if (settings.budgetRules) setBudgetRules(settings.budgetRules);
     if (settings.auctionBreaks) setAuctionBreaks(settings.auctionBreaks);
@@ -101,7 +105,8 @@ export function ThemeSettingsExtended({ settings, onChange, teams }: ThemeSettin
   useEffect(() => {
     onChange({
       playerStatsFields,
-      specialCategories,
+      enableSpecialCategories,
+      specialCategories: enableSpecialCategories ? specialCategories : [],
       budgetRules,
       auctionBreaks,
       currentBreakId: currentBreakId || undefined,
@@ -113,7 +118,7 @@ export function ThemeSettingsExtended({ settings, onChange, teams }: ThemeSettin
       mirrorPreloadPersist,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [playerStatsFields, specialCategories, budgetRules, auctionBreaks, currentBreakId, loadingScreen, teamOwners, maxIconicPlayers, defaultCountryCode, playerPlaceholderImage, mirrorPreloadPersist]);
+  }, [playerStatsFields, enableSpecialCategories, specialCategories, budgetRules, auctionBreaks, currentBreakId, loadingScreen, teamOwners, maxIconicPlayers, defaultCountryCode, playerPlaceholderImage, mirrorPreloadPersist]);
 
   // ─── Player Stats Fields ─────────────────────────────────────────────────
   const toggleStatField = (key: string) => {
@@ -191,7 +196,16 @@ export function ThemeSettingsExtended({ settings, onChange, teams }: ThemeSettin
       {/* ─── Section 2: Special Categories ──────────────────────────────────── */}
       <div className="admin-section-card">
         <h3 className="admin-section-title">🏷️ Special Player Categories & Age Spotlight</h3>
-        <p className="admin-section-desc">Add custom categories like Under-19, Under-17, Over-40. Players matching a category will get a spotlight badge during the auction and in team views.</p>
+        <p className="admin-section-desc">Enable age-based categories like Under-19, Under-17. When disabled, no age constraints or spotlight badges are shown.</p>
+        <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem', cursor: 'pointer' }}>
+          <input
+            type="checkbox"
+            checked={enableSpecialCategories}
+            onChange={(e) => setEnableSpecialCategories(e.target.checked)}
+          />
+          <span style={{ fontSize: '0.9rem', fontWeight: 600 }}>Enable Special Categories</span>
+        </label>
+        {enableSpecialCategories && (<>
         <div className="admin-items-list">
           {specialCategories.map(cat => (
             <div key={cat.id} className="admin-item-row">
@@ -231,6 +245,7 @@ export function ThemeSettingsExtended({ settings, onChange, teams }: ThemeSettin
         <button onClick={addCategory} className="admin-add-btn">
           <IoAdd /> Add Category
         </button>
+        </>)}
       </div>
 
       {/* ─── Section 3: Budget Rules ────────────────────────────────────────── */}

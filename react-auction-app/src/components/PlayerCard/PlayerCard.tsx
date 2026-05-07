@@ -13,7 +13,7 @@ import { formatRoleDisplay, getRoleCategory, getRoleBadgeColor as getRoleBadgeHe
 import { getCachedStorageUrl, resolveImageAsync } from '../../services/firebaseStorageService';
 import { extractDriveFileId } from '../../utils/driveImage';
 import { getLiveBlobUrl } from '../../services/mediaBlobCache';
-import { useCurrencySuffix } from '../../store';
+import { useCurrencySuffix, useAuctionStore } from '../../store';
 import { ImageLightbox } from '../ImageLightbox';
 
 interface PlayerCardProps {
@@ -76,7 +76,7 @@ export function PlayerCard({
     return () => { alive = false; };
   }, [player.imageUrl, player.name]);
 
-  const isUnderAge = player.age !== null && player.age < activeConfig.auction.rules.underAgeLimit;
+  const isUnderAge = useAuctionStore(s => s.enableSpecialCategories) && player.age !== null && player.age < activeConfig.auction.rules.underAgeLimit;
 
   const sizeClasses = {
     small: 'w-48 h-64',

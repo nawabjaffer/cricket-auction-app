@@ -137,6 +137,9 @@ interface AuctionStore {
   // Budget enforcement mode
   budgetMode: 'constraint' | 'releaseRefund';
 
+  // Whether special age categories are enabled
+  enableSpecialCategories: boolean;
+
   // Currency suffix (L = Lakhs, T = Thousands, K = K, etc.)
   currencySuffix: string;
 
@@ -259,6 +262,7 @@ export const useAuctionStore = create<AuctionStore>()(
         auctionRoleOrder: [...DEFAULT_AUCTION_ROLE_ORDER],
         bidIncrementRanges: [],
         budgetMode: 'constraint',
+        enableSpecialCategories: false,
         currencySuffix: 'L',
         organizerLogo: _cachedOrganizerLogo,
         organizerName: _cachedOrganizerName,

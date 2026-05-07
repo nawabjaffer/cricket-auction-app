@@ -1184,10 +1184,12 @@ export default function LivePage() {
                 <span style={{ opacity: 0.7 }}>Allocated Amount:</span>
                 <span style={{ color: '#60a5fa' }}>₹{(selectedTeamAllocated / 100000).toFixed(1)}L</span>
               </div>
+              {(teams[selectedTeamIndex]?.underAgePlayers || 0) > 0 && (
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem' }}>
                 <span style={{ opacity: 0.7 }}>Under-age Players:</span>
                 <span style={{ color: '#fbbf24' }}>{teams[selectedTeamIndex]?.underAgePlayers || 0}</span>
               </div>
+              )}
             </div>
           </motion.div>
         )}
