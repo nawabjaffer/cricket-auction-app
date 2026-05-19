@@ -36,15 +36,15 @@ export interface MatchScoringConfig {
 export type BallOutcome =
   | '0' | '1' | '2' | '3' | '4' | '6'
   | 'W'     // wicket
-  | 'WD'    // wide
-  | 'NB'    // no-ball
+  | 'WD'    // wide (dot)
+  | 'NB'    // no-ball (dot)
   | 'B'     // bye
   | 'LB'    // leg bye
-  | 'WD+1' | 'WD+2' | 'WD+4'  // wide + extra runs
-  | 'NB+0' | 'NB+1' | 'NB+2' | 'NB+4' | 'NB+6'; // no-ball + runs
+  | 'WD+1' | 'WD+2' | 'WD+3' | 'WD+4'  // wide + extra runs
+  | 'NB+0' | 'NB+1' | 'NB+2' | 'NB+3' | 'NB+4' | 'NB+6'; // no-ball + runs
 
 export type DismissalType =
-  | 'bowled' | 'caught' | 'lbw' | 'run_out'
+  | 'bowled' | 'caught' | 'caught_and_bowled' | 'lbw' | 'run_out'
   | 'stumped' | 'hit_wicket' | 'retired_hurt'
   | 'retired_out' | 'obstructing_field' | 'timed_out';
 
@@ -55,6 +55,7 @@ export interface WicketDetail {
   fielderId?: string;      // for caught, run out, stumped
   fielderName?: string;
   newBatsmanId?: string;   // replacement batsman
+  newBatsmanName?: string; // replacement batsman name
 }
 
 export interface BallEvent {
@@ -209,9 +210,20 @@ export interface LiveScore {
   lastBall: BallOutcome;
   lastBallRuns: number;
   currentOverBalls: string[];   // e.g. ["1", "4", "0", "W", "2"]
+  lastCompletedOverBalls?: string[]; // balls from the last completed over (shown until new over starts)
   recentOvers: string[];        // e.g. ["7", "4", "12", "6"]  (runs per over)
   partnership: { runs: number; balls: number };
   lastUpdated: number;
+  // Powerplay & free hit tracking
+  isPowerplay: boolean;
+  powerplayOvers: number;       // e.g. 6 for T20
+  isFreehit: boolean;
+  // Previous bowler (to prevent consecutive overs)
+  previousBowlerId?: string;
+  // All batsman innings (full scorecard)
+  allBatsmen?: BatsmanInnings[];
+  // All bowler innings (full scorecard)
+  allBowlers?: BowlerInnings[];
 }
 
 // ── Player Stats ──
@@ -292,7 +304,21 @@ export type OverlayType =
   | 'duck_out'
   | 'hat_trick'
   | 'live_question'
-  | 'ads_break';
+  | 'ads_break'
+  // Stats overlays
+  | 'stats_dots'
+  | 'stats_fours'
+  | 'stats_sixes'
+  | 'stats_sr'
+  | 'stats_mvp'
+  | 'match_summary'
+  | 'tournament_stats'
+  | 'points_table'
+  // Awards overlays
+  | 'award_orange_cap'
+  | 'award_purple_cap'
+  | 'award_mvp'
+  | 'award_ceremony';
 
 export interface LiveQuestion {
   id: string;
@@ -300,6 +326,7 @@ export interface LiveQuestion {
   options?: string[];
   imageUrl?: string;
   duration: number;        // seconds
+  responses?: Record<string, number>; // optionIndex -> count
 }
 
 export interface OverlayControlState {
@@ -323,6 +350,22 @@ export interface ScoringAd {
 
 // ── Overlay Config (persisted admin settings) ──
 
+export type AnimationType = 'css' | 'lottie' | 'image' | 'video';
+
+export interface AnimationConfig {
+  type: AnimationType;
+  enabled: boolean;
+  durationMs: number;        // how long the animation shows (ms)
+  mediaUrl?: string;         // URL for image/video/lottie json
+  soundUrl?: string;         // optional sound effect URL
+  text?: string;             // text overlay (e.g. "FOUR!", "SIX!", "OUT!")
+  color?: string;            // primary accent color
+  scale?: number;            // scale factor (1 = normal)
+  chromaKeyEnabled?: boolean; // enable chroma key (green screen removal)
+  chromaKeyColor?: string;   // color to remove (default: #00ff00)
+  chromaKeySimilarity?: number; // 0-1 threshold for color matching (default: 0.4)
+}
+
 export interface ScoringOverlayConfig {
   tournamentLogo?: string;
   tournamentName?: string;
@@ -344,10 +387,24 @@ export interface ScoringOverlayConfig {
   duckOutImageUrl?: string;
   hatTrickImageUrl?: string;
   wicketImageUrl?: string;
+  // Per-event animation configs
+  fourAnimation?: AnimationConfig;
+  sixAnimation?: AnimationConfig;
+  wicketAnimation?: AnimationConfig;
   // Live questions queue
   liveQuestions: LiveQuestion[];
   // Toss animation config
   tossConfig?: TossConfig;
+  // Impact sub toggle (tournament-level)
+  impactSubEnabled?: boolean;
+  // Scorecard ticker config
+  tickerConfig?: TickerConfig;
+  // OBS WebSocket config
+  obsWebSocketConfig?: OBSWebSocketConfig;
+  // MVP point weights (customizable)
+  mvpWeights?: MVPWeights;
+  // Minimum balls for strike rate eligibility
+  minBallsForSR?: number; // default 10
 }
 
 // ── Scoring Adapter Interface ──
@@ -370,6 +427,10 @@ export interface MatchSquadPlayer {
   battingOrder?: number;
   isCaptain?: boolean;
   isWicketKeeper?: boolean;
+  imageUrl?: string;
+  auctionPrice?: number;
+  isImpactSub?: boolean;        // marked as impact substitute at match time
+  replacedPlayerId?: string;    // player this impact sub replaced
 }
 
 export interface MatchLineup {
@@ -445,4 +506,156 @@ export interface PreMatchState {
   revealedPlayersTeamA: string[];   // player IDs revealed so far
   revealedPlayersTeamB: string[];
   lastUpdated: number;
+}
+
+// ── MVP Points System ──
+
+export interface MVPWeights {
+  runPoints: number;            // default 1
+  fourBonus: number;            // default 1
+  sixBonus: number;             // default 2
+  wicketPoints: number;         // default 25
+  catchPoints: number;          // default 10
+  runOutPoints: number;         // default 10
+  stumpingPoints: number;       // default 10
+  maidenPoints: number;         // default 5
+  dotBallPoints: number;        // default 0.5
+  // Bonuses
+  thirtyRunBonus: number;       // default 4
+  halfCenturyBonus: number;     // default 8
+  centuryBonus: number;         // default 16
+  threeWicketBonus: number;     // default 4
+  fiveWicketBonus: number;      // default 8
+  economyBonusThreshold: number;   // default 6.0 (eco below this gets bonus)
+  economyBonusPoints: number;      // default 4
+  srBonusThreshold: number;        // default 150 (SR above this gets bonus)
+  srBonusPoints: number;           // default 4
+}
+
+export const DEFAULT_MVP_WEIGHTS: MVPWeights = {
+  runPoints: 1,
+  fourBonus: 1,
+  sixBonus: 2,
+  wicketPoints: 25,
+  catchPoints: 10,
+  runOutPoints: 10,
+  stumpingPoints: 10,
+  maidenPoints: 5,
+  dotBallPoints: 0.5,
+  thirtyRunBonus: 4,
+  halfCenturyBonus: 8,
+  centuryBonus: 16,
+  threeWicketBonus: 4,
+  fiveWicketBonus: 8,
+  economyBonusThreshold: 6.0,
+  economyBonusPoints: 4,
+  srBonusThreshold: 150,
+  srBonusPoints: 4,
+};
+
+export interface PlayerMVPPoints {
+  playerId: string;
+  playerName: string;
+  teamId: string;
+  batting: number;
+  bowling: number;
+  fielding: number;
+  bonus: number;
+  total: number;
+}
+
+// ── Match Stats (real-time aggregation) ──
+
+export interface MatchStatsSnapshot {
+  matchId: string;
+  highestDotBallBowler: { playerId: string; playerName: string; teamId: string; dots: number; balls: number } | null;
+  highestFourScorer: { playerId: string; playerName: string; teamId: string; fours: number } | null;
+  highestSixScorer: { playerId: string; playerName: string; teamId: string; sixes: number } | null;
+  highestStrikeRate: { playerId: string; playerName: string; teamId: string; strikeRate: number; runs: number; balls: number } | null;
+  mvpLeaderboard: PlayerMVPPoints[];
+  lastUpdated: number;
+}
+
+// ── Tournament Stats ──
+
+export interface TournamentStats {
+  orangeCap: { playerId: string; playerName: string; teamId: string; teamName: string; runs: number; matches: number; imageUrl?: string } | null;
+  purpleCap: { playerId: string; playerName: string; teamId: string; teamName: string; wickets: number; matches: number; imageUrl?: string } | null;
+  mostSixes: { playerId: string; playerName: string; teamId: string; teamName: string; sixes: number; imageUrl?: string } | null;
+  mostFours: { playerId: string; playerName: string; teamId: string; teamName: string; fours: number; imageUrl?: string } | null;
+  bestEconomy: { playerId: string; playerName: string; teamId: string; teamName: string; economy: number; overs: number; imageUrl?: string } | null;
+  bestStrikeRate: { playerId: string; playerName: string; teamId: string; teamName: string; strikeRate: number; runs: number; balls: number; imageUrl?: string } | null;
+  mostDotBalls: { playerId: string; playerName: string; teamId: string; teamName: string; dots: number; imageUrl?: string } | null;
+  mvpLeaderboard: PlayerMVPPoints[];
+  lastUpdated: number;
+}
+
+// ── Tournament Awards ──
+
+export type AwardCategory =
+  | 'orange_cap'
+  | 'purple_cap'
+  | 'mvp'
+  | 'most_sixes'
+  | 'best_strike_rate'
+  | 'best_economy'
+  | 'most_dot_balls'
+  | 'best_fielder'
+  | 'motm';
+
+export interface TournamentAward {
+  id: string;
+  category: AwardCategory;
+  playerId: string;
+  playerName: string;
+  teamId: string;
+  teamName: string;
+  value: string;               // "342 runs", "15 wickets"
+  matchId?: string;            // for MOTM
+  sponsorName?: string;        // reuse from auction sponsors
+  sponsorLogoUrl?: string;
+  imageUrl?: string;
+}
+
+// ── Scorecard Ticker Config ──
+
+export type TickerMode = 'html' | 'png';
+export type TickerDesign = 'glass' | 'premium';
+
+export interface TickerConfig {
+  mode: TickerMode;
+  design?: TickerDesign;       // 'glass' (light/frosted) or 'premium' (dark purple/gold)
+  position?: 'top' | 'bottom';
+  height?: number;
+  showBowlerOnRight?: boolean;
+  animationSpeed?: number;
+  dotBallSymbol?: string;      // custom emoji/symbol for dot balls (default '0')
+  // HTML/CSS mode
+  customHTML?: string;
+  customCSS?: string;
+  // PNG template mode
+  pngTemplateUrl?: string;
+  pngFieldPositions?: Record<string, { x: number; y: number; fontSize?: number; color?: string; fontWeight?: string }>;
+}
+
+// ── OBS WebSocket Config ──
+
+export interface OBSWebSocketConfig {
+  host: string;                // default 'localhost'
+  port: number;                // default 4455
+  password?: string;
+  autoReplay: boolean;         // auto-trigger replay on 4/6/W
+  replayDelaySeconds: number;  // seconds to wait before triggering replay
+  replayDurationSeconds: number; // how long to save replay buffer
+}
+
+// ── Replay Trigger (written to RTDB for overlay/dock to consume) ──
+
+export interface ReplayTrigger {
+  id: string;
+  matchId: string;
+  type: 'four' | 'six' | 'wicket';
+  timestamp: number;
+  delaySeconds: number;
+  consumed: boolean;
 }

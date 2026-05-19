@@ -7,7 +7,7 @@ import { useEffect, useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type {
   MatchSetup, MatchLineup, PreMatchState, ScoringOverlayConfig,
-  ImpactPlayer,
+  ImpactPlayer, MatchSquadPlayer,
 } from '../types/scoring';
 import './PreMatchOverlay.css';
 
@@ -123,12 +123,22 @@ function TeamSquadColumn({ team, lineup }: {
             transition={{ delay: i * 0.08, duration: 0.3 }}
           >
             <span className="prematch-squad-col__num">{i + 1}</span>
-            <span className="prematch-squad-col__pname">
-              {p.playerName}
-              {p.isCaptain && <span className="prematch-squad-col__badge">C</span>}
-              {p.isWicketKeeper && <span className="prematch-squad-col__badge">WK</span>}
-            </span>
-            <span className="prematch-squad-col__role">{p.role}</span>
+            {p.imageUrl && (
+              <img src={p.imageUrl} alt="" className="prematch-squad-col__player-img" />
+            )}
+            <div className="prematch-squad-col__player-info">
+              <span className="prematch-squad-col__pname">
+                {p.playerName}
+                {p.isCaptain && <span className="prematch-squad-col__badge prematch-squad-col__badge--captain">C</span>}
+                {p.isWicketKeeper && <span className="prematch-squad-col__badge prematch-squad-col__badge--keeper">WK</span>}
+              </span>
+              <span className="prematch-squad-col__role-badge" data-role={getRoleCategory(p.role)}>
+                {p.role}
+              </span>
+            </div>
+            {p.auctionPrice !== undefined && (
+              <span className="prematch-squad-col__price">₹{p.auctionPrice}L</span>
+            )}
           </motion.div>
         )) || (
           <p className="prematch-squad-col__empty">Lineup not set</p>
@@ -136,6 +146,15 @@ function TeamSquadColumn({ team, lineup }: {
       </div>
     </div>
   );
+}
+
+function getRoleCategory(role: string): string {
+  const lower = role.toLowerCase();
+  if (lower.includes('bat')) return 'batsman';
+  if (lower.includes('bowl') || lower.includes('fast') || lower.includes('pace') || lower.includes('spin')) return 'bowler';
+  if (lower.includes('all') || lower.includes('round')) return 'allrounder';
+  if (lower.includes('keep') || lower.includes('wk')) return 'keeper';
+  return 'batsman';
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -309,13 +328,18 @@ function SquadRevealOverlay({ team, lineup, revealedIds, revealConfig }: {
                   transition={{ type: 'spring', stiffness: 200, damping: 20 }}
                 >
                   <div className="prematch-reveal__player-num">{i + 1}</div>
+                  {player.imageUrl && (
+                    <img src={player.imageUrl} alt="" className="prematch-reveal__player-img" />
+                  )}
                   <div className="prematch-reveal__player-info">
                     <span className="prematch-reveal__player-name">
                       {player.playerName}
-                      {player.isCaptain && <span className="prematch-reveal__badge">C</span>}
-                      {player.isWicketKeeper && <span className="prematch-reveal__badge">WK</span>}
+                      {player.isCaptain && <span className="prematch-reveal__badge prematch-reveal__badge--captain">C</span>}
+                      {player.isWicketKeeper && <span className="prematch-reveal__badge prematch-reveal__badge--keeper">WK</span>}
                     </span>
-                    <span className="prematch-reveal__player-role">{player.role}</span>
+                    <span className="prematch-reveal__player-role" data-role={getRoleCategory(player.role)}>
+                      {player.role}
+                    </span>
                   </div>
                 </motion.div>
               )}

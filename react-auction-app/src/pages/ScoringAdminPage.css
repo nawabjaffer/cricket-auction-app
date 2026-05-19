@@ -974,3 +974,97 @@
     padding: 0.75rem 1rem;
   }
 }
+
+/* ── Form Grid Variants ───────────────────────────────────────────────── */
+
+.scoring-admin__form-grid--3col {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+@media (max-width: 768px) {
+  .scoring-admin__form-grid--3col {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+/* ── Connection Status ────────────────────────────────────────────────── */
+
+.scoring-admin__connection-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 8px;
+  margin-bottom: 16px;
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.scoring-admin__status-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #64748b;
+}
+
+.scoring-admin__status-dot--connected {
+  background: #22c55e;
+  box-shadow: 0 0 6px rgba(34, 197, 94, 0.5);
+}
+
+.scoring-admin__status-dot--connecting {
+  background: #eab308;
+  animation: pulse-glow 1s ease-in-out infinite;
+}
+
+.scoring-admin__status-dot--error {
+  background: #ef4444;
+}
+
+.scoring-admin__status-dot--disconnected {
+  background: #64748b;
+}
+
+@keyframes pulse-glow {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+/* ── Textarea ─────────────────────────────────────────────────────────── */
+
+.scoring-admin__textarea {
+  width: 100%;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  color: #e2e8f0;
+  font-family: 'Fira Code', 'Courier New', monospace;
+  font-size: 0.8rem;
+  resize: vertical;
+}
+
+.scoring-admin__textarea:focus {
+  border-color: #3b82f6;
+  outline: none;
+}
+
+/* ── Help Text ────────────────────────────────────────────────────────── */
+
+.scoring-admin__help {
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.4);
+  margin-top: 4px;
+}
+
+/* ── Subsection Title ─────────────────────────────────────────────────── */
+
+.scoring-admin__subsection-title {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.8);
+  margin: 16px 0 8px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}

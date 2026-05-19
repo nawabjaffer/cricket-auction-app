@@ -406,6 +406,53 @@
   font-weight: 600;
 }
 
+.score-update__action-row .score-update__btn--active {
+  background: rgba(245, 158, 11, 0.25);
+  border-color: rgba(245, 158, 11, 0.6);
+  box-shadow: 0 0 6px rgba(245, 158, 11, 0.3);
+}
+
+/* ── NB/WD Sub-options Panel ────────────────────────────────────────────────── */
+
+.score-update__sub-options {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.5rem 1rem;
+  overflow: hidden;
+  flex-wrap: wrap;
+}
+
+.score-update__sub-label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: #fbbf24;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-right: 0.25rem;
+}
+
+.score-update__btn--sub {
+  background: rgba(245, 158, 11, 0.12);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  color: #fbbf24;
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 0.4rem 0.7rem;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.score-update__btn--sub:hover {
+  background: rgba(245, 158, 11, 0.25);
+  border-color: rgba(245, 158, 11, 0.5);
+}
+
+.score-update__btn--sub:active {
+  transform: scale(0.95);
+}
+
 /* ── Controls (Undo, Swap, New Innings) ─────────────────────────────────────── */
 
 .score-update__controls {
@@ -642,4 +689,59 @@
   .score-update__modal-grid {
     grid-template-columns: 1fr;
   }
+}
+
+/* ── Powerplay & Free Hit Indicators ──────────────────────────────────── */
+
+.score-update__indicators {
+  display: flex;
+  gap: 8px;
+  padding: 4px 16px;
+}
+
+.score-update__indicator {
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+.score-update__indicator--powerplay {
+  background: linear-gradient(135deg, #1e40af, #3b82f6);
+  color: #fff;
+  box-shadow: 0 0 12px rgba(59, 130, 246, 0.4);
+}
+
+.score-update__indicator--freehit {
+  background: linear-gradient(135deg, #15803d, #22c55e);
+  color: #fff;
+  box-shadow: 0 0 12px rgba(34, 197, 94, 0.4);
+}
+
+@keyframes pulse-glow {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+/* ── Innings Summary ──────────────────────────────────────────────────── */
+
+.score-update__innings-summary {
+  text-align: center;
+  padding: 16px;
+}
+
+.score-update__innings-total {
+  font-size: 2rem;
+  font-weight: 700;
+  color: #fbbf24;
+}
+
+/* ── Disabled Player Button ───────────────────────────────────────────── */
+
+.score-update__player-btn--disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  text-decoration: line-through;
 }

@@ -262,8 +262,12 @@ export class ScoringService {
   async updatePreMatchPhase(matchId: string, phase: PreMatchState['phase']): Promise<void> {
     const db = this.ensureDb();
     const snapshot = await get(ref(db, `${this.basePath}/matches/${matchId}/preMatch`));
-    if (!snapshot.exists()) return;
-    const existing = snapshot.val();
+    const existing = snapshot.exists() ? snapshot.val() : {
+      matchId,
+      phase: 'idle',
+      revealedPlayersTeamA: [],
+      revealedPlayersTeamB: [],
+    };
     await set(ref(db, `${this.basePath}/matches/${matchId}/preMatch`), this.stripUndefinedDeep({
       ...existing,
       phase,
@@ -277,7 +281,7 @@ export class ScoringService {
     if (!snapshot.exists()) return;
     const state = snapshot.val() as PreMatchState;
     const key = team === 'teamA' ? 'revealedPlayersTeamA' : 'revealedPlayersTeamB';
-    const list = state[key] || [];
+    const list = [...(state[key] || [])];
     if (!list.includes(playerId)) list.push(playerId);
     await set(ref(db, `${this.basePath}/matches/${matchId}/preMatch/${key}`), list);
   }

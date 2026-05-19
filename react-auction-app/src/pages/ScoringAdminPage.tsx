@@ -1,5 +1,5 @@
 // ============================================================================
-// SCORING ADMIN PAGE — /:tenantSlug/scoring/admin
+// SCORING ADMIN PAGE — /:tenantSlug/cricket/scorer/admin
 // Match setup, provider config, ads, overlay branding, animation triggers
 // ============================================================================
 
@@ -17,11 +17,11 @@ import { tenantPath } from '../services/tenantPath';
 import { realtimeSync } from '../services/realtimeSync';
 import { scoringService } from '../services/scoring';
 import { uploadFileToStorage } from '../services';
-import type { MatchSetup, ScoringAd, ScoringOverlayConfig, LiveQuestion, MatchScoringConfig, PreMatchState, ImpactPlayer, TossConfig, MatchLineup } from '../types/scoring';
+import type { MatchSetup, ScoringAd, ScoringOverlayConfig, LiveQuestion, MatchScoringConfig, PreMatchState, ImpactPlayer, TossConfig, MatchLineup, TickerConfig, OBSWebSocketConfig, MVPWeights, DEFAULT_MVP_WEIGHTS, AnimationConfig } from '../types/scoring';
 import type { SoldPlayer } from '../types';
 import './ScoringAdminPage.css';
 
-type Tab = 'matches' | 'provider' | 'ads' | 'overlay' | 'animations' | 'prematch';
+type Tab = 'matches' | 'provider' | 'ads' | 'overlay' | 'animations' | 'prematch' | 'ticker' | 'stats' | 'obs';
 
 const DEFAULT_OVERLAY_CONFIG: ScoringOverlayConfig = {
   showLiveBadge: true,
@@ -60,12 +60,14 @@ export default function ScoringAdminPage() {
         const db = realtimeSync.getDatabase();
         if (db) {
           scoringService.initialize(db, tenantPath('scoring'));
-          setScoringReady(true);
+        } else {
+          console.error('[ScoringAdmin] Database not available after init');
         }
-      } catch {
-        // already initialized
-        setScoringReady(true);
+      } catch (err) {
+        console.warn('[ScoringAdmin] Init warning (may already be initialized):', err);
       }
+      // Always set ready — if scoringService was already initialized before, it's fine
+      setScoringReady(true);
     };
     initScoring();
   }, []);
@@ -124,13 +126,13 @@ export default function ScoringAdminPage() {
 
       {/* Quick Actions Bar */}
       <div className="scoring-admin__quick-actions">
-        <button className="scoring-admin__quick-btn" onClick={() => navigate('/match/score/update')}>
+        <button className="scoring-admin__quick-btn" onClick={() => navigate('/cricket/scorer/update')}>
           <IoPencil size={14} /> Update Scorecard
         </button>
-        <button className="scoring-admin__quick-btn" onClick={() => window.open(`${baseUrl}/obs-overlay?mode=scoring`, '_blank')}>
+        <button className="scoring-admin__quick-btn" onClick={() => window.open(`${baseUrl}/cricket/scorer/obs-overlay`, '_blank')}>
           <IoDesktop size={14} /> OBS Overlay
         </button>
-        <button className="scoring-admin__quick-btn" onClick={() => window.open(`${baseUrl}/score/obs-dock`, '_blank')}>
+        <button className="scoring-admin__quick-btn" onClick={() => window.open(`${baseUrl}/cricket/scorer/obs-dock`, '_blank')}>
           <IoGameController size={14} /> OBS Control Dock
         </button>
         <button className="scoring-admin__quick-btn" onClick={() => navigate('/admin')}>
@@ -147,6 +149,9 @@ export default function ScoringAdminPage() {
           { key: 'overlay', icon: <IoPlay size={16} />, label: 'Overlay' },
           { key: 'animations', icon: <IoFlash size={16} />, label: 'Animations' },
           { key: 'prematch', icon: <IoVideocam size={16} />, label: 'Pre-Match' },
+          { key: 'ticker', icon: <IoDesktop size={16} />, label: 'Ticker' },
+          { key: 'stats', icon: <IoTrophy size={16} />, label: 'Stats' },
+          { key: 'obs', icon: <IoLink size={16} />, label: 'OBS WS' },
         ] as { key: Tab; icon: React.ReactNode; label: string }[]).map(tab => (
           <button
             key={tab.key}
@@ -201,6 +206,27 @@ export default function ScoringAdminPage() {
         {activeTab === 'prematch' && (
           <PreMatchTab
             matches={matches}
+            config={overlayConfig}
+            setConfig={setOverlayConfig}
+            onFeedback={showFeedback}
+          />
+        )}
+        {activeTab === 'ticker' && (
+          <TickerTab
+            config={overlayConfig}
+            setConfig={setOverlayConfig}
+            onFeedback={showFeedback}
+          />
+        )}
+        {activeTab === 'stats' && (
+          <StatsTab
+            config={overlayConfig}
+            setConfig={setOverlayConfig}
+            onFeedback={showFeedback}
+          />
+        )}
+        {activeTab === 'obs' && (
+          <OBSWebSocketTab
             config={overlayConfig}
             setConfig={setOverlayConfig}
             onFeedback={showFeedback}
@@ -314,6 +340,10 @@ function MatchesTab({ matches, teams, soldPlayers, onFeedback, saving, setSaving
   const handleStatusChange = async (matchId: string, status: MatchSetup['status']) => {
     try {
       await scoringService.updateMatch(matchId, { status });
+      // Auto-trigger squad_display phase when match goes live (pre-match ceremony)
+      if (status === 'live') {
+        await scoringService.updatePreMatchPhase(matchId, 'squad_display');
+      }
       onFeedback(`Match status: ${status}`);
     } catch {
       onFeedback('Failed to update status');
@@ -409,16 +439,16 @@ function MatchesTab({ matches, teams, soldPlayers, onFeedback, saving, setSaving
               </span>
             </div>
             <div className="scoring-admin__match-links">
-              <button className="scoring-admin__link-btn" onClick={() => navigate(`/match/score/update?matchId=${match.id}`)} title="Update Scorecard">
+              <button className="scoring-admin__link-btn" onClick={() => navigate(`/cricket/scorer/update?matchId=${match.id}`)} title="Update Scorecard">
                 <IoPencil size={13} /> Scorecard
               </button>
-              <button className="scoring-admin__link-btn" onClick={() => window.open(`${baseUrl}/obs-overlay?mode=scoring&matchId=${match.id}`, '_blank')} title="Open OBS Overlay">
+              <button className="scoring-admin__link-btn" onClick={() => window.open(`${baseUrl}/cricket/scorer/obs-overlay?matchId=${match.id}`, '_blank')} title="Open OBS Overlay">
                 <IoDesktop size={13} /> OBS Overlay
               </button>
-              <button className="scoring-admin__link-btn" onClick={() => { navigator.clipboard.writeText(`${baseUrl}/obs-overlay?mode=scoring&matchId=${match.id}`); onFeedback('OBS URL copied'); }} title="Copy OBS URL">
+              <button className="scoring-admin__link-btn" onClick={() => { navigator.clipboard.writeText(`${baseUrl}/cricket/scorer/obs-overlay?matchId=${match.id}`); onFeedback('OBS URL copied'); }} title="Copy OBS URL">
                 <IoLink size={13} /> Copy URL
               </button>
-              <button className="scoring-admin__link-btn" onClick={() => window.open(`${baseUrl}/score/obs-dock?matchId=${match.id}`, '_blank')} title="OBS Control Dock">
+              <button className="scoring-admin__link-btn" onClick={() => window.open(`${baseUrl}/cricket/scorer/obs-dock?matchId=${match.id}`, '_blank')} title="OBS Control Dock">
                 <IoGameController size={13} /> Control Dock
               </button>
             </div>
@@ -715,6 +745,12 @@ function OverlayTab({ config, setConfig, onFeedback }: {
 }) {
   const handleSave = async () => {
     try {
+      // Ensure service is initialized before saving
+      if (!realtimeSync.getDatabase()) {
+        await realtimeSync.ensureInitialized();
+        const db = realtimeSync.getDatabase();
+        if (db) scoringService.initialize(db, tenantPath('scoring'));
+      }
       await scoringService.saveOverlayConfig(config);
       onFeedback('Overlay config saved');
     } catch (err) {
@@ -846,12 +882,36 @@ function AnimationsTab({ config, setConfig, onFeedback }: {
 }) {
   const [newQ, setNewQ] = useState({ text: '', options: '', duration: 10 });
 
+  // Safe access to liveQuestions (may be undefined from Firebase)
+  const liveQuestions = config.liveQuestions || [];
+
+  // Default animation configs
+  const DEFAULT_FOUR_ANIMATION: AnimationConfig = {
+    type: 'css', enabled: true, durationMs: 3000, text: 'FOUR!', color: '#22c55e', scale: 1,
+  };
+  const DEFAULT_SIX_ANIMATION: AnimationConfig = {
+    type: 'css', enabled: true, durationMs: 4000, text: 'SIX!', color: '#8b5cf6', scale: 1.2,
+  };
+  const DEFAULT_WICKET_ANIMATION: AnimationConfig = {
+    type: 'css', enabled: true, durationMs: 4000, text: 'OUT!', color: '#ef4444', scale: 1,
+  };
+
+  const fourAnim = config.fourAnimation || DEFAULT_FOUR_ANIMATION;
+  const sixAnim = config.sixAnimation || DEFAULT_SIX_ANIMATION;
+  const wicketAnim = config.wicketAnimation || DEFAULT_WICKET_ANIMATION;
+
   const handleSave = async () => {
     try {
+      // Ensure service is initialized before saving
+      if (!realtimeSync.getDatabase()) {
+        await realtimeSync.ensureInitialized();
+        const db = realtimeSync.getDatabase();
+        if (db) scoringService.initialize(db, tenantPath('scoring'));
+      }
       await scoringService.saveOverlayConfig(config);
       onFeedback('Animation config saved');
-    } catch {
-      onFeedback('Failed to save');
+    } catch (err) {
+      onFeedback(`Failed to save: ${String(err)}`);
     }
   };
 
@@ -863,18 +923,25 @@ function AnimationsTab({ config, setConfig, onFeedback }: {
       options: newQ.options ? newQ.options.split(',').map(o => o.trim()).filter(Boolean) : undefined,
       duration: newQ.duration,
     };
-    setConfig({ ...config, liveQuestions: [...config.liveQuestions, question] });
+    setConfig({ ...config, liveQuestions: [...liveQuestions, question] });
     setNewQ({ text: '', options: '', duration: 10 });
   };
 
   const removeQuestion = (id: string) => {
-    setConfig({ ...config, liveQuestions: config.liveQuestions.filter(q => q.id !== id) });
+    setConfig({ ...config, liveQuestions: liveQuestions.filter(q => q.id !== id) });
   };
 
-  const handleUpload = async (file: File, field: keyof ScoringOverlayConfig) => {
+  const handleUpload = async (file: File, field: string) => {
     try {
       const url = await uploadFileToStorage(file, `media/scoring/animations/${field}-${Date.now()}`);
-      setConfig({ ...config, [field]: url });
+      // Check if field is an animation config key
+      if (field === 'fourAnimation' || field === 'sixAnimation' || field === 'wicketAnimation') {
+        const existing = config[field] || (field === 'fourAnimation' ? fourAnim : field === 'sixAnimation' ? sixAnim : wicketAnim);
+        setConfig({ ...config, [field]: { ...existing, mediaUrl: url } });
+      } else {
+        setConfig({ ...config, [field]: url });
+      }
+      onFeedback('Upload successful');
     } catch {
       onFeedback('Upload failed');
     }
@@ -943,9 +1010,158 @@ function AnimationsTab({ config, setConfig, onFeedback }: {
         </div>
       </div>
 
+      {/* Per-event Animation Configs */}
+      {([
+        { key: 'fourAnimation' as const, label: '4️⃣ Four (Boundary) Animation', defaults: fourAnim },
+        { key: 'sixAnimation' as const, label: '6️⃣ Six (Maximum) Animation', defaults: sixAnim },
+        { key: 'wicketAnimation' as const, label: '🏏 Wicket (Out) Animation', defaults: wicketAnim },
+      ]).map(section => {
+        const anim = config[section.key] || section.defaults;
+        const updateAnim = (patch: Partial<AnimationConfig>) => {
+          setConfig({ ...config, [section.key]: { ...anim, ...patch } });
+        };
+        const isCustom = anim.type !== 'css';
+        return (
+          <div key={section.key} className="scoring-admin__form-card">
+            <h3 className="scoring-admin__subsection-title">{section.label}</h3>
+            <div className="scoring-admin__form-grid">
+              <div className="scoring-admin__field">
+                <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <input type="checkbox" checked={anim.enabled} onChange={e => updateAnim({ enabled: e.target.checked })} />
+                  Enabled
+                </label>
+              </div>
+
+              {/* Radio: Default vs Custom Upload */}
+              <div className="scoring-admin__field" style={{ gridColumn: '1 / -1' }}>
+                <label style={{ fontWeight: 600, marginBottom: '0.4rem', display: 'block' }}>Animation Source</label>
+                <div style={{ display: 'flex', gap: '1.5rem' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer' }}>
+                    <input type="radio" name={`${section.key}_source`} checked={!isCustom} onChange={() => updateAnim({ type: 'css', mediaUrl: undefined, chromaKeyEnabled: false })} />
+                    <span>Default (CSS Animation)</span>
+                  </label>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer' }}>
+                    <input type="radio" name={`${section.key}_source`} checked={isCustom} onChange={() => updateAnim({ type: 'video' })} />
+                    <span>Custom Upload (Video Overlay)</span>
+                  </label>
+                </div>
+              </div>
+
+              <div className="scoring-admin__field">
+                <label>Duration (ms)</label>
+                <input type="number" min={500} max={10000} step={100} value={anim.durationMs} onChange={e => updateAnim({ durationMs: Number(e.target.value) })} className="scoring-admin__input" />
+              </div>
+              <div className="scoring-admin__field">
+                <label>Display Text</label>
+                <input type="text" value={anim.text || ''} onChange={e => updateAnim({ text: e.target.value })} placeholder="e.g. FOUR!" className="scoring-admin__input" />
+              </div>
+              <div className="scoring-admin__field">
+                <label>Accent Color</label>
+                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                  <input type="color" value={anim.color || '#22c55e'} onChange={e => updateAnim({ color: e.target.value })} />
+                  <span className="scoring-admin__hint">{anim.color || '#22c55e'}</span>
+                </div>
+              </div>
+              <div className="scoring-admin__field">
+                <label>Scale ({(anim.scale || 1).toFixed(1)}x)</label>
+                <input type="range" min={0.5} max={2} step={0.1} value={anim.scale || 1} onChange={e => updateAnim({ scale: Number(e.target.value) })} />
+              </div>
+
+              {/* Custom Upload Section */}
+              {isCustom && (
+                <>
+                  <div className="scoring-admin__field" style={{ gridColumn: '1 / -1' }}>
+                    <label>Upload Type</label>
+                    <select value={anim.type} onChange={e => updateAnim({ type: e.target.value as AnimationConfig['type'] })} className="scoring-admin__select">
+                      <option value="video">Video (.webm / .mp4)</option>
+                      <option value="image">Image (.png / .gif)</option>
+                      <option value="lottie">Lottie JSON</option>
+                    </select>
+                  </div>
+                  <div className="scoring-admin__field" style={{ gridColumn: '1 / -1' }}>
+                    <label>Media URL</label>
+                    <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                      <input type="text" value={anim.mediaUrl || ''} onChange={e => updateAnim({ mediaUrl: e.target.value })} placeholder={anim.type === 'lottie' ? 'Lottie JSON URL' : anim.type === 'video' ? 'Video URL (.webm / .mp4)' : 'Image URL (.png / .gif)'} className="scoring-admin__input" style={{ flex: 1 }} />
+                      <label className="scoring-admin__btn scoring-admin__btn--secondary" style={{ cursor: 'pointer' }}>
+                        Upload
+                        <input type="file" accept={anim.type === 'video' ? 'video/*' : anim.type === 'lottie' ? 'application/json' : 'image/*'} style={{ display: 'none' }} onChange={e => { if (e.target.files?.[0]) handleUpload(e.target.files[0], section.key).then(() => {}).catch(() => {}); }} />
+                      </label>
+                    </div>
+                  </div>
+
+                  {/* Chroma Key Settings */}
+                  {anim.type === 'video' && (
+                    <div className="scoring-admin__field" style={{ gridColumn: '1 / -1' }}>
+                      <label style={{ fontWeight: 600, marginBottom: '0.5rem', display: 'block' }}>🎬 Chroma Key (Background Removal)</label>
+                      <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer' }}>
+                          <input type="checkbox" checked={anim.chromaKeyEnabled || false} onChange={e => updateAnim({ chromaKeyEnabled: e.target.checked })} />
+                          <span>Enable Chroma Key</span>
+                        </label>
+                        {anim.chromaKeyEnabled && (
+                          <>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                              <label>Key Color:</label>
+                              <input type="color" value={anim.chromaKeyColor || '#00ff00'} onChange={e => updateAnim({ chromaKeyColor: e.target.value })} />
+                              <span className="scoring-admin__hint">{anim.chromaKeyColor || '#00ff00'}</span>
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                              <label>Similarity:</label>
+                              <input type="range" min={0.1} max={0.8} step={0.05} value={anim.chromaKeySimilarity || 0.4} onChange={e => updateAnim({ chromaKeySimilarity: Number(e.target.value) })} style={{ width: 100 }} />
+                              <span className="scoring-admin__hint">{(anim.chromaKeySimilarity || 0.4).toFixed(2)}</span>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                      <p className="scoring-admin__hint" style={{ marginTop: '0.3rem' }}>
+                        Upload a video with a solid color background (green screen). Enable chroma key and pick the background color to remove it.
+                      </p>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+            {/* Preview */}
+            {anim.type === 'css' && (
+              <div style={{ marginTop: '0.75rem', padding: '1rem', background: 'rgba(0,0,0,0.3)', borderRadius: 8, textAlign: 'center' }}>
+                <span style={{ fontSize: `${24 * (anim.scale || 1)}px`, fontWeight: 900, color: anim.color || '#22c55e', textShadow: `0 0 20px ${anim.color || '#22c55e'}80` }}>
+                  {anim.text || 'PREVIEW'}
+                </span>
+                <p className="scoring-admin__hint" style={{ marginTop: 4 }}>CSS default • {anim.durationMs}ms</p>
+              </div>
+            )}
+            {isCustom && anim.mediaUrl && (
+              <div style={{ marginTop: '0.75rem', padding: '1rem', background: 'rgba(0,0,0,0.3)', borderRadius: 8, textAlign: 'center' }}>
+                {anim.type === 'video' ? (
+                  <video src={anim.mediaUrl} autoPlay muted loop style={{ maxWidth: 200, maxHeight: 120, borderRadius: 8 }} />
+                ) : anim.type === 'image' ? (
+                  <img src={anim.mediaUrl} alt="preview" style={{ maxWidth: 200, maxHeight: 120, borderRadius: 8, objectFit: 'contain' }} />
+                ) : null}
+                <p className="scoring-admin__hint" style={{ marginTop: 4 }}>
+                  Custom {anim.type} • {anim.durationMs}ms
+                  {anim.chromaKeyEnabled && ` • Chroma: ${anim.chromaKeyColor || '#00ff00'}`}
+                </p>
+              </div>
+            )}
+          </div>
+        );
+      })}
+
       <div className="scoring-admin__form-card">
         <h3 className="scoring-admin__subsection-title">❓ Live Questions (Q key)</h3>
         <p className="scoring-admin__hint">Queue trivia questions to display during the broadcast. Press Q in the overlay to show the next question.</p>
+
+        {/* Audience Answer Link */}
+        <div className="scoring-admin__field" style={{ marginBottom: '1rem', padding: '0.75rem', background: 'rgba(251, 191, 36, 0.08)', border: '1px solid rgba(251, 191, 36, 0.2)', borderRadius: 8 }}>
+          <label style={{ fontWeight: 600, marginBottom: '0.4rem', display: 'block' }}>📱 Audience Answer Link</label>
+          <p className="scoring-admin__hint" style={{ marginBottom: '0.5rem' }}>Share this URL with the audience so they can vote on questions live. Append <code>?matchId=YOUR_MATCH_ID</code> for a specific match.</p>
+          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+            <input type="text" readOnly value={`${window.location.origin}${window.location.pathname.replace('/cricket/scorer/admin', '/cricket/scorer/live-question')}`} className="scoring-admin__input" style={{ flex: 1, fontSize: '0.8rem' }} />
+            <button className="scoring-admin__btn scoring-admin__btn--secondary" onClick={() => { navigator.clipboard.writeText(`${window.location.origin}${window.location.pathname.replace('/cricket/scorer/admin', '/cricket/scorer/live-question')}`); onFeedback('Audience link copied!'); }}>
+              Copy
+            </button>
+          </div>
+        </div>
 
         <div className="scoring-admin__form-grid" style={{ marginBottom: '1rem' }}>
           <div className="scoring-admin__field">
@@ -965,9 +1181,9 @@ function AnimationsTab({ config, setConfig, onFeedback }: {
           <IoAdd size={16} /> Add Question
         </button>
 
-        {config.liveQuestions.length > 0 && (
+        {liveQuestions.length > 0 && (
           <div className="scoring-admin__question-list">
-            {config.liveQuestions.map((q, i) => (
+            {liveQuestions.map((q, i) => (
               <div key={q.id} className="scoring-admin__question-card">
                 <span className="scoring-admin__question-num">Q{i + 1}</span>
                 <div className="scoring-admin__question-text">
@@ -1140,10 +1356,19 @@ function PreMatchTab({ matches, config, setConfig, onFeedback }: {
   };
 
   const handleSetTossResult = async (wonBy: string, elected: 'bat' | 'bowl', coinSide: 'heads' | 'tails') => {
-    if (!selectedMatchId || !preMatchState) return;
+    if (!selectedMatchId) return;
     try {
+      const base: PreMatchState = preMatchState || {
+        matchId: selectedMatchId,
+        phase: 'idle' as const,
+        squadRevealConfig: { autoReveal: true, delayAfterTossSeconds: 10, playerRevealIntervalMs: 2000 },
+        impactPlayers: { teamA: [], teamB: [] },
+        revealedPlayersTeamA: [],
+        revealedPlayersTeamB: [],
+        lastUpdated: Date.now(),
+      };
       await scoringService.savePreMatchState(selectedMatchId, {
-        ...preMatchState,
+        ...base,
         tossResult: { wonBy, elected, coinSide },
         phase: 'toss_animation',
         lastUpdated: Date.now(),
@@ -1626,5 +1851,427 @@ function SquadSelectionModal({ match, soldPlayers, onSave, onClose }: {
         </div>
       </motion.div>
     </motion.div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// TICKER CONFIG TAB
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function TickerTab({ config, setConfig, onFeedback }: {
+  config: ScoringOverlayConfig;
+  setConfig: (c: ScoringOverlayConfig) => void;
+  onFeedback: (msg: string) => void;
+}) {
+  const [saving, setSaving] = useState(false);
+  const ticker = config.tickerConfig || {
+    mode: 'html' as const,
+    position: 'bottom' as const,
+    height: 120,
+    showBowlerOnRight: true,
+    animationSpeed: 500,
+  };
+
+  const updateTicker = (updates: Partial<TickerConfig>) => {
+    const updated = { ...ticker, ...updates };
+    setConfig({ ...config, tickerConfig: updated });
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await scoringService.saveOverlayConfig(config);
+      onFeedback('Ticker config saved');
+    } catch (err) {
+      onFeedback(`Save failed: ${String(err)}`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="scoring-admin__section">
+      <h2 className="scoring-admin__section-title"><IoDesktop size={20} /> Scorecard Ticker</h2>
+      <p className="scoring-admin__section-desc">Configure the bottom-of-screen ticker bar for OBS broadcast</p>
+
+      <div className="scoring-admin__form-grid">
+        <div className="scoring-admin__field">
+          <label>Design</label>
+          <select
+            className="scoring-admin__select"
+            value={ticker.design || 'glass'}
+            onChange={e => updateTicker({ design: e.target.value as 'glass' | 'premium' })}
+          >
+            <option value="glass">Glass (Light frosted panels)</option>
+            <option value="premium">Premium Gold (Dark purple &amp; gold)</option>
+          </select>
+        </div>
+
+        <div className="scoring-admin__field">
+          <label>Mode</label>
+          <select
+            className="scoring-admin__select"
+            value={ticker.mode}
+            onChange={e => updateTicker({ mode: e.target.value as 'html' | 'png' })}
+          >
+            <option value="html">HTML/CSS (animated)</option>
+            <option value="png">PNG Template (static)</option>
+          </select>
+        </div>
+
+        <div className="scoring-admin__field">
+          <label>Position</label>
+          <select
+            className="scoring-admin__select"
+            value={ticker.position}
+            onChange={e => updateTicker({ position: e.target.value as 'top' | 'bottom' })}
+          >
+            <option value="bottom">Bottom</option>
+            <option value="top">Top</option>
+          </select>
+        </div>
+
+        <div className="scoring-admin__field">
+          <label>Height (px)</label>
+          <input
+            type="number"
+            className="scoring-admin__input"
+            value={ticker.height}
+            onChange={e => updateTicker({ height: Number(e.target.value) })}
+          />
+        </div>
+
+        <div className="scoring-admin__field">
+          <label>Animation Speed (ms)</label>
+          <input
+            type="number"
+            className="scoring-admin__input"
+            value={ticker.animationSpeed}
+            onChange={e => updateTicker({ animationSpeed: Number(e.target.value) })}
+          />
+        </div>
+
+        <div className="scoring-admin__field scoring-admin__field--checkbox">
+          <label>
+            <input
+              type="checkbox"
+              checked={ticker.showBowlerOnRight !== false}
+              onChange={e => updateTicker({ showBowlerOnRight: e.target.checked })}
+            />
+            Show bowler stats on right side
+          </label>
+        </div>
+
+        <div className="scoring-admin__field">
+          <label>Dot Ball Symbol</label>
+          <select
+            className="scoring-admin__select"
+            value={ticker.dotBallSymbol || '0'}
+            onChange={e => updateTicker({ dotBallSymbol: e.target.value })}
+          >
+            <option value="0">0 (default)</option>
+            <option value="•">• (dot)</option>
+            <option value="🌳">🌳 (tree)</option>
+            <option value="🌲">🌲 (evergreen)</option>
+            <option value="🍃">🍃 (leaf)</option>
+            <option value="❌">❌ (cross)</option>
+            <option value="⚫">⚫ (black circle)</option>
+            <option value="🔴">🔴 (red circle)</option>
+          </select>
+          <p className="scoring-admin__help">Symbol shown for dot balls in the over tracker</p>
+        </div>
+      </div>
+
+      {ticker.mode === 'html' && (
+        <div className="scoring-admin__field scoring-admin__field--full">
+          <label>Custom CSS (optional)</label>
+          <textarea
+            className="scoring-admin__textarea"
+            rows={6}
+            value={ticker.customCSS || ''}
+            onChange={e => updateTicker({ customCSS: e.target.value })}
+            placeholder={`.ticker { background: linear-gradient(to right, #1a1a2e, #16213e); }\n.ticker__score { font-size: 28px; }`}
+          />
+        </div>
+      )}
+
+      {ticker.mode === 'png' && (
+        <div className="scoring-admin__field scoring-admin__field--full">
+          <label>PNG Template URL</label>
+          <input
+            type="text"
+            className="scoring-admin__input"
+            value={ticker.pngTemplateUrl || ''}
+            onChange={e => updateTicker({ pngTemplateUrl: e.target.value })}
+            placeholder="https://storage.googleapis.com/..."
+          />
+          <p className="scoring-admin__help">Upload a PNG template with transparent areas where score data will be overlaid</p>
+        </div>
+      )}
+
+      <div className="scoring-admin__actions">
+        <button className="scoring-admin__btn scoring-admin__btn--primary" onClick={handleSave} disabled={saving}>
+          <IoSave size={16} /> {saving ? 'Saving...' : 'Save Ticker Config'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// STATS & MVP TAB
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function StatsTab({ config, setConfig, onFeedback }: {
+  config: ScoringOverlayConfig;
+  setConfig: (c: ScoringOverlayConfig) => void;
+  onFeedback: (msg: string) => void;
+}) {
+  const [saving, setSaving] = useState(false);
+  const weights = config.mvpWeights || {
+    run: 1,
+    four: 1,
+    six: 2,
+    wicket: 25,
+    catch_taken: 10,
+    runout: 10,
+    stumping: 10,
+    maidenOver: 12,
+    dotBall: 1,
+    economyBonus: 5,
+    strikeRateBonus: 5,
+  };
+
+  const updateWeights = (updates: Partial<MVPWeights>) => {
+    const updated = { ...weights, ...updates };
+    setConfig({ ...config, mvpWeights: updated });
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await scoringService.saveOverlayConfig(config);
+      onFeedback('Stats config saved');
+    } catch (err) {
+      onFeedback(`Save failed: ${String(err)}`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="scoring-admin__section">
+      <h2 className="scoring-admin__section-title"><IoTrophy size={20} /> Stats & MVP Points</h2>
+      <p className="scoring-admin__section-desc">Configure MVP point weights for real-time stats engine</p>
+
+      <h3 className="scoring-admin__subsection-title">MVP Point Weights</h3>
+      <div className="scoring-admin__form-grid scoring-admin__form-grid--3col">
+        {Object.entries(weights).map(([key, value]) => (
+          <div key={key} className="scoring-admin__field">
+            <label>{formatWeightLabel(key)}</label>
+            <input
+              type="number"
+              className="scoring-admin__input"
+              value={value}
+              onChange={e => updateWeights({ [key]: Number(e.target.value) })}
+              step={0.5}
+              min={0}
+            />
+          </div>
+        ))}
+      </div>
+
+      <div className="scoring-admin__field">
+        <label>Min Balls for Strike Rate Bonus</label>
+        <input
+          type="number"
+          className="scoring-admin__input"
+          value={config.minBallsForSR || 10}
+          onChange={e => setConfig({ ...config, minBallsForSR: Number(e.target.value) })}
+          min={1}
+        />
+        <p className="scoring-admin__help">Batsmen must face at least this many balls to qualify for strike rate bonus</p>
+      </div>
+
+      <div className="scoring-admin__field scoring-admin__field--checkbox">
+        <label>
+          <input
+            type="checkbox"
+            checked={config.impactSubEnabled || false}
+            onChange={e => setConfig({ ...config, impactSubEnabled: e.target.checked })}
+          />
+          Enable Impact Sub (decided at match time)
+        </label>
+        <p className="scoring-admin__help">When enabled, teams can substitute one player during the match</p>
+      </div>
+
+      <div className="scoring-admin__actions">
+        <button className="scoring-admin__btn scoring-admin__btn--primary" onClick={handleSave} disabled={saving}>
+          <IoSave size={16} /> {saving ? 'Saving...' : 'Save Stats Config'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function formatWeightLabel(key: string): string {
+  return key
+    .replace(/([A-Z])/g, ' $1')
+    .replace(/_/g, ' ')
+    .replace(/^./, s => s.toUpperCase())
+    .trim();
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// OBS WEBSOCKET TAB
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function OBSWebSocketTab({ config, setConfig, onFeedback }: {
+  config: ScoringOverlayConfig;
+  setConfig: (c: ScoringOverlayConfig) => void;
+  onFeedback: (msg: string) => void;
+}) {
+  const [saving, setSaving] = useState(false);
+  const [connectionStatus, setConnectionStatus] = useState<'disconnected' | 'connected' | 'connecting' | 'error'>('disconnected');
+
+  const obsConfig = config.obsWebSocketConfig || {
+    host: 'localhost',
+    port: 4455,
+    autoReplay: true,
+    replayDelaySeconds: 3,
+    replayDurationSeconds: 30,
+  };
+
+  const updateOBS = (updates: Partial<OBSWebSocketConfig>) => {
+    const updated = { ...obsConfig, ...updates };
+    setConfig({ ...config, obsWebSocketConfig: updated });
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await scoringService.saveOverlayConfig(config);
+      onFeedback('OBS WebSocket config saved');
+    } catch (err) {
+      onFeedback(`Save failed: ${String(err)}`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleTestConnection = async () => {
+    setConnectionStatus('connecting');
+    try {
+      // Import and use obsReplayService
+      const { obsReplayService } = await import('../services/scoring/obsReplayService');
+      await obsReplayService.connect(obsConfig);
+      setConnectionStatus('connected');
+      onFeedback('Connected to OBS WebSocket');
+      // Disconnect after test
+      setTimeout(() => {
+        obsReplayService.disconnect();
+        setConnectionStatus('disconnected');
+      }, 3000);
+    } catch {
+      setConnectionStatus('error');
+      onFeedback('Failed to connect to OBS WebSocket');
+    }
+  };
+
+  return (
+    <div className="scoring-admin__section">
+      <h2 className="scoring-admin__section-title"><IoLink size={20} /> OBS WebSocket</h2>
+      <p className="scoring-admin__section-desc">Connect to OBS Studio for replay buffer control</p>
+
+      <div className="scoring-admin__connection-status">
+        <span className={`scoring-admin__status-dot scoring-admin__status-dot--${connectionStatus}`} />
+        <span>{connectionStatus === 'connected' ? 'Connected' : connectionStatus === 'connecting' ? 'Connecting...' : connectionStatus === 'error' ? 'Connection Error' : 'Disconnected'}</span>
+      </div>
+
+      <div className="scoring-admin__form-grid">
+        <div className="scoring-admin__field">
+          <label>Host</label>
+          <input
+            type="text"
+            className="scoring-admin__input"
+            value={obsConfig.host}
+            onChange={e => updateOBS({ host: e.target.value })}
+            placeholder="localhost"
+          />
+        </div>
+
+        <div className="scoring-admin__field">
+          <label>Port</label>
+          <input
+            type="number"
+            className="scoring-admin__input"
+            value={obsConfig.port}
+            onChange={e => updateOBS({ port: Number(e.target.value) })}
+          />
+        </div>
+
+        <div className="scoring-admin__field">
+          <label>Password (optional)</label>
+          <input
+            type="password"
+            className="scoring-admin__input"
+            value={obsConfig.password || ''}
+            onChange={e => updateOBS({ password: e.target.value || undefined })}
+            placeholder="OBS WebSocket password"
+          />
+        </div>
+      </div>
+
+      <h3 className="scoring-admin__subsection-title">Replay Settings</h3>
+      <div className="scoring-admin__form-grid">
+        <div className="scoring-admin__field scoring-admin__field--checkbox">
+          <label>
+            <input
+              type="checkbox"
+              checked={obsConfig.autoReplay}
+              onChange={e => updateOBS({ autoReplay: e.target.checked })}
+            />
+            Auto-trigger replay on boundaries & wickets
+          </label>
+        </div>
+
+        <div className="scoring-admin__field">
+          <label>Replay Delay (seconds)</label>
+          <input
+            type="number"
+            className="scoring-admin__input"
+            value={obsConfig.replayDelaySeconds}
+            onChange={e => updateOBS({ replayDelaySeconds: Number(e.target.value) })}
+            min={0}
+            max={30}
+          />
+        </div>
+
+        <div className="scoring-admin__field">
+          <label>Replay Buffer Duration (seconds)</label>
+          <input
+            type="number"
+            className="scoring-admin__input"
+            value={obsConfig.replayDurationSeconds}
+            onChange={e => updateOBS({ replayDurationSeconds: Number(e.target.value) })}
+            min={5}
+            max={120}
+          />
+        </div>
+      </div>
+
+      <div className="scoring-admin__actions">
+        <button className="scoring-admin__btn scoring-admin__btn--primary" onClick={handleSave} disabled={saving}>
+          <IoSave size={16} /> {saving ? 'Saving...' : 'Save'}
+        </button>
+        <button
+          className="scoring-admin__btn scoring-admin__btn--secondary"
+          onClick={handleTestConnection}
+          disabled={connectionStatus === 'connecting'}
+        >
+          <IoLink size={16} /> Test Connection
+        </button>
+      </div>
+    </div>
   );
 }

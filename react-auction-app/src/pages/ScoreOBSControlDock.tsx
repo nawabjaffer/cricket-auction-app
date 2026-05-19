@@ -1,11 +1,13 @@
 // ============================================================================
-// SCORE OBS CONTROL DOCK — /:tenantSlug/score/obs-dock
+// SCORE OBS CONTROL DOCK — /:tenantSlug/cricket/scorer/obs-dock
 // Compact dock panel for controlling scoring overlays in OBS
 // Add as Custom Browser Dock in OBS: Docks → Custom Browser Docks
 // ============================================================================
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { scoringService } from '../services/scoring';
+import { realtimeSync } from '../services/realtimeSync';
+import { tenantPath } from '../services/tenantPath';
 import type { MatchSetup, LiveScore, OverlayControlState, OverlayType } from '../types/scoring';
 import './ScoreOBSControlDock.css';
 
@@ -23,32 +25,53 @@ const OVERLAY_BUTTONS: { key: OverlayType; label: string; icon: string; shortcut
   { key: 'ads_break', label: 'Ads Break', icon: '📺', shortcut: 'A', color: '#64748b' },
 ];
 
+const STATS_OVERLAY_BUTTONS: { key: OverlayType; label: string; icon: string; color: string }[] = [
+  { key: 'stats_fours', label: '4s Stats', icon: '4️⃣', color: '#eab308' },
+  { key: 'stats_sixes', label: '6s Stats', icon: '6️⃣', color: '#f97316' },
+  { key: 'stats_sr', label: 'Strike Rate', icon: '📈', color: '#22c55e' },
+  { key: 'stats_mvp', label: 'MVP', icon: '🏆', color: '#fbbf24' },
+  { key: 'match_summary', label: 'Summary', icon: '📋', color: '#3b82f6' },
+  { key: 'points_table', label: 'Points Table', icon: '📊', color: '#0ea5e9' },
+  { key: 'award_orange_cap', label: 'Orange Cap', icon: '🧢', color: '#f97316' },
+  { key: 'award_purple_cap', label: 'Purple Cap', icon: '🧢', color: '#a855f7' },
+];
+
 export default function ScoreOBSControlDock() {
   const [matches, setMatches] = useState<MatchSetup[]>([]);
   const [selectedMatchId, setSelectedMatchId] = useState('');
   const [liveScore, setLiveScore] = useState<LiveScore | null>(null);
   const [activeOverlay, setActiveOverlay] = useState<OverlayType>('none');
   const [feedback, setFeedback] = useState('');
+  const initialized = useRef(false);
 
-  // Load matches
+  // Initialize scoring service + load matches
   useEffect(() => {
-    const loadMatches = async () => {
+    const init = async () => {
       try {
+        if (!initialized.current) {
+          await realtimeSync.ensureInitialized();
+          const db = realtimeSync.getDatabase();
+          if (db) {
+            scoringService.initialize(db, tenantPath('scoring'));
+            initialized.current = true;
+          } else {
+            console.error('[ScoreOBSControlDock] Failed to get database');
+            return;
+          }
+        }
         const all = await scoringService.getAllMatches();
         setMatches(all);
-        // Auto-select from URL query param
         const params = new URLSearchParams(window.location.search);
         const qMatch = params.get('matchId');
         if (qMatch && all.some(m => m.id === qMatch)) {
           setSelectedMatchId(qMatch);
         } else if (all.length > 0) {
-          // Select first live match, or first scheduled
           const live = all.find(m => m.status === 'live');
           setSelectedMatchId(live?.id || all[0].id);
         }
-      } catch { /* noop */ }
+      } catch (err) { console.error('[ScoreOBSControlDock] Init error:', err); }
     };
-    loadMatches();
+    init();
   }, []);
 
   // Subscribe to live score
@@ -77,7 +100,10 @@ export default function ScoreOBSControlDock() {
   const triggerOverlay = useCallback(async (overlay: OverlayType) => {
     if (!selectedMatchId) return;
     try {
-      const newOverlay = activeOverlay === overlay ? 'none' : overlay;
+      // Animation overlays always re-trigger (don't toggle off)
+      const animationTypes = ['boundary_four', 'boundary_six', 'wicket', 'duck_out', 'hat_trick'];
+      const isAnimation = animationTypes.includes(overlay);
+      const newOverlay = isAnimation ? overlay : (activeOverlay === overlay ? 'none' : overlay);
       await scoringService.setOverlayControl(selectedMatchId, { activeOverlay: newOverlay });
       setActiveOverlay(newOverlay);
       showFeedback(newOverlay === 'none' ? 'Overlay cleared' : `Showing: ${overlay.replace(/_/g, ' ')}`);
@@ -208,6 +234,74 @@ export default function ScoreOBSControlDock() {
           <span>{activeOverlay.replace(/_/g, ' ').toUpperCase()}</span>
         </div>
       )}
+
+      {/* Stats Overlay Controls */}
+      <div className="score-dock__section">
+        <div className="score-dock__section-label">Stats & Awards</div>
+        <div className="score-dock__overlay-grid">
+          {STATS_OVERLAY_BUTTONS.map(btn => (
+            <button
+              key={btn.key}
+              className={`score-dock__overlay-btn ${activeOverlay === btn.key ? 'active' : ''}`}
+              style={{ '--btn-color': btn.color } as React.CSSProperties}
+              onClick={() => triggerOverlay(btn.key)}
+              title={btn.label}
+            >
+              <span className="score-dock__overlay-icon">{btn.icon}</span>
+              <span className="score-dock__overlay-label">{btn.label}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Replay Controls */}
+      <div className="score-dock__section">
+        <div className="score-dock__section-label">Replay Buffer</div>
+        <div className="score-dock__replay-controls">
+          <button
+            className="score-dock__replay-btn"
+            onClick={async () => {
+              try {
+                const { obsReplayService } = await import('../services/scoring/obsReplayService');
+                obsReplayService.triggerManualReplay();
+                showFeedback('Replay triggered');
+              } catch {
+                showFeedback('Connect to OBS first');
+              }
+            }}
+          >
+            ⏪ Instant Replay
+          </button>
+          <button
+            className="score-dock__replay-btn"
+            onClick={async () => {
+              try {
+                const { obsReplayService } = await import('../services/scoring/obsReplayService');
+                obsReplayService.startReplayBuffer();
+                showFeedback('Replay buffer started');
+              } catch {
+                showFeedback('Connect to OBS first');
+              }
+            }}
+          >
+            ▶️ Start Buffer
+          </button>
+          <button
+            className="score-dock__replay-btn"
+            onClick={async () => {
+              try {
+                const { obsReplayService } = await import('../services/scoring/obsReplayService');
+                obsReplayService.stopReplayBuffer();
+                showFeedback('Replay buffer stopped');
+              } catch {
+                showFeedback('Connect to OBS first');
+              }
+            }}
+          >
+            ⏹️ Stop Buffer
+          </button>
+        </div>
+      </div>
 
       {/* Feedback */}
       {feedback && <div className="score-dock__feedback">{feedback}</div>}

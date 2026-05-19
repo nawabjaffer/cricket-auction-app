@@ -476,3 +476,132 @@
   font-size: 0.85rem;
   color: rgba(255,255,255,0.9);
 }
+
+/* ── Player Images in Squad ────────────────────────────────────────────── */
+
+.prematch-squad-col__player-img {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid var(--team-color, #3b82f6);
+  flex-shrink: 0;
+}
+
+.prematch-squad-col__player {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.prematch-squad-col__player-info {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+.prematch-squad-col__price {
+  color: #fbbf24;
+  font-size: 11px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+/* ── Role Badges ───────────────────────────────────────────────────────── */
+
+.prematch-squad-col__role-badge {
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  padding: 1px 6px;
+  border-radius: 4px;
+  display: inline-block;
+  width: fit-content;
+}
+
+.prematch-squad-col__role-badge[data-role="batsman"] {
+  background: rgba(59, 130, 246, 0.2);
+  color: #60a5fa;
+}
+
+.prematch-squad-col__role-badge[data-role="bowler"] {
+  background: rgba(168, 85, 247, 0.2);
+  color: #c084fc;
+}
+
+.prematch-squad-col__role-badge[data-role="allrounder"] {
+  background: rgba(34, 197, 94, 0.2);
+  color: #4ade80;
+}
+
+.prematch-squad-col__role-badge[data-role="keeper"] {
+  background: rgba(249, 115, 22, 0.2);
+  color: #fb923c;
+}
+
+.prematch-squad-col__badge--captain {
+  background: #fbbf24;
+  color: #1e293b;
+}
+
+.prematch-squad-col__badge--keeper {
+  background: #f97316;
+  color: #fff;
+}
+
+/* ── Squad Reveal Player Images ────────────────────────────────────────── */
+
+.prematch-reveal__player-img {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid var(--team-color, #3b82f6);
+  flex-shrink: 0;
+}
+
+.prematch-reveal__player {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.prematch-reveal__badge--captain {
+  background: #fbbf24;
+  color: #1e293b;
+}
+
+.prematch-reveal__badge--keeper {
+  background: #f97316;
+  color: #fff;
+}
+
+.prematch-reveal__player-role {
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  padding: 1px 6px;
+  border-radius: 4px;
+  display: inline-block;
+  width: fit-content;
+}
+
+.prematch-reveal__player-role[data-role="batsman"] {
+  background: rgba(59, 130, 246, 0.2);
+  color: #60a5fa;
+}
+
+.prematch-reveal__player-role[data-role="bowler"] {
+  background: rgba(168, 85, 247, 0.2);
+  color: #c084fc;
+}
+
+.prematch-reveal__player-role[data-role="allrounder"] {
+  background: rgba(34, 197, 94, 0.2);
+  color: #4ade80;
+}
+
+.prematch-reveal__player-role[data-role="keeper"] {
+  background: rgba(249, 115, 22, 0.2);
+  color: #fb923c;
+}

@@ -1,16 +1,19 @@
 // ============================================================================
 // MANUAL SCORING ADAPTER — Firebase RTDB based ball-by-ball scoring
 // Always available as the default/fallback scoring provider.
+// Full innings persistence, powerplay, free hit, maiden detection,
+// extras tracking, replay triggers, bowling consecutive-over prevention.
 // ============================================================================
 
 import { ref, get, set, onValue, push, type Database } from 'firebase/database';
 import type {
   IScoringAdapter, MatchScore, PlayerMatchStats, LiveScore,
   BallEvent, BallOutcome, WicketDetail, LiveBatsman, LiveBowler,
-  Innings,
+  Innings, BatsmanInnings, BowlerInnings, Extras,
+  ReplayTrigger,
 } from '../../types/scoring';
 
-interface BallInput {
+export interface BallInput {
   outcome: BallOutcome;
   wicket?: WicketDetail;
   batsmanRuns?: number;
@@ -79,14 +82,14 @@ export class ManualScoringAdapter implements IScoringAdapter {
 
   /**
    * Record a single ball delivery. Computes the new live score state
-   * and writes it atomically to Firebase RTDB.
+   * and writes it atomically to Firebase RTDB. Also persists full innings data.
    */
   async recordBall(
     matchId: string,
     currentLive: LiveScore,
     currentInnings: Innings,
     input: BallInput,
-  ): Promise<{ updatedLive: LiveScore; ballEvent: BallEvent }> {
+  ): Promise<{ updatedLive: LiveScore; ballEvent: BallEvent; updatedInnings: Innings; isInningsComplete: boolean }> {
     const { outcome, wicket } = input;
 
     // Parse outcome
@@ -125,7 +128,7 @@ export class ManualScoringAdapter implements IScoringAdapter {
       ? this.incrementOvers(currentLive.overs)
       : currentLive.overs;
     const ballsDelivered = this.oversToBalls(newOvers);
-    const newRunRate = ballsDelivered > 0 ? (newRuns / ballsDelivered) * 6 : 0;
+    const newRunRate = ballsDelivered > 0 ? Math.round((newRuns / ballsDelivered) * 6 * 100) / 100 : 0;
 
     // Update current over balls display
     const currentOverBalls = [...currentLive.currentOverBalls, this.ballDisplay(outcome, totalRuns)];
@@ -133,12 +136,33 @@ export class ManualScoringAdapter implements IScoringAdapter {
     // Check if over just completed
     const overCompleted = isLegal && this.getBallsInCurrentOver(newOvers) === 0 && ballsDelivered > 0;
 
+    // Determine if free hit should be set (no-ball → next legal ball is free hit)
+    const isNoBall = outcome === 'NB' || outcome === 'NB+0' || String(outcome).startsWith('NB+');
+    const nextIsFreehit = isNoBall;
+
     // Update batsmen stats
-    const updatedBatsmen = this.updateBatsmenStats(
+    let updatedBatsmen = this.updateBatsmenStats(
       currentLive.currentBatsmen, batsmanRuns, isLegal, wicket,
       // Swap strike if odd runs on legal ball, or at end of over
       (batsmanRuns % 2 === 1 && isLegal) || overCompleted,
     );
+
+    // Replace dismissed batsman with new batsman if provided
+    if (wicket?.newBatsmanId) {
+      const newBatsman: LiveBatsman = {
+        playerId: wicket.newBatsmanId,
+        playerName: wicket.newBatsmanName || wicket.newBatsmanId,
+        runs: 0,
+        balls: 0,
+        fours: 0,
+        sixes: 0,
+        strikeRate: 0,
+        isOnStrike: updatedBatsmen[0].playerId === wicket.batsmanId,
+      };
+      updatedBatsmen = updatedBatsmen.map(b =>
+        b.playerId === wicket.batsmanId ? newBatsman : b,
+      ) as [LiveBatsman, LiveBatsman];
+    }
 
     // Update bowler stats
     const updatedBowler = this.updateBowlerStats(
@@ -155,35 +179,260 @@ export class ManualScoringAdapter implements IScoringAdapter {
       recentOvers = [...recentOvers, String(overRuns)].slice(-12);
     }
 
+    // Maiden detection: over completed with 0 runs from bat (no extras counted in maidens are wides/noballs)
+    let updatedBowlerFinal = updatedBowler;
+    if (overCompleted) {
+      const overHadRuns = currentOverBalls.some(b => {
+        if (b === 'W' || b === '0') return false;
+        if (b === 'WD' || b === 'NB') return true; // wides/noballs count as runs against bowler for maiden
+        const n = parseInt(b);
+        return !isNaN(n) && n > 0;
+      });
+      if (!overHadRuns) {
+        updatedBowlerFinal = { ...updatedBowlerFinal, maidens: updatedBowlerFinal.maidens + 1 };
+      }
+    }
+
+    // Powerplay tracking
+    const powerplayOvers = currentLive.powerplayOvers || 6;
+    const isPowerplay = newOvers < powerplayOvers;
+
+    // Update all batsmen and bowlers arrays for full scorecard
+    const allBatsmen = this.updateAllBatsmen(
+      currentLive.allBatsmen || [],
+      currentLive.currentBatsmen,
+      batsmanRuns, isLegal, wicket,
+    );
+    const allBowlers = this.updateAllBowlers(
+      currentLive.allBowlers || [],
+      updatedBowlerFinal,
+    );
+
+    // Update innings extras
+    const updatedExtras: Extras = {
+      total: (currentInnings.extras?.total || 0) + extras,
+      wides: (currentInnings.extras?.wides || 0) + (parsed.extraType === 'wide' ? extras : 0),
+      noBalls: (currentInnings.extras?.noBalls || 0) + (parsed.extraType === 'noball' ? 1 : 0),
+      byes: (currentInnings.extras?.byes || 0) + (parsed.extraType === 'bye' ? extras : 0),
+      legByes: (currentInnings.extras?.legByes || 0) + (parsed.extraType === 'legbye' ? extras : 0),
+      penalty: currentInnings.extras?.penalty || 0,
+    };
+
+    // Update fall of wickets
+    const fallOfWickets = [...(currentInnings.fallOfWickets || [])];
+    if (wicket) {
+      fallOfWickets.push({
+        wicketNumber: newWickets,
+        score: newRuns,
+        overs: newOvers,
+        batsmanId: wicket.batsmanId,
+        batsmanName: allBatsmen.find(b => b.playerId === wicket.batsmanId)?.playerName || '',
+      });
+    }
+
+    // Determine previous bowler for consecutive-over prevention
+    const previousBowlerId = overCompleted ? currentLive.currentBowler.playerId : currentLive.previousBowlerId;
+
     const updatedLive: LiveScore = {
       ...currentLive,
       runs: newRuns,
       wickets: newWickets,
       overs: newOvers,
-      runRate: Math.round(newRunRate * 100) / 100,
+      runRate: newRunRate,
       requiredRate: currentLive.target
         ? this.computeRequiredRate(currentLive.target, newRuns, newOvers, currentInnings.maxOvers)
         : undefined,
       currentBatsmen: updatedBatsmen,
-      currentBowler: updatedBowler,
+      currentBowler: overCompleted
+        ? { ...updatedBowlerFinal } // keep current bowler; ScoreUpdatePage will prompt for new bowler
+        : updatedBowlerFinal,
       lastBall: outcome,
       lastBallRuns: totalRuns,
       currentOverBalls: overCompleted ? [] : currentOverBalls,
+      lastCompletedOverBalls: overCompleted ? currentOverBalls : currentLive.lastCompletedOverBalls,
       recentOvers,
       partnership: {
         runs: currentLive.partnership.runs + totalRuns,
         balls: currentLive.partnership.balls + (isLegal ? 1 : 0),
       },
       lastUpdated: Date.now(),
+      isPowerplay: isPowerplay,
+      powerplayOvers,
+      isFreehit: nextIsFreehit,
+      previousBowlerId,
+      allBatsmen,
+      allBowlers,
     };
 
-    // Write to Firebase
+    // Build updated innings
+    const updatedInnings: Innings = {
+      ...currentInnings,
+      totalRuns: newRuns,
+      totalWickets: newWickets,
+      totalOvers: newOvers,
+      extras: updatedExtras,
+      batsmen: allBatsmen,
+      bowlers: allBowlers,
+      fallOfWickets,
+      isCompleted: false,
+    };
+
+    // Check if innings is complete
+    const maxWickets = 10;
+    const isAllOut = newWickets >= maxWickets;
+    const isOversComplete = newOvers >= currentInnings.maxOvers;
+    const isTargetChased = currentLive.target ? newRuns >= currentLive.target : false;
+    const isInningsComplete = isAllOut || isOversComplete || isTargetChased;
+
+    if (isInningsComplete) {
+      updatedInnings.isCompleted = true;
+    }
+
+    // Write to Firebase atomically
     await set(ref(this.db, `${this.basePath}/matches/${matchId}/live`), this.stripUndefinedDeep(updatedLive));
+
+    // Persist full innings data
+    await set(
+      ref(this.db, `${this.basePath}/matches/${matchId}/innings/${currentLive.currentInnings}`),
+      this.stripUndefinedDeep(updatedInnings),
+    );
 
     // Store ball event in history
     await set(ref(this.db, `${this.basePath}/matches/${matchId}/balls/${ballEvent.id}`), this.stripUndefinedDeep(ballEvent));
 
-    return { updatedLive, ballEvent };
+    // Trigger replay on boundaries and wickets
+    if (ballEvent.isBoundary || ballEvent.isSix || ballEvent.isWicket) {
+      const trigger: ReplayTrigger = {
+        id: ballEvent.id,
+        matchId,
+        type: ballEvent.isWicket ? 'wicket' : (ballEvent.isSix ? 'six' : 'four'),
+        timestamp: Date.now(),
+        delaySeconds: 3,
+        consumed: false,
+      };
+      await set(ref(this.db, `${this.basePath}/matches/${matchId}/replayTrigger`), this.stripUndefinedDeep(trigger));
+    }
+
+    return { updatedLive, ballEvent, updatedInnings, isInningsComplete };
+  }
+
+  // ── Update all batsmen array (full scorecard) ──────────────────────────
+
+  private updateAllBatsmen(
+    existing: BatsmanInnings[],
+    currentPair: [LiveBatsman, LiveBatsman],
+    batsmanRuns: number,
+    isLegal: boolean,
+    wicket?: WicketDetail,
+  ): BatsmanInnings[] {
+    const result = [...existing];
+
+    // Ensure both current batsmen are in the array
+    for (const bat of currentPair) {
+      const idx = result.findIndex(b => b.playerId === bat.playerId);
+      if (idx === -1) {
+        result.push({
+          playerId: bat.playerId,
+          playerName: bat.playerName,
+          runs: bat.runs,
+          balls: bat.balls,
+          fours: bat.fours,
+          sixes: bat.sixes,
+          strikeRate: bat.strikeRate,
+          dismissal: 'not out',
+          isOut: false,
+          order: result.length + 1,
+        });
+      } else {
+        // Update from live data
+        result[idx] = {
+          ...result[idx],
+          runs: bat.runs,
+          balls: bat.balls,
+          fours: bat.fours,
+          sixes: bat.sixes,
+          strikeRate: bat.strikeRate,
+        };
+      }
+    }
+
+    // Update striker with this ball's runs
+    const strikerLive = currentPair[0]; // striker is always index 0
+    const strikerIdx = result.findIndex(b => b.playerId === strikerLive.playerId);
+    if (strikerIdx !== -1) {
+      const s = result[strikerIdx];
+      result[strikerIdx] = {
+        ...s,
+        runs: s.runs + batsmanRuns,
+        balls: s.balls + (isLegal ? 1 : 0),
+        fours: s.fours + (batsmanRuns === 4 ? 1 : 0),
+        sixes: s.sixes + (batsmanRuns === 6 ? 1 : 0),
+        strikeRate: (s.balls + (isLegal ? 1 : 0)) > 0
+          ? Math.round(((s.runs + batsmanRuns) / (s.balls + (isLegal ? 1 : 0))) * 100 * 100) / 100
+          : 0,
+      };
+    }
+
+    // Mark dismissal
+    if (wicket) {
+      const outIdx = result.findIndex(b => b.playerId === wicket.batsmanId);
+      if (outIdx !== -1) {
+        result[outIdx] = {
+          ...result[outIdx],
+          isOut: true,
+          dismissal: this.formatDismissal(wicket),
+        };
+      }
+    }
+
+    return result;
+  }
+
+  private formatDismissal(wicket: WicketDetail): string {
+    switch (wicket.dismissalType) {
+      case 'bowled': return 'b ' + (wicket.fielderName || 'bowler');
+      case 'caught': return `c ${wicket.fielderName || '?'} b bowler`;
+      case 'caught_and_bowled': return 'c & b bowler';
+      case 'lbw': return 'lbw b bowler';
+      case 'run_out': return `run out (${wicket.fielderName || '?'})`;
+      case 'stumped': return `st ${wicket.fielderName || '?'} b bowler`;
+      case 'hit_wicket': return 'hit wicket';
+      case 'obstructing_field': return 'obstructing the field';
+      case 'retired_hurt': return 'retired hurt';
+      case 'retired_out': return 'retired out';
+      case 'timed_out': return 'timed out';
+      default: return wicket.dismissalType;
+    }
+  }
+
+  // ── Update all bowlers array (full scorecard) ──────────────────────────
+
+  private updateAllBowlers(
+    existing: BowlerInnings[],
+    currentBowler: LiveBowler,
+  ): BowlerInnings[] {
+    const result = [...existing];
+    const idx = result.findIndex(b => b.playerId === currentBowler.playerId);
+    const bowlerEntry: BowlerInnings = {
+      playerId: currentBowler.playerId,
+      playerName: currentBowler.playerName,
+      overs: currentBowler.overs,
+      maidens: currentBowler.maidens,
+      runs: currentBowler.runs,
+      wickets: currentBowler.wickets,
+      economy: currentBowler.economy,
+      wides: 0, // tracked separately if needed
+      noBalls: 0,
+      dots: currentBowler.dots,
+    };
+
+    if (idx === -1) {
+      result.push(bowlerEntry);
+    } else {
+      result[idx] = bowlerEntry;
+    }
+
+    return result;
   }
 
   /**
@@ -205,7 +454,10 @@ export class ManualScoringAdapter implements IScoringAdapter {
     openers: [{ id: string; name: string }, { id: string; name: string }],
     openingBowler: { id: string; name: string },
     target?: number,
+    maxOvers?: number,
   ): Promise<LiveScore> {
+    const effectiveMaxOvers = maxOvers || 20;
+    const powerplayOvers = effectiveMaxOvers >= 20 ? 6 : Math.min(effectiveMaxOvers, 6);
     const live: LiveScore = {
       matchId,
       currentInnings: inningsNumber,
@@ -215,7 +467,7 @@ export class ManualScoringAdapter implements IScoringAdapter {
       wickets: 0,
       overs: 0,
       runRate: 0,
-      requiredRate: target ? (target / 20) : undefined, // assuming T20 initially
+      requiredRate: target ? Math.round((target / effectiveMaxOvers) * 6 * 100) / 100 : undefined,
       target,
       currentBatsmen: [
         { playerId: openers[0].id, playerName: openers[0].name, runs: 0, balls: 0, fours: 0, sixes: 0, strikeRate: 0, isOnStrike: true },
@@ -231,9 +483,37 @@ export class ManualScoringAdapter implements IScoringAdapter {
       recentOvers: [],
       partnership: { runs: 0, balls: 0 },
       lastUpdated: Date.now(),
+      isPowerplay: true,
+      powerplayOvers,
+      isFreehit: false,
+      allBatsmen: [
+        { playerId: openers[0].id, playerName: openers[0].name, runs: 0, balls: 0, fours: 0, sixes: 0, strikeRate: 0, dismissal: 'not out', isOut: false, order: 1 },
+        { playerId: openers[1].id, playerName: openers[1].name, runs: 0, balls: 0, fours: 0, sixes: 0, strikeRate: 0, dismissal: 'not out', isOut: false, order: 2 },
+      ],
+      allBowlers: [
+        { playerId: openingBowler.id, playerName: openingBowler.name, overs: 0, maidens: 0, runs: 0, wickets: 0, economy: 0, wides: 0, noBalls: 0, dots: 0 },
+      ],
+    };
+
+    // Also initialize the innings data node
+    const inningsData: Innings = {
+      number: inningsNumber,
+      battingTeamId,
+      bowlingTeamId,
+      totalRuns: 0,
+      totalWickets: 0,
+      totalOvers: 0,
+      maxOvers: effectiveMaxOvers,
+      extras: { total: 0, wides: 0, noBalls: 0, byes: 0, legByes: 0, penalty: 0 },
+      batsmen: live.allBatsmen!,
+      bowlers: live.allBowlers!,
+      fallOfWickets: [],
+      overs: [],
+      isCompleted: false,
     };
 
     await set(ref(this.db, `${this.basePath}/matches/${matchId}/live`), this.stripUndefinedDeep(live));
+    await set(ref(this.db, `${this.basePath}/matches/${matchId}/innings/${inningsNumber}`), this.stripUndefinedDeep(inningsData));
     return live;
   }
 
@@ -252,6 +532,63 @@ export class ManualScoringAdapter implements IScoringAdapter {
    */
   async saveMatchScore(matchId: string, score: MatchScore): Promise<void> {
     await set(ref(this.db, `${this.basePath}/matches/${matchId}/final`), this.stripUndefinedDeep(score));
+  }
+
+  /**
+   * Get innings data from Firebase.
+   */
+  async getInnings(matchId: string, inningsNumber: 1 | 2): Promise<Innings | null> {
+    const snap = await get(ref(this.db, `${this.basePath}/matches/${matchId}/innings/${inningsNumber}`));
+    return snap.exists() ? snap.val() : null;
+  }
+
+  /**
+   * Complete a match — compute result, save final scorecard.
+   */
+  async completeMatch(
+    matchId: string,
+    match: { teamA: { id: string; name: string }; teamB: { id: string; name: string }; maxOvers: number; venue: string; date: string; tossWonBy?: string; tossElected?: 'bat' | 'bowl' },
+  ): Promise<MatchScore> {
+    const inn1 = await this.getInnings(matchId, 1);
+    const inn2 = await this.getInnings(matchId, 2);
+    const innings: Innings[] = [];
+    if (inn1) innings.push(inn1);
+    if (inn2) innings.push(inn2);
+
+    // Compute result
+    let result: MatchScore['result'] = null;
+    if (inn1 && inn2) {
+      if (inn1.totalRuns > inn2.totalRuns) {
+        const margin = inn1.totalRuns - inn2.totalRuns;
+        const winnerId = inn1.battingTeamId;
+        result = { winner: winnerId, margin: `${margin} runs` };
+      } else if (inn2.totalRuns > inn1.totalRuns) {
+        const wicketsRemaining = 10 - inn2.totalWickets;
+        const winnerId = inn2.battingTeamId;
+        result = { winner: winnerId, margin: `${wicketsRemaining} wickets` };
+      } else {
+        // Tie — super over would follow
+        result = { winner: '', margin: 'Match Tied' };
+      }
+    }
+
+    const score: MatchScore = {
+      matchId,
+      status: 'completed',
+      teams: innings.map(i => ({ batting: i.battingTeamId, bowling: i.bowlingTeamId })),
+      innings,
+      result,
+      toss: match.tossWonBy ? { wonBy: match.tossWonBy, elected: match.tossElected || 'bat' } : null,
+      venue: match.venue,
+      date: match.date,
+    };
+
+    await this.saveMatchScore(matchId, score);
+
+    // Update match status
+    await set(ref(this.db, `${this.basePath}/matches/${matchId}/setup/status`), 'completed');
+
+    return score;
   }
 
   /**
@@ -293,7 +630,9 @@ export class ManualScoringAdapter implements IScoringAdapter {
   }
 
   private getBallsInCurrentOver(overs: number): number {
-    return Math.round((overs % 1) * 10);
+    // Fix floating point: round to 1 decimal place first
+    const rounded = Math.round(overs * 10) / 10;
+    return Math.round((rounded % 1) * 10);
   }
 
   private incrementOvers(overs: number): number {
@@ -303,11 +642,13 @@ export class ManualScoringAdapter implements IScoringAdapter {
       // Over complete
       return completedOvers + 1;
     }
-    return completedOvers + (ballsInOver + 1) / 10;
+    // Use integer math to avoid floating-point issues
+    return Math.round((completedOvers * 10 + ballsInOver + 1)) / 10;
   }
 
   private oversToBalls(overs: number): number {
-    return Math.floor(overs) * 6 + this.getBallsInCurrentOver(overs);
+    const rounded = Math.round(overs * 10) / 10;
+    return Math.floor(rounded) * 6 + this.getBallsInCurrentOver(rounded);
   }
 
   private ballDisplay(outcome: BallOutcome, runs: number): string {

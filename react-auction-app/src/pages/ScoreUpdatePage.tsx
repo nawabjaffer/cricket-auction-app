@@ -1,5 +1,5 @@
 // ============================================================================
-// SCORE UPDATE PAGE — /:tenantSlug/match/score/update?matchId=xxx
+// SCORE UPDATE PAGE — /:tenantSlug/cricket/scorer/update?matchId=xxx
 // Ball-by-ball scoring interface with run buttons, wicket modal, undo
 // ============================================================================
 
@@ -26,23 +26,36 @@ const RUN_BUTTONS: { outcome: BallOutcome; label: string; className: string }[] 
 ];
 
 const EXTRA_BUTTONS: { outcome: BallOutcome; label: string }[] = [
-  { outcome: 'WD', label: 'WD' },
-  { outcome: 'NB', label: 'NB' },
   { outcome: 'B', label: 'B' },
   { outcome: 'LB', label: 'LB' },
-  { outcome: 'WD+1', label: 'WD+1' },
+];
+
+const NB_SUB_OPTIONS: { outcome: BallOutcome; label: string }[] = [
+  { outcome: 'NB+0', label: 'NB (dot)' },
   { outcome: 'NB+1', label: 'NB+1' },
+  { outcome: 'NB+2', label: 'NB+2' },
+  { outcome: 'NB+3', label: 'NB+3' },
   { outcome: 'NB+4', label: 'NB+4' },
   { outcome: 'NB+6', label: 'NB+6' },
+];
+
+const WD_SUB_OPTIONS: { outcome: BallOutcome; label: string }[] = [
+  { outcome: 'WD', label: 'WD (dot)' },
+  { outcome: 'WD+1', label: 'WD+1' },
+  { outcome: 'WD+2', label: 'WD+2' },
+  { outcome: 'WD+3', label: 'WD+3' },
+  { outcome: 'WD+4', label: 'WD+4' },
 ];
 
 const DISMISSAL_TYPES: { value: DismissalType; label: string }[] = [
   { value: 'bowled', label: 'Bowled' },
   { value: 'caught', label: 'Caught' },
+  { value: 'caught_and_bowled', label: 'Caught & Bowled' },
   { value: 'lbw', label: 'LBW' },
   { value: 'run_out', label: 'Run Out' },
   { value: 'stumped', label: 'Stumped' },
   { value: 'hit_wicket', label: 'Hit Wicket' },
+  { value: 'obstructing_field', label: 'Obstruct Field' },
   { value: 'retired_hurt', label: 'Retired Hurt' },
   { value: 'retired_out', label: 'Retired Out' },
 ];
@@ -56,13 +69,34 @@ export default function ScoreUpdatePage() {
   const {
     match, liveScore, lineups, loading, error, recording,
     undoStack, recordBall, undoLastBall, initInnings,
-    setOverlay, changeBatsman, changeBowler,
+    setOverlay, changeBatsman, changeBowler, swapStrike,
+    completeMatch, isInningsComplete, isMatchComplete, needsBowlerChange,
   } = useScoringState(matchId);
 
   const [showWicketModal, setShowWicketModal] = useState(false);
   const [showInitModal, setShowInitModal] = useState(false);
+  const [initModalDefaults, setInitModalDefaults] = useState<{ inningsNumber?: 1 | 2; battingTeamId?: string; target?: number } | null>(null);
   const [showBatsmanPicker, setShowBatsmanPicker] = useState<'striker' | 'non-striker' | null>(null);
   const [showBowlerPicker, setShowBowlerPicker] = useState(false);
+  const [showEndOfInningsModal, setShowEndOfInningsModal] = useState(false);
+  const [showMatchCompleteModal, setShowMatchCompleteModal] = useState(false);
+  const [expandedExtra, setExpandedExtra] = useState<'NB' | 'WD' | null>(null);
+
+  // Auto-show bowler picker at end of over
+  useEffect(() => {
+    if (needsBowlerChange && !showBowlerPicker) {
+      setShowBowlerPicker(true);
+    }
+  }, [needsBowlerChange]);
+
+  // Auto-show end-of-innings / match-complete modals
+  useEffect(() => {
+    if (isMatchComplete) {
+      setShowMatchCompleteModal(true);
+    } else if (isInningsComplete) {
+      setShowEndOfInningsModal(true);
+    }
+  }, [isInningsComplete, isMatchComplete]);
 
   useEffect(() => {
     if (!isAuthenticated) navigate('/admin/login');
@@ -110,7 +144,7 @@ export default function ScoreUpdatePage() {
       <div className="score-update score-update--error">
         <h2>Error</h2>
         <p>{error || 'Match not found'}</p>
-        <button onClick={() => navigate('/scoring/admin')} className="score-update__btn score-update__btn--primary">
+        <button onClick={() => navigate('/cricket/scorer/admin')} className="score-update__btn score-update__btn--primary">
           Back to Scoring Admin
         </button>
       </div>
@@ -163,6 +197,20 @@ export default function ScoreUpdatePage() {
     <div className="score-update">
       <ScoreHeader match={match} />
 
+      {/* ── Powerplay & Free Hit Indicators ─────────────────────────── */}
+      <div className="score-update__indicators">
+        {liveScore.isPowerplay && (
+          <span className="score-update__indicator score-update__indicator--powerplay">
+            ⚡ POWERPLAY
+          </span>
+        )}
+        {liveScore.isFreehit && (
+          <span className="score-update__indicator score-update__indicator--freehit">
+            🆓 FREE HIT
+          </span>
+        )}
+      </div>
+
       {/* ── Live Score Strip ───────────────────────────────────────────── */}
       <div className="score-update__score-strip">
         <div className="score-update__team-score">
@@ -185,15 +233,15 @@ export default function ScoreUpdatePage() {
       <div className="score-update__current-over">
         <span className="score-update__over-label">This Over:</span>
         <div className="score-update__ball-sequence">
-          {liveScore.currentOverBalls.map((ball, i) => (
+          {(liveScore.currentOverBalls || []).map((ball, i) => (
             <span key={i} className={`score-update__ball-chip score-update__ball-chip--${getBallChipClass(ball)}`}>
               {ball}
             </span>
           ))}
         </div>
-        {liveScore.recentOvers.length > 0 && (
+        {(liveScore.recentOvers || []).length > 0 && (
           <div className="score-update__recent-overs">
-            {liveScore.recentOvers.slice(-6).map((o, i) => (
+            {(liveScore.recentOvers || []).slice(-6).map((o, i) => (
               <span key={i} className="score-update__over-runs">{o}</span>
             ))}
           </div>
@@ -202,7 +250,7 @@ export default function ScoreUpdatePage() {
 
       {/* ── Batsmen ───────────────────────────────────────────────────── */}
       <div className="score-update__batsmen">
-        {liveScore.currentBatsmen.map((bat, i) => (
+        {(liveScore.currentBatsmen || []).map((bat, i) => (
           <div
             key={bat.playerId}
             className={`score-update__batsman ${bat.isOnStrike ? 'score-update__batsman--strike' : ''}`}
@@ -219,7 +267,7 @@ export default function ScoreUpdatePage() {
           </div>
         ))}
         <div className="score-update__partnership">
-          P'ship: {liveScore.partnership.runs} ({liveScore.partnership.balls})
+          P'ship: {(liveScore.partnership || { runs: 0, balls: 0 }).runs} ({(liveScore.partnership || { runs: 0, balls: 0 }).balls})
         </div>
       </div>
 
@@ -257,6 +305,20 @@ export default function ScoreUpdatePage() {
         >
           W
         </button>
+        <button
+          className={`score-update__btn score-update__btn--extra ${expandedExtra === 'NB' ? 'score-update__btn--active' : ''}`}
+          onClick={() => setExpandedExtra(expandedExtra === 'NB' ? null : 'NB')}
+          disabled={recording}
+        >
+          NB
+        </button>
+        <button
+          className={`score-update__btn score-update__btn--extra ${expandedExtra === 'WD' ? 'score-update__btn--active' : ''}`}
+          onClick={() => setExpandedExtra(expandedExtra === 'WD' ? null : 'WD')}
+          disabled={recording}
+        >
+          WD
+        </button>
         {EXTRA_BUTTONS.map(btn => (
           <button
             key={btn.outcome}
@@ -269,6 +331,52 @@ export default function ScoreUpdatePage() {
         ))}
       </div>
 
+      {/* ── NB/WD Sub-options Panel ───────────────────────────────────── */}
+      <AnimatePresence>
+        {expandedExtra === 'NB' && (
+          <motion.div
+            className="score-update__sub-options"
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.2 }}
+          >
+            <span className="score-update__sub-label">No Ball:</span>
+            {NB_SUB_OPTIONS.map(btn => (
+              <button
+                key={btn.outcome}
+                className="score-update__btn score-update__btn--sub"
+                onClick={() => { handleRunClick(btn.outcome); setExpandedExtra(null); }}
+                disabled={recording}
+              >
+                {btn.label}
+              </button>
+            ))}
+          </motion.div>
+        )}
+        {expandedExtra === 'WD' && (
+          <motion.div
+            className="score-update__sub-options"
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.2 }}
+          >
+            <span className="score-update__sub-label">Wide:</span>
+            {WD_SUB_OPTIONS.map(btn => (
+              <button
+                key={btn.outcome}
+                className="score-update__btn score-update__btn--sub"
+                onClick={() => { handleRunClick(btn.outcome); setExpandedExtra(null); }}
+                disabled={recording}
+              >
+                {btn.label}
+              </button>
+            ))}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* ── Undo + Controls ───────────────────────────────────────────── */}
       <div className="score-update__controls">
         <button
@@ -280,24 +388,13 @@ export default function ScoreUpdatePage() {
         </button>
         <button
           className="score-update__btn"
-          onClick={() => {
-            const [a, b] = liveScore.currentBatsmen;
-            // Trigger swap by setting overlay signal (manual adapter handles it)
-            changeBatsman(
-              { playerId: b.playerId, playerName: b.playerName, role: '' },
-              'striker',
-            );
-            changeBatsman(
-              { playerId: a.playerId, playerName: a.playerName, role: '' },
-              'non-striker',
-            );
-          }}
+          onClick={() => swapStrike()}
         >
           <IoSwapHorizontal size={16} /> Swap
         </button>
         <button
           className="score-update__btn score-update__btn--secondary"
-          onClick={() => setShowInitModal(true)}
+          onClick={() => { setInitModalDefaults(null); setShowInitModal(true); }}
         >
           New Innings
         </button>
@@ -316,6 +413,11 @@ export default function ScoreUpdatePage() {
           { type: 'wicket' as const, label: 'Wicket' },
           { type: 'duck_out' as const, label: 'Duck' },
           { type: 'hat_trick' as const, label: 'Hat-Trick' },
+          { type: 'stats_fours' as const, label: '4s Stats' },
+          { type: 'stats_sixes' as const, label: '6s Stats' },
+          { type: 'stats_sr' as const, label: 'SR Stats' },
+          { type: 'stats_mvp' as const, label: 'MVP' },
+          { type: 'match_summary' as const, label: 'Summary' },
           { type: 'live_question' as const, label: 'Question' },
           { type: 'none' as const, label: 'Clear' },
         ].map(item => (
@@ -337,6 +439,7 @@ export default function ScoreUpdatePage() {
             bowlingLineup={bowlingLineup?.players || []}
             currentBatsmen={liveScore.currentBatsmen}
             currentBowler={liveScore.currentBowler}
+            allBatsmen={liveScore.allBatsmen}
             onConfirm={async (wicket) => {
               await recordBall('W', wicket);
               setShowWicketModal(false);
@@ -349,7 +452,14 @@ export default function ScoreUpdatePage() {
       {showBatsmanPicker && (
         <PlayerPickerModal
           title={`Select ${showBatsmanPicker === 'striker' ? 'Striker' : 'Non-Striker'}`}
-          players={battingLineup?.players || []}
+          players={(battingLineup?.players || []).filter(p => {
+            // Exclude already dismissed batsmen
+            const dismissed = (liveScore.allBatsmen || []).find(b => b.playerId === p.playerId);
+            if (dismissed?.isOut) return false;
+            // Exclude currently batting players
+            if (liveScore.currentBatsmen.some(b => b.playerId === p.playerId)) return false;
+            return true;
+          })}
           onSelect={(p) => { changeBatsman(p, showBatsmanPicker!); setShowBatsmanPicker(null); }}
           onClose={() => setShowBatsmanPicker(null)}
         />
@@ -357,10 +467,12 @@ export default function ScoreUpdatePage() {
 
       {showBowlerPicker && (
         <PlayerPickerModal
-          title="Select Bowler"
+          title={needsBowlerChange ? 'Select New Bowler (required)' : 'Select Bowler'}
           players={bowlingLineup?.players || []}
+          disabledPlayerId={liveScore.previousBowlerId}
+          disabledReason="Bowled last over"
           onSelect={(p) => { changeBowler(p); setShowBowlerPicker(false); }}
-          onClose={() => setShowBowlerPicker(false)}
+          onClose={() => { if (!needsBowlerChange) setShowBowlerPicker(false); }}
         />
       )}
 
@@ -368,6 +480,7 @@ export default function ScoreUpdatePage() {
         <InitInningsModal
           match={match}
           lineups={lineups}
+          defaults={initModalDefaults}
           onStart={async (data) => {
             await initInnings(
               data.inningsNumber,
@@ -378,9 +491,98 @@ export default function ScoreUpdatePage() {
               data.target,
             );
             setShowInitModal(false);
+            setInitModalDefaults(null);
           }}
-          onClose={() => setShowInitModal(false)}
+          onClose={() => { setShowInitModal(false); setInitModalDefaults(null); }}
         />
+      )}
+
+      {/* ── End of Innings Modal ──────────────────────────────────────── */}
+      {showEndOfInningsModal && liveScore && (
+        <div className="score-update__modal-overlay" onClick={() => setShowEndOfInningsModal(false)}>
+          <motion.div
+            className="score-update__modal"
+            initial={{ scale: 0.8, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            onClick={e => e.stopPropagation()}
+          >
+            <h3>Innings Complete</h3>
+            <div className="score-update__innings-summary">
+              <p className="score-update__innings-total">
+                {liveScore.runs}/{liveScore.wickets} ({liveScore.overs} ov)
+              </p>
+              <p>Run Rate: {liveScore.runRate}</p>
+            </div>
+            {liveScore.currentInnings === 1 ? (
+              <>
+                <p>Target for 2nd innings: <strong>{liveScore.runs + 1}</strong></p>
+                <div className="score-update__modal-actions">
+                  <button
+                    className="score-update__btn score-update__btn--primary score-update__btn--lg"
+                    onClick={() => {
+                      setShowEndOfInningsModal(false);
+                      // Pre-fill 2nd innings: swap teams, auto-set target
+                      setInitModalDefaults({
+                        inningsNumber: 2,
+                        battingTeamId: liveScore.bowlingTeamId,
+                        target: liveScore.runs + 1,
+                      });
+                      setShowInitModal(true);
+                    }}
+                  >
+                    Start 2nd Innings
+                  </button>
+                </div>
+              </>
+            ) : (
+              <div className="score-update__modal-actions">
+                <button
+                  className="score-update__btn score-update__btn--primary score-update__btn--lg"
+                  onClick={() => {
+                    setShowEndOfInningsModal(false);
+                    completeMatch();
+                  }}
+                >
+                  Complete Match
+                </button>
+              </div>
+            )}
+          </motion.div>
+        </div>
+      )}
+
+      {/* ── Match Complete Modal ──────────────────────────────────────── */}
+      {showMatchCompleteModal && (
+        <div className="score-update__modal-overlay">
+          <motion.div
+            className="score-update__modal"
+            initial={{ scale: 0.8, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+          >
+            <h3>🏆 Match Complete</h3>
+            <p>The match has been completed and stats saved.</p>
+            <div className="score-update__modal-actions">
+              <button
+                className="score-update__btn score-update__btn--primary"
+                onClick={() => {
+                  setOverlay('match_summary');
+                  setShowMatchCompleteModal(false);
+                }}
+              >
+                Show Summary Overlay
+              </button>
+              <button
+                className="score-update__btn"
+                onClick={() => {
+                  setShowMatchCompleteModal(false);
+                  navigate('/cricket/scorer/admin');
+                }}
+              >
+                Back to Admin
+              </button>
+            </div>
+          </motion.div>
+        </div>
       )}
     </div>
   );
@@ -400,7 +602,7 @@ function ScoreHeader({ match }: { match: { teamA: { name: string }; teamB: { nam
         </h1>
         <p className="score-update__venue">{match.venue}</p>
       </div>
-      <button className="score-update__close-btn" onClick={() => navigate('/scoring/admin')}>
+      <button className="score-update__close-btn" onClick={() => navigate('/cricket/scorer/admin')}>
         <IoClose size={20} />
       </button>
     </header>
@@ -418,11 +620,12 @@ function getBallChipClass(ball: string): string {
 
 // ── Wicket Modal ─────────────────────────────────────────────────────────────
 
-function WicketModal({ battingLineup, bowlingLineup, currentBatsmen, currentBowler, onConfirm, onClose }: {
+function WicketModal({ battingLineup, bowlingLineup, currentBatsmen, currentBowler, allBatsmen, onConfirm, onClose }: {
   battingLineup: MatchSquadPlayer[];
   bowlingLineup: MatchSquadPlayer[];
   currentBatsmen: [{ playerId: string; playerName: string }, { playerId: string; playerName: string }];
   currentBowler: { playerId: string; playerName: string };
+  allBatsmen?: { playerId: string; isOut: boolean }[];
   onConfirm: (wicket: WicketDetail) => void;
   onClose: () => void;
 }) {
@@ -432,8 +635,10 @@ function WicketModal({ battingLineup, bowlingLineup, currentBatsmen, currentBowl
   const [newBatsmanId, setNewBatsmanId] = useState('');
 
   const needsFielder = ['caught', 'run_out', 'stumped'].includes(dismissalType);
+  const dismissedIds = new Set((allBatsmen || []).filter(b => b.isOut).map(b => b.playerId));
+  const currentIds = new Set(currentBatsmen.map(b => b.playerId));
   const availableBatsmen = battingLineup.filter(
-    p => !currentBatsmen.some(b => b.playerId === p.playerId) || p.playerId === outBatsman,
+    p => !dismissedIds.has(p.playerId) && !currentIds.has(p.playerId),
   );
 
   return (
@@ -469,9 +674,7 @@ function WicketModal({ battingLineup, bowlingLineup, currentBatsmen, currentBowl
           <label>New Batsman</label>
           <select value={newBatsmanId} onChange={e => setNewBatsmanId(e.target.value)} className="score-update__select">
             <option value="">Select new batsman</option>
-            {availableBatsmen
-              .filter(p => p.playerId !== outBatsman && !currentBatsmen.some(b => b.playerId === p.playerId))
-              .map(p => <option key={p.playerId} value={p.playerId}>{p.playerName}</option>)}
+            {availableBatsmen.map(p => <option key={p.playerId} value={p.playerId}>{p.playerName}</option>)}
           </select>
         </div>
 
@@ -479,13 +682,15 @@ function WicketModal({ battingLineup, bowlingLineup, currentBatsmen, currentBowl
           <button
             className="score-update__btn score-update__btn--wicket"
             onClick={() => {
+              const isCaughtAndBowled = dismissalType === 'caught_and_bowled';
               onConfirm({
                 dismissalType,
                 batsmanId: outBatsman,
                 bowlerId: currentBowler.playerId,
-                fielderId: fielderId || undefined,
-                fielderName: bowlingLineup.find(p => p.playerId === fielderId)?.playerName,
+                fielderId: isCaughtAndBowled ? currentBowler.playerId : (fielderId || undefined),
+                fielderName: isCaughtAndBowled ? currentBowler.playerName : bowlingLineup.find(p => p.playerId === fielderId)?.playerName,
                 newBatsmanId: newBatsmanId || undefined,
+                newBatsmanName: battingLineup.find(p => p.playerId === newBatsmanId)?.playerName,
               });
             }}
           >
@@ -500,9 +705,10 @@ function WicketModal({ battingLineup, bowlingLineup, currentBatsmen, currentBowl
 
 // ── Init Innings Modal ───────────────────────────────────────────────────────
 
-function InitInningsModal({ match, lineups, onStart, onClose }: {
+function InitInningsModal({ match, lineups, defaults, onStart, onClose }: {
   match: { id: string; teamA: { id: string; name: string }; teamB: { id: string; name: string }; maxOvers: number };
   lineups: { teamA: { players: MatchSquadPlayer[] } | null; teamB: { players: MatchSquadPlayer[] } | null };
+  defaults?: { inningsNumber?: 1 | 2; battingTeamId?: string; target?: number } | null;
   onStart: (data: {
     inningsNumber: 1 | 2;
     battingTeamId: string;
@@ -513,12 +719,12 @@ function InitInningsModal({ match, lineups, onStart, onClose }: {
   }) => void;
   onClose: () => void;
 }) {
-  const [inningsNumber, setInningsNumber] = useState<1 | 2>(1);
-  const [battingTeamId, setBattingTeamId] = useState(match.teamA.id);
+  const [inningsNumber, setInningsNumber] = useState<1 | 2>(defaults?.inningsNumber || 1);
+  const [battingTeamId, setBattingTeamId] = useState(defaults?.battingTeamId || match.teamA.id);
   const [opener1, setOpener1] = useState('');
   const [opener2, setOpener2] = useState('');
   const [bowlerId, setBowlerId] = useState('');
-  const [target, setTarget] = useState<number | ''>('');
+  const [target, setTarget] = useState<number | ''>(defaults?.target || '');
 
   const bowlingTeamId = battingTeamId === match.teamA.id ? match.teamB.id : match.teamA.id;
   const battingPlayers = (battingTeamId === match.teamA.id ? lineups.teamA : lineups.teamB)?.players || [];
@@ -610,9 +816,11 @@ function InitInningsModal({ match, lineups, onStart, onClose }: {
 
 // ── Player Picker Modal ──────────────────────────────────────────────────────
 
-function PlayerPickerModal({ title, players, onSelect, onClose }: {
+function PlayerPickerModal({ title, players, disabledPlayerId, disabledReason, onSelect, onClose }: {
   title: string;
   players: MatchSquadPlayer[];
+  disabledPlayerId?: string;
+  disabledReason?: string;
   onSelect: (p: MatchSquadPlayer) => void;
   onClose: () => void;
 }) {
@@ -621,16 +829,22 @@ function PlayerPickerModal({ title, players, onSelect, onClose }: {
       <div className="score-update__modal" onClick={e => e.stopPropagation()}>
         <h3>{title}</h3>
         <div className="score-update__player-list">
-          {players.map(p => (
-            <button
-              key={p.playerId}
-              className="score-update__player-btn"
-              onClick={() => onSelect(p)}
-            >
-              {p.playerName}
-              <span className="score-update__player-role">{p.role}</span>
-            </button>
-          ))}
+          {players.map(p => {
+            const isDisabled = p.playerId === disabledPlayerId;
+            return (
+              <button
+                key={p.playerId}
+                className={`score-update__player-btn ${isDisabled ? 'score-update__player-btn--disabled' : ''}`}
+                onClick={() => !isDisabled && onSelect(p)}
+                disabled={isDisabled}
+              >
+                {p.playerName}
+                <span className="score-update__player-role">
+                  {isDisabled ? disabledReason : p.role}
+                </span>
+              </button>
+            );
+          })}
         </div>
         <div className="score-update__modal-actions">
           <button className="score-update__btn" onClick={onClose}>Cancel</button>

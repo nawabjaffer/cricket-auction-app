@@ -296,3 +296,28 @@
   font-size: 10px;
   color: rgba(255, 255, 255, 0.4);
 }
+
+/* ── Replay Controls ──────────────────────────────────────────────────── */
+
+.score-dock__replay-controls {
+  display: flex;
+  gap: 4px;
+}
+
+.score-dock__replay-btn {
+  flex: 1;
+  padding: 6px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 10px;
+  cursor: pointer;
+  transition: all 0.15s;
+  text-align: center;
+}
+
+.score-dock__replay-btn:hover {
+  background: rgba(59, 130, 246, 0.2);
+  border-color: rgba(59, 130, 246, 0.3);
+}
