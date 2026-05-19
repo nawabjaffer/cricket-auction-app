@@ -72,6 +72,9 @@ export default function ScoreOBSOverlayPage() {
   const [innings, setInnings] = useState<Record<string, Innings>>({});
   const [replayTrigger, setReplayTrigger] = useState<ReplayTrigger | null>(null);
   const [allMatches, setAllMatches] = useState<Record<string, { setup: MatchSetup; final?: MatchScore }>>({});
+  const [allTeams, setAllTeams] = useState<{ id: string; name: string; logoUrl?: string }[]>([]);
+  const [inningsIntroPhase, setInningsIntroPhase] = useState<'batsmen' | 'bowler' | 'done'>('done');
+  const inningsIntroShownRef = useRef(false);
 
   // Get matchId from URL params
   useEffect(() => {
@@ -154,7 +157,10 @@ export default function ScoreOBSOverlayPage() {
       }
     }));
 
-    // Match stats
+    // Match stats (check both paths for compatibility)
+    unsubs.push(onValue(ref(obsDb, `${basePath}/matches/${matchId}/stats`), snap => {
+      if (snap.exists()) setMatchStats(snap.val());
+    }));
     unsubs.push(onValue(ref(obsDb, `${basePath}/matchStats/${matchId}`), snap => {
       if (snap.exists()) setMatchStats(snap.val());
     }));
@@ -199,6 +205,14 @@ export default function ScoreOBSOverlayPage() {
       setAllMatches(result);
     }));
 
+    // All auction teams (for full points table)
+    const teamsPath = tenantPath('auction/teams');
+    unsubs.push(onValue(ref(obsDb, teamsPath), snap => {
+      if (!snap.exists()) return;
+      const data = snap.val() as Record<string, { id: string; name: string; logoUrl?: string }>;
+      setAllTeams(Object.values(data).map(t => ({ id: t.id, name: t.name, logoUrl: t.logoUrl })));
+    }));
+
     return () => unsubs.forEach(u => u());
   }, [matchId]);
 
@@ -215,6 +229,16 @@ export default function ScoreOBSOverlayPage() {
       setLineups({ teamA: teamALineup, teamB: teamBLineup });
     }
   }, [match, rawLineups]);
+
+  // Innings start intro sequence — show batsmen then bowler when live first appears
+  useEffect(() => {
+    if (!live || inningsIntroShownRef.current) return;
+    inningsIntroShownRef.current = true;
+    setInningsIntroPhase('batsmen');
+    const t1 = setTimeout(() => setInningsIntroPhase('bowler'), 4000);
+    const t2 = setTimeout(() => setInningsIntroPhase('done'), 8000);
+    return () => { clearTimeout(t1); clearTimeout(t2); };
+  }, [live]);
 
   // Auto-dismiss overlay after duration
   const triggerOverlay = useCallback((type: OverlayType, durationMs = 5000) => {
@@ -298,6 +322,72 @@ export default function ScoreOBSOverlayPage() {
     );
   }
 
+  // Match intro / waiting for innings — show animated match info card
+  if (!live && match) {
+    return (
+      <div className="score-obs">
+        <motion.div
+          className="score-obs__top-bar"
+          initial={{ y: -40, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ type: 'spring', stiffness: 200, damping: 28, delay: 0.2 }}
+        >
+          <div className="score-obs__top-left">
+            {config.tournamentLogo && <img src={config.tournamentLogo} alt="" className="score-obs__tournament-logo" />}
+            {config.tournamentName && <span className="score-obs__tournament-name">{config.tournamentName}</span>}
+          </div>
+          <div className="score-obs__top-right">
+            {config.broadcastPartnerLogo && <img src={config.broadcastPartnerLogo} alt="" className="score-obs__partner-logo" />}
+            {config.broadcastPartnerName && <span className="score-obs__partner-name">{config.broadcastPartnerName}</span>}
+          </div>
+        </motion.div>
+        <MatchIntroOverlay match={match} config={config} lineups={lineups} playerImages={playerImages} />
+        {/* Show tournament overlays even without live score */}
+        <AnimatePresence mode="wait">
+          {localOverlay === 'points_table' && (
+            <PointsTableOverlay allMatches={allMatches} allTeams={allTeams} />
+          )}
+          {localOverlay === 'award_orange_cap' && tournamentStats && (
+            <AwardOverlay title="ORANGE CAP" subtitle="Most Runs — Tournament" color="#f97316"
+              playerName={tournamentStats.orangeCap?.playerName || ''} value={`${tournamentStats.orangeCap?.runs || 0} runs`} />
+          )}
+          {localOverlay === 'award_purple_cap' && tournamentStats && (
+            <AwardOverlay title="PURPLE CAP" subtitle="Most Wickets — Tournament" color="#a855f7"
+              playerName={tournamentStats.purpleCap?.playerName || ''} value={`${tournamentStats.purpleCap?.wickets || 0} wickets`} />
+          )}
+          {localOverlay === 'tournament_fours' && tournamentStats && (
+            <StatsListOverlay title="MOST FOURS — TOURNAMENT" items={tournamentStats.topFourHitters?.map(p => ({ name: p.playerName, value: String(p.fours), team: p.teamName })) || []} />
+          )}
+          {localOverlay === 'tournament_sixes' && tournamentStats && (
+            <StatsListOverlay title="MOST SIXES — TOURNAMENT" items={tournamentStats.topSixHitters?.map(p => ({ name: p.playerName, value: String(p.sixes), team: p.teamName })) || []} />
+          )}
+          {localOverlay === 'tournament_sr' && tournamentStats && (
+            <StatsListOverlay title="BEST STRIKE RATE — TOURNAMENT" items={tournamentStats.topStrikeRates?.map(p => ({ name: p.playerName, value: String(p.strikeRate), team: p.teamName })) || []} />
+          )}
+          {localOverlay === 'tournament_mvp' && tournamentStats && (
+            <StatsListOverlay title="MVP — TOURNAMENT" items={tournamentStats.mvpLeaderboard?.slice(0, 5).map(p => ({ name: p.playerName, value: String(p.total.toFixed(1)), team: p.teamId })) || []} />
+          )}
+          {/* Animation overlays work even before innings starts */}
+          {localOverlay === 'boundary_four' && config.enableBoundaryAnimation && (
+            <BoundaryOverlay type="four" animConfig={config.fourAnimation} />
+          )}
+          {localOverlay === 'boundary_six' && config.enableSixerAnimation && (
+            <BoundaryOverlay type="six" animConfig={config.sixAnimation} />
+          )}
+          {localOverlay === 'wicket' && config.enableWicketAnimation && (
+            <WicketOverlay imageUrl={config.wicketImageUrl} animConfig={config.wicketAnimation} />
+          )}
+          {localOverlay === 'duck_out' && config.enableDuckOutAnimation && (
+            <DuckOutOverlay imageUrl={config.duckOutImageUrl} />
+          )}
+          {localOverlay === 'hat_trick' && config.enableHatTrickAnimation && (
+            <HatTrickOverlay imageUrl={config.hatTrickImageUrl} />
+          )}
+        </AnimatePresence>
+      </div>
+    );
+  }
+
   if (!live) return null;
 
   const effectiveOverlay = localOverlay;
@@ -343,6 +433,16 @@ export default function ScoreOBSOverlayPage() {
           )}
         </div>
       </motion.div>
+
+      {/* ── Innings Start Intro (batsmen + bowler with images) ────── */}
+      <AnimatePresence>
+        {inningsIntroPhase === 'batsmen' && live && match && (
+          <InningsIntroCard key="intro-bat" type="batsmen" live={live} match={match} playerImages={playerImages} lineups={lineups} />
+        )}
+        {inningsIntroPhase === 'bowler' && live && match && (
+          <InningsIntroCard key="intro-bowl" type="bowler" live={live} match={match} playerImages={playerImages} lineups={lineups} />
+        )}
+      </AnimatePresence>
 
       {/* ── Score Ticker (always visible when live) ──────────────── */}
       {live && match && (
@@ -414,37 +514,79 @@ export default function ScoreOBSOverlayPage() {
         )}
         {effectiveOverlay === 'stats_fours' && matchStats && (
           <StatsListOverlay
-            title="FOURS"
-            items={matchStats.topRunScorers?.map(p => ({
+            title="FOURS — THIS MATCH"
+            items={matchStats.topFours?.map(p => ({
               name: p.playerName,
-              value: String(p.fours || 0),
+              value: String(p.fours),
             })) || []}
           />
         )}
         {effectiveOverlay === 'stats_sixes' && matchStats && (
           <StatsListOverlay
-            title="SIXES"
-            items={matchStats.topRunScorers?.map(p => ({
+            title="SIXES — THIS MATCH"
+            items={matchStats.topSixes?.map(p => ({
               name: p.playerName,
-              value: String(p.sixes || 0),
-            })).sort((a, b) => Number(b.value) - Number(a.value)) || []}
+              value: String(p.sixes),
+            })) || []}
           />
         )}
         {effectiveOverlay === 'stats_sr' && matchStats && (
           <StatsListOverlay
-            title="STRIKE RATE"
-            items={matchStats.topRunScorers?.filter(p => p.balls >= 10).map(p => ({
+            title="STRIKE RATE — THIS MATCH"
+            items={matchStats.topStrikeRates?.map(p => ({
               name: p.playerName,
               value: String(p.strikeRate),
-            })).sort((a, b) => Number(b.value) - Number(a.value)) || []}
+            })) || []}
           />
         )}
         {effectiveOverlay === 'stats_mvp' && matchStats && (
           <StatsListOverlay
-            title="MVP POINTS"
+            title="MVP — THIS MATCH"
             items={matchStats.mvpPoints?.slice(0, 5).map(p => ({
               name: p.playerName,
               value: String(p.totalPoints.toFixed(1)),
+            })) || matchStats.mvpLeaderboard?.slice(0, 5).map(p => ({
+              name: p.playerName,
+              value: String(p.total.toFixed(1)),
+            })) || []}
+          />
+        )}
+        {effectiveOverlay === 'tournament_fours' && tournamentStats && (
+          <StatsListOverlay
+            title="MOST FOURS — TOURNAMENT"
+            items={tournamentStats.topFourHitters?.map(p => ({
+              name: p.playerName,
+              value: String(p.fours),
+              team: p.teamName,
+            })) || []}
+          />
+        )}
+        {effectiveOverlay === 'tournament_sixes' && tournamentStats && (
+          <StatsListOverlay
+            title="MOST SIXES — TOURNAMENT"
+            items={tournamentStats.topSixHitters?.map(p => ({
+              name: p.playerName,
+              value: String(p.sixes),
+              team: p.teamName,
+            })) || []}
+          />
+        )}
+        {effectiveOverlay === 'tournament_sr' && tournamentStats && (
+          <StatsListOverlay
+            title="BEST STRIKE RATE — TOURNAMENT"
+            items={tournamentStats.topStrikeRates?.map(p => ({
+              name: p.playerName,
+              value: String(p.strikeRate),
+              team: p.teamName,
+            })) || []}
+          />
+        )}
+        {effectiveOverlay === 'tournament_mvp' && tournamentStats && (
+          <StatsListOverlay
+            title="MVP — TOURNAMENT"
+            items={tournamentStats.mvpLeaderboard?.slice(0, 5).map(p => ({
+              name: p.playerName,
+              value: String(p.total.toFixed(1)),
             })) || []}
           />
         )}
@@ -454,23 +596,44 @@ export default function ScoreOBSOverlayPage() {
         {effectiveOverlay === 'award_orange_cap' && tournamentStats && (
           <AwardOverlay
             title="ORANGE CAP"
-            subtitle="Most Runs"
+            subtitle="Most Runs — Tournament"
             color="#f97316"
-            playerName={tournamentStats.topRunScorers?.[0]?.playerName || ''}
-            value={`${tournamentStats.topRunScorers?.[0]?.totalRuns || 0} runs`}
+            playerName={tournamentStats.orangeCap?.playerName || ''}
+            value={`${tournamentStats.orangeCap?.runs || 0} runs`}
           />
         )}
         {effectiveOverlay === 'award_purple_cap' && tournamentStats && (
           <AwardOverlay
             title="PURPLE CAP"
-            subtitle="Most Wickets"
+            subtitle="Most Wickets — Tournament"
             color="#a855f7"
-            playerName={tournamentStats.topWicketTakers?.[0]?.playerName || ''}
-            value={`${tournamentStats.topWicketTakers?.[0]?.totalWickets || 0} wickets`}
+            playerName={tournamentStats.purpleCap?.playerName || ''}
+            value={`${tournamentStats.purpleCap?.wickets || 0} wickets`}
+          />
+        )}
+        {effectiveOverlay === 'award_orange_cap_match' && matchStats && (
+          <AwardOverlay
+            title="ORANGE CAP"
+            subtitle="Most Runs — This Match"
+            color="#f97316"
+            playerName={matchStats.topRunScorers?.[0]?.playerName || ''}
+            value={`${matchStats.topRunScorers?.[0]?.runs || 0} runs (${matchStats.topRunScorers?.[0]?.balls || 0} balls)`}
+          />
+        )}
+        {effectiveOverlay === 'award_purple_cap_match' && matchStats && (
+          <AwardOverlay
+            title="PURPLE CAP"
+            subtitle="Most Wickets — This Match"
+            color="#a855f7"
+            playerName={matchStats.topWicketTakers?.[0]?.playerName || ''}
+            value={`${matchStats.topWicketTakers?.[0]?.wickets || 0} wickets`}
           />
         )}
         {effectiveOverlay === 'points_table' && (
-          <PointsTableOverlay allMatches={allMatches} />
+          <PointsTableOverlay allMatches={allMatches} allTeams={allTeams} />
+        )}
+        {effectiveOverlay === 'match_intro' && match && (
+          <MatchIntroOverlay match={match} config={config} lineups={lineups} playerImages={playerImages} />
         )}
       </AnimatePresence>
     </div>
@@ -861,7 +1024,7 @@ function QuestionOverlay({ question }: { question: LiveQuestion }) {
 
 function StatsListOverlay({ title, items }: {
   title: string;
-  items: { name: string; value: string }[];
+  items: { name: string; value: string; team?: string }[];
 }) {
   return (
     <motion.div
@@ -876,7 +1039,10 @@ function StatsListOverlay({ title, items }: {
         {items.slice(0, 5).map((item, i) => (
           <div key={i} className="score-obs__stats-item">
             <span className="score-obs__stats-rank">{i + 1}</span>
-            <span className="score-obs__stats-name">{item.name}</span>
+            <div className="score-obs__stats-name-col">
+              <span className="score-obs__stats-name">{item.name}</span>
+              {item.team && <span className="score-obs__stats-team">{item.team}</span>}
+            </div>
             <span className="score-obs__stats-value">{item.value}</span>
           </div>
         ))}
@@ -1231,7 +1397,10 @@ interface TeamStanding {
   points: number;
 }
 
-function PointsTableOverlay({ allMatches }: { allMatches: Record<string, { setup: MatchSetup; final?: MatchScore }> }) {
+function PointsTableOverlay({ allMatches, allTeams }: {
+  allMatches: Record<string, { setup: MatchSetup; final?: MatchScore }>;
+  allTeams?: { id: string; name: string; logoUrl?: string }[];
+}) {
   // Compute standings from completed matches
   const standings: Record<string, TeamStanding> = {};
 
@@ -1263,6 +1432,15 @@ function PointsTableOverlay({ allMatches }: { allMatches: Record<string, { setup
   // Also add teams from scheduled/live matches that haven't completed
   for (const m of Object.values(allMatches)) {
     for (const team of [m.setup.teamA, m.setup.teamB]) {
+      if (!standings[team.id]) {
+        standings[team.id] = { teamId: team.id, teamName: team.name, played: 0, won: 0, lost: 0, nrr: 0, points: 0 };
+      }
+    }
+  }
+
+  // Add ALL tournament teams from auction (even those without matches yet)
+  if (allTeams) {
+    for (const team of allTeams) {
       if (!standings[team.id]) {
         standings[team.id] = { teamId: team.id, teamName: team.name, played: 0, won: 0, lost: 0, nrr: 0, points: 0 };
       }
@@ -1304,6 +1482,244 @@ function PointsTableOverlay({ allMatches }: { allMatches: Record<string, { setup
           ))}
         </tbody>
       </table>
+    </motion.div>
+  );
+}
+
+// ── Match Intro Overlay (shown before innings starts) ──
+
+function MatchIntroOverlay({ match, config, lineups, playerImages }: {
+  match: MatchSetup;
+  config: ScoringOverlayConfig;
+  lineups: { teamA: MatchLineup | null; teamB: MatchLineup | null };
+  playerImages: Record<string, string>;
+}) {
+  const [phase, setPhase] = useState(0); // 0=matchup, 1=teamA, 2=teamB, 3=toss
+
+  useEffect(() => {
+    const timers = [
+      setTimeout(() => setPhase(1), 4000),
+      setTimeout(() => setPhase(2), 8000),
+      setTimeout(() => setPhase(3), 12000),
+    ];
+    return () => timers.forEach(clearTimeout);
+  }, []);
+
+  // Build player image map
+  const imgMap: Record<string, string> = { ...playerImages };
+  [lineups.teamA, lineups.teamB].forEach(l => {
+    l?.players?.forEach(p => { if (p.imageUrl) imgMap[p.playerId] = p.imageUrl; });
+  });
+
+  return (
+    <div className="score-obs__match-intro">
+      <AnimatePresence mode="wait">
+        {phase === 0 && (
+          <motion.div
+            key="matchup"
+            className="score-obs__intro-matchup"
+            initial={{ scale: 0.5, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            exit={{ scale: 1.2, opacity: 0 }}
+            transition={{ type: 'spring', stiffness: 200, damping: 22 }}
+          >
+            <div className="score-obs__intro-team">
+              {match.teamA.logoUrl && <img src={match.teamA.logoUrl} alt="" className="score-obs__intro-logo" />}
+              <span className="score-obs__intro-team-name" style={{ color: match.teamA.primaryColor || '#3b82f6' }}>
+                {match.teamA.name}
+              </span>
+            </div>
+            <div className="score-obs__intro-vs">
+              <span>VS</span>
+            </div>
+            <div className="score-obs__intro-team">
+              {match.teamB.logoUrl && <img src={match.teamB.logoUrl} alt="" className="score-obs__intro-logo" />}
+              <span className="score-obs__intro-team-name" style={{ color: match.teamB.primaryColor || '#ef4444' }}>
+                {match.teamB.name}
+              </span>
+            </div>
+            <div className="score-obs__intro-venue">
+              <span>{match.venue}</span>
+              <span>{new Date(match.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+            </div>
+          </motion.div>
+        )}
+
+        {phase === 1 && lineups.teamA && (
+          <motion.div
+            key="teamA"
+            className="score-obs__intro-squad"
+            initial={{ x: -200, opacity: 0 }}
+            animate={{ x: 0, opacity: 1 }}
+            exit={{ x: 200, opacity: 0 }}
+            transition={{ type: 'spring', stiffness: 180, damping: 22 }}
+          >
+            <div className="score-obs__intro-squad-header" style={{ borderColor: match.teamA.primaryColor || '#3b82f6' }}>
+              {match.teamA.logoUrl && <img src={match.teamA.logoUrl} alt="" className="score-obs__intro-squad-logo" />}
+              <span>{match.teamA.name}</span>
+            </div>
+            <div className="score-obs__intro-squad-players">
+              {lineups.teamA.players.slice(0, 11).map((p, i) => (
+                <motion.div
+                  key={p.playerId}
+                  className="score-obs__intro-player"
+                  initial={{ opacity: 0, x: -30 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: i * 0.15 }}
+                >
+                  <div className="score-obs__intro-player-img">
+                    {imgMap[p.playerId]
+                      ? <img src={imgMap[p.playerId]} alt="" />
+                      : <span>{p.playerName.charAt(0)}</span>
+                    }
+                  </div>
+                  <span className="score-obs__intro-player-name">{p.playerName}</span>
+                  <span className="score-obs__intro-player-role">{p.role}</span>
+                  {p.isCaptain && <span className="score-obs__intro-badge">C</span>}
+                  {p.isWicketKeeper && <span className="score-obs__intro-badge">WK</span>}
+                </motion.div>
+              ))}
+            </div>
+          </motion.div>
+        )}
+
+        {phase === 2 && lineups.teamB && (
+          <motion.div
+            key="teamB"
+            className="score-obs__intro-squad"
+            initial={{ x: 200, opacity: 0 }}
+            animate={{ x: 0, opacity: 1 }}
+            exit={{ x: -200, opacity: 0 }}
+            transition={{ type: 'spring', stiffness: 180, damping: 22 }}
+          >
+            <div className="score-obs__intro-squad-header" style={{ borderColor: match.teamB.primaryColor || '#ef4444' }}>
+              {match.teamB.logoUrl && <img src={match.teamB.logoUrl} alt="" className="score-obs__intro-squad-logo" />}
+              <span>{match.teamB.name}</span>
+            </div>
+            <div className="score-obs__intro-squad-players">
+              {lineups.teamB.players.slice(0, 11).map((p, i) => (
+                <motion.div
+                  key={p.playerId}
+                  className="score-obs__intro-player"
+                  initial={{ opacity: 0, x: 30 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: i * 0.15 }}
+                >
+                  <div className="score-obs__intro-player-img">
+                    {imgMap[p.playerId]
+                      ? <img src={imgMap[p.playerId]} alt="" />
+                      : <span>{p.playerName.charAt(0)}</span>
+                    }
+                  </div>
+                  <span className="score-obs__intro-player-name">{p.playerName}</span>
+                  <span className="score-obs__intro-player-role">{p.role}</span>
+                  {p.isCaptain && <span className="score-obs__intro-badge">C</span>}
+                  {p.isWicketKeeper && <span className="score-obs__intro-badge">WK</span>}
+                </motion.div>
+              ))}
+            </div>
+          </motion.div>
+        )}
+
+        {phase === 3 && (
+          <motion.div
+            key="ready"
+            className="score-obs__intro-ready"
+            initial={{ scale: 0 }}
+            animate={{ scale: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ type: 'spring', stiffness: 200, damping: 18 }}
+          >
+            {config.tournamentLogo && <img src={config.tournamentLogo} alt="" className="score-obs__intro-tournament-logo" />}
+            <span className="score-obs__intro-ready-text">MATCH DAY</span>
+            <span className="score-obs__intro-ready-teams">
+              {match.teamA.name} vs {match.teamB.name}
+            </span>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+// ── Innings Intro Card (batsmen/bowler with images at start of innings) ──
+
+function InningsIntroCard({ type, live, match, playerImages, lineups }: {
+  type: 'batsmen' | 'bowler';
+  live: LiveScore;
+  match: MatchSetup;
+  playerImages: Record<string, string>;
+  lineups: { teamA: MatchLineup | null; teamB: MatchLineup | null };
+}) {
+  const imgMap: Record<string, string> = { ...playerImages };
+  [lineups.teamA, lineups.teamB].forEach(l => {
+    l?.players?.forEach(p => { if (p.imageUrl) imgMap[p.playerId] = p.imageUrl; });
+  });
+
+  const battingTeamName = live.battingTeamId === match.teamA.id ? match.teamA.name : match.teamB.name;
+  const bowlingTeamName = live.bowlingTeamId === match.teamA.id ? match.teamA.name : match.teamB.name;
+
+  if (type === 'batsmen') {
+    return (
+      <motion.div
+        className="score-obs__innings-intro score-obs__innings-intro--bat"
+        initial={{ y: 60, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        exit={{ y: -60, opacity: 0 }}
+        transition={{ type: 'spring', stiffness: 180, damping: 22 }}
+      >
+        <div className="score-obs__innings-intro-header">
+          <span className="score-obs__innings-intro-label">OPENING BATSMEN</span>
+          <span className="score-obs__innings-intro-team">{battingTeamName}</span>
+        </div>
+        <div className="score-obs__innings-intro-players">
+          {(live.currentBatsmen || []).map(b => (
+            <div key={b.playerId} className="score-obs__innings-intro-player">
+              <div className="score-obs__innings-intro-img">
+                {imgMap[b.playerId]
+                  ? <img src={imgMap[b.playerId]} alt={b.playerName} />
+                  : <span className="score-obs__innings-intro-placeholder">{b.playerName.charAt(0)}</span>
+                }
+              </div>
+              <div className="score-obs__innings-intro-info">
+                <span className="score-obs__innings-intro-name">{b.playerName}</span>
+                {b.isOnStrike && <span className="score-obs__innings-intro-strike">🏏 On Strike</span>}
+              </div>
+            </div>
+          ))}
+        </div>
+      </motion.div>
+    );
+  }
+
+  return (
+    <motion.div
+      className="score-obs__innings-intro score-obs__innings-intro--bowl"
+      initial={{ y: 60, opacity: 0 }}
+      animate={{ y: 0, opacity: 1 }}
+      exit={{ y: -60, opacity: 0 }}
+      transition={{ type: 'spring', stiffness: 180, damping: 22 }}
+    >
+      <div className="score-obs__innings-intro-header">
+        <span className="score-obs__innings-intro-label">OPENING BOWLER</span>
+        <span className="score-obs__innings-intro-team">{bowlingTeamName}</span>
+      </div>
+      <div className="score-obs__innings-intro-players">
+        <div className="score-obs__innings-intro-player">
+          <div className="score-obs__innings-intro-img">
+            {imgMap[live.currentBowler.playerId]
+              ? <img src={imgMap[live.currentBowler.playerId]} alt={live.currentBowler.playerName} />
+              : <span className="score-obs__innings-intro-placeholder">{live.currentBowler.playerName.charAt(0)}</span>
+            }
+          </div>
+          <div className="score-obs__innings-intro-info">
+            <span className="score-obs__innings-intro-name">{live.currentBowler.playerName}</span>
+            <span className="score-obs__innings-intro-stats">
+              {live.currentBowler.overs} ov · {live.currentBowler.wickets}/{live.currentBowler.runs}
+            </span>
+          </div>
+        </div>
+      </div>
     </motion.div>
   );
 }

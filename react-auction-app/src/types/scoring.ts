@@ -305,20 +305,29 @@ export type OverlayType =
   | 'hat_trick'
   | 'live_question'
   | 'ads_break'
-  // Stats overlays
+  // Stats overlays — match scope (current match only, 2 teams)
   | 'stats_dots'
   | 'stats_fours'
   | 'stats_sixes'
   | 'stats_sr'
   | 'stats_mvp'
   | 'match_summary'
+  // Stats overlays — tournament scope (all teams/players)
+  | 'tournament_fours'
+  | 'tournament_sixes'
+  | 'tournament_sr'
+  | 'tournament_mvp'
   | 'tournament_stats'
   | 'points_table'
   // Awards overlays
   | 'award_orange_cap'
   | 'award_purple_cap'
+  | 'award_orange_cap_match'
+  | 'award_purple_cap_match'
   | 'award_mvp'
-  | 'award_ceremony';
+  | 'award_ceremony'
+  // Match intro sequence
+  | 'match_intro';
 
 export interface LiveQuestion {
   id: string;
@@ -566,6 +575,30 @@ export interface PlayerMVPPoints {
 
 // ── Match Stats (real-time aggregation) ──
 
+export interface PlayerStatEntry {
+  playerId: string;
+  playerName: string;
+  teamId: string;
+  runs: number;
+  balls: number;
+  fours: number;
+  sixes: number;
+  strikeRate: number;
+  imageUrl?: string;
+}
+
+export interface BowlerStatEntry {
+  playerId: string;
+  playerName: string;
+  teamId: string;
+  wickets: number;
+  runs: number;
+  overs: number;
+  economy: number;
+  dots: number;
+  imageUrl?: string;
+}
+
 export interface MatchStatsSnapshot {
   matchId: string;
   highestDotBallBowler: { playerId: string; playerName: string; teamId: string; dots: number; balls: number } | null;
@@ -573,6 +606,14 @@ export interface MatchStatsSnapshot {
   highestSixScorer: { playerId: string; playerName: string; teamId: string; sixes: number } | null;
   highestStrikeRate: { playerId: string; playerName: string; teamId: string; strikeRate: number; runs: number; balls: number } | null;
   mvpLeaderboard: PlayerMVPPoints[];
+  // Ranked lists for overlay consumption
+  topRunScorers: PlayerStatEntry[];
+  topWicketTakers: BowlerStatEntry[];
+  topFours: PlayerStatEntry[];
+  topSixes: PlayerStatEntry[];
+  topStrikeRates: PlayerStatEntry[];
+  topDotBowlers: BowlerStatEntry[];
+  mvpPoints: { playerId: string; playerName: string; teamId: string; totalPoints: number; imageUrl?: string }[];
   lastUpdated: number;
 }
 
@@ -587,6 +628,12 @@ export interface TournamentStats {
   bestStrikeRate: { playerId: string; playerName: string; teamId: string; teamName: string; strikeRate: number; runs: number; balls: number; imageUrl?: string } | null;
   mostDotBalls: { playerId: string; playerName: string; teamId: string; teamName: string; dots: number; imageUrl?: string } | null;
   mvpLeaderboard: PlayerMVPPoints[];
+  // Ranked lists for overlays
+  topRunScorers: { playerId: string; playerName: string; teamId: string; teamName: string; runs: number; balls: number; strikeRate: number; imageUrl?: string }[];
+  topWicketTakers: { playerId: string; playerName: string; teamId: string; teamName: string; wickets: number; economy: number; imageUrl?: string }[];
+  topSixHitters: { playerId: string; playerName: string; teamId: string; teamName: string; sixes: number; imageUrl?: string }[];
+  topFourHitters: { playerId: string; playerName: string; teamId: string; teamName: string; fours: number; imageUrl?: string }[];
+  topStrikeRates: { playerId: string; playerName: string; teamId: string; teamName: string; strikeRate: number; runs: number; balls: number; imageUrl?: string }[];
   lastUpdated: number;
 }
 

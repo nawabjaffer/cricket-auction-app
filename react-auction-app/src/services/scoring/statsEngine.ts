@@ -128,12 +128,12 @@ export class StatsEngine {
       : null;
 
     // Highest four scorer
-    const topFours = allBatsmen.length > 0
+    const topFoursPlayer = allBatsmen.length > 0
       ? allBatsmen.reduce((best, b) => (b.fours > best.fours ? b : best))
       : null;
 
     // Highest six scorer
-    const topSixes = allBatsmen.length > 0
+    const topSixesPlayer = allBatsmen.length > 0
       ? allBatsmen.reduce((best, b) => (b.sixes > best.sixes ? b : best))
       : null;
 
@@ -142,6 +142,37 @@ export class StatsEngine {
     const topSR = eligibleBatsmen.length > 0
       ? eligibleBatsmen.reduce((best, b) => (b.strikeRate > best.strikeRate ? b : best))
       : null;
+
+    // Ranked lists
+    const topRunScorers = [...allBatsmen]
+      .sort((a, b) => b.runs - a.runs)
+      .slice(0, 10)
+      .map(b => ({ playerId: b.playerId, playerName: b.playerName, teamId: b.teamId, runs: b.runs, balls: b.balls, fours: b.fours, sixes: b.sixes, strikeRate: b.strikeRate }));
+
+    const topWicketTakers = [...allBowlers]
+      .sort((a, b) => b.wickets - a.wickets || a.runs - b.runs)
+      .slice(0, 10)
+      .map(b => ({ playerId: b.playerId, playerName: b.playerName, teamId: b.teamId, wickets: b.wickets, runs: b.runs, overs: b.overs, economy: b.economy, dots: b.dots }));
+
+    const topFours = [...allBatsmen]
+      .sort((a, b) => b.fours - a.fours)
+      .slice(0, 10)
+      .map(b => ({ playerId: b.playerId, playerName: b.playerName, teamId: b.teamId, runs: b.runs, balls: b.balls, fours: b.fours, sixes: b.sixes, strikeRate: b.strikeRate }));
+
+    const topSixes = [...allBatsmen]
+      .sort((a, b) => b.sixes - a.sixes)
+      .slice(0, 10)
+      .map(b => ({ playerId: b.playerId, playerName: b.playerName, teamId: b.teamId, runs: b.runs, balls: b.balls, fours: b.fours, sixes: b.sixes, strikeRate: b.strikeRate }));
+
+    const topStrikeRates = [...eligibleBatsmen]
+      .sort((a, b) => b.strikeRate - a.strikeRate)
+      .slice(0, 10)
+      .map(b => ({ playerId: b.playerId, playerName: b.playerName, teamId: b.teamId, runs: b.runs, balls: b.balls, fours: b.fours, sixes: b.sixes, strikeRate: b.strikeRate }));
+
+    const topDotBowlers = [...eligibleBowlers]
+      .sort((a, b) => b.dots - a.dots)
+      .slice(0, 10)
+      .map(b => ({ playerId: b.playerId, playerName: b.playerName, teamId: b.teamId, wickets: b.wickets, runs: b.runs, overs: b.overs, economy: b.economy, dots: b.dots }));
 
     return {
       matchId,
@@ -152,17 +183,17 @@ export class StatsEngine {
         dots: topDotBowler.dots,
         balls: Math.floor(topDotBowler.overs) * 6 + Math.round((topDotBowler.overs % 1) * 10),
       } : null,
-      highestFourScorer: topFours && topFours.fours > 0 ? {
-        playerId: topFours.playerId,
-        playerName: topFours.playerName,
-        teamId: topFours.teamId,
-        fours: topFours.fours,
+      highestFourScorer: topFoursPlayer && topFoursPlayer.fours > 0 ? {
+        playerId: topFoursPlayer.playerId,
+        playerName: topFoursPlayer.playerName,
+        teamId: topFoursPlayer.teamId,
+        fours: topFoursPlayer.fours,
       } : null,
-      highestSixScorer: topSixes && topSixes.sixes > 0 ? {
-        playerId: topSixes.playerId,
-        playerName: topSixes.playerName,
-        teamId: topSixes.teamId,
-        sixes: topSixes.sixes,
+      highestSixScorer: topSixesPlayer && topSixesPlayer.sixes > 0 ? {
+        playerId: topSixesPlayer.playerId,
+        playerName: topSixesPlayer.playerName,
+        teamId: topSixesPlayer.teamId,
+        sixes: topSixesPlayer.sixes,
       } : null,
       highestStrikeRate: topSR ? {
         playerId: topSR.playerId,
@@ -173,6 +204,13 @@ export class StatsEngine {
         balls: topSR.balls,
       } : null,
       mvpLeaderboard: [],
+      topRunScorers,
+      topWicketTakers,
+      topFours,
+      topSixes,
+      topStrikeRates,
+      topDotBowlers,
+      mvpPoints: [],
       lastUpdated: Date.now(),
     };
   }
@@ -328,6 +366,22 @@ export class StatsEngine {
       bestStrikeRate: bestSR,
       mostDotBalls: mostDots,
       mvpLeaderboard: [],
+      // Ranked lists
+      topRunScorers: orangeArr.slice(0, 10).map(([id, p]) => ({
+        playerId: id, playerName: p.playerName, teamId: p.teamId, teamName: p.teamName,
+        runs: p.runs, balls: p.balls, strikeRate: p.balls > 0 ? Math.round((p.runs / p.balls) * 100 * 100) / 100 : 0,
+      })),
+      topWicketTakers: purpleArr.slice(0, 10).map(([id, p]) => ({
+        playerId: id, playerName: p.playerName, teamId: p.teamId, teamName: p.teamName,
+        wickets: p.wickets, economy: p.bowlingBalls > 0 ? Math.round((p.bowlingRuns / p.bowlingBalls) * 6 * 100) / 100 : 0,
+      })),
+      topSixHitters: sixArr.slice(0, 10).map(([id, p]) => ({
+        playerId: id, playerName: p.playerName, teamId: p.teamId, teamName: p.teamName, sixes: p.sixes,
+      })),
+      topFourHitters: fourArr.slice(0, 10).map(([id, p]) => ({
+        playerId: id, playerName: p.playerName, teamId: p.teamId, teamName: p.teamName, fours: p.fours,
+      })),
+      topStrikeRates: srArr.slice(0, 10),
       lastUpdated: Date.now(),
     };
 

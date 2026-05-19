@@ -1506,3 +1506,306 @@
   color: #1a0933;
   box-shadow: 0 1px 4px rgba(212, 175, 55, 0.5);
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   MATCH INTRO OVERLAY
+   ═══════════════════════════════════════════════════════════════════════════════ */
+
+.score-obs__match-intro {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+}
+
+.score-obs__intro-matchup {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 48px;
+  padding: 40px 60px;
+  background: rgba(10, 10, 30, 0.92);
+  border-radius: 24px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(20px);
+  flex-direction: column;
+}
+
+.score-obs__intro-team {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.score-obs__intro-logo {
+  width: 120px;
+  height: 120px;
+  object-fit: contain;
+  filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.5));
+}
+
+.score-obs__intro-team-name {
+  font-size: 28px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+}
+
+.score-obs__intro-vs {
+  font-size: 48px;
+  font-weight: 900;
+  color: rgba(255, 255, 255, 0.3);
+  text-shadow: 0 0 20px rgba(255, 255, 255, 0.1);
+}
+
+.score-obs__intro-venue {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  margin-top: 16px;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 16px;
+}
+
+/* Squad reveal in match intro */
+.score-obs__intro-squad {
+  padding: 24px 36px;
+  background: rgba(10, 10, 30, 0.92);
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(20px);
+  min-width: 500px;
+}
+
+.score-obs__intro-squad-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-bottom: 12px;
+  margin-bottom: 16px;
+  border-bottom: 2px solid;
+  font-size: 22px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: #fff;
+}
+
+.score-obs__intro-squad-logo {
+  width: 40px;
+  height: 40px;
+  object-fit: contain;
+}
+
+.score-obs__intro-squad-players {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.score-obs__intro-player {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 8px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.score-obs__intro-player-img {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.score-obs__intro-player-img img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.score-obs__intro-player-name {
+  flex: 1;
+  font-size: 14px;
+  font-weight: 600;
+  color: #fff;
+}
+
+.score-obs__intro-player-role {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.5);
+  text-transform: capitalize;
+}
+
+.score-obs__intro-badge {
+  font-size: 10px;
+  padding: 2px 5px;
+  border-radius: 4px;
+  background: rgba(212, 175, 55, 0.3);
+  color: #d4af37;
+  font-weight: 700;
+}
+
+/* Match ready phase */
+.score-obs__intro-ready {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 48px;
+  background: rgba(10, 10, 30, 0.92);
+  border-radius: 24px;
+  backdrop-filter: blur(20px);
+}
+
+.score-obs__intro-tournament-logo {
+  width: 80px;
+  height: 80px;
+  object-fit: contain;
+}
+
+.score-obs__intro-ready-text {
+  font-size: 40px;
+  font-weight: 900;
+  text-transform: uppercase;
+  background: linear-gradient(135deg, #d4af37, #f5d76e);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  letter-spacing: 4px;
+}
+
+.score-obs__intro-ready-teams {
+  font-size: 18px;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   INNINGS INTRO (batsmen/bowler intro at innings start)
+   ═══════════════════════════════════════════════════════════════════════════════ */
+
+.score-obs__innings-intro {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  padding: 28px 40px;
+  background: rgba(10, 10, 30, 0.94);
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(24px);
+  z-index: 60;
+  min-width: 400px;
+}
+
+.score-obs__innings-intro--bat {
+  border-left: 3px solid #22c55e;
+}
+
+.score-obs__innings-intro--bowl {
+  border-left: 3px solid #a855f7;
+}
+
+.score-obs__innings-intro-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.score-obs__innings-intro-label {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.score-obs__innings-intro-team {
+  font-size: 13px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.score-obs__innings-intro-players {
+  display: flex;
+  gap: 24px;
+}
+
+.score-obs__innings-intro-player {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.score-obs__innings-intro-img {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.08);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid rgba(255, 255, 255, 0.12);
+}
+
+.score-obs__innings-intro-img img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.score-obs__innings-intro-placeholder {
+  font-size: 24px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.score-obs__innings-intro-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.score-obs__innings-intro-name {
+  font-size: 18px;
+  font-weight: 700;
+  color: #fff;
+}
+
+.score-obs__innings-intro-strike {
+  font-size: 12px;
+  color: #22c55e;
+}
+
+.score-obs__innings-intro-stats {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   STATS LIST — team sub-label
+   ═══════════════════════════════════════════════════════════════════════════════ */
+
+.score-obs__stats-name-col {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.score-obs__stats-team {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.45);
+  margin-top: 1px;
+}

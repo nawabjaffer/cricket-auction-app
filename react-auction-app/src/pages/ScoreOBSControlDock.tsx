@@ -26,14 +26,21 @@ const OVERLAY_BUTTONS: { key: OverlayType; label: string; icon: string; shortcut
 ];
 
 const STATS_OVERLAY_BUTTONS: { key: OverlayType; label: string; icon: string; color: string }[] = [
-  { key: 'stats_fours', label: '4s Stats', icon: '4️⃣', color: '#eab308' },
-  { key: 'stats_sixes', label: '6s Stats', icon: '6️⃣', color: '#f97316' },
-  { key: 'stats_sr', label: 'Strike Rate', icon: '📈', color: '#22c55e' },
-  { key: 'stats_mvp', label: 'MVP', icon: '🏆', color: '#fbbf24' },
+  { key: 'stats_fours', label: '4s (Match)', icon: '4️⃣', color: '#eab308' },
+  { key: 'tournament_fours', label: '4s (Tourney)', icon: '4️⃣', color: '#ca8a04' },
+  { key: 'stats_sixes', label: '6s (Match)', icon: '6️⃣', color: '#f97316' },
+  { key: 'tournament_sixes', label: '6s (Tourney)', icon: '6️⃣', color: '#ea580c' },
+  { key: 'stats_sr', label: 'SR (Match)', icon: '📈', color: '#22c55e' },
+  { key: 'tournament_sr', label: 'SR (Tourney)', icon: '📈', color: '#16a34a' },
+  { key: 'stats_mvp', label: 'MVP (Match)', icon: '🏆', color: '#fbbf24' },
+  { key: 'tournament_mvp', label: 'MVP (Tourney)', icon: '🏆', color: '#d97706' },
   { key: 'match_summary', label: 'Summary', icon: '📋', color: '#3b82f6' },
   { key: 'points_table', label: 'Points Table', icon: '📊', color: '#0ea5e9' },
-  { key: 'award_orange_cap', label: 'Orange Cap', icon: '🧢', color: '#f97316' },
-  { key: 'award_purple_cap', label: 'Purple Cap', icon: '🧢', color: '#a855f7' },
+  { key: 'award_orange_cap_match', label: 'Orange (Match)', icon: '🧢', color: '#fb923c' },
+  { key: 'award_orange_cap', label: 'Orange (Tourney)', icon: '🧢', color: '#f97316' },
+  { key: 'award_purple_cap_match', label: 'Purple (Match)', icon: '🧢', color: '#c084fc' },
+  { key: 'award_purple_cap', label: 'Purple (Tourney)', icon: '🧢', color: '#a855f7' },
+  { key: 'match_intro', label: 'Match Intro', icon: '🎬', color: '#6366f1' },
 ];
 
 export default function ScoreOBSControlDock() {
