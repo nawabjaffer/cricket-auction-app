@@ -17,7 +17,7 @@ import type {
   LiveScore, OverlayControlState, OverlayType,
   ScoringOverlayConfig, ScoringAd, MatchSetup, LiveQuestion,
   PreMatchState, MatchLineup, MatchStatsSnapshot, TournamentStats,
-  ReplayTrigger, Innings, MatchScore, AnimationConfig,
+  ReplayTrigger, Innings, MatchScore, AnimationConfig, FieldPlacement,
 } from '../types/scoring';
 import PreMatchOverlay from './PreMatchOverlay';
 import './ScoreOBSOverlayPage.css';
@@ -67,6 +67,9 @@ export default function ScoreOBSOverlayPage() {
   const adIndexRef = useRef(0);
   const questionIndexRef = useRef(0);
   const autoDismissRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const celebrationActiveRef = useRef(false);
+  const configRef = useRef(config);
+  configRef.current = config;
   const [matchStats, setMatchStats] = useState<MatchStatsSnapshot | null>(null);
   const [tournamentStats, setTournamentStats] = useState<TournamentStats | null>(null);
   const [innings, setInnings] = useState<Record<string, Innings>>({});
@@ -75,6 +78,7 @@ export default function ScoreOBSOverlayPage() {
   const [allTeams, setAllTeams] = useState<{ id: string; name: string; logoUrl?: string }[]>([]);
   const [inningsIntroPhase, setInningsIntroPhase] = useState<'batsmen' | 'bowler' | 'done'>('done');
   const inningsIntroShownRef = useRef(false);
+  const [activeFieldPlacement, setActiveFieldPlacement] = useState<FieldPlacement | null>(null);
 
   // Get matchId from URL params
   useEffect(() => {
@@ -103,24 +107,37 @@ export default function ScoreOBSOverlayPage() {
     unsubs.push(onValue(ref(obsDb, `${basePath}/matches/${matchId}/overlay`), snap => {
       if (snap.exists()) {
         const ctrl = snap.val() as OverlayControlState;
+        console.log('[OBS-Overlay] Firebase overlay received:', ctrl.activeOverlay, ctrl);
         setOverlay(ctrl);
         if (ctrl.activeOverlay !== 'none') {
+          // Always clear any pending auto-dismiss from previous overlay
+          if (autoDismissRef.current) { clearTimeout(autoDismissRef.current); autoDismissRef.current = null; }
+          celebrationActiveRef.current = false;
           setLocalOverlay(ctrl.activeOverlay);
+          console.log('[OBS-Overlay] setLocalOverlay →', ctrl.activeOverlay);
           // Auto-dismiss animation overlays and clear Firebase state
           const animationTypes = ['boundary_four', 'boundary_six', 'wicket', 'duck_out', 'hat_trick'];
           if (animationTypes.includes(ctrl.activeOverlay)) {
-            if (autoDismissRef.current) clearTimeout(autoDismissRef.current);
-            const duration = ctrl.activeOverlay === 'hat_trick' ? 8000 :
-              ctrl.activeOverlay === 'boundary_four' ? (config.fourAnimation?.durationMs || 3000) :
-              ctrl.activeOverlay === 'boundary_six' ? (config.sixAnimation?.durationMs || 4000) :
-              ctrl.activeOverlay === 'wicket' ? (config.wicketAnimation?.durationMs || 4000) : 5000;
+            celebrationActiveRef.current = true;
+            const cfg = configRef.current;
+            const duration =
+              ctrl.activeOverlay === 'hat_trick' ? (cfg.hatTrickAnimation?.durationMs || 8000) :
+              ctrl.activeOverlay === 'duck_out' ? (cfg.duckOutAnimation?.durationMs || 5000) :
+              ctrl.activeOverlay === 'boundary_four' ? (cfg.fourAnimation?.durationMs || 3000) :
+              ctrl.activeOverlay === 'boundary_six' ? (cfg.sixAnimation?.durationMs || 4000) :
+              ctrl.activeOverlay === 'wicket' ? (cfg.wicketAnimation?.durationMs || 4000) : 5000;
+            console.log('[OBS-Overlay] Celebration active:', ctrl.activeOverlay, 'duration:', duration);
             autoDismissRef.current = setTimeout(() => {
+              console.log('[OBS-Overlay] Auto-dismiss firing, clearing overlay');
+              celebrationActiveRef.current = false;
               setLocalOverlay('none');
               // Clear Firebase overlay state so dock can re-trigger
               fbSet(ref(obsDb, `${basePath}/matches/${matchId}/overlay`), { activeOverlay: 'none', lastUpdated: Date.now() });
             }, duration);
           }
         } else {
+          if (autoDismissRef.current) { clearTimeout(autoDismissRef.current); autoDismissRef.current = null; }
+          celebrationActiveRef.current = false;
           setLocalOverlay('none');
         }
       }
@@ -213,6 +230,17 @@ export default function ScoreOBSOverlayPage() {
       setAllTeams(Object.values(data).map(t => ({ id: t.id, name: t.name, logoUrl: t.logoUrl })));
     }));
 
+    // Active field placement (bottom-left mini overlay)
+    unsubs.push(onValue(ref(obsDb, `${basePath}/matches/${matchId}/activeFieldPlacement`), async snap => {
+      if (!snap.exists() || !snap.val()) { setActiveFieldPlacement(null); return; }
+      const placementId = snap.val() as string;
+      // Fetch the actual placement data
+      onValue(ref(obsDb, `${basePath}/matches/${matchId}/fieldPlacements/${placementId}`), pSnap => {
+        if (pSnap.exists()) setActiveFieldPlacement(pSnap.val() as FieldPlacement);
+        else setActiveFieldPlacement(null);
+      }, { onlyOnce: true });
+    }));
+
     return () => unsubs.forEach(u => u());
   }, [matchId]);
 
@@ -230,6 +258,36 @@ export default function ScoreOBSOverlayPage() {
     }
   }, [match, rawLineups]);
 
+  // Preload animation assets (video/image) to eliminate latency on trigger
+  useEffect(() => {
+    const urls: string[] = [];
+    if (config.fourAnimation?.mediaUrl) urls.push(config.fourAnimation.mediaUrl);
+    if (config.sixAnimation?.mediaUrl) urls.push(config.sixAnimation.mediaUrl);
+    if (config.wicketAnimation?.mediaUrl) urls.push(config.wicketAnimation.mediaUrl);
+    if (config.duckOutAnimation?.mediaUrl) urls.push(config.duckOutAnimation.mediaUrl);
+    if (config.hatTrickAnimation?.mediaUrl) urls.push(config.hatTrickAnimation.mediaUrl);
+    if (config.duckOutImageUrl) urls.push(config.duckOutImageUrl);
+    if (config.hatTrickImageUrl) urls.push(config.hatTrickImageUrl);
+    if (config.wicketImageUrl) urls.push(config.wicketImageUrl);
+
+    urls.forEach(url => {
+      if (!url) return;
+      const ext = url.split('.').pop()?.toLowerCase() || '';
+      if (['mp4', 'webm', 'mov'].includes(ext)) {
+        // Preload video by creating a hidden element and loading metadata+data
+        const vid = document.createElement('video');
+        vid.preload = 'auto';
+        vid.muted = true;
+        vid.src = url;
+        vid.load();
+      } else {
+        // Preload image
+        const img = new Image();
+        img.src = url;
+      }
+    });
+  }, [config]);
+
   // Innings start intro sequence — show batsmen then bowler when live first appears
   useEffect(() => {
     if (!live || inningsIntroShownRef.current) return;
@@ -242,6 +300,9 @@ export default function ScoreOBSOverlayPage() {
 
   // Auto-dismiss overlay after duration
   const triggerOverlay = useCallback((type: OverlayType, durationMs = 5000) => {
+    // Never overwrite an active celebration with a stats overlay
+    const celebrationTypes: OverlayType[] = ['boundary_four', 'boundary_six', 'wicket', 'duck_out', 'hat_trick'];
+    if (!celebrationTypes.includes(type) && celebrationActiveRef.current) return;
     setLocalOverlay(type);
     if (autoDismissRef.current) clearTimeout(autoDismissRef.current);
     if (type !== 'none' && type !== 'full_scorecard') {
@@ -273,18 +334,39 @@ export default function ScoreOBSOverlayPage() {
     return () => window.removeEventListener('keydown', handleKey);
   }, [triggerOverlay, config]);
 
-  // Auto-rotate full scorecard + player/bowler stat overlays
+  // Auto-show stats ONLY on contextual events: over end, new bowler, new batsman
+  const prevLiveRef = useRef<LiveScore | null>(null);
   useEffect(() => {
-    if (!live || !config.autoOverlayEnabled) return;
-    const sequence: OverlayType[] = ['full_scorecard', 'batsman_striker', 'batsman_nonstriker', 'bowler'];
-    let idx = 0;
-    const intervalMs = Math.max(10, config.autoOverlayIntervalSeconds || 30) * 1000;
-    const timer = setInterval(() => {
-      triggerOverlay(sequence[idx], sequence[idx] === 'full_scorecard' ? 7000 : 5000);
-      idx = (idx + 1) % sequence.length;
-    }, intervalMs);
-    return () => clearInterval(timer);
-  }, [live, config.autoOverlayEnabled, config.autoOverlayIntervalSeconds, triggerOverlay]);
+    if (!live) { prevLiveRef.current = null; return; }
+    const prev = prevLiveRef.current;
+    prevLiveRef.current = live;
+    if (!prev) return;
+
+    // Don't interrupt celebration animations or manually triggered overlays
+    const celebrationTypes: OverlayType[] = ['boundary_four', 'boundary_six', 'wicket', 'duck_out', 'hat_trick'];
+    const manualOverlays: OverlayType[] = ['field_placement', 'full_scorecard', 'match_intro', 'points_table', 'match_summary', 'live_question'];
+    if (celebrationTypes.includes(localOverlay) || manualOverlays.includes(localOverlay)) return;
+
+    // Over just completed → show bowler stats briefly
+    if (live.overs > prev.overs && (live.currentOverBalls?.length || 0) === 0) {
+      triggerOverlay('bowler', 5000);
+      return;
+    }
+
+    // New bowler assigned → show new bowler stats
+    if (live.currentBowler?.playerId && prev.currentBowler?.playerId &&
+        live.currentBowler.playerId !== prev.currentBowler.playerId) {
+      triggerOverlay('bowler', 5000);
+      return;
+    }
+
+    // New batsman on strike → show striker stats
+    if (live.currentBatsmen?.[0]?.playerId && prev.currentBatsmen?.[0]?.playerId &&
+        live.currentBatsmen[0].playerId !== prev.currentBatsmen[0].playerId &&
+        (live.currentOverBalls?.length || 0) > 0) {
+      triggerOverlay('batsman_striker', 5000);
+    }
+  }, [live, localOverlay, triggerOverlay]);
 
   // L-banner ad rotation
   useEffect(() => {
@@ -301,7 +383,8 @@ export default function ScoreOBSOverlayPage() {
 
   if (!matchId) return null;
 
-  // Pre-match overlay (before live score exists)
+  // Pre-match overlay (show ceremony phases regardless of live score)
+  // Only skip pre-match when phase is idle or match_ready (ceremony done)
   const isPreMatch = preMatch && preMatch.phase !== 'idle' && preMatch.phase !== 'match_ready';
   if (isPreMatch && match) {
     return (
@@ -317,7 +400,7 @@ export default function ScoreOBSOverlayPage() {
             {config.broadcastPartnerName && <span className="score-obs__partner-name">{config.broadcastPartnerName}</span>}
           </div>
         </div>
-        <PreMatchOverlay match={match} preMatch={preMatch} config={config} lineups={lineups} />
+        <PreMatchOverlay match={match} preMatch={preMatch} config={config} lineups={lineups} playerImages={playerImages} />
       </div>
     );
   }
@@ -349,39 +432,41 @@ export default function ScoreOBSOverlayPage() {
           )}
           {localOverlay === 'award_orange_cap' && tournamentStats && (
             <AwardOverlay title="ORANGE CAP" subtitle="Most Runs — Tournament" color="#f97316"
-              playerName={tournamentStats.orangeCap?.playerName || ''} value={`${tournamentStats.orangeCap?.runs || 0} runs`} />
+              playerName={tournamentStats.orangeCap?.playerName || ''} value={`${tournamentStats.orangeCap?.runs || 0} runs`}
+              imageUrl={tournamentStats.orangeCap?.imageUrl} />
           )}
           {localOverlay === 'award_purple_cap' && tournamentStats && (
             <AwardOverlay title="PURPLE CAP" subtitle="Most Wickets — Tournament" color="#a855f7"
-              playerName={tournamentStats.purpleCap?.playerName || ''} value={`${tournamentStats.purpleCap?.wickets || 0} wickets`} />
+              playerName={tournamentStats.purpleCap?.playerName || ''} value={`${tournamentStats.purpleCap?.wickets || 0} wickets`}
+              imageUrl={tournamentStats.purpleCap?.imageUrl} />
           )}
           {localOverlay === 'tournament_fours' && tournamentStats && (
-            <StatsListOverlay title="MOST FOURS — TOURNAMENT" items={tournamentStats.topFourHitters?.map(p => ({ name: p.playerName, value: String(p.fours), team: p.teamName })) || []} />
+            <StatsListOverlay title="MOST FOURS — TOURNAMENT" items={tournamentStats.topFourHitters?.map(p => ({ name: p.playerName, value: String(p.fours), team: p.teamName, imageUrl: p.imageUrl })) || []} playerImages={playerImages} />
           )}
           {localOverlay === 'tournament_sixes' && tournamentStats && (
-            <StatsListOverlay title="MOST SIXES — TOURNAMENT" items={tournamentStats.topSixHitters?.map(p => ({ name: p.playerName, value: String(p.sixes), team: p.teamName })) || []} />
+            <StatsListOverlay title="MOST SIXES — TOURNAMENT" items={tournamentStats.topSixHitters?.map(p => ({ name: p.playerName, value: String(p.sixes), team: p.teamName, imageUrl: p.imageUrl })) || []} playerImages={playerImages} />
           )}
           {localOverlay === 'tournament_sr' && tournamentStats && (
-            <StatsListOverlay title="BEST STRIKE RATE — TOURNAMENT" items={tournamentStats.topStrikeRates?.map(p => ({ name: p.playerName, value: String(p.strikeRate), team: p.teamName })) || []} />
+            <StatsListOverlay title="BEST STRIKE RATE — TOURNAMENT" items={tournamentStats.topStrikeRates?.map(p => ({ name: p.playerName, value: String(p.strikeRate), team: p.teamName, imageUrl: p.imageUrl })) || []} playerImages={playerImages} />
           )}
           {localOverlay === 'tournament_mvp' && tournamentStats && (
-            <StatsListOverlay title="MVP — TOURNAMENT" items={tournamentStats.mvpLeaderboard?.slice(0, 5).map(p => ({ name: p.playerName, value: String(p.total.toFixed(1)), team: p.teamId })) || []} />
+            <StatsListOverlay title="MVP — TOURNAMENT" items={tournamentStats.mvpLeaderboard?.slice(0, 5).map(p => ({ name: p.playerName, value: String(p.total.toFixed(1)), team: p.teamId })) || []} playerImages={playerImages} />
           )}
           {/* Animation overlays work even before innings starts */}
-          {localOverlay === 'boundary_four' && config.enableBoundaryAnimation && (
-            <BoundaryOverlay type="four" animConfig={config.fourAnimation} />
+          {localOverlay === 'boundary_four' && (
+            <BoundaryOverlay key="pre-overlay-four" type="four" animConfig={config.fourAnimation} />
           )}
-          {localOverlay === 'boundary_six' && config.enableSixerAnimation && (
-            <BoundaryOverlay type="six" animConfig={config.sixAnimation} />
+          {localOverlay === 'boundary_six' && (
+            <BoundaryOverlay key="pre-overlay-six" type="six" animConfig={config.sixAnimation} />
           )}
-          {localOverlay === 'wicket' && config.enableWicketAnimation && (
-            <WicketOverlay imageUrl={config.wicketImageUrl} animConfig={config.wicketAnimation} />
+          {localOverlay === 'wicket' && (
+            <WicketOverlay key="pre-overlay-wicket" imageUrl={config.wicketImageUrl} animConfig={config.wicketAnimation} />
           )}
-          {localOverlay === 'duck_out' && config.enableDuckOutAnimation && (
-            <DuckOutOverlay imageUrl={config.duckOutImageUrl} />
+          {localOverlay === 'duck_out' && (
+            <DuckOutOverlay key="pre-overlay-duck" imageUrl={config.duckOutImageUrl} animConfig={config.duckOutAnimation} />
           )}
-          {localOverlay === 'hat_trick' && config.enableHatTrickAnimation && (
-            <HatTrickOverlay imageUrl={config.hatTrickImageUrl} />
+          {localOverlay === 'hat_trick' && (
+            <HatTrickOverlay key="pre-overlay-hattrick" imageUrl={config.hatTrickImageUrl} animConfig={config.hatTrickAnimation} />
           )}
         </AnimatePresence>
       </div>
@@ -480,37 +565,71 @@ export default function ScoreOBSOverlayPage() {
         )}
       </AnimatePresence>
 
-      {/* ── Overlay Components ─────────────────────────────────────── */}
+      {/* ── Persistent Field Placement (bottom-left) ───────────────── */}
+      <AnimatePresence>
+        {activeFieldPlacement && (
+          <motion.div
+            className="score-obs__field-placement"
+            initial={{ scale: 0.6, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            exit={{ scale: 0.6, opacity: 0 }}
+            transition={{ type: 'spring', stiffness: 180, damping: 22 }}
+          >
+            <div className="score-obs__field-ground">
+              <div className="score-obs__field-pitch" />
+              <div className="score-obs__field-inner-circle" />
+              {activeFieldPlacement.positions.map(pos => (
+                <div
+                  key={pos.id}
+                  className="score-obs__field-dot"
+                  style={{ left: `${pos.x}%`, top: `${pos.y}%` }}
+                  title={pos.label}
+                >
+                  <span className="score-obs__field-dot-label">{pos.label}</span>
+                </div>
+              ))}
+            </div>
+            <div className="score-obs__field-name">{activeFieldPlacement.name}</div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ── Celebration Animation Overlays (immediate, no wait) ─── */}
+      {effectiveOverlay !== 'none' && console.log('[OBS-Overlay] Render check:', effectiveOverlay, 'enableBoundary:', config.enableBoundaryAnimation, 'enableSixer:', config.enableSixerAnimation, 'fourAnim:', config.fourAnimation, 'sixAnim:', config.sixAnimation)}
+      <AnimatePresence>
+        {effectiveOverlay === 'boundary_four' && (
+          <BoundaryOverlay key="overlay-four" type="four" animConfig={config.fourAnimation} />
+        )}
+        {effectiveOverlay === 'boundary_six' && (
+          <BoundaryOverlay key="overlay-six" type="six" animConfig={config.sixAnimation} />
+        )}
+        {effectiveOverlay === 'wicket' && (
+          <WicketOverlay key="overlay-wicket" imageUrl={config.wicketImageUrl} animConfig={config.wicketAnimation} />
+        )}
+        {effectiveOverlay === 'duck_out' && (
+          <DuckOutOverlay key="overlay-duck" imageUrl={config.duckOutImageUrl} animConfig={config.duckOutAnimation} />
+        )}
+        {effectiveOverlay === 'hat_trick' && (
+          <HatTrickOverlay key="overlay-hattrick" imageUrl={config.hatTrickImageUrl} animConfig={config.hatTrickAnimation} />
+        )}
+      </AnimatePresence>
+
+      {/* ── Info/Stats Overlay Components ──────────────────────────── */}
       <AnimatePresence mode="wait">
         {effectiveOverlay === 'batsman_striker' && live.currentBatsmen?.[0] && (
-          <BatsmanStatsOverlay key="striker" batsman={live.currentBatsmen[0]} playerImages={playerImages} lineups={lineups} />
+          <BatsmanStatsOverlay key="overlay-striker" batsman={live.currentBatsmen[0]} playerImages={playerImages} lineups={lineups} />
         )}
         {effectiveOverlay === 'batsman_nonstriker' && live.currentBatsmen?.[1] && (
-          <BatsmanStatsOverlay key="non-striker" batsman={live.currentBatsmen[1]} playerImages={playerImages} lineups={lineups} />
+          <BatsmanStatsOverlay key="overlay-nonstriker" batsman={live.currentBatsmen[1]} playerImages={playerImages} lineups={lineups} />
         )}
         {effectiveOverlay === 'bowler' && (
-          <BowlerStatsOverlay bowler={live.currentBowler} playerImages={playerImages} lineups={lineups} />
+          <BowlerStatsOverlay key="overlay-bowler" bowler={live.currentBowler} playerImages={playerImages} lineups={lineups} />
         )}
         {effectiveOverlay === 'full_scorecard' && (
-          <FullScorecardOverlay live={live} battingTeam={battingTeamName} bowlingTeam={bowlingTeamName} />
-        )}
-        {effectiveOverlay === 'boundary_four' && config.enableBoundaryAnimation && (
-          <BoundaryOverlay type="four" animConfig={config.fourAnimation} />
-        )}
-        {effectiveOverlay === 'boundary_six' && config.enableSixerAnimation && (
-          <BoundaryOverlay type="six" animConfig={config.sixAnimation} />
-        )}
-        {effectiveOverlay === 'wicket' && config.enableWicketAnimation && (
-          <WicketOverlay imageUrl={config.wicketImageUrl} animConfig={config.wicketAnimation} />
-        )}
-        {effectiveOverlay === 'duck_out' && config.enableDuckOutAnimation && (
-          <DuckOutOverlay imageUrl={config.duckOutImageUrl} />
-        )}
-        {effectiveOverlay === 'hat_trick' && config.enableHatTrickAnimation && (
-          <HatTrickOverlay imageUrl={config.hatTrickImageUrl} />
+          <FullScorecardOverlay key="overlay-scorecard" live={live} battingTeam={battingTeamName} bowlingTeam={bowlingTeamName} />
         )}
         {effectiveOverlay === 'live_question' && currentQuestion && (
-          <QuestionOverlay question={currentQuestion} />
+          <QuestionOverlay key="overlay-question" question={currentQuestion} />
         )}
         {effectiveOverlay === 'stats_fours' && matchStats && (
           <StatsListOverlay
@@ -518,7 +637,9 @@ export default function ScoreOBSOverlayPage() {
             items={matchStats.topFours?.map(p => ({
               name: p.playerName,
               value: String(p.fours),
+              imageUrl: p.imageUrl,
             })) || []}
+            playerImages={playerImages}
           />
         )}
         {effectiveOverlay === 'stats_sixes' && matchStats && (
@@ -527,7 +648,9 @@ export default function ScoreOBSOverlayPage() {
             items={matchStats.topSixes?.map(p => ({
               name: p.playerName,
               value: String(p.sixes),
+              imageUrl: p.imageUrl,
             })) || []}
+            playerImages={playerImages}
           />
         )}
         {effectiveOverlay === 'stats_sr' && matchStats && (
@@ -536,7 +659,9 @@ export default function ScoreOBSOverlayPage() {
             items={matchStats.topStrikeRates?.map(p => ({
               name: p.playerName,
               value: String(p.strikeRate),
+              imageUrl: p.imageUrl,
             })) || []}
+            playerImages={playerImages}
           />
         )}
         {effectiveOverlay === 'stats_mvp' && matchStats && (
@@ -545,10 +670,12 @@ export default function ScoreOBSOverlayPage() {
             items={matchStats.mvpPoints?.slice(0, 5).map(p => ({
               name: p.playerName,
               value: String(p.totalPoints.toFixed(1)),
+              imageUrl: p.imageUrl,
             })) || matchStats.mvpLeaderboard?.slice(0, 5).map(p => ({
               name: p.playerName,
               value: String(p.total.toFixed(1)),
             })) || []}
+            playerImages={playerImages}
           />
         )}
         {effectiveOverlay === 'tournament_fours' && tournamentStats && (
@@ -558,7 +685,9 @@ export default function ScoreOBSOverlayPage() {
               name: p.playerName,
               value: String(p.fours),
               team: p.teamName,
+              imageUrl: p.imageUrl,
             })) || []}
+            playerImages={playerImages}
           />
         )}
         {effectiveOverlay === 'tournament_sixes' && tournamentStats && (
@@ -568,7 +697,9 @@ export default function ScoreOBSOverlayPage() {
               name: p.playerName,
               value: String(p.sixes),
               team: p.teamName,
+              imageUrl: p.imageUrl,
             })) || []}
+            playerImages={playerImages}
           />
         )}
         {effectiveOverlay === 'tournament_sr' && tournamentStats && (
@@ -578,7 +709,9 @@ export default function ScoreOBSOverlayPage() {
               name: p.playerName,
               value: String(p.strikeRate),
               team: p.teamName,
+              imageUrl: p.imageUrl,
             })) || []}
+            playerImages={playerImages}
           />
         )}
         {effectiveOverlay === 'tournament_mvp' && tournamentStats && (
@@ -588,6 +721,7 @@ export default function ScoreOBSOverlayPage() {
               name: p.playerName,
               value: String(p.total.toFixed(1)),
             })) || []}
+            playerImages={playerImages}
           />
         )}
         {effectiveOverlay === 'match_summary' && matchStats && match && (
@@ -600,6 +734,7 @@ export default function ScoreOBSOverlayPage() {
             color="#f97316"
             playerName={tournamentStats.orangeCap?.playerName || ''}
             value={`${tournamentStats.orangeCap?.runs || 0} runs`}
+            imageUrl={tournamentStats.orangeCap?.imageUrl}
           />
         )}
         {effectiveOverlay === 'award_purple_cap' && tournamentStats && (
@@ -609,6 +744,7 @@ export default function ScoreOBSOverlayPage() {
             color="#a855f7"
             playerName={tournamentStats.purpleCap?.playerName || ''}
             value={`${tournamentStats.purpleCap?.wickets || 0} wickets`}
+            imageUrl={tournamentStats.purpleCap?.imageUrl}
           />
         )}
         {effectiveOverlay === 'award_orange_cap_match' && matchStats && (
@@ -618,6 +754,7 @@ export default function ScoreOBSOverlayPage() {
             color="#f97316"
             playerName={matchStats.topRunScorers?.[0]?.playerName || ''}
             value={`${matchStats.topRunScorers?.[0]?.runs || 0} runs (${matchStats.topRunScorers?.[0]?.balls || 0} balls)`}
+            imageUrl={matchStats.topRunScorers?.[0]?.imageUrl}
           />
         )}
         {effectiveOverlay === 'award_purple_cap_match' && matchStats && (
@@ -627,6 +764,7 @@ export default function ScoreOBSOverlayPage() {
             color="#a855f7"
             playerName={matchStats.topWicketTakers?.[0]?.playerName || ''}
             value={`${matchStats.topWicketTakers?.[0]?.wickets || 0} wickets`}
+            imageUrl={matchStats.topWicketTakers?.[0]?.imageUrl}
           />
         )}
         {effectiveOverlay === 'points_table' && (
@@ -634,6 +772,9 @@ export default function ScoreOBSOverlayPage() {
         )}
         {effectiveOverlay === 'match_intro' && match && (
           <MatchIntroOverlay match={match} config={config} lineups={lineups} playerImages={playerImages} />
+        )}
+        {effectiveOverlay === 'field_placement' && activeFieldPlacement && (
+          <FieldPlacementOverlay placement={activeFieldPlacement} />
         )}
       </AnimatePresence>
     </div>
@@ -884,7 +1025,7 @@ function FullScorecardOverlay({ live, battingTeam, bowlingTeam }: {
         ))}
 
         {/* Yet to bat (dimmed) */}
-        {allBatsmen.filter(b => !b.isOut && !(live.currentBatsmen || []).some(cb => cb.playerId === b.playerId)).map((b, i) => (
+        {allBatsmen.filter(b => !b.isOut && !(live.currentBatsmen || []).some((cb: { playerId: string }) => cb.playerId === b.playerId)).map((b, i) => (
           <motion.div
             key={b.playerId}
             className="score-obs__sc-bat-row score-obs__sc-bat-row--pending"
@@ -964,8 +1105,11 @@ function ChromaKeyVideo({ src, chromaColor, similarity, className }: {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const animRef = useRef<number>(0);
+  const drawingRef = useRef(false);
+  const [corsFailed, setCorsFailed] = useState(false);
 
   useEffect(() => {
+    if (corsFailed) return;
     const video = videoRef.current;
     const canvas = canvasRef.current;
     if (!video || !canvas) return;
@@ -976,46 +1120,124 @@ function ChromaKeyVideo({ src, chromaColor, similarity, className }: {
     const keyG = parseInt(hex.substring(2, 4), 16);
     const keyB = parseInt(hex.substring(4, 6), 16);
     const threshold = similarity * 442; // max distance = sqrt(255^2*3) ≈ 442
+    const thresholdSq = threshold * threshold; // avoid sqrt per pixel
 
     const ctx = canvas.getContext('2d', { willReadFrequently: true });
     if (!ctx) return;
 
     const draw = () => {
-      if (video.paused || video.ended) return;
-      canvas.width = video.videoWidth || 640;
-      canvas.height = video.videoHeight || 360;
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      const data = imageData.data;
-      for (let i = 0; i < data.length; i += 4) {
-        const r = data[i], g = data[i + 1], b = data[i + 2];
-        const dist = Math.sqrt((r - keyR) ** 2 + (g - keyG) ** 2 + (b - keyB) ** 2);
-        if (dist < threshold) {
-          data[i + 3] = 0; // set alpha to 0 (transparent)
-        }
+      if (video.paused || video.ended) {
+        drawingRef.current = false;
+        return;
       }
-      ctx.putImageData(imageData, 0, 0);
+      const w = video.videoWidth || 1920;
+      const h = video.videoHeight || 1080;
+      if (canvas.width !== w) canvas.width = w;
+      if (canvas.height !== h) canvas.height = h;
+      ctx.drawImage(video, 0, 0, w, h);
+      try {
+        const imageData = ctx.getImageData(0, 0, w, h);
+        const data = imageData.data;
+        for (let i = 0; i < data.length; i += 4) {
+          const dr = data[i] - keyR;
+          const dg = data[i + 1] - keyG;
+          const db = data[i + 2] - keyB;
+          const distSq = dr * dr + dg * dg + db * db;
+          if (distSq < thresholdSq) {
+            data[i + 3] = 0; // transparent
+          } else if (distSq < thresholdSq * 2.25) {
+            // Soft edge — feather the alpha for smooth transition
+            const ratio = (Math.sqrt(distSq) - threshold) / (threshold * 0.5);
+            data[i + 3] = Math.min(255, Math.round(ratio * 255));
+          }
+        }
+        ctx.putImageData(imageData, 0, 0);
+      } catch {
+        // Canvas tainted by CORS — fall back to regular video
+        console.warn('[OBS-Overlay] Chroma key canvas tainted, falling back to direct video');
+        drawingRef.current = false;
+        setCorsFailed(true);
+        return;
+      }
       animRef.current = requestAnimationFrame(draw);
     };
 
-    video.addEventListener('play', () => { animRef.current = requestAnimationFrame(draw); });
-    if (!video.paused) animRef.current = requestAnimationFrame(draw);
+    const startDrawing = () => {
+      if (!drawingRef.current) {
+        drawingRef.current = true;
+        animRef.current = requestAnimationFrame(draw);
+      }
+    };
 
-    return () => { cancelAnimationFrame(animRef.current); };
-  }, [chromaColor, similarity]);
+    const handleError = () => {
+      console.warn('[OBS-Overlay] Video CORS error, falling back to direct video');
+      setCorsFailed(true);
+    };
+
+    video.addEventListener('play', startDrawing);
+    video.addEventListener('playing', startDrawing);
+    video.addEventListener('error', handleError);
+    // If video already playing (autoPlay), start immediately
+    if (!video.paused && video.readyState >= 2) startDrawing();
+
+    return () => {
+      drawingRef.current = false;
+      cancelAnimationFrame(animRef.current);
+      video.removeEventListener('play', startDrawing);
+      video.removeEventListener('playing', startDrawing);
+      video.removeEventListener('error', handleError);
+    };
+  }, [chromaColor, similarity, corsFailed]);
+
+  // CORS failed — render video directly without chroma key
+  if (corsFailed) {
+    return <AutoPlayVideo src={src} className={className ? `${className} score-obs__celebration-video` : 'score-obs__celebration-video'} />;
+  }
 
   return (
-    <div className={className} style={{ position: 'relative' }}>
+    <div className={className} style={{ position: 'relative', width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <video
         ref={videoRef}
         src={src}
         autoPlay
         muted
         playsInline
-        style={{ position: 'absolute', opacity: 0, pointerEvents: 'none' }}
+        crossOrigin="anonymous"
+        onError={() => setCorsFailed(true)}
+        style={{ position: 'absolute', width: 0, height: 0, opacity: 0, pointerEvents: 'none' }}
       />
-      <canvas ref={canvasRef} className="score-obs__celebration-video" />
+      <canvas ref={canvasRef} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
     </div>
+  );
+}
+
+// AutoPlayVideo — ensures video plays immediately even in OBS browser source
+function AutoPlayVideo({ src, className }: { src: string; className?: string }) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    // Force play on mount — handles browsers/OBS that block autoplay
+    video.muted = true;
+    const playPromise = video.play();
+    if (playPromise) {
+      playPromise.catch(() => {
+        // Retry after a tick
+        setTimeout(() => { video.play().catch(() => {}); }, 50);
+      });
+    }
+  }, []);
+
+  return (
+    <video
+      ref={videoRef}
+      src={src}
+      autoPlay
+      muted
+      playsInline
+      className={className}
+    />
   );
 }
 
@@ -1027,8 +1249,11 @@ function BoundaryOverlay({ type, animConfig }: { type: 'four' | 'six'; animConfi
   const color = animConfig?.color || defaultColor;
   const scale = animConfig?.scale || (isSix ? 1.2 : 1);
 
-  // Custom media (image/video)
-  if (animConfig?.type === 'image' && animConfig.mediaUrl) {
+  // Custom media — check if mediaUrl is set (regardless of type field, be lenient)
+  const hasVideo = animConfig?.mediaUrl && (animConfig.type === 'video' || animConfig.mediaUrl.match(/\.(mp4|webm|mov)(\?|$)/i));
+  const hasImage = animConfig?.mediaUrl && (animConfig.type === 'image' || animConfig.mediaUrl.match(/\.(png|gif|jpg|jpeg|webp|svg)(\?|$)/i));
+
+  if (hasImage && !hasVideo) {
     return (
       <motion.div
         className={`score-obs__celebration score-obs__celebration--${type}`}
@@ -1037,28 +1262,29 @@ function BoundaryOverlay({ type, animConfig }: { type: 'four' | 'six'; animConfi
         exit={{ scale: 0, opacity: 0 }}
         transition={{ type: 'spring', stiffness: 300, damping: 20 }}
       >
-        <img src={animConfig.mediaUrl} alt={text} className="score-obs__celebration-img" />
+        <img src={animConfig!.mediaUrl} alt={text} className="score-obs__celebration-img" />
       </motion.div>
     );
   }
 
-  if (animConfig?.type === 'video' && animConfig.mediaUrl) {
+  if (hasVideo) {
     return (
       <motion.div
         className={`score-obs__celebration score-obs__celebration--${type}`}
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
+        transition={{ duration: 0.15 }}
       >
-        {animConfig.chromaKeyEnabled ? (
+        {animConfig!.chromaKeyEnabled ? (
           <ChromaKeyVideo
-            src={animConfig.mediaUrl}
-            chromaColor={animConfig.chromaKeyColor || '#00ff00'}
-            similarity={animConfig.chromaKeySimilarity || 0.4}
+            src={animConfig!.mediaUrl!}
+            chromaColor={animConfig!.chromaKeyColor || '#00ff00'}
+            similarity={animConfig!.chromaKeySimilarity || 0.4}
             className="score-obs__celebration-chroma"
           />
         ) : (
-          <video src={animConfig.mediaUrl} autoPlay muted playsInline className="score-obs__celebration-video" />
+          <AutoPlayVideo src={animConfig!.mediaUrl!} className="score-obs__celebration-video" />
         )}
       </motion.div>
     );
@@ -1084,8 +1310,11 @@ function WicketOverlay({ imageUrl, animConfig }: { imageUrl?: string; animConfig
   const color = animConfig?.color || '#ef4444';
   const scale = animConfig?.scale || 1;
 
-  // Custom media from animConfig takes priority
-  if (animConfig?.type === 'image' && animConfig.mediaUrl) {
+  // Lenient media type detection
+  const hasVideo = animConfig?.mediaUrl && (animConfig.type === 'video' || animConfig.mediaUrl.match(/\.(mp4|webm|mov)(\?|$)/i));
+  const hasImage = animConfig?.mediaUrl && (animConfig.type === 'image' || animConfig.mediaUrl.match(/\.(png|gif|jpg|jpeg|webp|svg)(\?|$)/i));
+
+  if (hasImage && !hasVideo) {
     return (
       <motion.div
         className="score-obs__celebration score-obs__celebration--wicket"
@@ -1093,28 +1322,29 @@ function WicketOverlay({ imageUrl, animConfig }: { imageUrl?: string; animConfig
         animate={{ y: 0, opacity: 1, scale }}
         exit={{ y: 50, opacity: 0 }}
       >
-        <img src={animConfig.mediaUrl} alt={text} className="score-obs__celebration-img" />
+        <img src={animConfig!.mediaUrl} alt={text} className="score-obs__celebration-img" />
       </motion.div>
     );
   }
 
-  if (animConfig?.type === 'video' && animConfig.mediaUrl) {
+  if (hasVideo) {
     return (
       <motion.div
         className="score-obs__celebration score-obs__celebration--wicket"
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
+        transition={{ duration: 0.15 }}
       >
-        {animConfig.chromaKeyEnabled ? (
+        {animConfig!.chromaKeyEnabled ? (
           <ChromaKeyVideo
-            src={animConfig.mediaUrl}
-            chromaColor={animConfig.chromaKeyColor || '#00ff00'}
-            similarity={animConfig.chromaKeySimilarity || 0.4}
+            src={animConfig!.mediaUrl!}
+            chromaColor={animConfig!.chromaKeyColor || '#00ff00'}
+            similarity={animConfig!.chromaKeySimilarity || 0.4}
             className="score-obs__celebration-chroma"
           />
         ) : (
-          <video src={animConfig.mediaUrl} autoPlay muted playsInline className="score-obs__celebration-video" />
+          <AutoPlayVideo src={animConfig!.mediaUrl!} className="score-obs__celebration-video" />
         )}
       </motion.div>
     );
@@ -1148,12 +1378,55 @@ function WicketOverlay({ imageUrl, animConfig }: { imageUrl?: string; animConfig
   );
 }
 
-function DuckOutOverlay({ imageUrl }: { imageUrl?: string }) {
+function DuckOutOverlay({ imageUrl, animConfig }: { imageUrl?: string; animConfig?: AnimationConfig }) {
+  const text = animConfig?.text || 'DUCK OUT!';
+  const scale = animConfig?.scale || 1;
+
+  const hasVideo = animConfig?.mediaUrl && (animConfig.type === 'video' || animConfig.mediaUrl.match(/\.(mp4|webm|mov)(\?|$)/i));
+  const hasImage = animConfig?.mediaUrl && (animConfig.type === 'image' || animConfig.mediaUrl.match(/\.(png|gif|jpg|jpeg|webp|svg)(\?|$)/i));
+
+  if (hasVideo) {
+    return (
+      <motion.div
+        className="score-obs__celebration score-obs__celebration--duck"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        transition={{ duration: 0.15 }}
+      >
+        {animConfig!.chromaKeyEnabled ? (
+          <ChromaKeyVideo
+            src={animConfig!.mediaUrl!}
+            chromaColor={animConfig!.chromaKeyColor || '#00ff00'}
+            similarity={animConfig!.chromaKeySimilarity || 0.4}
+            className="score-obs__celebration-chroma"
+          />
+        ) : (
+          <AutoPlayVideo src={animConfig!.mediaUrl!} className="score-obs__celebration-video" />
+        )}
+      </motion.div>
+    );
+  }
+
+  if (hasImage && !hasVideo) {
+    return (
+      <motion.div
+        className="score-obs__celebration score-obs__celebration--duck"
+        initial={{ scale: 0, opacity: 0 }}
+        animate={{ scale, opacity: 1 }}
+        exit={{ scale: 0, opacity: 0 }}
+        transition={{ type: 'spring', stiffness: 300, damping: 20 }}
+      >
+        <img src={animConfig!.mediaUrl} alt={text} className="score-obs__celebration-img" />
+      </motion.div>
+    );
+  }
+
   return (
     <motion.div
       className="score-obs__celebration score-obs__celebration--duck"
       initial={{ scale: 0, rotate: 10 }}
-      animate={{ scale: 1, rotate: 0 }}
+      animate={{ scale, rotate: 0 }}
       exit={{ scale: 0 }}
     >
       {imageUrl ? (
@@ -1161,19 +1434,62 @@ function DuckOutOverlay({ imageUrl }: { imageUrl?: string }) {
       ) : (
         <>
           <span className="score-obs__celebration-emoji">🦆</span>
-          <span className="score-obs__celebration-text">DUCK OUT!</span>
+          <span className="score-obs__celebration-text">{text}</span>
         </>
       )}
     </motion.div>
   );
 }
 
-function HatTrickOverlay({ imageUrl }: { imageUrl?: string }) {
+function HatTrickOverlay({ imageUrl, animConfig }: { imageUrl?: string; animConfig?: AnimationConfig }) {
+  const text = animConfig?.text || 'HAT-TRICK!';
+  const scale = animConfig?.scale || 1;
+
+  const hasVideo = animConfig?.mediaUrl && (animConfig.type === 'video' || animConfig.mediaUrl.match(/\.(mp4|webm|mov)(\?|$)/i));
+  const hasImage = animConfig?.mediaUrl && (animConfig.type === 'image' || animConfig.mediaUrl.match(/\.(png|gif|jpg|jpeg|webp|svg)(\?|$)/i));
+
+  if (hasVideo) {
+    return (
+      <motion.div
+        className="score-obs__celebration score-obs__celebration--hattrick"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        transition={{ duration: 0.15 }}
+      >
+        {animConfig!.chromaKeyEnabled ? (
+          <ChromaKeyVideo
+            src={animConfig!.mediaUrl!}
+            chromaColor={animConfig!.chromaKeyColor || '#00ff00'}
+            similarity={animConfig!.chromaKeySimilarity || 0.4}
+            className="score-obs__celebration-chroma"
+          />
+        ) : (
+          <AutoPlayVideo src={animConfig!.mediaUrl!} className="score-obs__celebration-video" />
+        )}
+      </motion.div>
+    );
+  }
+
+  if (hasImage && !hasVideo) {
+    return (
+      <motion.div
+        className="score-obs__celebration score-obs__celebration--hattrick"
+        initial={{ scale: 0, opacity: 0 }}
+        animate={{ scale: [0, 1.3 * scale, scale] }}
+        exit={{ scale: 0, opacity: 0 }}
+        transition={{ duration: 0.6 }}
+      >
+        <img src={animConfig!.mediaUrl} alt={text} className="score-obs__celebration-img" />
+      </motion.div>
+    );
+  }
+
   return (
     <motion.div
       className="score-obs__celebration score-obs__celebration--hattrick"
       initial={{ scale: 0 }}
-      animate={{ scale: [0, 1.3, 1] }}
+      animate={{ scale: [0, 1.3 * scale, scale] }}
       exit={{ scale: 0, opacity: 0 }}
       transition={{ duration: 0.6 }}
     >
@@ -1182,7 +1498,7 @@ function HatTrickOverlay({ imageUrl }: { imageUrl?: string }) {
       ) : (
         <>
           <span className="score-obs__celebration-emoji">🎩</span>
-          <span className="score-obs__celebration-text">HAT-TRICK!</span>
+          <span className="score-obs__celebration-text">{text}</span>
         </>
       )}
     </motion.div>
@@ -1215,38 +1531,73 @@ function QuestionOverlay({ question }: { question: LiveQuestion }) {
   );
 }
 
-// ── Stats List Overlay ──
+// ── Stats List Overlay (Leaderboard style) ──
 
-function StatsListOverlay({ title, items }: {
+function StatsListOverlay({ title, items, playerImages }: {
   title: string;
-  items: { name: string; value: string; team?: string }[];
+  items: { name: string; value: string; team?: string; imageUrl?: string }[];
+  playerImages?: Record<string, string>;
 }) {
+  const topPlayer = items[0];
+  const topPlayerImg = topPlayer?.imageUrl || (playerImages && topPlayer ? playerImages[topPlayer.name] : undefined);
+  // Determine color theme from title
+  const isOrange = title.toLowerCase().includes('run') || title.toLowerCase().includes('four') || title.toLowerCase().includes('orange');
+  const isPurple = title.toLowerCase().includes('wicket') || title.toLowerCase().includes('purple') || title.toLowerCase().includes('dot');
+  const isMvp = title.toLowerCase().includes('mvp');
+  const accentColor = isPurple ? '#a855f7' : isMvp ? '#fbbf24' : '#f97316';
+
   return (
     <motion.div
-      className="score-obs__overlay-card score-obs__stats-list"
-      initial={{ x: 100, opacity: 0 }}
-      animate={{ x: 0, opacity: 1 }}
-      exit={{ x: 100, opacity: 0 }}
+      className="score-obs__overlay-card score-obs__leaderboard"
+      initial={{ scale: 0.85, opacity: 0 }}
+      animate={{ scale: 1, opacity: 1 }}
+      exit={{ scale: 0.85, opacity: 0 }}
       transition={{ type: 'spring', stiffness: 200, damping: 25 }}
     >
-      <div className="score-obs__stats-title">{title}</div>
-      <div className="score-obs__stats-items">
-        {items.slice(0, 5).map((item, i) => (
-          <div key={i} className="score-obs__stats-item">
-            <span className="score-obs__stats-rank">{i + 1}</span>
-            <div className="score-obs__stats-name-col">
-              <span className="score-obs__stats-name">{item.name}</span>
-              {item.team && <span className="score-obs__stats-team">{item.team}</span>}
-            </div>
-            <span className="score-obs__stats-value">{item.value}</span>
+      <div className="score-obs__lb-layout">
+        {/* Left: Content */}
+        <div className="score-obs__lb-content">
+          {/* Header */}
+          <div className="score-obs__lb-header" style={{ borderBottomColor: `${accentColor}60` }}>
+            <span className="score-obs__lb-title" style={{ color: accentColor }}>{title}</span>
           </div>
-        ))}
+
+          {/* Rows */}
+          <div className="score-obs__lb-rows">
+            {items.slice(0, 5).map((item, i) => (
+              <motion.div
+                key={i}
+                className={`score-obs__lb-row ${i === 0 ? 'score-obs__lb-row--first' : ''}`}
+                style={i === 0 ? { background: `linear-gradient(90deg, ${accentColor}cc, ${accentColor}99)` } : undefined}
+                initial={{ x: -30, opacity: 0 }}
+                animate={{ x: 0, opacity: 1 }}
+                transition={{ delay: i * 0.08 }}
+              >
+                <div className="score-obs__lb-row-left">
+                  <span className="score-obs__lb-rank">{i + 1}</span>
+                  <div className="score-obs__lb-player-info">
+                    <span className="score-obs__lb-player-name">{item.name}</span>
+                    {item.team && <span className="score-obs__lb-player-team">{item.team}</span>}
+                  </div>
+                </div>
+                <span className="score-obs__lb-player-value">{item.value}</span>
+              </motion.div>
+            ))}
+          </div>
+        </div>
+
+        {/* Right: Player image spotlight */}
+        {topPlayerImg && (
+          <div className="score-obs__lb-player-spotlight">
+            <img src={topPlayerImg} alt={topPlayer?.name || ''} className="score-obs__lb-player-img" />
+          </div>
+        )}
       </div>
     </motion.div>
   );
 }
 
-// ── Match Summary Overlay ──
+// ── Match Summary Overlay (broadcast-style card) ──
 
 function MatchSummaryOverlay({ matchStats, match, innings }: {
   matchStats: MatchStatsSnapshot;
@@ -1255,70 +1606,179 @@ function MatchSummaryOverlay({ matchStats, match, innings }: {
 }) {
   const inn1 = innings['1'];
   const inn2 = innings['2'];
-  
+
+  const getTeamName = (teamId: string) =>
+    teamId === match.teamA.id ? match.teamA.name : match.teamB.name;
+  const getTeamColor = (teamId: string) =>
+    teamId === match.teamA.id ? (match.teamA.primaryColor || '#3b82f6') : (match.teamB.primaryColor || '#22c55e');
+  const getTeamLogo = (teamId: string) =>
+    teamId === match.teamA.id ? match.teamA.logoUrl : match.teamB.logoUrl;
+
+  // Build result text
+  let resultText = '';
+  if (matchStats.mvpPoints && matchStats.mvpPoints.length > 0) {
+    resultText = `PLAYER OF THE MATCH: ${matchStats.mvpPoints[0].playerName}`;
+  }
+
   return (
     <motion.div
-      className="score-obs__overlay-card score-obs__match-summary"
-      initial={{ scale: 0.8, opacity: 0 }}
+      className="score-obs__overlay-card score-obs__match-summary-v2"
+      initial={{ scale: 0.85, opacity: 0 }}
       animate={{ scale: 1, opacity: 1 }}
-      exit={{ scale: 0.8, opacity: 0 }}
+      exit={{ scale: 0.85, opacity: 0 }}
+      transition={{ type: 'spring', stiffness: 200, damping: 25 }}
     >
-      <div className="score-obs__summary-header">MATCH SUMMARY</div>
-      <div className="score-obs__summary-scores">
+      {/* Header */}
+      <div className="score-obs__ms-header">
+        <span className="score-obs__ms-header-text">MATCH SUMMARY</span>
+      </div>
+
+      <div className="score-obs__ms-body">
+        {/* Innings 1 Block */}
         {inn1 && (
-          <div className="score-obs__summary-innings">
-            <span className="score-obs__summary-team">
-              {inn1.battingTeamId === match.teamA.id ? match.teamA.name : match.teamB.name}
-            </span>
-            <span className="score-obs__summary-total">
-              {inn1.totalRuns}/{inn1.totalWickets} ({inn1.totalOvers} ov)
-            </span>
+          <div className="score-obs__ms-innings">
+            {/* Team Banner */}
+            <div className="score-obs__ms-team-banner" style={{ background: `linear-gradient(90deg, ${getTeamColor(inn1.battingTeamId)}, ${getTeamColor(inn1.battingTeamId)}dd)` }}>
+              <div className="score-obs__ms-team-left">
+                {getTeamLogo(inn1.battingTeamId) && (
+                  <img src={getTeamLogo(inn1.battingTeamId)!} alt="" className="score-obs__ms-team-logo" />
+                )}
+                <span className="score-obs__ms-team-name">{getTeamName(inn1.battingTeamId).toUpperCase()}</span>
+              </div>
+              <span className="score-obs__ms-team-score">
+                {inn1.totalOvers} Ov | <strong>{inn1.totalRuns}-{inn1.totalWickets}</strong>
+              </span>
+            </div>
+
+            {/* Stats Grid: Batsmen (left) | Bowlers (right) */}
+            <div className="score-obs__ms-stats-grid">
+              {/* Top Batsmen */}
+              <div className="score-obs__ms-stats-col">
+                {inn1.batsmen.filter(b => b.runs > 0).sort((a, b) => b.runs - a.runs).slice(0, 4).map(b => (
+                  <div key={b.playerId} className="score-obs__ms-stat-row">
+                    <span className="score-obs__ms-player-name">{b.playerName.toUpperCase()}</span>
+                    <div className="score-obs__ms-player-figures">
+                      <span className="score-obs__ms-fig-primary">{b.runs}</span>
+                      <span className="score-obs__ms-fig-secondary">{b.balls}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Top Bowlers (from bowling team) */}
+              <div className="score-obs__ms-stats-col">
+                {inn1.bowlers.sort((a, b) => b.wickets - a.wickets || a.economy - b.economy).slice(0, 4).map(b => (
+                  <div key={b.playerId} className="score-obs__ms-stat-row">
+                    <span className="score-obs__ms-player-name">{b.playerName.toUpperCase()}</span>
+                    <div className="score-obs__ms-player-figures">
+                      <span className="score-obs__ms-fig-primary">{b.wickets}-{b.runs}</span>
+                      <span className="score-obs__ms-fig-secondary">{b.overs}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         )}
+
+        {/* Innings 2 Block */}
         {inn2 && (
-          <div className="score-obs__summary-innings">
-            <span className="score-obs__summary-team">
-              {inn2.battingTeamId === match.teamA.id ? match.teamA.name : match.teamB.name}
-            </span>
-            <span className="score-obs__summary-total">
-              {inn2.totalRuns}/{inn2.totalWickets} ({inn2.totalOvers} ov)
-            </span>
+          <div className="score-obs__ms-innings">
+            {/* Team Banner */}
+            <div className="score-obs__ms-team-banner" style={{ background: `linear-gradient(90deg, ${getTeamColor(inn2.battingTeamId)}, ${getTeamColor(inn2.battingTeamId)}dd)` }}>
+              <div className="score-obs__ms-team-left">
+                {getTeamLogo(inn2.battingTeamId) && (
+                  <img src={getTeamLogo(inn2.battingTeamId)!} alt="" className="score-obs__ms-team-logo" />
+                )}
+                <span className="score-obs__ms-team-name">{getTeamName(inn2.battingTeamId).toUpperCase()}</span>
+              </div>
+              <span className="score-obs__ms-team-score">
+                {inn2.totalOvers} Ov | <strong>{inn2.totalRuns}-{inn2.totalWickets}</strong>
+              </span>
+            </div>
+
+            {/* Stats Grid */}
+            <div className="score-obs__ms-stats-grid">
+              <div className="score-obs__ms-stats-col">
+                {inn2.batsmen.filter(b => b.runs > 0).sort((a, b) => b.runs - a.runs).slice(0, 4).map(b => (
+                  <div key={b.playerId} className="score-obs__ms-stat-row">
+                    <span className="score-obs__ms-player-name">{b.playerName.toUpperCase()}</span>
+                    <div className="score-obs__ms-player-figures">
+                      <span className="score-obs__ms-fig-primary">{b.runs}</span>
+                      <span className="score-obs__ms-fig-secondary">{b.balls}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="score-obs__ms-stats-col">
+                {inn2.bowlers.sort((a, b) => b.wickets - a.wickets || a.economy - b.economy).slice(0, 4).map(b => (
+                  <div key={b.playerId} className="score-obs__ms-stat-row">
+                    <span className="score-obs__ms-player-name">{b.playerName.toUpperCase()}</span>
+                    <div className="score-obs__ms-player-figures">
+                      <span className="score-obs__ms-fig-primary">{b.wickets}-{b.runs}</span>
+                      <span className="score-obs__ms-fig-secondary">{b.overs}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         )}
       </div>
-      {matchStats.mvpPoints && matchStats.mvpPoints.length > 0 && (
-        <div className="score-obs__summary-mvp">
-          <span className="score-obs__summary-mvp-label">Player of the Match</span>
-          <span className="score-obs__summary-mvp-name">{matchStats.mvpPoints[0].playerName}</span>
-          <span className="score-obs__summary-mvp-points">{matchStats.mvpPoints[0].totalPoints.toFixed(1)} pts</span>
-        </div>
-      )}
+
+      {/* Footer */}
+      <div className="score-obs__ms-footer">
+        <span className="score-obs__ms-footer-text">{resultText}</span>
+      </div>
     </motion.div>
   );
 }
 
-// ── Award Overlay ──
+// ── Award Overlay (Orange Cap / Purple Cap / MVP style) ──
 
-function AwardOverlay({ title, subtitle, color, playerName, value }: {
+function AwardOverlay({ title, subtitle, color, playerName, value, imageUrl }: {
   title: string;
   subtitle: string;
   color: string;
   playerName: string;
   value: string;
+  imageUrl?: string;
 }) {
   return (
     <motion.div
-      className="score-obs__overlay-card score-obs__award"
-      style={{ '--award-color': color } as React.CSSProperties}
-      initial={{ scale: 0, rotate: -10 }}
-      animate={{ scale: 1, rotate: 0 }}
-      exit={{ scale: 0, opacity: 0 }}
-      transition={{ type: 'spring', stiffness: 200, damping: 20 }}
+      className="score-obs__overlay-card score-obs__award-v2"
+      initial={{ scale: 0.8, opacity: 0 }}
+      animate={{ scale: 1, opacity: 1 }}
+      exit={{ scale: 0.8, opacity: 0 }}
+      transition={{ type: 'spring', stiffness: 200, damping: 22 }}
     >
-      <div className="score-obs__award-title" style={{ color }}>{title}</div>
-      <div className="score-obs__award-subtitle">{subtitle}</div>
-      <div className="score-obs__award-player">{playerName}</div>
-      <div className="score-obs__award-value">{value}</div>
+      <div className="score-obs__award-v2-layout">
+        {/* Left: Info */}
+        <div className="score-obs__award-v2-content">
+          {/* Award badge header */}
+          <div className="score-obs__award-v2-badge" style={{ background: `linear-gradient(135deg, ${color}, ${color}cc)` }}>
+            <span className="score-obs__award-v2-badge-title">{title}</span>
+            <span className="score-obs__award-v2-badge-sub">{subtitle}</span>
+          </div>
+
+          {/* Player name */}
+          <div className="score-obs__award-v2-player">
+            <span className="score-obs__award-v2-name">{playerName}</span>
+          </div>
+
+          {/* Value */}
+          <div className="score-obs__award-v2-value-row">
+            <span className="score-obs__award-v2-value" style={{ color }}>{value}</span>
+          </div>
+        </div>
+
+        {/* Right: Player image */}
+        {imageUrl && (
+          <div className="score-obs__award-v2-image">
+            <img src={imageUrl} alt={playerName} className="score-obs__award-v2-img" />
+          </div>
+        )}
+      </div>
     </motion.div>
   );
 }
@@ -1334,24 +1794,25 @@ function TickerWithIntro({ live, match, battingTeam, bowlingTeam, config, lineup
   lineups: { teamA: MatchLineup | null; teamB: MatchLineup | null };
   playerImages: Record<string, string>;
 }) {
-  const [introPhase, setIntroPhase] = useState<'venue' | 'logos' | 'reveal' | 'done'>('venue');
-  const introShownRef = useRef(false);
+  // Skip intro if match is already in progress (balls bowled) — only show intro on fresh match start
+  const matchAlreadyStarted = live.overs > 0 || (live.currentOverBalls?.length || 0) > 0;
+  const [introPhase, setIntroPhase] = useState<'venue' | 'logos' | 'reveal' | 'done'>(matchAlreadyStarted ? 'done' : 'venue');
   const ticker = config.tickerConfig;
   const position = ticker?.position || 'bottom';
 
   useEffect(() => {
-    if (introShownRef.current) return;
-    introShownRef.current = true;
-    // Phase 1: venue info (1.5s) → Phase 2: logos slide in (2s) → Phase 3: reveal ticker (1s)
-    const t1 = setTimeout(() => setIntroPhase('logos'), 1500);
-    const t2 = setTimeout(() => setIntroPhase('reveal'), 3500);
-    const t3 = setTimeout(() => setIntroPhase('done'), 4500);
+    if (matchAlreadyStarted) return; // No intro needed
+    // Phase 1: venue info (2.5s) → Phase 2: logos slide in (3s) → Phase 3: reveal ticker (1.5s) → done
+    const t1 = setTimeout(() => setIntroPhase('logos'), 2500);
+    const t2 = setTimeout(() => setIntroPhase('reveal'), 5500);
+    const t3 = setTimeout(() => setIntroPhase('done'), 7000);
     return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); };
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const battingLogo = live.battingTeamId === match.teamA.id ? match.teamA.logoUrl : match.teamB.logoUrl;
   const bowlingLogo = live.bowlingTeamId === match.teamA.id ? match.teamA.logoUrl : match.teamB.logoUrl;
 
+  // Single flat AnimatePresence — each phase has a unique key for clean transitions
   if (introPhase === 'done') {
     return (
       <ScorecardTicker
@@ -1814,16 +2275,37 @@ function MatchIntroOverlay({ match, config, lineups, playerImages }: {
   lineups: { teamA: MatchLineup | null; teamB: MatchLineup | null };
   playerImages: Record<string, string>;
 }) {
-  const [phase, setPhase] = useState(0); // 0=matchup, 1=teamA, 2=teamB, 3=toss
+  const [phase, setPhase] = useState(0); // 0=matchup, 1=teamA, 2=teamB, 3=ready
+  const lineupsLoadedRef = useRef(false);
 
   useEffect(() => {
-    const timers = [
-      setTimeout(() => setPhase(1), 4000),
-      setTimeout(() => setPhase(2), 8000),
-      setTimeout(() => setPhase(3), 12000),
-    ];
+    const hasTeamA = lineups.teamA && lineups.teamA.players.length > 0;
+    const hasTeamB = lineups.teamB && lineups.teamB.players.length > 0;
+
+    // If lineups arrived late, restart the sequence from the beginning
+    if ((hasTeamA || hasTeamB) && !lineupsLoadedRef.current) {
+      lineupsLoadedRef.current = true;
+      setPhase(0);
+    }
+
+    const timers: ReturnType<typeof setTimeout>[] = [];
+    if (hasTeamA && hasTeamB) {
+      // Full sequence: matchup(4s) → teamA(4s) → teamB(4s) → ready
+      timers.push(setTimeout(() => setPhase(1), 4000));
+      timers.push(setTimeout(() => setPhase(2), 8000));
+      timers.push(setTimeout(() => setPhase(3), 12000));
+    } else if (hasTeamA) {
+      timers.push(setTimeout(() => setPhase(1), 4000));
+      timers.push(setTimeout(() => setPhase(3), 8000));
+    } else if (hasTeamB) {
+      timers.push(setTimeout(() => setPhase(2), 4000));
+      timers.push(setTimeout(() => setPhase(3), 8000));
+    } else {
+      // No lineups yet — just show matchup for now, will restart when lineups arrive
+      timers.push(setTimeout(() => setPhase(3), 6000));
+    }
     return () => timers.forEach(clearTimeout);
-  }, []);
+  }, [lineups.teamA, lineups.teamB]);
 
   // Build player image map
   const imgMap: Record<string, string> = { ...playerImages };
@@ -2040,6 +2522,36 @@ function InningsIntroCard({ type, live, match, playerImages, lineups }: {
           </div>
         </div>
       </div>
+    </motion.div>
+  );
+}
+
+// ── Field Placement Overlay (full-screen triggered via overlay button) ─────
+
+function FieldPlacementOverlay({ placement }: { placement: FieldPlacement }) {
+  return (
+    <motion.div
+      className="score-obs__field-overlay-full"
+      initial={{ scale: 0.7, opacity: 0 }}
+      animate={{ scale: 1, opacity: 1 }}
+      exit={{ scale: 0.7, opacity: 0 }}
+      transition={{ type: 'spring', stiffness: 160, damping: 20 }}
+    >
+      <div className="score-obs__field-overlay-ground">
+        <div className="score-obs__field-pitch" />
+        <div className="score-obs__field-inner-circle" />
+        {placement.positions.map(pos => (
+          <div
+            key={pos.id}
+            className="score-obs__field-overlay-dot"
+            style={{ left: `${pos.x}%`, top: `${pos.y}%` }}
+          >
+            <div className="score-obs__field-overlay-dot-inner" />
+            <span className="score-obs__field-overlay-dot-label">{pos.label}</span>
+          </div>
+        ))}
+      </div>
+      <div className="score-obs__field-overlay-title">{placement.name}</div>
     </motion.div>
   );
 }

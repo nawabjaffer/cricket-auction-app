@@ -16,6 +16,7 @@ export interface MatchSetup {
   venue: string;
   date: string;           // ISO date
   maxOvers: number;       // e.g. 20 for T20
+  powerplayOvers?: number; // e.g. 6 for T20 (default: maxOvers <= 20 ? 6 : 10)
   tossWonBy?: string;     // team ID
   tossElected?: 'bat' | 'bowl';
   status: 'scheduled' | 'live' | 'completed' | 'abandoned';
@@ -329,7 +330,9 @@ export type OverlayType =
   | 'award_mvp'
   | 'award_ceremony'
   // Match intro sequence
-  | 'match_intro';
+  | 'match_intro'
+  // Field placement overlay
+  | 'field_placement';
 
 export interface LiveQuestion {
   id: string;
@@ -402,6 +405,8 @@ export interface ScoringOverlayConfig {
   fourAnimation?: AnimationConfig;
   sixAnimation?: AnimationConfig;
   wicketAnimation?: AnimationConfig;
+  duckOutAnimation?: AnimationConfig;
+  hatTrickAnimation?: AnimationConfig;
   // Live questions queue
   liveQuestions: LiveQuestion[];
   // Toss animation config
@@ -708,3 +713,76 @@ export interface ReplayTrigger {
   delaySeconds: number;
   consumed: boolean;
 }
+
+// ── Field Placement ──
+
+export interface FielderPosition {
+  id: string;
+  label: string;             // e.g. 'Mid-on', 'Deep Fine Leg'
+  x: number;                 // 0-100 percentage from left
+  y: number;                 // 0-100 percentage from top
+}
+
+export interface FieldPlacement {
+  id: string;
+  name: string;              // e.g. 'Powerplay Default', 'Death Overs Spread'
+  positions: FielderPosition[];
+  isDefault?: boolean;       // mark as a preset
+}
+
+export const DEFAULT_FIELD_PLACEMENTS: FieldPlacement[] = [
+  {
+    id: 'powerplay',
+    name: 'Powerplay (2 out)',
+    isDefault: true,
+    positions: [
+      { id: 'wk', label: 'Wicket Keeper', x: 50, y: 62 },
+      { id: 'slip', label: 'Slip', x: 58, y: 58 },
+      { id: 'point', label: 'Point', x: 72, y: 42 },
+      { id: 'cover', label: 'Cover', x: 68, y: 30 },
+      { id: 'mid-off', label: 'Mid Off', x: 55, y: 22 },
+      { id: 'mid-on', label: 'Mid On', x: 42, y: 22 },
+      { id: 'midwicket', label: 'Mid Wicket', x: 30, y: 32 },
+      { id: 'sq-leg', label: 'Square Leg', x: 28, y: 48 },
+      { id: 'fine-leg', label: 'Fine Leg', x: 30, y: 72 },
+      { id: 'third-man', label: 'Third Man', x: 72, y: 72 },
+      { id: 'long-on', label: 'Long On', x: 42, y: 8 },
+    ],
+  },
+  {
+    id: 'death-overs',
+    name: 'Death Overs (5 out)',
+    isDefault: true,
+    positions: [
+      { id: 'wk', label: 'Wicket Keeper', x: 50, y: 62 },
+      { id: 'long-off', label: 'Long Off', x: 60, y: 8 },
+      { id: 'long-on', label: 'Long On', x: 40, y: 8 },
+      { id: 'deep-midwicket', label: 'Deep Mid Wicket', x: 18, y: 25 },
+      { id: 'deep-sq-leg', label: 'Deep Square Leg', x: 12, y: 50 },
+      { id: 'fine-leg', label: 'Fine Leg', x: 25, y: 80 },
+      { id: 'third-man', label: 'Third Man', x: 75, y: 80 },
+      { id: 'deep-point', label: 'Deep Point', x: 85, y: 42 },
+      { id: 'deep-cover', label: 'Deep Cover', x: 82, y: 22 },
+      { id: 'mid-off', label: 'Mid Off', x: 55, y: 30 },
+      { id: 'mid-on', label: 'Mid On', x: 42, y: 30 },
+    ],
+  },
+  {
+    id: 'spin-attack',
+    name: 'Spin Attack',
+    isDefault: true,
+    positions: [
+      { id: 'wk', label: 'Wicket Keeper', x: 50, y: 62 },
+      { id: 'slip', label: 'Slip', x: 58, y: 56 },
+      { id: 'short-leg', label: 'Short Leg', x: 42, y: 48 },
+      { id: 'silly-point', label: 'Silly Point', x: 58, y: 46 },
+      { id: 'cover', label: 'Cover', x: 72, y: 30 },
+      { id: 'mid-off', label: 'Mid Off', x: 55, y: 20 },
+      { id: 'mid-on', label: 'Mid On', x: 42, y: 20 },
+      { id: 'midwicket', label: 'Mid Wicket', x: 28, y: 32 },
+      { id: 'deep-midwicket', label: 'Deep Mid Wicket', x: 15, y: 25 },
+      { id: 'long-on', label: 'Long On', x: 38, y: 5 },
+      { id: 'long-off', label: 'Long Off', x: 62, y: 5 },
+    ],
+  },
+];

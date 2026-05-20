@@ -17,7 +17,7 @@ import { tenantPath } from '../services/tenantPath';
 import { realtimeSync } from '../services/realtimeSync';
 import { scoringService } from '../services/scoring';
 import { uploadFileToStorage } from '../services';
-import type { MatchSetup, ScoringAd, ScoringOverlayConfig, LiveQuestion, MatchScoringConfig, PreMatchState, ImpactPlayer, TossConfig, MatchLineup, TickerConfig, OBSWebSocketConfig, MVPWeights, DEFAULT_MVP_WEIGHTS, AnimationConfig } from '../types/scoring';
+import type { MatchSetup, ScoringAd, ScoringOverlayConfig, LiveQuestion, MatchScoringConfig, PreMatchState, PreMatchPhase, ImpactPlayer, TossConfig, MatchLineup, TickerConfig, OBSWebSocketConfig, MVPWeights, DEFAULT_MVP_WEIGHTS, AnimationConfig } from '../types/scoring';
 import type { SoldPlayer } from '../types';
 import './ScoringAdminPage.css';
 
@@ -269,11 +269,11 @@ function MatchesTab({ matches, teams, soldPlayers, onFeedback, saving, setSaving
   const [editId, setEditId] = useState<string | null>(null);
   const [squadMatchId, setSquadMatchId] = useState<string | null>(null);
   const [form, setForm] = useState({
-    teamAId: '', teamBId: '', venue: '', date: '', maxOvers: 20, tossWonBy: '', tossElected: '' as '' | 'bat' | 'bowl',
+    teamAId: '', teamBId: '', venue: '', date: '', maxOvers: 20, powerplayOvers: 6, tossWonBy: '', tossElected: '' as '' | 'bat' | 'bowl',
   });
 
   const resetForm = () => {
-    setForm({ teamAId: '', teamBId: '', venue: '', date: '', maxOvers: 20, tossWonBy: '', tossElected: '' });
+    setForm({ teamAId: '', teamBId: '', venue: '', date: '', maxOvers: 20, powerplayOvers: 6, tossWonBy: '', tossElected: '' });
     setEditId(null);
     setShowForm(false);
   };
@@ -297,6 +297,7 @@ function MatchesTab({ matches, teams, soldPlayers, onFeedback, saving, setSaving
         venue: form.venue,
         date: form.date,
         maxOvers: form.maxOvers,
+        powerplayOvers: form.powerplayOvers,
         tossWonBy: form.tossWonBy || undefined,
         tossElected: form.tossElected || undefined,
         status: 'scheduled',
@@ -320,6 +321,7 @@ function MatchesTab({ matches, teams, soldPlayers, onFeedback, saving, setSaving
       venue: match.venue,
       date: match.date,
       maxOvers: match.maxOvers,
+      powerplayOvers: match.powerplayOvers || (match.maxOvers <= 20 ? 6 : 10),
       tossWonBy: match.tossWonBy || '',
       tossElected: (match.tossElected || '') as '' | 'bat' | 'bowl',
     });
@@ -339,10 +341,113 @@ function MatchesTab({ matches, teams, soldPlayers, onFeedback, saving, setSaving
 
   const handleStatusChange = async (matchId: string, status: MatchSetup['status']) => {
     try {
+      // Prevent ending match until both innings are completed
+      if (status === 'completed') {
+        const inn1 = await scoringService.getInnings(matchId, 1);
+        const inn2 = await scoringService.getInnings(matchId, 2);
+        if (!inn1 || !inn2) {
+          onFeedback('Cannot end match: both innings must be completed first');
+          return;
+        }
+        if (!inn1.isCompleted || !inn2.isCompleted) {
+          onFeedback('Cannot end match: both innings must be completed first');
+          return;
+        }
+      }
+
       await scoringService.updateMatch(matchId, { status });
-      // Auto-trigger squad_display phase when match goes live (pre-match ceremony)
+
+      // When starting a match, auto-populate default squads and run prematch ceremony
       if (status === 'live') {
-        await scoringService.updatePreMatchPhase(matchId, 'squad_display');
+        const match = matches.find(m => m.id === matchId);
+        if (match) {
+          // Auto-populate default playing 11 from sold players if no lineup exists
+          const existingA = await scoringService.getLineup(matchId, match.teamA.id);
+          const existingB = await scoringService.getLineup(matchId, match.teamB.id);
+
+          if (!existingA || existingA.players.length === 0) {
+            const teamAPlayers = soldPlayers
+              .filter(p => p.teamId === match.teamA.id || p.teamName === match.teamA.name)
+              .slice(0, 11)
+              .map((p, i) => ({
+                playerId: p.id,
+                playerName: p.name,
+                role: p.role || 'Unknown',
+                imageUrl: p.imageUrl,
+                auctionPrice: p.soldAmount,
+                battingOrder: i + 1,
+              }));
+            if (teamAPlayers.length > 0) {
+              await scoringService.saveLineup(matchId, { matchId, teamId: match.teamA.id, players: teamAPlayers });
+            }
+          }
+
+          if (!existingB || existingB.players.length === 0) {
+            const teamBPlayers = soldPlayers
+              .filter(p => p.teamId === match.teamB.id || p.teamName === match.teamB.name)
+              .slice(0, 11)
+              .map((p, i) => ({
+                playerId: p.id,
+                playerName: p.name,
+                role: p.role || 'Unknown',
+                imageUrl: p.imageUrl,
+                auctionPrice: p.soldAmount,
+                battingOrder: i + 1,
+              }));
+            if (teamBPlayers.length > 0) {
+              await scoringService.saveLineup(matchId, { matchId, teamId: match.teamB.id, players: teamBPlayers });
+            }
+          }
+
+          // Build full prematch state with toss info from match setup
+          const tossResult = match.tossWonBy && match.tossElected ? {
+            wonBy: match.tossWonBy,
+            elected: match.tossElected,
+            coinSide: 'heads' as const,
+          } : undefined;
+
+          const fullPreMatchState: PreMatchState = {
+            matchId,
+            phase: 'squad_display',
+            tossResult,
+            squadRevealConfig: {
+              autoReveal: true,
+              delayAfterTossSeconds: 2,
+              playerRevealIntervalMs: 800,
+            },
+            impactPlayers: { teamA: [], teamB: [] },
+            revealedPlayersTeamA: [],
+            revealedPlayersTeamB: [],
+            lastUpdated: Date.now(),
+          };
+
+          // Save full prematch state so all overlay components have proper data
+          await scoringService.savePreMatchState(matchId, fullPreMatchState);
+
+          // Auto-progress through prematch phases with proper timing
+          // Build sequence based on available data (skip toss if not set)
+          const hasToss = Boolean(tossResult);
+          const delays: Array<[number, PreMatchPhase]> = [];
+          let t = 8000; // squad_display duration
+          if (hasToss) {
+            delays.push([t, 'toss_animation']);
+            t += 5000;
+            delays.push([t, 'toss_result']);
+            t += 5000;
+          }
+          delays.push([t, 'squad_reveal_teamA']);
+          t += 10000;
+          delays.push([t, 'squad_reveal_teamB']);
+          t += 10000;
+          delays.push([t, 'match_ready']);
+          for (const [delay, phase] of delays) {
+            setTimeout(async () => {
+              try {
+                await scoringService.updatePreMatchPhase(matchId, phase);
+              } catch { /* ignore if match ended */ }
+            }, delay);
+          }
+        }
       }
       onFeedback(`Match status: ${status}`);
     } catch {
@@ -366,14 +471,14 @@ function MatchesTab({ matches, teams, soldPlayers, onFeedback, saving, setSaving
               <label>Team A *</label>
               <select value={form.teamAId} onChange={e => setForm(f => ({ ...f, teamAId: e.target.value }))} className="scoring-admin__select">
                 <option value="">Select team</option>
-                {teams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                {teams.filter(t => t.id !== form.teamBId).map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
               </select>
             </div>
             <div className="scoring-admin__field">
               <label>Team B *</label>
               <select value={form.teamBId} onChange={e => setForm(f => ({ ...f, teamBId: e.target.value }))} className="scoring-admin__select">
                 <option value="">Select team</option>
-                {teams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                {teams.filter(t => t.id !== form.teamAId).map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
               </select>
             </div>
             <div className="scoring-admin__field">
@@ -382,11 +487,23 @@ function MatchesTab({ matches, teams, soldPlayers, onFeedback, saving, setSaving
             </div>
             <div className="scoring-admin__field">
               <label>Date *</label>
-              <input type="date" value={form.date} onChange={e => setForm(f => ({ ...f, date: e.target.value }))} className="scoring-admin__input" />
+              <div className="scoring-admin__date-row">
+                <input type="date" value={form.date} onChange={e => setForm(f => ({ ...f, date: e.target.value }))} className="scoring-admin__input" />
+                <button type="button" className="scoring-admin__btn scoring-admin__btn--sm" onClick={() => setForm(f => ({ ...f, date: new Date().toISOString().split('T')[0] }))}>Today</button>
+              </div>
             </div>
             <div className="scoring-admin__field">
               <label>Max Overs</label>
-              <input type="number" min={1} max={50} value={form.maxOvers} onChange={e => setForm(f => ({ ...f, maxOvers: Number(e.target.value) }))} className="scoring-admin__input" />
+              <input type="number" min={1} max={50} value={form.maxOvers} onChange={e => {
+                const overs = Number(e.target.value);
+                // Auto-calculate powerplay: T20=6, T10=3, 50-over=10, otherwise ~30% of overs (min 2)
+                const pp = overs >= 40 ? 10 : overs >= 16 ? 6 : overs >= 8 ? 3 : Math.max(2, Math.round(overs * 0.3));
+                setForm(f => ({ ...f, maxOvers: overs, powerplayOvers: pp }));
+              }} className="scoring-admin__input" />
+            </div>
+            <div className="scoring-admin__field">
+              <label>Powerplay Overs</label>
+              <input type="number" min={1} max={form.maxOvers} value={form.powerplayOvers} onChange={e => setForm(f => ({ ...f, powerplayOvers: Number(e.target.value) }))} className="scoring-admin__input" />
             </div>
             <div className="scoring-admin__field">
               <label>Toss Won By</label>
@@ -895,10 +1012,18 @@ function AnimationsTab({ config, setConfig, onFeedback }: {
   const DEFAULT_WICKET_ANIMATION: AnimationConfig = {
     type: 'css', enabled: true, durationMs: 4000, text: 'OUT!', color: '#ef4444', scale: 1,
   };
+  const DEFAULT_DUCK_ANIMATION: AnimationConfig = {
+    type: 'css', enabled: true, durationMs: 5000, text: 'DUCK OUT!', color: '#fbbf24', scale: 1,
+  };
+  const DEFAULT_HATTRICK_ANIMATION: AnimationConfig = {
+    type: 'css', enabled: true, durationMs: 8000, text: 'HAT-TRICK!', color: '#fbbf24', scale: 1,
+  };
 
   const fourAnim = config.fourAnimation || DEFAULT_FOUR_ANIMATION;
   const sixAnim = config.sixAnimation || DEFAULT_SIX_ANIMATION;
   const wicketAnim = config.wicketAnimation || DEFAULT_WICKET_ANIMATION;
+  const duckAnim = config.duckOutAnimation || DEFAULT_DUCK_ANIMATION;
+  const hatTrickAnim = config.hatTrickAnimation || DEFAULT_HATTRICK_ANIMATION;
 
   const handleSave = async () => {
     try {
@@ -1015,6 +1140,8 @@ function AnimationsTab({ config, setConfig, onFeedback }: {
         { key: 'fourAnimation' as const, label: '4️⃣ Four (Boundary) Animation', defaults: fourAnim },
         { key: 'sixAnimation' as const, label: '6️⃣ Six (Maximum) Animation', defaults: sixAnim },
         { key: 'wicketAnimation' as const, label: '🏏 Wicket (Out) Animation', defaults: wicketAnim },
+        { key: 'duckOutAnimation' as const, label: '🦆 Duck Out Animation', defaults: duckAnim },
+        { key: 'hatTrickAnimation' as const, label: '🎩 Hat-Trick Animation', defaults: hatTrickAnim },
       ]).map(section => {
         const anim = config[section.key] || section.defaults;
         const updateAnim = (patch: Partial<AnimationConfig>) => {
@@ -1669,7 +1796,7 @@ function SquadSelectionModal({ match, soldPlayers, onSave, onClose }: {
   const teamAPlayers = soldPlayers.filter(p => p.teamId === match.teamA.id || p.teamName === match.teamA.name);
   const teamBPlayers = soldPlayers.filter(p => p.teamId === match.teamB.id || p.teamName === match.teamB.name);
 
-  // Load existing lineups
+  // Load existing lineups, or pre-select default playing 11
   useEffect(() => {
     if (loadedExisting) return;
     const loadLineups = async () => {
@@ -1678,21 +1805,31 @@ function SquadSelectionModal({ match, soldPlayers, onSave, onClose }: {
           scoringService.getLineup(match.id, match.teamA.id),
           scoringService.getLineup(match.id, match.teamB.id),
         ]);
-        if (la) {
+        if (la && la.players.length > 0) {
           setSelectedA(la.players.map(p => p.playerId));
           const cap = la.players.find(p => p.isCaptain);
           const wk = la.players.find(p => p.isWicketKeeper);
           if (cap) setCaptainA(cap.playerId);
           if (wk) setWkA(wk.playerId);
+        } else {
+          // Auto-select first 11 players as default playing XI
+          setSelectedA(teamAPlayers.slice(0, 11).map(p => p.id));
         }
-        if (lb) {
+        if (lb && lb.players.length > 0) {
           setSelectedB(lb.players.map(p => p.playerId));
           const cap = lb.players.find(p => p.isCaptain);
           const wk = lb.players.find(p => p.isWicketKeeper);
           if (cap) setCaptainB(cap.playerId);
           if (wk) setWkB(wk.playerId);
+        } else {
+          // Auto-select first 11 players as default playing XI
+          setSelectedB(teamBPlayers.slice(0, 11).map(p => p.id));
         }
-      } catch { /* no existing lineups */ }
+      } catch {
+        // No existing lineups — pre-select defaults
+        setSelectedA(teamAPlayers.slice(0, 11).map(p => p.id));
+        setSelectedB(teamBPlayers.slice(0, 11).map(p => p.id));
+      }
       setLoadedExisting(true);
     };
     loadLineups();

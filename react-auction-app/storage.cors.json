@@ -3,6 +3,6 @@
     "origin": ["*"],
     "method": ["GET", "HEAD"],
     "maxAgeSeconds": 3600,
-    "responseHeader": ["Content-Type", "Content-Length", "Cache-Control", "ETag"]
+    "responseHeader": ["Content-Type", "Content-Length", "Content-Range", "Accept-Ranges", "Cache-Control", "ETag", "Access-Control-Allow-Origin"]
   }
 ]

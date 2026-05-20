@@ -11,7 +11,7 @@ import type {
   IScoringAdapter, ScoringProvider, MatchSetup, MatchScoringConfig,
   LiveScore, PlayerMatchStats, PlayerCareerStats,
   ScoringOverlayConfig, ScoringAd, OverlayControlState, MatchLineup,
-  PreMatchState,
+  PreMatchState, Innings,
 } from '../../types/scoring';
 import { createEmptyCareerStats } from '../../types/scoring';
 
@@ -158,6 +158,14 @@ export class ScoringService {
   async getLineup(matchId: string, teamId: string): Promise<MatchLineup | null> {
     const db = this.ensureDb();
     const snapshot = await get(ref(db, `${this.basePath}/matches/${matchId}/lineups/${teamId}`));
+    return snapshot.exists() ? snapshot.val() : null;
+  }
+
+  // ── Innings ─────────────────────────────────────────────────────────────────
+
+  async getInnings(matchId: string, inningsNumber: 1 | 2): Promise<Innings | null> {
+    const db = this.ensureDb();
+    const snapshot = await get(ref(db, `${this.basePath}/matches/${matchId}/innings/${inningsNumber}`));
     return snapshot.exists() ? snapshot.val() : null;
   }
 
@@ -368,6 +376,38 @@ export class ScoringService {
 
     career.lastUpdated = Date.now();
     return career;
+  }
+
+  // ── Field Placement ──
+
+  async getFieldPlacements(matchId: string): Promise<import('../../types/scoring').FieldPlacement[]> {
+    const db = this.ensureDb();
+    const snapshot = await get(ref(db, `${this.basePath}/matches/${matchId}/fieldPlacements`));
+    return snapshot.exists() ? Object.values(snapshot.val()) : [];
+  }
+
+  async saveFieldPlacement(matchId: string, placement: import('../../types/scoring').FieldPlacement): Promise<void> {
+    const db = this.ensureDb();
+    await set(
+      ref(db, `${this.basePath}/matches/${matchId}/fieldPlacements/${placement.id}`),
+      this.stripUndefinedDeep(placement)
+    );
+  }
+
+  async setActiveFieldPlacement(matchId: string, placementId: string | null): Promise<void> {
+    const db = this.ensureDb();
+    await set(ref(db, `${this.basePath}/matches/${matchId}/activeFieldPlacement`), placementId);
+  }
+
+  async getActiveFieldPlacement(matchId: string): Promise<string | null> {
+    const db = this.ensureDb();
+    const snapshot = await get(ref(db, `${this.basePath}/matches/${matchId}/activeFieldPlacement`));
+    return snapshot.exists() ? snapshot.val() : null;
+  }
+
+  async deleteFieldPlacement(matchId: string, placementId: string): Promise<void> {
+    const db = this.ensureDb();
+    await remove(ref(db, `${this.basePath}/matches/${matchId}/fieldPlacements/${placementId}`));
   }
 }
 

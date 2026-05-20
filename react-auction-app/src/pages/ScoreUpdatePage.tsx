@@ -12,6 +12,7 @@ import { useAdminAuth } from '../hooks/useAdminAuth';
 import { useTenantNavigate as useNavigate } from '../hooks/useTenantNavigate';
 import { useScoringState } from '../hooks/useScoringState';
 import type { BallOutcome, DismissalType, WicketDetail, MatchSquadPlayer } from '../types/scoring';
+import FieldPlacementEditor from '../components/FieldPlacementEditor/FieldPlacementEditor';
 import './ScoreUpdatePage.css';
 
 // ── Run buttons layout ───────────────────────────────────────────────────────
@@ -91,6 +92,7 @@ export default function ScoreUpdatePage() {
   const [showMatchCompleteModal, setShowMatchCompleteModal] = useState(false);
   const [expandedExtra, setExpandedExtra] = useState<'NB' | 'WD' | 'B' | 'LB' | null>(null);
   const [pendingExtraOutcome, setPendingExtraOutcome] = useState<BallOutcome | null>(null); // for wicket-on-extra flow
+  const [showFieldEditor, setShowFieldEditor] = useState(false);
 
   // Auto-show bowler picker at end of over
   useEffect(() => {
@@ -503,6 +505,7 @@ export default function ScoreUpdatePage() {
           { type: 'stats_mvp' as const, label: 'MVP' },
           { type: 'match_summary' as const, label: 'Summary' },
           { type: 'live_question' as const, label: 'Question' },
+          { type: 'field_placement' as const, label: 'Field' },
           { type: 'none' as const, label: 'Clear' },
         ].map(item => (
           <button
@@ -513,7 +516,27 @@ export default function ScoreUpdatePage() {
             {item.label}
           </button>
         ))}
+        <button
+          className={`score-update__overlay-btn ${showFieldEditor ? 'score-update__overlay-btn--active' : ''}`}
+          onClick={() => setShowFieldEditor(v => !v)}
+        >
+          🟢 Edit Field
+        </button>
       </div>
+
+      {/* ── Field Placement Editor Panel ──────────────────────────────── */}
+      <AnimatePresence>
+        {showFieldEditor && matchId && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            style={{ overflow: 'hidden' }}
+          >
+            <FieldPlacementEditor matchId={matchId} onClose={() => setShowFieldEditor(false)} />
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* ── Modals ────────────────────────────────────────────────────── */}
       <AnimatePresence>

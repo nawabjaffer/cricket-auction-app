@@ -41,6 +41,7 @@ const STATS_OVERLAY_BUTTONS: { key: OverlayType; label: string; icon: string; co
   { key: 'award_purple_cap_match', label: 'Purple (Match)', icon: '🧢', color: '#c084fc' },
   { key: 'award_purple_cap', label: 'Purple (Tourney)', icon: '🧢', color: '#a855f7' },
   { key: 'match_intro', label: 'Match Intro', icon: '🎬', color: '#6366f1' },
+  { key: 'field_placement', label: 'Field', icon: '🟢', color: '#10b981' },
 ];
 
 export default function ScoreOBSControlDock() {

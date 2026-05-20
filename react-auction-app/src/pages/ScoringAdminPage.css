@@ -1068,3 +1068,33 @@
   padding-bottom: 4px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
+
+/* ── Date Row (input + Today button) ──────────────────────────────────── */
+
+.scoring-admin__date-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.scoring-admin__date-row input {
+  flex: 1;
+}
+
+.scoring-admin__today-btn {
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: 1px solid rgba(16, 185, 129, 0.4);
+  background: rgba(16, 185, 129, 0.15);
+  color: #10b981;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s;
+}
+
+.scoring-admin__today-btn:hover {
+  background: rgba(16, 185, 129, 0.3);
+  border-color: #10b981;
+}

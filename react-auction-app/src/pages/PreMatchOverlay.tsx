@@ -16,9 +16,10 @@ interface PreMatchOverlayProps {
   preMatch: PreMatchState;
   config: ScoringOverlayConfig;
   lineups: { teamA: MatchLineup | null; teamB: MatchLineup | null };
+  playerImages?: Record<string, string>;
 }
 
-export default function PreMatchOverlay({ match, preMatch, config, lineups }: PreMatchOverlayProps) {
+export default function PreMatchOverlay({ match, preMatch, config, lineups, playerImages }: PreMatchOverlayProps) {
   const { phase } = preMatch;
 
   if (phase === 'idle' || phase === 'match_ready') return null;
@@ -27,7 +28,7 @@ export default function PreMatchOverlay({ match, preMatch, config, lineups }: Pr
     <div className="prematch-overlay">
       <AnimatePresence mode="wait">
         {phase === 'squad_display' && (
-          <SquadDisplayOverlay key="squad" match={match} lineups={lineups} config={config} />
+          <SquadDisplayOverlay key="squad" match={match} lineups={lineups} config={config} playerImages={playerImages} />
         )}
         {phase === 'toss_animation' && (
           <TossAnimationOverlay key="toss" match={match} preMatch={preMatch} config={config} />
@@ -42,6 +43,7 @@ export default function PreMatchOverlay({ match, preMatch, config, lineups }: Pr
             lineup={lineups.teamA}
             revealedIds={preMatch.revealedPlayersTeamA || []}
             revealConfig={preMatch.squadRevealConfig}
+            playerImages={playerImages}
           />
         )}
         {phase === 'squad_reveal_teamB' && lineups.teamB && (
@@ -51,6 +53,7 @@ export default function PreMatchOverlay({ match, preMatch, config, lineups }: Pr
             lineup={lineups.teamB}
             revealedIds={preMatch.revealedPlayersTeamB || []}
             revealConfig={preMatch.squadRevealConfig}
+            playerImages={playerImages}
           />
         )}
         {phase === 'impact_players' && (
@@ -65,10 +68,11 @@ export default function PreMatchOverlay({ match, preMatch, config, lineups }: Pr
 // SQUAD DISPLAY — Both teams' full squads side by side
 // ═══════════════════════════════════════════════════════════════════════════════
 
-function SquadDisplayOverlay({ match, lineups, config }: {
+function SquadDisplayOverlay({ match, lineups, config, playerImages }: {
   match: MatchSetup;
   lineups: { teamA: MatchLineup | null; teamB: MatchLineup | null };
   config: ScoringOverlayConfig;
+  playerImages?: Record<string, string>;
 }) {
   return (
     <motion.div
@@ -92,20 +96,23 @@ function SquadDisplayOverlay({ match, lineups, config }: {
         <TeamSquadColumn
           team={match.teamA}
           lineup={lineups.teamA}
+          playerImages={playerImages}
         />
         <div className="prematch-squad-display__divider" />
         <TeamSquadColumn
           team={match.teamB}
           lineup={lineups.teamB}
+          playerImages={playerImages}
         />
       </div>
     </motion.div>
   );
 }
 
-function TeamSquadColumn({ team, lineup }: {
+function TeamSquadColumn({ team, lineup, playerImages }: {
   team: { name: string; logoUrl?: string; primaryColor?: string };
   lineup: MatchLineup | null;
+  playerImages?: Record<string, string>;
 }) {
   return (
     <div className="prematch-squad-col" style={{ '--team-color': team.primaryColor || '#3b82f6' } as React.CSSProperties}>
@@ -114,33 +121,40 @@ function TeamSquadColumn({ team, lineup }: {
         <h2 className="prematch-squad-col__name">{team.name}</h2>
       </div>
       <div className="prematch-squad-col__players">
-        {lineup?.players.map((p, i) => (
-          <motion.div
-            key={p.playerId}
-            className="prematch-squad-col__player"
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: i * 0.08, duration: 0.3 }}
-          >
-            <span className="prematch-squad-col__num">{i + 1}</span>
-            {p.imageUrl && (
-              <img src={p.imageUrl} alt="" className="prematch-squad-col__player-img" />
-            )}
-            <div className="prematch-squad-col__player-info">
-              <span className="prematch-squad-col__pname">
-                {p.playerName}
-                {p.isCaptain && <span className="prematch-squad-col__badge prematch-squad-col__badge--captain">C</span>}
-                {p.isWicketKeeper && <span className="prematch-squad-col__badge prematch-squad-col__badge--keeper">WK</span>}
-              </span>
-              <span className="prematch-squad-col__role-badge" data-role={getRoleCategory(p.role)}>
-                {p.role}
-              </span>
-            </div>
-            {p.auctionPrice !== undefined && (
-              <span className="prematch-squad-col__price">₹{p.auctionPrice}L</span>
-            )}
-          </motion.div>
-        )) || (
+        {lineup?.players.map((p, i) => {
+          const imgUrl = p.imageUrl || playerImages?.[p.playerId];
+          return (
+            <motion.div
+              key={p.playerId}
+              className="prematch-squad-col__player"
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: i * 0.08, duration: 0.3 }}
+            >
+              <span className="prematch-squad-col__num">{i + 1}</span>
+              <div className="prematch-squad-col__player-img-wrap">
+                {imgUrl ? (
+                  <img src={imgUrl} alt="" className="prematch-squad-col__player-img" />
+                ) : (
+                  <div className="prematch-squad-col__player-img-placeholder" />
+                )}
+              </div>
+              <div className="prematch-squad-col__player-info">
+                <span className="prematch-squad-col__pname">
+                  {p.playerName}
+                  {p.isCaptain && <span className="prematch-squad-col__badge prematch-squad-col__badge--captain">C</span>}
+                  {p.isWicketKeeper && <span className="prematch-squad-col__badge prematch-squad-col__badge--keeper">WK</span>}
+                </span>
+                <span className="prematch-squad-col__role-badge" data-role={getRoleCategory(p.role)}>
+                  {p.role}
+                </span>
+              </div>
+              {p.auctionPrice !== undefined && (
+                <span className="prematch-squad-col__price">₹{p.auctionPrice}L</span>
+              )}
+            </motion.div>
+          );
+        }) || (
           <p className="prematch-squad-col__empty">Lineup not set</p>
         )}
       </div>
@@ -263,11 +277,12 @@ function TossResultOverlay({ match, preMatch, config }: {
 // SQUAD REVEAL — Animated player-by-player reveal
 // ═══════════════════════════════════════════════════════════════════════════════
 
-function SquadRevealOverlay({ team, lineup, revealedIds, revealConfig }: {
+function SquadRevealOverlay({ team, lineup, revealedIds, revealConfig, playerImages }: {
   team: { name: string; logoUrl?: string; primaryColor?: string };
   lineup: MatchLineup;
   revealedIds: string[];
   revealConfig: PreMatchState['squadRevealConfig'];
+  playerImages?: Record<string, string>;
 }) {
   const [localRevealed, setLocalRevealed] = useState<string[]>(revealedIds);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -318,6 +333,7 @@ function SquadRevealOverlay({ team, lineup, revealedIds, revealConfig }: {
       <div className="prematch-reveal__grid">
         {lineup.players.map((player, i) => {
           const isRevealed = localRevealed.includes(player.playerId);
+          const imgUrl = player.imageUrl || playerImages?.[player.playerId];
           return (
             <AnimatePresence key={player.playerId}>
               {isRevealed && (
@@ -328,8 +344,8 @@ function SquadRevealOverlay({ team, lineup, revealedIds, revealConfig }: {
                   transition={{ type: 'spring', stiffness: 200, damping: 20 }}
                 >
                   <div className="prematch-reveal__player-num">{i + 1}</div>
-                  {player.imageUrl && (
-                    <img src={player.imageUrl} alt="" className="prematch-reveal__player-img" />
+                  {imgUrl && (
+                    <img src={imgUrl} alt="" className="prematch-reveal__player-img" />
                   )}
                   <div className="prematch-reveal__player-info">
                     <span className="prematch-reveal__player-name">

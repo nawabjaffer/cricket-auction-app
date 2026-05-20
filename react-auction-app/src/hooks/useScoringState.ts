@@ -208,6 +208,8 @@ export function useScoringState(matchId: string | undefined) {
 
       setUndoStack(prev => [...prev.slice(-19), { live: prevLive, innings: prevInnings, ballId: ballEvent.id }]);
 
+      // Note: overlay auto-trigger is handled by ManualScoringAdapter.recordBall() directly
+
       // Check if bowler change is needed (over completed)
       const overCompleted = updatedLive.currentOverBalls.length === 0 && updatedLive.overs > 0;
       
@@ -252,6 +254,11 @@ export function useScoringState(matchId: string | undefined) {
         // Update tournament stats
         const tournamentStats = await statsEngine.aggregateTournamentStats();
         await statsEngine.saveTournamentStats(tournamentStats);
+
+        // Auto-trigger match summary overlay after completion
+        try {
+          await setOverlay('match_summary');
+        } catch { /* ignore overlay trigger failure */ }
       }
     } catch (err) {
       setState(s => ({ ...s, error: `Record failed: ${err}` }));
