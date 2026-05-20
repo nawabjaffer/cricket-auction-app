@@ -1268,6 +1268,9 @@ function BoundaryOverlay({ type, animConfig }: { type: 'four' | 'six'; animConfi
   }
 
   if (hasVideo) {
+    // Skip chroma key for Firebase Storage URLs when CORS isn't configured
+    const isFirebaseStorage = animConfig!.mediaUrl!.includes('firebasestorage.googleapis.com');
+    const useChromaKey = animConfig!.chromaKeyEnabled && !isFirebaseStorage;
     return (
       <motion.div
         className={`score-obs__celebration score-obs__celebration--${type}`}
@@ -1276,7 +1279,7 @@ function BoundaryOverlay({ type, animConfig }: { type: 'four' | 'six'; animConfi
         exit={{ opacity: 0 }}
         transition={{ duration: 0.15 }}
       >
-        {animConfig!.chromaKeyEnabled ? (
+        {useChromaKey ? (
           <ChromaKeyVideo
             src={animConfig!.mediaUrl!}
             chromaColor={animConfig!.chromaKeyColor || '#00ff00'}
@@ -1328,6 +1331,8 @@ function WicketOverlay({ imageUrl, animConfig }: { imageUrl?: string; animConfig
   }
 
   if (hasVideo) {
+    const isFirebaseStorage = animConfig!.mediaUrl!.includes('firebasestorage.googleapis.com');
+    const useChromaKey = animConfig!.chromaKeyEnabled && !isFirebaseStorage;
     return (
       <motion.div
         className="score-obs__celebration score-obs__celebration--wicket"
@@ -1336,7 +1341,7 @@ function WicketOverlay({ imageUrl, animConfig }: { imageUrl?: string; animConfig
         exit={{ opacity: 0 }}
         transition={{ duration: 0.15 }}
       >
-        {animConfig!.chromaKeyEnabled ? (
+        {useChromaKey ? (
           <ChromaKeyVideo
             src={animConfig!.mediaUrl!}
             chromaColor={animConfig!.chromaKeyColor || '#00ff00'}
@@ -1386,6 +1391,8 @@ function DuckOutOverlay({ imageUrl, animConfig }: { imageUrl?: string; animConfi
   const hasImage = animConfig?.mediaUrl && (animConfig.type === 'image' || animConfig.mediaUrl.match(/\.(png|gif|jpg|jpeg|webp|svg)(\?|$)/i));
 
   if (hasVideo) {
+    const isFirebaseStorage = animConfig!.mediaUrl!.includes('firebasestorage.googleapis.com');
+    const useChromaKey = animConfig!.chromaKeyEnabled && !isFirebaseStorage;
     return (
       <motion.div
         className="score-obs__celebration score-obs__celebration--duck"
@@ -1394,7 +1401,7 @@ function DuckOutOverlay({ imageUrl, animConfig }: { imageUrl?: string; animConfi
         exit={{ opacity: 0 }}
         transition={{ duration: 0.15 }}
       >
-        {animConfig!.chromaKeyEnabled ? (
+        {useChromaKey ? (
           <ChromaKeyVideo
             src={animConfig!.mediaUrl!}
             chromaColor={animConfig!.chromaKeyColor || '#00ff00'}
@@ -1449,6 +1456,8 @@ function HatTrickOverlay({ imageUrl, animConfig }: { imageUrl?: string; animConf
   const hasImage = animConfig?.mediaUrl && (animConfig.type === 'image' || animConfig.mediaUrl.match(/\.(png|gif|jpg|jpeg|webp|svg)(\?|$)/i));
 
   if (hasVideo) {
+    const isFirebaseStorage = animConfig!.mediaUrl!.includes('firebasestorage.googleapis.com');
+    const useChromaKey = animConfig!.chromaKeyEnabled && !isFirebaseStorage;
     return (
       <motion.div
         className="score-obs__celebration score-obs__celebration--hattrick"
@@ -1457,7 +1466,7 @@ function HatTrickOverlay({ imageUrl, animConfig }: { imageUrl?: string; animConf
         exit={{ opacity: 0 }}
         transition={{ duration: 0.15 }}
       >
-        {animConfig!.chromaKeyEnabled ? (
+        {useChromaKey ? (
           <ChromaKeyVideo
             src={animConfig!.mediaUrl!}
             chromaColor={animConfig!.chromaKeyColor || '#00ff00'}
