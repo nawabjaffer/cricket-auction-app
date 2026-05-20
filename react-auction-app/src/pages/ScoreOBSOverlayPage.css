@@ -33,12 +33,11 @@
 }
 
 .score-obs__tournament-logo {
-  width: 48px;
-  height: 48px;
+  width: 100px;
+  height: 100px;
   object-fit: contain;
   border-radius: 8px;
-  background: rgba(0, 0, 0, 0.5);
-  padding: 4px;
+  margin: 20px;
 }
 
 .score-obs__tournament-name {
@@ -1477,7 +1476,7 @@
 
 .score-ticker__prem-ball--filled {
   background:  rgba(255, 255, 255, 0.75);
-  color: #fcebb6;
+  color: #1a0933;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
 }
 

@@ -41,7 +41,9 @@ export type BallOutcome =
   | 'B'     // bye
   | 'LB'    // leg bye
   | 'WD+1' | 'WD+2' | 'WD+3' | 'WD+4'  // wide + extra runs
-  | 'NB+0' | 'NB+1' | 'NB+2' | 'NB+3' | 'NB+4' | 'NB+6'; // no-ball + runs
+  | 'NB+0' | 'NB+1' | 'NB+2' | 'NB+3' | 'NB+4' | 'NB+6' // no-ball + runs
+  | 'B+1' | 'B+2' | 'B+3' | 'B+4'       // bye + runs
+  | 'LB+1' | 'LB+2' | 'LB+3' | 'LB+4'; // leg bye + runs
 
 export type DismissalType =
   | 'bowled' | 'caught' | 'caught_and_bowled' | 'lbw' | 'run_out'

@@ -453,6 +453,17 @@
   transform: scale(0.95);
 }
 
+.score-update__btn--runout {
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  color: #f87171;
+}
+
+.score-update__btn--runout:hover {
+  background: rgba(239, 68, 68, 0.3);
+  border-color: rgba(239, 68, 68, 0.6);
+}
+
 /* ── Controls (Undo, Swap, New Innings) ─────────────────────────────────────── */
 
 .score-update__controls {

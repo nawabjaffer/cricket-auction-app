@@ -609,6 +609,7 @@ export class ManualScoringAdapter implements IScoringAdapter {
     if (str === 'W') return { totalRuns: 0, batsmanRuns: 0, extras: 0, isLegal: true };
     if (str === 'WD') return { totalRuns: 1, batsmanRuns: 0, extras: 1, isLegal: false, extraType: 'wide' };
     if (str === 'NB+0') return { totalRuns: 1, batsmanRuns: 0, extras: 1, isLegal: false, extraType: 'noball' };
+    if (str === 'NB') return { totalRuns: 1, batsmanRuns: 0, extras: 1, isLegal: false, extraType: 'noball' };
     if (str === 'B') return { totalRuns: batsmanRunsOverride ?? 1, batsmanRuns: 0, extras: batsmanRunsOverride ?? 1, isLegal: true, extraType: 'bye' };
     if (str === 'LB') return { totalRuns: batsmanRunsOverride ?? 1, batsmanRuns: 0, extras: batsmanRunsOverride ?? 1, isLegal: true, extraType: 'legbye' };
 
@@ -622,6 +623,18 @@ export class ManualScoringAdapter implements IScoringAdapter {
     if (str.startsWith('NB+')) {
       const n = parseInt(str.slice(3)) || 0;
       return { totalRuns: 1 + n, batsmanRuns: n, extras: 1, isLegal: false, extraType: 'noball' };
+    }
+
+    // Bye + runs: "B+N"
+    if (str.startsWith('B+')) {
+      const n = parseInt(str.slice(2)) || 0;
+      return { totalRuns: n, batsmanRuns: 0, extras: n, isLegal: true, extraType: 'bye' };
+    }
+
+    // Leg bye + runs: "LB+N"
+    if (str.startsWith('LB+')) {
+      const n = parseInt(str.slice(3)) || 0;
+      return { totalRuns: n, batsmanRuns: 0, extras: n, isLegal: true, extraType: 'legbye' };
     }
 
     // Simple runs: "0", "1", "2", "3", "4", "6"
@@ -654,9 +667,9 @@ export class ManualScoringAdapter implements IScoringAdapter {
   private ballDisplay(outcome: BallOutcome, runs: number): string {
     if (outcome === 'W') return 'W';
     if (outcome === 'WD' || String(outcome).startsWith('WD+')) return `WD`;
-    if (outcome === 'NB+0' || String(outcome).startsWith('NB+')) return `NB`;
-    if (outcome === 'B') return 'B';
-    if (outcome === 'LB') return 'LB';
+    if (outcome === 'NB' || outcome === 'NB+0' || String(outcome).startsWith('NB+')) return `NB`;
+    if (outcome === 'B' || String(outcome).startsWith('B+')) return `B`;
+    if (outcome === 'LB' || String(outcome).startsWith('LB+')) return `LB`;
     return String(runs);
   }
 

@@ -25,11 +25,6 @@ const RUN_BUTTONS: { outcome: BallOutcome; label: string; className: string }[] 
   { outcome: '6', label: '6', className: 'six' },
 ];
 
-const EXTRA_BUTTONS: { outcome: BallOutcome; label: string }[] = [
-  { outcome: 'B', label: 'B' },
-  { outcome: 'LB', label: 'LB' },
-];
-
 const NB_SUB_OPTIONS: { outcome: BallOutcome; label: string }[] = [
   { outcome: 'NB+0', label: 'NB (dot)' },
   { outcome: 'NB+1', label: 'NB+1' },
@@ -45,6 +40,20 @@ const WD_SUB_OPTIONS: { outcome: BallOutcome; label: string }[] = [
   { outcome: 'WD+2', label: 'WD+2' },
   { outcome: 'WD+3', label: 'WD+3' },
   { outcome: 'WD+4', label: 'WD+4' },
+];
+
+const B_SUB_OPTIONS: { outcome: BallOutcome; label: string }[] = [
+  { outcome: 'B+1', label: 'B+1' },
+  { outcome: 'B+2', label: 'B+2' },
+  { outcome: 'B+3', label: 'B+3' },
+  { outcome: 'B+4', label: 'B+4' },
+];
+
+const LB_SUB_OPTIONS: { outcome: BallOutcome; label: string }[] = [
+  { outcome: 'LB+1', label: 'LB+1' },
+  { outcome: 'LB+2', label: 'LB+2' },
+  { outcome: 'LB+3', label: 'LB+3' },
+  { outcome: 'LB+4', label: 'LB+4' },
 ];
 
 const DISMISSAL_TYPES: { value: DismissalType; label: string }[] = [
@@ -80,7 +89,8 @@ export default function ScoreUpdatePage() {
   const [showBowlerPicker, setShowBowlerPicker] = useState(false);
   const [showEndOfInningsModal, setShowEndOfInningsModal] = useState(false);
   const [showMatchCompleteModal, setShowMatchCompleteModal] = useState(false);
-  const [expandedExtra, setExpandedExtra] = useState<'NB' | 'WD' | null>(null);
+  const [expandedExtra, setExpandedExtra] = useState<'NB' | 'WD' | 'B' | 'LB' | null>(null);
+  const [pendingExtraOutcome, setPendingExtraOutcome] = useState<BallOutcome | null>(null); // for wicket-on-extra flow
 
   // Auto-show bowler picker at end of over
   useEffect(() => {
@@ -319,19 +329,23 @@ export default function ScoreUpdatePage() {
         >
           WD
         </button>
-        {EXTRA_BUTTONS.map(btn => (
-          <button
-            key={btn.outcome}
-            className="score-update__btn score-update__btn--extra"
-            onClick={() => handleRunClick(btn.outcome)}
-            disabled={recording}
-          >
-            {btn.label}
-          </button>
-        ))}
+        <button
+          className={`score-update__btn score-update__btn--extra ${expandedExtra === 'B' ? 'score-update__btn--active' : ''}`}
+          onClick={() => setExpandedExtra(expandedExtra === 'B' ? null : 'B')}
+          disabled={recording}
+        >
+          B
+        </button>
+        <button
+          className={`score-update__btn score-update__btn--extra ${expandedExtra === 'LB' ? 'score-update__btn--active' : ''}`}
+          onClick={() => setExpandedExtra(expandedExtra === 'LB' ? null : 'LB')}
+          disabled={recording}
+        >
+          LB
+        </button>
       </div>
 
-      {/* ── NB/WD Sub-options Panel ───────────────────────────────────── */}
+      {/* ── Extra Sub-options Panels ──────────────────────────────────── */}
       <AnimatePresence>
         {expandedExtra === 'NB' && (
           <motion.div
@@ -352,6 +366,13 @@ export default function ScoreUpdatePage() {
                 {btn.label}
               </button>
             ))}
+            <button
+              className="score-update__btn score-update__btn--sub score-update__btn--runout"
+              onClick={() => { setPendingExtraOutcome('NB+0'); setShowWicketModal(true); setExpandedExtra(null); }}
+              disabled={recording}
+            >
+              NB + Run Out
+            </button>
           </motion.div>
         )}
         {expandedExtra === 'WD' && (
@@ -373,6 +394,69 @@ export default function ScoreUpdatePage() {
                 {btn.label}
               </button>
             ))}
+            <button
+              className="score-update__btn score-update__btn--sub score-update__btn--runout"
+              onClick={() => { setPendingExtraOutcome('WD'); setShowWicketModal(true); setExpandedExtra(null); }}
+              disabled={recording}
+            >
+              WD + Stumped/Run Out
+            </button>
+          </motion.div>
+        )}
+        {expandedExtra === 'B' && (
+          <motion.div
+            className="score-update__sub-options"
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.2 }}
+          >
+            <span className="score-update__sub-label">Bye:</span>
+            {B_SUB_OPTIONS.map(btn => (
+              <button
+                key={btn.outcome}
+                className="score-update__btn score-update__btn--sub"
+                onClick={() => { handleRunClick(btn.outcome); setExpandedExtra(null); }}
+                disabled={recording}
+              >
+                {btn.label}
+              </button>
+            ))}
+            <button
+              className="score-update__btn score-update__btn--sub score-update__btn--runout"
+              onClick={() => { setPendingExtraOutcome('B+1'); setShowWicketModal(true); setExpandedExtra(null); }}
+              disabled={recording}
+            >
+              B + Run Out
+            </button>
+          </motion.div>
+        )}
+        {expandedExtra === 'LB' && (
+          <motion.div
+            className="score-update__sub-options"
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.2 }}
+          >
+            <span className="score-update__sub-label">Leg Bye:</span>
+            {LB_SUB_OPTIONS.map(btn => (
+              <button
+                key={btn.outcome}
+                className="score-update__btn score-update__btn--sub"
+                onClick={() => { handleRunClick(btn.outcome); setExpandedExtra(null); }}
+                disabled={recording}
+              >
+                {btn.label}
+              </button>
+            ))}
+            <button
+              className="score-update__btn score-update__btn--sub score-update__btn--runout"
+              onClick={() => { setPendingExtraOutcome('LB+1'); setShowWicketModal(true); setExpandedExtra(null); }}
+              disabled={recording}
+            >
+              LB + Run Out
+            </button>
           </motion.div>
         )}
       </AnimatePresence>
@@ -440,11 +524,14 @@ export default function ScoreUpdatePage() {
             currentBatsmen={liveScore.currentBatsmen}
             currentBowler={liveScore.currentBowler}
             allBatsmen={liveScore.allBatsmen}
+            extraContext={pendingExtraOutcome}
             onConfirm={async (wicket) => {
-              await recordBall('W', wicket);
+              const outcome = pendingExtraOutcome || 'W';
+              await recordBall(outcome, wicket);
               setShowWicketModal(false);
+              setPendingExtraOutcome(null);
             }}
-            onClose={() => setShowWicketModal(false)}
+            onClose={() => { setShowWicketModal(false); setPendingExtraOutcome(null); }}
           />
         )}
       </AnimatePresence>
@@ -620,16 +707,30 @@ function getBallChipClass(ball: string): string {
 
 // ── Wicket Modal ─────────────────────────────────────────────────────────────
 
-function WicketModal({ battingLineup, bowlingLineup, currentBatsmen, currentBowler, allBatsmen, onConfirm, onClose }: {
+function WicketModal({ battingLineup, bowlingLineup, currentBatsmen, currentBowler, allBatsmen, extraContext, onConfirm, onClose }: {
   battingLineup: MatchSquadPlayer[];
   bowlingLineup: MatchSquadPlayer[];
   currentBatsmen: [{ playerId: string; playerName: string }, { playerId: string; playerName: string }];
   currentBowler: { playerId: string; playerName: string };
   allBatsmen?: { playerId: string; isOut: boolean }[];
+  extraContext?: BallOutcome | null;
   onConfirm: (wicket: WicketDetail) => void;
   onClose: () => void;
 }) {
-  const [dismissalType, setDismissalType] = useState<DismissalType>('bowled');
+  // Determine allowed dismissal types based on delivery context
+  const allowedDismissals = (() => {
+    if (!extraContext) return DISMISSAL_TYPES;
+    const str = String(extraContext);
+    if (str.startsWith('NB') || str.startsWith('B+') || str.startsWith('LB+') || str === 'B' || str === 'LB') {
+      return DISMISSAL_TYPES.filter(d => d.value === 'run_out');
+    }
+    if (str.startsWith('WD') || str === 'WD') {
+      return DISMISSAL_TYPES.filter(d => d.value === 'run_out' || d.value === 'stumped');
+    }
+    return DISMISSAL_TYPES;
+  })();
+
+  const [dismissalType, setDismissalType] = useState<DismissalType>(allowedDismissals[0]?.value || 'run_out');
   const [outBatsman, setOutBatsman] = useState(currentBatsmen[0].playerId);
   const [fielderId, setFielderId] = useState('');
   const [newBatsmanId, setNewBatsmanId] = useState('');
@@ -644,12 +745,12 @@ function WicketModal({ battingLineup, bowlingLineup, currentBatsmen, currentBowl
   return (
     <motion.div className="score-update__modal-overlay" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose}>
       <motion.div className="score-update__modal" initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.9, y: 20 }} onClick={e => e.stopPropagation()}>
-        <h3>Wicket</h3>
+        <h3>{extraContext ? `Wicket on ${String(extraContext)}` : 'Wicket'}</h3>
 
         <div className="score-update__modal-field">
           <label>Dismissal Type</label>
           <select value={dismissalType} onChange={e => setDismissalType(e.target.value as DismissalType)} className="score-update__select">
-            {DISMISSAL_TYPES.map(d => <option key={d.value} value={d.value}>{d.label}</option>)}
+            {allowedDismissals.map(d => <option key={d.value} value={d.value}>{d.label}</option>)}
           </select>
         </div>
 
