@@ -639,6 +639,16 @@
   border-color: rgba(251, 191, 36, 0.4);
 }
 
+.score-update__runs-row {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.score-update__runs-row .score-update__btn--sub {
+  min-width: 2.2rem;
+  text-align: center;
+}
+
 .score-update__select option {
   background: #1a1a2e;
 }

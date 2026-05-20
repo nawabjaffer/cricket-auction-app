@@ -111,7 +111,7 @@ export class ManualScoringAdapter implements IScoringAdapter {
       extras,
       extraType: parsed.extraType,
       isLegal,
-      isBoundary: batsmanRuns === 4 && isLegal,
+      isBoundary: batsmanRuns === 4,  // boundary counts even on NB/extras
       isSix: batsmanRuns === 6,
       isWicket: !!wicket,
       wicket,
@@ -131,20 +131,36 @@ export class ManualScoringAdapter implements IScoringAdapter {
     const newRunRate = ballsDelivered > 0 ? Math.round((newRuns / ballsDelivered) * 6 * 100) / 100 : 0;
 
     // Update current over balls display
-    const currentOverBalls = [...currentLive.currentOverBalls, this.ballDisplay(outcome, totalRuns)];
+    const currentOverBalls = [...currentLive.currentOverBalls, this.ballDisplay(outcome, totalRuns, !!wicket)];
 
     // Check if over just completed
     const overCompleted = isLegal && this.getBallsInCurrentOver(newOvers) === 0 && ballsDelivered > 0;
 
     // Determine if free hit should be set (no-ball → next legal ball is free hit)
     const isNoBall = outcome === 'NB' || outcome === 'NB+0' || String(outcome).startsWith('NB+');
-    const nextIsFreehit = isNoBall;
+    const isWide = outcome === 'WD' || String(outcome).startsWith('WD+');
+    // Free hit persists until next legal ball; if another NB, new free hit starts
+    // If wide on free hit, free hit carries over (wide doesn't consume the free hit)
+    const nextIsFreehit = isNoBall || (currentLive.isFreehit && !isLegal);
+
+    // Strike swap rules:
+    // - Legal ball: swap if batsman ran odd OR over completed
+    // - No-ball: swap if batsman ran odd (NB doesn't end over, but running swaps)
+    // - Wide: swap if total extras beyond the +1 wide are odd (they ran odd times)
+    //   e.g. WD=no swap (no running), WD+1=1 run taken → swap, WD+2=2 runs → no swap
+    // - Bye/Leg-bye: runs are extras but batsmen physically run → swap on odd extras
+    // - Over completed: always swap (end of over)
+    const isByeOrLegbye = parsed.extraType === 'bye' || parsed.extraType === 'legbye';
+    const wideRunsTaken = isWide ? (totalRuns - 1) : 0; // subtract the automatic +1 wide extra
+    const shouldSwapStrike = overCompleted ||
+      (!isWide && !isByeOrLegbye && batsmanRuns % 2 === 1) ||  // normal/NB: odd batsman runs
+      (isWide && wideRunsTaken % 2 === 1) ||                    // wide: odd runs taken
+      (isByeOrLegbye && extras % 2 === 1);                      // bye/lb: odd extras (they ran)
 
     // Update batsmen stats
     let updatedBatsmen = this.updateBatsmenStats(
       currentLive.currentBatsmen, batsmanRuns, isLegal, wicket,
-      // Swap strike if odd runs on legal ball, or at end of over
-      (batsmanRuns % 2 === 1 && isLegal) || overCompleted,
+      shouldSwapStrike,
     );
 
     // Replace dismissed batsman with new batsman if provided
@@ -165,8 +181,11 @@ export class ManualScoringAdapter implements IScoringAdapter {
     }
 
     // Update bowler stats
+    // Run out, retired hurt/out, obstructing field, timed out do NOT credit the bowler
+    const nonBowlerDismissals = ['run_out', 'retired_hurt', 'retired_out', 'obstructing_field', 'timed_out'];
+    const isBowlerWicket = !!wicket && !nonBowlerDismissals.includes(wicket.dismissalType);
     const updatedBowler = this.updateBowlerStats(
-      currentLive.currentBowler, totalRuns, batsmanRuns, extras, isLegal, !!wicket, parsed.extraType,
+      currentLive.currentBowler, totalRuns, batsmanRuns, extras, isLegal, isBowlerWicket, parsed.extraType,
     );
 
     // Build recent overs summary
@@ -179,16 +198,26 @@ export class ManualScoringAdapter implements IScoringAdapter {
       recentOvers = [...recentOvers, String(overRuns)].slice(-12);
     }
 
-    // Maiden detection: over completed with 0 runs from bat (no extras counted in maidens are wides/noballs)
+    // Maiden detection: over completed with 0 runs conceded by bowler
+    // Byes/leg-byes don't count against bowler; wides/no-balls do
     let updatedBowlerFinal = updatedBowler;
     if (overCompleted) {
-      const overHadRuns = currentOverBalls.some(b => {
-        if (b === 'W' || b === '0') return false;
-        if (b === 'WD' || b === 'NB') return true; // wides/noballs count as runs against bowler for maiden
+      const overHadRunsAgainstBowler = currentOverBalls.some(b => {
+        if (b === 'W' || b === '0' || b.includes('·W') && !b.includes('WD') && !b.includes('NB')) {
+          // Pure wicket or dot — no runs against bowler
+          // Run-out with runs (e.g. '2·W') still counts as runs
+          if (b.includes('·W')) {
+            const runPart = parseInt(b);
+            return !isNaN(runPart) && runPart > 0;
+          }
+          return false;
+        }
+        if (b === 'B' || b === 'LB' || b === 'B·W' || b === 'LB·W') return false; // byes/LBs don't count against bowler
+        if (b.includes('WD') || b.includes('NB')) return true; // wides/no-balls count as runs against bowler
         const n = parseInt(b);
         return !isNaN(n) && n > 0;
       });
-      if (!overHadRuns) {
+      if (!overHadRunsAgainstBowler) {
         updatedBowlerFinal = { ...updatedBowlerFinal, maidens: updatedBowlerFinal.maidens + 1 };
       }
     }
@@ -251,10 +280,12 @@ export class ManualScoringAdapter implements IScoringAdapter {
       currentOverBalls: overCompleted ? [] : currentOverBalls,
       lastCompletedOverBalls: overCompleted ? currentOverBalls : currentLive.lastCompletedOverBalls,
       recentOvers,
-      partnership: {
-        runs: currentLive.partnership.runs + totalRuns,
-        balls: currentLive.partnership.balls + (isLegal ? 1 : 0),
-      },
+      partnership: wicket
+        ? { runs: 0, balls: 0 }  // reset partnership on wicket
+        : {
+          runs: currentLive.partnership.runs + totalRuns,
+          balls: currentLive.partnership.balls + (isLegal ? 1 : 0),
+        },
       lastUpdated: Date.now(),
       isPowerplay: isPowerplay,
       powerplayOvers,
@@ -300,8 +331,23 @@ export class ManualScoringAdapter implements IScoringAdapter {
     // Store ball event in history
     await set(ref(this.db, `${this.basePath}/matches/${matchId}/balls/${ballEvent.id}`), this.stripUndefinedDeep(ballEvent));
 
-    // Trigger replay on boundaries and wickets
+    // Trigger overlay animation + replay on boundaries and wickets
     if (ballEvent.isBoundary || ballEvent.isSix || ballEvent.isWicket) {
+      // Determine overlay type — check for duck (batsman out on 0)
+      let overlayType: string;
+      if (ballEvent.isWicket && wicket) {
+        const outBatsman = currentLive.currentBatsmen.find(b => b.playerId === wicket.batsmanId);
+        const batsmanTotalRuns = (outBatsman?.runs || 0) + (outBatsman?.playerId === currentLive.currentBatsmen[0].playerId ? batsmanRuns : 0);
+        overlayType = batsmanTotalRuns === 0 ? 'duck_out' : 'wicket';
+      } else {
+        overlayType = ballEvent.isSix ? 'boundary_six' : 'boundary_four';
+      }
+      // Set overlay so OBS browser source auto-shows animation
+      await set(ref(this.db, `${this.basePath}/matches/${matchId}/overlay`), {
+        activeOverlay: overlayType,
+        lastUpdated: Date.now(),
+      });
+      // Also write replay trigger for replay systems
       const trigger: ReplayTrigger = {
         id: ballEvent.id,
         matchId,
@@ -664,12 +710,14 @@ export class ManualScoringAdapter implements IScoringAdapter {
     return Math.floor(rounded) * 6 + this.getBallsInCurrentOver(rounded);
   }
 
-  private ballDisplay(outcome: BallOutcome, runs: number): string {
+  private ballDisplay(outcome: BallOutcome, runs: number, isWicket?: boolean): string {
     if (outcome === 'W') return 'W';
-    if (outcome === 'WD' || String(outcome).startsWith('WD+')) return `WD`;
-    if (outcome === 'NB' || outcome === 'NB+0' || String(outcome).startsWith('NB+')) return `NB`;
-    if (outcome === 'B' || String(outcome).startsWith('B+')) return `B`;
-    if (outcome === 'LB' || String(outcome).startsWith('LB+')) return `LB`;
+    if (outcome === 'WD' || String(outcome).startsWith('WD+')) return isWicket ? 'WD·W' : 'WD';
+    if (outcome === 'NB' || outcome === 'NB+0' || String(outcome).startsWith('NB+')) return isWicket ? 'NB·W' : 'NB';
+    if (outcome === 'B' || String(outcome).startsWith('B+')) return isWicket ? 'B·W' : 'B';
+    if (outcome === 'LB' || String(outcome).startsWith('LB+')) return isWicket ? 'LB·W' : 'LB';
+    // Regular runs — show wicket indicator if run-out happened
+    if (isWicket) return runs > 0 ? `${runs}·W` : 'W';
     return String(runs);
   }
 
@@ -681,15 +729,15 @@ export class ManualScoringAdapter implements IScoringAdapter {
     swapStrike?: boolean,
   ): [LiveBatsman, LiveBatsman] {
     const [striker, nonStriker] = batsmen;
+    const newRuns = striker.runs + batsmanRuns;
+    const newBalls = striker.balls + (isLegal ? 1 : 0);
     const updatedStriker: LiveBatsman = {
       ...striker,
-      runs: striker.runs + batsmanRuns,
-      balls: striker.balls + (isLegal ? 1 : 0),
+      runs: newRuns,
+      balls: newBalls,
       fours: striker.fours + (batsmanRuns === 4 ? 1 : 0),
       sixes: striker.sixes + (batsmanRuns === 6 ? 1 : 0),
-      strikeRate: isLegal
-        ? Math.round(((striker.runs + batsmanRuns) / (striker.balls + 1)) * 100 * 100) / 100
-        : striker.strikeRate,
+      strikeRate: newBalls > 0 ? Math.round((newRuns / newBalls) * 100 * 100) / 100 : 0,
     };
 
     if (swapStrike) {

@@ -645,10 +645,11 @@ export default function ScoreOBSOverlayPage() {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 function getBallClass(ball: string): string {
-  if (ball === 'W') return 'score-obs__ball--wicket';
+  if (ball === 'W' || ball.includes('·W')) return 'score-obs__ball--wicket';
   if (ball === '4') return 'score-obs__ball--four';
   if (ball === '6') return 'score-obs__ball--six';
   if (ball === '0') return 'score-obs__ball--dot';
+  if (ball === 'B' || ball === 'LB' || ball.includes('WD') || ball.includes('NB')) return 'score-obs__ball--extra';
   return '';
 }
 

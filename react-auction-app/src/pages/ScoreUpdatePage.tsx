@@ -525,8 +525,32 @@ export default function ScoreUpdatePage() {
             currentBowler={liveScore.currentBowler}
             allBatsmen={liveScore.allBatsmen}
             extraContext={pendingExtraOutcome}
-            onConfirm={async (wicket) => {
-              const outcome = pendingExtraOutcome || 'W';
+            isFreehit={liveScore.isFreehit}
+            onConfirm={async (wicket, runsCompleted) => {
+              let outcome: BallOutcome;
+              if (pendingExtraOutcome) {
+                // Build correct outcome with runs completed
+                const extraStr = String(pendingExtraOutcome);
+                if (extraStr.startsWith('NB')) {
+                  outcome = (runsCompleted ? `NB+${runsCompleted}` : 'NB+0') as BallOutcome;
+                } else if (extraStr.startsWith('WD')) {
+                  outcome = (runsCompleted ? `WD+${runsCompleted}` : 'WD') as BallOutcome;
+                } else if (extraStr.startsWith('B')) {
+                  outcome = (runsCompleted ? `B+${runsCompleted}` : 'B') as BallOutcome;
+                } else if (extraStr.startsWith('LB')) {
+                  outcome = (runsCompleted ? `LB+${runsCompleted}` : 'LB') as BallOutcome;
+                } else {
+                  outcome = pendingExtraOutcome;
+                }
+              } else {
+                // Plain wicket — runs scored on the ball (e.g., caught off a big shot attempt = 0)
+                // For run_out without extras, runs go as batsman runs
+                if (wicket.dismissalType === 'run_out' && runsCompleted && runsCompleted > 0) {
+                  outcome = String(runsCompleted) as BallOutcome;
+                } else {
+                  outcome = 'W';
+                }
+              }
               await recordBall(outcome, wicket);
               setShowWicketModal(false);
               setPendingExtraOutcome(null);
@@ -697,28 +721,33 @@ function ScoreHeader({ match }: { match: { teamA: { name: string }; teamB: { nam
 }
 
 function getBallChipClass(ball: string): string {
-  if (ball === 'W') return 'wicket';
+  if (ball === 'W' || ball.includes('·W')) return 'wicket';
   if (ball === '4') return 'four';
   if (ball === '6') return 'six';
   if (ball === '0') return 'dot';
-  if (ball.includes('WD') || ball.includes('NB')) return 'extra';
+  if (ball.includes('WD') || ball.includes('NB') || ball === 'B' || ball === 'LB') return 'extra';
   return 'run';
 }
 
 // ── Wicket Modal ─────────────────────────────────────────────────────────────
 
-function WicketModal({ battingLineup, bowlingLineup, currentBatsmen, currentBowler, allBatsmen, extraContext, onConfirm, onClose }: {
+function WicketModal({ battingLineup, bowlingLineup, currentBatsmen, currentBowler, allBatsmen, extraContext, isFreehit, onConfirm, onClose }: {
   battingLineup: MatchSquadPlayer[];
   bowlingLineup: MatchSquadPlayer[];
   currentBatsmen: [{ playerId: string; playerName: string }, { playerId: string; playerName: string }];
   currentBowler: { playerId: string; playerName: string };
   allBatsmen?: { playerId: string; isOut: boolean }[];
   extraContext?: BallOutcome | null;
-  onConfirm: (wicket: WicketDetail) => void;
+  isFreehit?: boolean;
+  onConfirm: (wicket: WicketDetail, runsCompleted?: number) => void;
   onClose: () => void;
 }) {
   // Determine allowed dismissal types based on delivery context
   const allowedDismissals = (() => {
+    // Free hit: only run_out is valid (and obstructing the field)
+    if (isFreehit && !extraContext) {
+      return DISMISSAL_TYPES.filter(d => d.value === 'run_out' || d.value === 'obstructing_field');
+    }
     if (!extraContext) return DISMISSAL_TYPES;
     const str = String(extraContext);
     if (str.startsWith('NB') || str.startsWith('B+') || str.startsWith('LB+') || str === 'B' || str === 'LB') {
@@ -734,6 +763,10 @@ function WicketModal({ battingLineup, bowlingLineup, currentBatsmen, currentBowl
   const [outBatsman, setOutBatsman] = useState(currentBatsmen[0].playerId);
   const [fielderId, setFielderId] = useState('');
   const [newBatsmanId, setNewBatsmanId] = useState('');
+  const [runsCompleted, setRunsCompleted] = useState(0);
+
+  // Show runs completed field for run_out (batsmen cross before dismissal)
+  const showRunsCompleted = dismissalType === 'run_out';
 
   const needsFielder = ['caught', 'run_out', 'stumped'].includes(dismissalType);
   const dismissedIds = new Set((allBatsmen || []).filter(b => b.isOut).map(b => b.playerId));
@@ -771,6 +804,23 @@ function WicketModal({ battingLineup, bowlingLineup, currentBatsmen, currentBowl
           </div>
         )}
 
+        {showRunsCompleted && (
+          <div className="score-update__modal-field">
+            <label>Runs completed before run out</label>
+            <div className="score-update__runs-row">
+              {[0, 1, 2, 3].map(n => (
+                <button
+                  key={n}
+                  className={`score-update__btn score-update__btn--sub ${runsCompleted === n ? 'score-update__btn--active' : ''}`}
+                  onClick={() => setRunsCompleted(n)}
+                >
+                  {n}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         <div className="score-update__modal-field">
           <label>New Batsman</label>
           <select value={newBatsmanId} onChange={e => setNewBatsmanId(e.target.value)} className="score-update__select">
@@ -792,7 +842,7 @@ function WicketModal({ battingLineup, bowlingLineup, currentBatsmen, currentBowl
                 fielderName: isCaughtAndBowled ? currentBowler.playerName : bowlingLineup.find(p => p.playerId === fielderId)?.playerName,
                 newBatsmanId: newBatsmanId || undefined,
                 newBatsmanName: battingLineup.find(p => p.playerId === newBatsmanId)?.playerName,
-              });
+              }, showRunsCompleted ? runsCompleted : undefined);
             }}
           >
             Confirm Wicket
