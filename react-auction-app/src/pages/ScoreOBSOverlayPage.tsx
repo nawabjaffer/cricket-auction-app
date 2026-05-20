@@ -446,7 +446,7 @@ export default function ScoreOBSOverlayPage() {
 
       {/* ── Score Ticker (always visible when live) ──────────────── */}
       {live && match && (
-        <ScorecardTicker
+        <TickerWithIntro
           live={live}
           match={match}
           battingTeam={battingTeamName}
@@ -483,13 +483,13 @@ export default function ScoreOBSOverlayPage() {
       {/* ── Overlay Components ─────────────────────────────────────── */}
       <AnimatePresence mode="wait">
         {effectiveOverlay === 'batsman_striker' && live.currentBatsmen?.[0] && (
-          <BatsmanStatsOverlay key="striker" batsman={live.currentBatsmen[0]} />
+          <BatsmanStatsOverlay key="striker" batsman={live.currentBatsmen[0]} playerImages={playerImages} lineups={lineups} />
         )}
         {effectiveOverlay === 'batsman_nonstriker' && live.currentBatsmen?.[1] && (
-          <BatsmanStatsOverlay key="non-striker" batsman={live.currentBatsmen[1]} />
+          <BatsmanStatsOverlay key="non-striker" batsman={live.currentBatsmen[1]} playerImages={playerImages} lineups={lineups} />
         )}
         {effectiveOverlay === 'bowler' && (
-          <BowlerStatsOverlay bowler={live.currentBowler} />
+          <BowlerStatsOverlay bowler={live.currentBowler} playerImages={playerImages} lineups={lineups} />
         )}
         {effectiveOverlay === 'full_scorecard' && (
           <FullScorecardOverlay live={live} battingTeam={battingTeamName} bowlingTeam={bowlingTeamName} />
@@ -653,108 +653,302 @@ function getBallClass(ball: string): string {
   return '';
 }
 
-function BatsmanStatsOverlay({ batsman }: { batsman: { playerId: string; playerName: string; runs: number; balls: number; fours: number; sixes: number; strikeRate: number; isOnStrike: boolean } }) {
-  return (
-    <motion.div
-      className="score-obs__overlay-card score-obs__batsman-card"
-      initial={{ x: 100, opacity: 0 }}
-      animate={{ x: 0, opacity: 1 }}
-      exit={{ x: 100, opacity: 0 }}
-      transition={{ type: 'spring', stiffness: 200, damping: 25 }}
-    >
-      <div className="score-obs__card-header">
-        {batsman.isOnStrike && <span className="score-obs__strike-indicator">●</span>}
-        <span className="score-obs__card-name">{batsman.playerName}</span>
-      </div>
-      <div className="score-obs__card-stats">
-        <div className="score-obs__stat-main">
-          <span className="score-obs__stat-value score-obs__stat-value--big">{batsman.runs}</span>
-          <span className="score-obs__stat-label">({batsman.balls})</span>
-        </div>
-        <div className="score-obs__stat-row">
-          <span className="score-obs__stat-item">4s: {batsman.fours}</span>
-          <span className="score-obs__stat-item">6s: {batsman.sixes}</span>
-          <span className="score-obs__stat-item">SR: {batsman.strikeRate}</span>
-        </div>
-      </div>
-    </motion.div>
-  );
-}
-
-function BowlerStatsOverlay({ bowler }: { bowler: { playerId: string; playerName: string; overs: number; maidens: number; runs: number; wickets: number; economy: number; dots: number } }) {
-  return (
-    <motion.div
-      className="score-obs__overlay-card score-obs__bowler-card"
-      initial={{ x: 100, opacity: 0 }}
-      animate={{ x: 0, opacity: 1 }}
-      exit={{ x: 100, opacity: 0 }}
-      transition={{ type: 'spring', stiffness: 200, damping: 25 }}
-    >
-      <div className="score-obs__card-header">
-        <span className="score-obs__card-name">{bowler.playerName}</span>
-      </div>
-      <div className="score-obs__card-stats">
-        <div className="score-obs__stat-main">
-          <span className="score-obs__stat-value score-obs__stat-value--big">{bowler.wickets}/{bowler.runs}</span>
-          <span className="score-obs__stat-label">({bowler.overs} ov)</span>
-        </div>
-        <div className="score-obs__stat-row">
-          <span className="score-obs__stat-item">Eco: {bowler.economy}</span>
-          <span className="score-obs__stat-item">Dots: {bowler.dots}</span>
-          <span className="score-obs__stat-item">Mdns: {bowler.maidens}</span>
-        </div>
-      </div>
-    </motion.div>
-  );
-}
-
-function FullScorecardOverlay({ live, battingTeam }: {
-  live: LiveScore; battingTeam: string; bowlingTeam: string;
+function BatsmanStatsOverlay({ batsman, playerImages, lineups }: {
+  batsman: { playerId: string; playerName: string; runs: number; balls: number; fours: number; sixes: number; strikeRate: number; isOnStrike: boolean };
+  playerImages?: Record<string, string>;
+  lineups?: { teamA: MatchLineup | null; teamB: MatchLineup | null };
 }) {
+  // Build player image map
+  const imgMap: Record<string, string> = { ...(playerImages || {}) };
+  if (lineups) {
+    [lineups.teamA, lineups.teamB].forEach(l => {
+      l?.players?.forEach(p => { if (p.imageUrl) imgMap[p.playerId] = p.imageUrl; });
+    });
+  }
+  const playerImg = imgMap[batsman.playerId];
+
   return (
     <motion.div
-      className="score-obs__overlay-card score-obs__scorecard"
+      className="score-obs__overlay-card score-obs__batsman-profile"
       initial={{ scale: 0.8, opacity: 0 }}
       animate={{ scale: 1, opacity: 1 }}
       exit={{ scale: 0.8, opacity: 0 }}
       transition={{ type: 'spring', stiffness: 200, damping: 25 }}
     >
-      <div className="score-obs__scorecard-header">
-        <span className="score-obs__scorecard-team">{battingTeam}</span>
-        <span className="score-obs__scorecard-score">{live.runs}/{live.wickets} ({live.overs} ov)</span>
+      <div className="score-obs__profile-layout">
+        {/* Player Image Section */}
+        <div className="score-obs__profile-image-section">
+          {playerImg ? (
+            <img src={playerImg} alt={batsman.playerName} className="score-obs__profile-img" />
+          ) : (
+            <div className="score-obs__profile-img-placeholder">
+              {batsman.playerName.charAt(0)}
+            </div>
+          )}
+          <div className="score-obs__profile-img-gradient" />
+        </div>
+
+        {/* Stats Section */}
+        <div className="score-obs__profile-stats">
+          {/* Name Header */}
+          <div className="score-obs__profile-header">
+            <h1 className="score-obs__profile-name">{batsman.playerName.toUpperCase()}</h1>
+            <span className="score-obs__profile-role">
+              {batsman.isOnStrike ? '🏏 ON STRIKE' : 'BATTING'}
+            </span>
+          </div>
+
+          {/* Primary Stat: Runs (highlighted) */}
+          <div className="score-obs__profile-stat-highlight">
+            <span className="score-obs__profile-stat-label">RUNS</span>
+            <span className="score-obs__profile-stat-big">{batsman.runs}</span>
+          </div>
+
+          {/* Stats Grid */}
+          <div className="score-obs__profile-stat-grid">
+            <div className="score-obs__profile-stat-cell">
+              <span className="score-obs__profile-stat-cell-label">BALLS</span>
+              <span className="score-obs__profile-stat-cell-value">{batsman.balls}</span>
+            </div>
+            <div className="score-obs__profile-stat-cell">
+              <span className="score-obs__profile-stat-cell-label">STRIKE RATE</span>
+              <span className="score-obs__profile-stat-cell-value">{batsman.strikeRate}</span>
+            </div>
+          </div>
+
+          {/* Boundaries Row */}
+          <div className="score-obs__profile-stat-row">
+            <span className="score-obs__profile-stat-label">4s / 6s</span>
+            <span className="score-obs__profile-stat-value">{batsman.fours} / {batsman.sixes}</span>
+          </div>
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
+function BowlerStatsOverlay({ bowler, playerImages, lineups }: {
+  bowler: { playerId: string; playerName: string; overs: number; maidens: number; runs: number; wickets: number; economy: number; dots: number };
+  playerImages?: Record<string, string>;
+  lineups?: { teamA: MatchLineup | null; teamB: MatchLineup | null };
+}) {
+  // Build player image map
+  const imgMap: Record<string, string> = { ...(playerImages || {}) };
+  if (lineups) {
+    [lineups.teamA, lineups.teamB].forEach(l => {
+      l?.players?.forEach(p => { if (p.imageUrl) imgMap[p.playerId] = p.imageUrl; });
+    });
+  }
+  const playerImg = imgMap[bowler.playerId];
+
+  return (
+    <motion.div
+      className="score-obs__overlay-card score-obs__batsman-profile score-obs__bowler-profile"
+      initial={{ scale: 0.8, opacity: 0 }}
+      animate={{ scale: 1, opacity: 1 }}
+      exit={{ scale: 0.8, opacity: 0 }}
+      transition={{ type: 'spring', stiffness: 200, damping: 25 }}
+    >
+      <div className="score-obs__profile-layout">
+        {/* Player Image Section */}
+        <div className="score-obs__profile-image-section">
+          {playerImg ? (
+            <img src={playerImg} alt={bowler.playerName} className="score-obs__profile-img" />
+          ) : (
+            <div className="score-obs__profile-img-placeholder">
+              {bowler.playerName.charAt(0)}
+            </div>
+          )}
+          <div className="score-obs__profile-img-gradient" />
+        </div>
+
+        {/* Stats Section */}
+        <div className="score-obs__profile-stats">
+          {/* Name Header */}
+          <div className="score-obs__profile-header score-obs__profile-header--bowler">
+            <h1 className="score-obs__profile-name">{bowler.playerName.toUpperCase()}</h1>
+            <span className="score-obs__profile-role">BOWLING</span>
+          </div>
+
+          {/* Primary Stat: Wickets/Runs (highlighted) */}
+          <div className="score-obs__profile-stat-highlight score-obs__profile-stat-highlight--bowler">
+            <span className="score-obs__profile-stat-label">FIGURES</span>
+            <span className="score-obs__profile-stat-big">{bowler.wickets}/{bowler.runs}</span>
+          </div>
+
+          {/* Stats Grid */}
+          <div className="score-obs__profile-stat-grid">
+            <div className="score-obs__profile-stat-cell">
+              <span className="score-obs__profile-stat-cell-label">OVERS</span>
+              <span className="score-obs__profile-stat-cell-value">{bowler.overs}</span>
+            </div>
+            <div className="score-obs__profile-stat-cell">
+              <span className="score-obs__profile-stat-cell-label">ECONOMY</span>
+              <span className="score-obs__profile-stat-cell-value">{bowler.economy}</span>
+            </div>
+          </div>
+
+          {/* Additional stats */}
+          <div className="score-obs__profile-stat-grid">
+            <div className="score-obs__profile-stat-cell">
+              <span className="score-obs__profile-stat-cell-label">MAIDENS</span>
+              <span className="score-obs__profile-stat-cell-value">{bowler.maidens}</span>
+            </div>
+            <div className="score-obs__profile-stat-cell">
+              <span className="score-obs__profile-stat-cell-label">DOTS</span>
+              <span className="score-obs__profile-stat-cell-value">{bowler.dots}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
+function FullScorecardOverlay({ live, battingTeam, bowlingTeam }: {
+  live: LiveScore; battingTeam: string; bowlingTeam: string;
+}) {
+  const allBatsmen = live.allBatsmen || [];
+  const allBowlers = live.allBowlers || [];
+
+  return (
+    <motion.div
+      className="score-obs__overlay-card score-obs__scorecard-v2"
+      initial={{ scale: 0.85, opacity: 0 }}
+      animate={{ scale: 1, opacity: 1 }}
+      exit={{ scale: 0.85, opacity: 0 }}
+      transition={{ type: 'spring', stiffness: 200, damping: 25 }}
+    >
+      {/* Title Bar */}
+      <div className="score-obs__sc-title-bar">
+        <div className="score-obs__sc-team-badge">
+          <span className="score-obs__sc-team-name">{battingTeam.toUpperCase()}</span>
+        </div>
+        <div className="score-obs__sc-score-badge">
+          {live.runs}/{live.wickets} ({live.overs} ov)
+        </div>
       </div>
 
-      <div className="score-obs__scorecard-section">
-        <div className="score-obs__scorecard-row score-obs__scorecard-row--header">
-          <span>Batsman</span><span>R</span><span>B</span><span>4s</span><span>6s</span><span>SR</span>
+      {/* Batting Section */}
+      <div className="score-obs__sc-batting">
+        {/* Header row */}
+        <div className="score-obs__sc-bat-header">
+          <span className="score-obs__sc-col-name">BATSMAN</span>
+          <span className="score-obs__sc-col-how">HOW OUT</span>
+          <span className="score-obs__sc-col-r">R</span>
+          <span className="score-obs__sc-col-b">B</span>
+          <span className="score-obs__sc-col-4">4s</span>
+          <span className="score-obs__sc-col-6">6s</span>
+          <span className="score-obs__sc-col-sr">SR</span>
         </div>
+
+        {/* Current batsmen (highlighted) */}
         {(live.currentBatsmen || []).map(b => (
-          <div key={b.playerId} className="score-obs__scorecard-row">
-            <span>{b.playerName} {b.isOnStrike ? '●' : ''}</span>
-            <span>{b.runs}</span><span>{b.balls}</span>
-            <span>{b.fours}</span><span>{b.sixes}</span><span>{b.strikeRate}</span>
-          </div>
+          <motion.div
+            key={b.playerId}
+            className="score-obs__sc-bat-row score-obs__sc-bat-row--active"
+            initial={{ x: -20, opacity: 0 }}
+            animate={{ x: 0, opacity: 1 }}
+            transition={{ delay: 0.1 }}
+          >
+            <span className="score-obs__sc-col-name">
+              {b.playerName.toUpperCase()}
+              {b.isOnStrike && <span className="score-obs__sc-strike">●</span>}
+            </span>
+            <span className="score-obs__sc-col-how score-obs__sc-notout">not out</span>
+            <span className="score-obs__sc-col-r score-obs__sc-runs-active">{b.runs}</span>
+            <span className="score-obs__sc-col-b">{b.balls}</span>
+            <span className="score-obs__sc-col-4">{b.fours}</span>
+            <span className="score-obs__sc-col-6">{b.sixes}</span>
+            <span className="score-obs__sc-col-sr">{b.strikeRate}</span>
+          </motion.div>
+        ))}
+
+        {/* Dismissed batsmen */}
+        {allBatsmen.filter(b => b.isOut).map((b, i) => (
+          <motion.div
+            key={b.playerId}
+            className="score-obs__sc-bat-row"
+            initial={{ x: -20, opacity: 0 }}
+            animate={{ x: 0, opacity: 1 }}
+            transition={{ delay: 0.05 * (i + 2) }}
+          >
+            <span className="score-obs__sc-col-name">{b.playerName.toUpperCase()}</span>
+            <span className="score-obs__sc-col-how">{b.dismissal}</span>
+            <span className="score-obs__sc-col-r">{b.runs}</span>
+            <span className="score-obs__sc-col-b">{b.balls}</span>
+            <span className="score-obs__sc-col-4">{b.fours}</span>
+            <span className="score-obs__sc-col-6">{b.sixes}</span>
+            <span className="score-obs__sc-col-sr">{b.strikeRate}</span>
+          </motion.div>
+        ))}
+
+        {/* Yet to bat (dimmed) */}
+        {allBatsmen.filter(b => !b.isOut && !(live.currentBatsmen || []).some(cb => cb.playerId === b.playerId)).map((b, i) => (
+          <motion.div
+            key={b.playerId}
+            className="score-obs__sc-bat-row score-obs__sc-bat-row--pending"
+            initial={{ x: -20, opacity: 0 }}
+            animate={{ x: 0, opacity: 0.5 }}
+            transition={{ delay: 0.05 * (i + 4) }}
+          >
+            <span className="score-obs__sc-col-name">{b.playerName.toUpperCase()}</span>
+            <span className="score-obs__sc-col-how"></span>
+            <span className="score-obs__sc-col-r"></span>
+            <span className="score-obs__sc-col-b"></span>
+            <span className="score-obs__sc-col-4"></span>
+            <span className="score-obs__sc-col-6"></span>
+            <span className="score-obs__sc-col-sr"></span>
+          </motion.div>
         ))}
       </div>
 
-      <div className="score-obs__scorecard-section">
-        <div className="score-obs__scorecard-row score-obs__scorecard-row--header">
-          <span>Bowler</span><span>O</span><span>M</span><span>R</span><span>W</span><span>Eco</span>
+      {/* Bowling Section */}
+      {allBowlers.length > 0 && (
+        <div className="score-obs__sc-bowling">
+          <div className="score-obs__sc-bowl-header-bar">
+            <span>{bowlingTeam.toUpperCase()} — BOWLING</span>
+          </div>
+          <div className="score-obs__sc-bowl-header">
+            <span className="score-obs__sc-col-name">BOWLER</span>
+            <span className="score-obs__sc-col-o">O</span>
+            <span className="score-obs__sc-col-m">M</span>
+            <span className="score-obs__sc-col-r">R</span>
+            <span className="score-obs__sc-col-w">W</span>
+            <span className="score-obs__sc-col-eco">ECO</span>
+          </div>
+          {/* Current bowler (highlighted) */}
+          {live.currentBowler && (
+            <div className="score-obs__sc-bowl-row score-obs__sc-bowl-row--active">
+              <span className="score-obs__sc-col-name">{live.currentBowler.playerName.toUpperCase()}</span>
+              <span className="score-obs__sc-col-o">{live.currentBowler.overs}</span>
+              <span className="score-obs__sc-col-m">{live.currentBowler.maidens}</span>
+              <span className="score-obs__sc-col-r">{live.currentBowler.runs}</span>
+              <span className="score-obs__sc-col-w score-obs__sc-wkts-active">{live.currentBowler.wickets}</span>
+              <span className="score-obs__sc-col-eco">{live.currentBowler.economy}</span>
+            </div>
+          )}
+          {/* Other bowlers */}
+          {allBowlers.filter(b => b.playerId !== live.currentBowler?.playerId).map(b => (
+            <div key={b.playerId} className="score-obs__sc-bowl-row">
+              <span className="score-obs__sc-col-name">{b.playerName.toUpperCase()}</span>
+              <span className="score-obs__sc-col-o">{b.overs}</span>
+              <span className="score-obs__sc-col-m">{b.maidens}</span>
+              <span className="score-obs__sc-col-r">{b.runs}</span>
+              <span className="score-obs__sc-col-w">{b.wickets}</span>
+              <span className="score-obs__sc-col-eco">{b.economy}</span>
+            </div>
+          ))}
         </div>
-        {live.currentBowler && (
-        <div className="score-obs__scorecard-row">
-          <span>{live.currentBowler.playerName}</span>
-          <span>{live.currentBowler.overs}</span><span>{live.currentBowler.maidens}</span>
-          <span>{live.currentBowler.runs}</span><span>{live.currentBowler.wickets}</span>
-          <span>{live.currentBowler.economy}</span>
-        </div>
-        )}
-      </div>
+      )}
 
-      <div className="score-obs__scorecard-footer">
-        <span>CRR: {live.runRate}</span>
-        {live.requiredRate !== undefined && <span>RRR: {live.requiredRate}</span>}
-        <span>P'ship: {(live.partnership || { runs: 0, balls: 0 }).runs}({(live.partnership || { runs: 0, balls: 0 }).balls})</span>
+      {/* Summary Footer */}
+      <div className="score-obs__sc-footer">
+        <span className="score-obs__sc-footer-item">OVERS {live.overs}</span>
+        <span className="score-obs__sc-footer-item">CRR {live.runRate}</span>
+        {live.requiredRate !== undefined && <span className="score-obs__sc-footer-item">RRR {live.requiredRate}</span>}
+        <span className="score-obs__sc-footer-item">P'SHIP {(live.partnership || { runs: 0, balls: 0 }).runs}({(live.partnership || { runs: 0, balls: 0 }).balls})</span>
+        <span className="score-obs__sc-footer-total">TOTAL {live.runs}-{live.wickets}</span>
       </div>
     </motion.div>
   );
@@ -1126,6 +1320,131 @@ function AwardOverlay({ title, subtitle, color, playerName, value }: {
       <div className="score-obs__award-player">{playerName}</div>
       <div className="score-obs__award-value">{value}</div>
     </motion.div>
+  );
+}
+
+// ── Ticker With Intro Animation ──
+
+function TickerWithIntro({ live, match, battingTeam, bowlingTeam, config, lineups, playerImages }: {
+  live: LiveScore;
+  match: MatchSetup;
+  battingTeam: string;
+  bowlingTeam: string;
+  config: ScoringOverlayConfig;
+  lineups: { teamA: MatchLineup | null; teamB: MatchLineup | null };
+  playerImages: Record<string, string>;
+}) {
+  const [introPhase, setIntroPhase] = useState<'venue' | 'logos' | 'reveal' | 'done'>('venue');
+  const introShownRef = useRef(false);
+  const ticker = config.tickerConfig;
+  const position = ticker?.position || 'bottom';
+
+  useEffect(() => {
+    if (introShownRef.current) return;
+    introShownRef.current = true;
+    // Phase 1: venue info (1.5s) → Phase 2: logos slide in (2s) → Phase 3: reveal ticker (1s)
+    const t1 = setTimeout(() => setIntroPhase('logos'), 1500);
+    const t2 = setTimeout(() => setIntroPhase('reveal'), 3500);
+    const t3 = setTimeout(() => setIntroPhase('done'), 4500);
+    return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); };
+  }, []);
+
+  const battingLogo = live.battingTeamId === match.teamA.id ? match.teamA.logoUrl : match.teamB.logoUrl;
+  const bowlingLogo = live.bowlingTeamId === match.teamA.id ? match.teamA.logoUrl : match.teamB.logoUrl;
+
+  if (introPhase === 'done') {
+    return (
+      <ScorecardTicker
+        live={live} match={match} battingTeam={battingTeam} bowlingTeam={bowlingTeam}
+        config={config} lineups={lineups} playerImages={playerImages}
+      />
+    );
+  }
+
+  return (
+    <div className={`score-ticker-intro score-ticker-intro--${position}`}>
+      <AnimatePresence mode="wait">
+        {/* Phase 1: Venue + Match Info */}
+        {introPhase === 'venue' && (
+          <motion.div
+            key="venue"
+            className="score-ticker-intro__venue"
+            initial={{ y: 40, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: -20, opacity: 0 }}
+            transition={{ type: 'spring', stiffness: 200, damping: 25 }}
+          >
+            <span className="score-ticker-intro__teams">
+              {match.teamA.name} vs {match.teamB.name}
+            </span>
+            <span className="score-ticker-intro__venue-text">
+              {match.venue} • {new Date(match.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
+            </span>
+          </motion.div>
+        )}
+
+        {/* Phase 2: Logos slide in from left/right */}
+        {introPhase === 'logos' && (
+          <motion.div
+            key="logos"
+            className="score-ticker-intro__logos"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ scale: 0.8, opacity: 0 }}
+            transition={{ duration: 0.3 }}
+          >
+            <motion.div
+              className="score-ticker-intro__logo-wrap"
+              initial={{ x: -200, opacity: 0 }}
+              animate={{ x: 0, opacity: 1 }}
+              transition={{ type: 'spring', stiffness: 180, damping: 20, delay: 0.1 }}
+            >
+              {battingLogo ? (
+                <img src={battingLogo} alt={battingTeam} className="score-ticker-intro__logo-img" />
+              ) : (
+                <div className="score-ticker-intro__logo-fallback">{battingTeam.slice(0, 3).toUpperCase()}</div>
+              )}
+            </motion.div>
+
+            <motion.div
+              className="score-ticker-intro__vs"
+              initial={{ scale: 0, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              transition={{ type: 'spring', stiffness: 300, damping: 20, delay: 0.4 }}
+            >
+              VS
+            </motion.div>
+
+            <motion.div
+              className="score-ticker-intro__logo-wrap"
+              initial={{ x: 200, opacity: 0 }}
+              animate={{ x: 0, opacity: 1 }}
+              transition={{ type: 'spring', stiffness: 180, damping: 20, delay: 0.1 }}
+            >
+              {bowlingLogo ? (
+                <img src={bowlingLogo} alt={bowlingTeam} className="score-ticker-intro__logo-img" />
+              ) : (
+                <div className="score-ticker-intro__logo-fallback">{bowlingTeam.slice(0, 3).toUpperCase()}</div>
+              )}
+            </motion.div>
+          </motion.div>
+        )}
+
+        {/* Phase 3: Collapse into ticker shape */}
+        {introPhase === 'reveal' && (
+          <motion.div
+            key="reveal"
+            className="score-ticker-intro__reveal"
+            initial={{ scaleX: 0.3, opacity: 0.5 }}
+            animate={{ scaleX: 1, opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ type: 'spring', stiffness: 200, damping: 22 }}
+          >
+            <span className="score-ticker-intro__reveal-text">MATCH LIVE</span>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
   );
 }
 
