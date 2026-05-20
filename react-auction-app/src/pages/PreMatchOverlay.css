@@ -347,178 +347,154 @@
   font-size: 20px;
 }
 
-/* ── Squad Reveal ── */
+/* ── (Old prematch-reveal classes removed — now uses score-obs__squad-* via ScoreOBSOverlayPage.css) ── */
 
-.prematch-reveal {
+/* ── Impact Players Overlay (Full screen card view) ── */
+
+.prematch-impact {
   position: absolute;
   inset: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 40px 80px;
+  justify-content: center;
+  padding: 40px 60px;
+  background: radial-gradient(ellipse at center, rgba(8, 8, 47, 0.95) 0%, rgba(2, 2, 20, 0.98) 100%);
 }
 
-.prematch-reveal__header {
-  text-align: center;
+.prematch-impact__header {
   margin-bottom: 24px;
-}
-
-.prematch-reveal__logo {
-  width: 48px;
-  height: 48px;
-  object-fit: contain;
-  margin-bottom: 8px;
-}
-
-.prematch-reveal__title {
-  font-size: 28px;
-  font-weight: 800;
-  color: var(--team-color, #3b82f6);
-  text-transform: uppercase;
-  margin: 0;
-}
-
-.prematch-reveal__subtitle {
-  font-size: 14px;
-  color: rgba(255,255,255,0.6);
-  margin-top: 4px;
-  text-transform: uppercase;
-  letter-spacing: 3px;
-}
-
-.prematch-reveal__grid {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  width: 100%;
-  max-width: 600px;
-}
-
-.prematch-reveal__player {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 10px 16px;
-  background: rgba(0,0,0,0.5);
-  border-radius: 8px;
-  border-left: 4px solid var(--team-color, #3b82f6);
-  backdrop-filter: blur(8px);
-}
-
-.prematch-reveal__player-num {
-  font-size: 16px;
-  font-weight: 800;
-  color: var(--team-color, #3b82f6);
-  width: 28px;
   text-align: center;
-}
-
-.prematch-reveal__player-info {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.prematch-reveal__player-name {
-  font-size: 16px;
-  font-weight: 700;
-  color: #fff;
-}
-
-.prematch-reveal__badge {
-  display: inline-block;
-  font-size: 10px;
-  font-weight: 700;
-  color: #fbbf24;
-  background: rgba(251,191,36,0.15);
-  padding: 2px 6px;
-  border-radius: 4px;
-  margin-left: 8px;
-}
-
-.prematch-reveal__player-role {
-  font-size: 12px;
-  color: rgba(255,255,255,0.5);
-  text-transform: capitalize;
-}
-
-/* ── Impact Players (right side panel) ── */
-
-.prematch-impact {
-  position: absolute;
-  top: 80px;
-  right: 20px;
-  width: 280px;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
 }
 
 .prematch-impact__title {
-  font-size: 14px;
+  font-size: 24px;
   font-weight: 800;
-  color: #fbbf24;
+  color: #a78bfa;
   text-transform: uppercase;
-  letter-spacing: 2px;
-  text-align: center;
-  padding: 8px 16px;
-  background: rgba(0,0,0,0.6);
-  border-radius: 8px;
-  border: 1px solid rgba(251,191,36,0.3);
+  letter-spacing: 3px;
+  text-shadow: 0 0 20px rgba(139, 92, 246, 0.4);
+}
+
+.prematch-impact__teams {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 40px;
+  width: 100%;
+  max-width: 1000px;
+}
+
+.prematch-impact__divider {
+  width: 2px;
+  align-self: stretch;
+  background: linear-gradient(180deg, transparent, rgba(255,255,255,0.2), transparent);
+  border-radius: 1px;
 }
 
 .prematch-impact__team {
-  background: rgba(0,0,0,0.5);
-  border-radius: 10px;
-  padding: 12px;
-  border: 1px solid rgba(255,255,255,0.08);
-  backdrop-filter: blur(8px);
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
 }
 
 .prematch-impact__team-header {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 8px;
-  padding-bottom: 6px;
+  gap: 10px;
+  padding-bottom: 8px;
   border-bottom: 2px solid var(--team-color, #3b82f6);
+  width: 100%;
+  justify-content: center;
 }
 
 .prematch-impact__team-logo {
-  width: 24px;
-  height: 24px;
+  width: 32px;
+  height: 32px;
   object-fit: contain;
   border-radius: 4px;
 }
 
 .prematch-impact__team-name {
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 700;
   color: var(--team-color, #3b82f6);
   text-transform: uppercase;
+  letter-spacing: 1px;
 }
 
-.prematch-impact__player {
+.prematch-impact__cards {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+  width: 100%;
+}
+
+.prematch-impact__card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: linear-gradient(180deg, rgba(255,255,255,0.06) 0%, rgba(0,0,0,0.4) 100%);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 12px;
+  overflow: hidden;
+  transition: transform 0.2s;
+}
+
+.prematch-impact__card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(0,0,0,0.4);
+}
+
+.prematch-impact__card-img {
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  overflow: hidden;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 6px 8px;
-  border-radius: 4px;
-  background: rgba(255,255,255,0.04);
-  margin-top: 4px;
+  justify-content: center;
+  background: linear-gradient(180deg, rgba(139,92,246,0.05), rgba(0,0,0,0.2));
 }
 
-.prematch-impact__player-name {
-  font-size: 13px;
-  font-weight: 600;
+.prematch-impact__card-img img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.prematch-impact__card-placeholder {
+  font-size: 28px;
+  font-weight: 800;
+  color: rgba(255,255,255,0.15);
+}
+
+.prematch-impact__card-name {
+  width: 100%;
+  padding: 6px 4px 2px;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 700;
   color: #fff;
+  background: rgba(0,0,0,0.6);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.prematch-impact__player-role {
-  font-size: 11px;
+.prematch-impact__card-role {
+  width: 100%;
+  padding: 2px 4px 6px;
+  text-align: center;
+  font-size: 10px;
+  font-weight: 600;
   color: rgba(255,255,255,0.5);
-  text-transform: capitalize;
+  background: rgba(0,0,0,0.6);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
 /* ── ScoringAdminPage pre-match specific ── */
@@ -628,59 +604,54 @@
   color: #fff;
 }
 
-/* ── Squad Reveal Player Images ────────────────────────────────────────── */
+/* ── Impact Subs Section in Squad Column ──────────────────────────────── */
 
-.prematch-reveal__player-img {
-  width: 48px;
-  height: 48px;
-  border-radius: 50%;
-  object-fit: cover;
-  border: 2px solid var(--team-color, #3b82f6);
-  flex-shrink: 0;
-}
-
-.prematch-reveal__player {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.prematch-reveal__badge--captain {
-  background: #fbbf24;
-  color: #1e293b;
-}
-
-.prematch-reveal__badge--keeper {
-  background: #f97316;
+.prematch-squad-col__badge--impact {
+  background: linear-gradient(135deg, #8b5cf6, #6366f1);
   color: #fff;
 }
 
-.prematch-reveal__player-role {
-  font-size: 10px;
-  letter-spacing: 0.05em;
+.prematch-squad-col__impact-section {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 2px solid rgba(139, 92, 246, 0.3);
+}
+
+.prematch-squad-col__impact-header {
+  font-size: 11px;
+  font-weight: 800;
+  color: #a78bfa;
   text-transform: uppercase;
-  padding: 1px 6px;
+  letter-spacing: 1.5px;
+  margin-bottom: 8px;
+  padding: 4px 8px;
+  background: rgba(139, 92, 246, 0.1);
   border-radius: 4px;
-  display: inline-block;
-  width: fit-content;
+  text-align: center;
 }
 
-.prematch-reveal__player-role[data-role="batsman"] {
-  background: rgba(59, 130, 246, 0.2);
-  color: #60a5fa;
+.prematch-squad-col__impact-player {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px;
+  margin-top: 4px;
+  background: rgba(139, 92, 246, 0.08);
+  border: 1px solid rgba(139, 92, 246, 0.15);
+  border-radius: 6px;
 }
 
-.prematch-reveal__player-role[data-role="bowler"] {
-  background: rgba(168, 85, 247, 0.2);
-  color: #c084fc;
+.prematch-squad-col__impact-name {
+  font-size: 12px;
+  font-weight: 700;
+  color: #e9d5ff;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
 }
 
-.prematch-reveal__player-role[data-role="allrounder"] {
-  background: rgba(34, 197, 94, 0.2);
-  color: #4ade80;
-}
-
-.prematch-reveal__player-role[data-role="keeper"] {
-  background: rgba(249, 115, 22, 0.2);
-  color: #fb923c;
+.prematch-squad-col__impact-role {
+  font-size: 10px;
+  font-weight: 600;
+  color: rgba(167, 139, 250, 0.7);
+  text-transform: capitalize;
 }

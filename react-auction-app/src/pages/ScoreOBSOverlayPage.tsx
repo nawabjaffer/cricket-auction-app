@@ -18,6 +18,7 @@ import type {
   ScoringOverlayConfig, ScoringAd, MatchSetup, LiveQuestion,
   PreMatchState, MatchLineup, MatchStatsSnapshot, TournamentStats,
   ReplayTrigger, Innings, MatchScore, AnimationConfig, FieldPlacement,
+  ImpactPlayer,
 } from '../types/scoring';
 import PreMatchOverlay from './PreMatchOverlay';
 import './ScoreOBSOverlayPage.css';
@@ -424,7 +425,7 @@ export default function ScoreOBSOverlayPage() {
             {config.broadcastPartnerName && <span className="score-obs__partner-name">{config.broadcastPartnerName}</span>}
           </div>
         </motion.div>
-        <MatchIntroOverlay match={match} config={config} lineups={lineups} playerImages={playerImages} />
+        <MatchIntroOverlay match={match} config={config} lineups={lineups} playerImages={playerImages} impactPlayers={preMatch?.impactPlayers} />
         {/* Show tournament overlays even without live score */}
         <AnimatePresence mode="wait">
           {localOverlay === 'points_table' && (
@@ -771,7 +772,7 @@ export default function ScoreOBSOverlayPage() {
           <PointsTableOverlay allMatches={allMatches} allTeams={allTeams} />
         )}
         {effectiveOverlay === 'match_intro' && match && (
-          <MatchIntroOverlay match={match} config={config} lineups={lineups} playerImages={playerImages} />
+          <MatchIntroOverlay match={match} config={config} lineups={lineups} playerImages={playerImages} impactPlayers={preMatch?.impactPlayers} />
         )}
         {effectiveOverlay === 'field_placement' && activeFieldPlacement && (
           <FieldPlacementOverlay placement={activeFieldPlacement} />
@@ -2327,11 +2328,12 @@ function PointsTableOverlay({ allMatches, allTeams }: {
 
 // ── Match Intro Overlay (shown before innings starts) ──
 
-function MatchIntroOverlay({ match, config, lineups, playerImages }: {
+function MatchIntroOverlay({ match, config, lineups, playerImages, impactPlayers }: {
   match: MatchSetup;
   config: ScoringOverlayConfig;
   lineups: { teamA: MatchLineup | null; teamB: MatchLineup | null };
   playerImages: Record<string, string>;
+  impactPlayers?: { teamA: ImpactPlayer[]; teamB: ImpactPlayer[] };
 }) {
   const [phase, setPhase] = useState(0); // 0=matchup, 1=teamA, 2=teamB, 3=ready
   const lineupsLoadedRef = useRef(false);
@@ -2428,45 +2430,18 @@ function MatchIntroOverlay({ match, config, lineups, playerImages }: {
               {config.broadcastPartnerLogo && <img src={config.broadcastPartnerLogo} alt="" className="score-obs__squad-header-logo score-obs__squad-header-logo--right" />}
             </div>
 
-            {/* Players Grid */}
-            <div className="score-obs__squad-grid-container">
-              {/* Top Row (up to 6) */}
-              <div className="score-obs__squad-grid score-obs__squad-grid--top">
-                {lineups.teamA.players.slice(0, 6).map((p, i) => (
-                  <motion.div
-                    key={p.playerId}
-                    className={`score-obs__squad-card ${p.isCaptain ? 'score-obs__squad-card--captain' : ''}`}
-                    initial={{ y: 30, opacity: 0 }}
-                    animate={{ y: 0, opacity: 1 }}
-                    transition={{ delay: i * 0.1, type: 'spring', stiffness: 200, damping: 20 }}
-                  >
-                    {p.isCaptain && <div className="score-obs__squad-captain-badge">C</div>}
-                    {p.isWicketKeeper && <div className="score-obs__squad-wk-badge">WK</div>}
-                    <div className="score-obs__squad-card-img">
-                      {imgMap[p.playerId]
-                        ? <img src={imgMap[p.playerId]} alt={p.playerName} />
-                        : <span className="score-obs__squad-card-placeholder">{p.playerName.charAt(0)}</span>
-                      }
-                    </div>
-                    <div className="score-obs__squad-card-name">
-                      <span>{p.playerName}</span>
-                    </div>
-                    <div className="score-obs__squad-card-role">
-                      <span>{p.role}</span>
-                    </div>
-                  </motion.div>
-                ))}
-              </div>
-              {/* Bottom Row (remaining, centered) */}
-              {lineups.teamA.players.length > 6 && (
-                <div className="score-obs__squad-grid score-obs__squad-grid--bottom">
-                  {lineups.teamA.players.slice(6, 11).map((p, i) => (
+            {/* Players Grid + Impact Subs */}
+            <div className="score-obs__squad-body">
+              <div className="score-obs__squad-grid-container">
+                {/* Top Row (up to 6) */}
+                <div className="score-obs__squad-grid score-obs__squad-grid--top">
+                  {lineups.teamA.players.slice(0, 6).map((p, i) => (
                     <motion.div
                       key={p.playerId}
                       className={`score-obs__squad-card ${p.isCaptain ? 'score-obs__squad-card--captain' : ''}`}
                       initial={{ y: 30, opacity: 0 }}
                       animate={{ y: 0, opacity: 1 }}
-                      transition={{ delay: (i + 6) * 0.1, type: 'spring', stiffness: 200, damping: 20 }}
+                      transition={{ delay: i * 0.1, type: 'spring', stiffness: 200, damping: 20 }}
                     >
                       {p.isCaptain && <div className="score-obs__squad-captain-badge">C</div>}
                       {p.isWicketKeeper && <div className="score-obs__squad-wk-badge">WK</div>}
@@ -2485,6 +2460,63 @@ function MatchIntroOverlay({ match, config, lineups, playerImages }: {
                     </motion.div>
                   ))}
                 </div>
+                {/* Bottom Row (remaining, centered) */}
+                {lineups.teamA.players.length > 6 && (
+                  <div className="score-obs__squad-grid score-obs__squad-grid--bottom">
+                    {lineups.teamA.players.slice(6, 11).map((p, i) => (
+                      <motion.div
+                        key={p.playerId}
+                        className={`score-obs__squad-card ${p.isCaptain ? 'score-obs__squad-card--captain' : ''}`}
+                        initial={{ y: 30, opacity: 0 }}
+                        animate={{ y: 0, opacity: 1 }}
+                        transition={{ delay: (i + 6) * 0.1, type: 'spring', stiffness: 200, damping: 20 }}
+                      >
+                        {p.isCaptain && <div className="score-obs__squad-captain-badge">C</div>}
+                        {p.isWicketKeeper && <div className="score-obs__squad-wk-badge">WK</div>}
+                        <div className="score-obs__squad-card-img">
+                          {imgMap[p.playerId]
+                            ? <img src={imgMap[p.playerId]} alt={p.playerName} />
+                            : <span className="score-obs__squad-card-placeholder">{p.playerName.charAt(0)}</span>
+                          }
+                        </div>
+                        <div className="score-obs__squad-card-name">
+                          <span>{p.playerName}</span>
+                        </div>
+                        <div className="score-obs__squad-card-role">
+                          <span>{p.role}</span>
+                        </div>
+                      </motion.div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Impact Subs Panel */}
+              {impactPlayers?.teamA && impactPlayers.teamA.length > 0 && (
+                <motion.div
+                  className="score-obs__impact-subs-panel"
+                  initial={{ x: 40, opacity: 0 }}
+                  animate={{ x: 0, opacity: 1 }}
+                  transition={{ delay: 0.6, type: 'spring', stiffness: 180, damping: 22 }}
+                >
+                  <div className="score-obs__impact-subs-header">
+                    <span>⚡ IMPACT SUBS</span>
+                  </div>
+                  <div className="score-obs__impact-subs-list">
+                    {impactPlayers.teamA.map((p, i) => (
+                      <motion.div
+                        key={p.playerId}
+                        className="score-obs__impact-sub-item"
+                        initial={{ opacity: 0, x: 20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: 0.8 + i * 0.12 }}
+                      >
+                        <span className="score-obs__impact-sub-name">{p.playerName}</span>
+                        <span className="score-obs__impact-sub-role">{p.role}</span>
+                      </motion.div>
+                    ))}
+                  </div>
+                </motion.div>
               )}
             </div>
 
@@ -2521,45 +2553,18 @@ function MatchIntroOverlay({ match, config, lineups, playerImages }: {
               {config.broadcastPartnerLogo && <img src={config.broadcastPartnerLogo} alt="" className="score-obs__squad-header-logo score-obs__squad-header-logo--right" />}
             </div>
 
-            {/* Players Grid */}
-            <div className="score-obs__squad-grid-container">
-              {/* Top Row (up to 6) */}
-              <div className="score-obs__squad-grid score-obs__squad-grid--top">
-                {lineups.teamB.players.slice(0, 6).map((p, i) => (
-                  <motion.div
-                    key={p.playerId}
-                    className={`score-obs__squad-card ${p.isCaptain ? 'score-obs__squad-card--captain' : ''}`}
-                    initial={{ y: 30, opacity: 0 }}
-                    animate={{ y: 0, opacity: 1 }}
-                    transition={{ delay: i * 0.1, type: 'spring', stiffness: 200, damping: 20 }}
-                  >
-                    {p.isCaptain && <div className="score-obs__squad-captain-badge">C</div>}
-                    {p.isWicketKeeper && <div className="score-obs__squad-wk-badge">WK</div>}
-                    <div className="score-obs__squad-card-img">
-                      {imgMap[p.playerId]
-                        ? <img src={imgMap[p.playerId]} alt={p.playerName} />
-                        : <span className="score-obs__squad-card-placeholder">{p.playerName.charAt(0)}</span>
-                      }
-                    </div>
-                    <div className="score-obs__squad-card-name">
-                      <span>{p.playerName}</span>
-                    </div>
-                    <div className="score-obs__squad-card-role">
-                      <span>{p.role}</span>
-                    </div>
-                  </motion.div>
-                ))}
-              </div>
-              {/* Bottom Row (remaining, centered) */}
-              {lineups.teamB.players.length > 6 && (
-                <div className="score-obs__squad-grid score-obs__squad-grid--bottom">
-                  {lineups.teamB.players.slice(6, 11).map((p, i) => (
+            {/* Players Grid + Impact Subs */}
+            <div className="score-obs__squad-body">
+              <div className="score-obs__squad-grid-container">
+                {/* Top Row (up to 6) */}
+                <div className="score-obs__squad-grid score-obs__squad-grid--top">
+                  {lineups.teamB.players.slice(0, 6).map((p, i) => (
                     <motion.div
                       key={p.playerId}
                       className={`score-obs__squad-card ${p.isCaptain ? 'score-obs__squad-card--captain' : ''}`}
                       initial={{ y: 30, opacity: 0 }}
                       animate={{ y: 0, opacity: 1 }}
-                      transition={{ delay: (i + 6) * 0.1, type: 'spring', stiffness: 200, damping: 20 }}
+                      transition={{ delay: i * 0.1, type: 'spring', stiffness: 200, damping: 20 }}
                     >
                       {p.isCaptain && <div className="score-obs__squad-captain-badge">C</div>}
                       {p.isWicketKeeper && <div className="score-obs__squad-wk-badge">WK</div>}
@@ -2578,6 +2583,63 @@ function MatchIntroOverlay({ match, config, lineups, playerImages }: {
                     </motion.div>
                   ))}
                 </div>
+                {/* Bottom Row (remaining, centered) */}
+                {lineups.teamB.players.length > 6 && (
+                  <div className="score-obs__squad-grid score-obs__squad-grid--bottom">
+                    {lineups.teamB.players.slice(6, 11).map((p, i) => (
+                      <motion.div
+                        key={p.playerId}
+                        className={`score-obs__squad-card ${p.isCaptain ? 'score-obs__squad-card--captain' : ''}`}
+                        initial={{ y: 30, opacity: 0 }}
+                        animate={{ y: 0, opacity: 1 }}
+                        transition={{ delay: (i + 6) * 0.1, type: 'spring', stiffness: 200, damping: 20 }}
+                      >
+                        {p.isCaptain && <div className="score-obs__squad-captain-badge">C</div>}
+                        {p.isWicketKeeper && <div className="score-obs__squad-wk-badge">WK</div>}
+                        <div className="score-obs__squad-card-img">
+                          {imgMap[p.playerId]
+                            ? <img src={imgMap[p.playerId]} alt={p.playerName} />
+                            : <span className="score-obs__squad-card-placeholder">{p.playerName.charAt(0)}</span>
+                          }
+                        </div>
+                        <div className="score-obs__squad-card-name">
+                          <span>{p.playerName}</span>
+                        </div>
+                        <div className="score-obs__squad-card-role">
+                          <span>{p.role}</span>
+                        </div>
+                      </motion.div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Impact Subs Panel */}
+              {impactPlayers?.teamB && impactPlayers.teamB.length > 0 && (
+                <motion.div
+                  className="score-obs__impact-subs-panel"
+                  initial={{ x: 40, opacity: 0 }}
+                  animate={{ x: 0, opacity: 1 }}
+                  transition={{ delay: 0.6, type: 'spring', stiffness: 180, damping: 22 }}
+                >
+                  <div className="score-obs__impact-subs-header">
+                    <span>⚡ IMPACT SUBS</span>
+                  </div>
+                  <div className="score-obs__impact-subs-list">
+                    {impactPlayers.teamB.map((p, i) => (
+                      <motion.div
+                        key={p.playerId}
+                        className="score-obs__impact-sub-item"
+                        initial={{ opacity: 0, x: 20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: 0.8 + i * 0.12 }}
+                      >
+                        <span className="score-obs__impact-sub-name">{p.playerName}</span>
+                        <span className="score-obs__impact-sub-role">{p.role}</span>
+                      </motion.div>
+                    ))}
+                  </div>
+                </motion.div>
               )}
             </div>
 

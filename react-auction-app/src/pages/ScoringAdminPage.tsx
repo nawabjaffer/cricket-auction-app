@@ -209,6 +209,7 @@ export default function ScoringAdminPage() {
             config={overlayConfig}
             setConfig={setOverlayConfig}
             onFeedback={showFeedback}
+            soldPlayers={soldPlayers}
           />
         )}
         {activeTab === 'ticker' && (
@@ -1358,11 +1359,12 @@ function AnimationsTab({ config, setConfig, onFeedback }: {
 // PRE-MATCH TAB — Toss videos, squad reveal, impact players
 // ═══════════════════════════════════════════════════════════════════════════════
 
-function PreMatchTab({ matches, config, setConfig, onFeedback }: {
+function PreMatchTab({ matches, config, setConfig, onFeedback, soldPlayers }: {
   matches: MatchSetup[];
   config: ScoringOverlayConfig;
   setConfig: (c: ScoringOverlayConfig) => void;
   onFeedback: (msg: string) => void;
+  soldPlayers: SoldPlayer[];
 }) {
   const [selectedMatchId, setSelectedMatchId] = useState<string>('');
   const [preMatchState, setPreMatchState] = useState<PreMatchState | null>(null);
@@ -1684,12 +1686,12 @@ function PreMatchTab({ matches, config, setConfig, onFeedback }: {
       {/* Impact Players */}
       {selectedMatch && (
         <div className="scoring-admin__form-card">
-          <h3 className="scoring-admin__subsection-title">⚡ Impact Players (4 per team)</h3>
-          <p className="scoring-admin__hint">Impact substitute players shown on the right side of the broadcast at match start.</p>
+          <h3 className="scoring-admin__subsection-title">⚡ Impact Substitutes (from remaining squad)</h3>
+          <p className="scoring-admin__hint">Select up to 4 impact substitutes per team from players NOT in the playing XI. These will be shown in squad reveal and match view.</p>
 
           {/* Team A Impact Players */}
           <div style={{ marginTop: '1rem' }}>
-            <h4 style={{ color: selectedMatch.teamA.primaryColor || '#3b82f6', margin: '0 0 0.5rem' }}>{selectedMatch.teamA.name}</h4>
+            <h4 style={{ color: selectedMatch.teamA.primaryColor || '#3b82f6', margin: '0 0 0.5rem' }}>{selectedMatch.teamA.name} — Impact Subs</h4>
             <div className="scoring-admin__impact-list">
               {impactPlayersA.map(p => (
                 <div key={p.playerId} className="scoring-admin__impact-item">
@@ -1699,31 +1701,38 @@ function PreMatchTab({ matches, config, setConfig, onFeedback }: {
                   </button>
                 </div>
               ))}
-              {impactPlayersA.length < 4 && lineups.teamA && (
-                <select
-                  className="scoring-admin__select"
-                  onChange={e => {
-                    const player = lineups.teamA?.players.find(p => p.playerId === e.target.value);
-                    if (player) {
-                      addImpactPlayer('A', { playerId: player.playerId, playerName: player.playerName, role: player.role });
-                      e.target.value = '';
-                    }
-                  }}
-                  defaultValue=""
-                >
-                  <option value="">+ Add impact player...</option>
-                  {lineups.teamA.players
-                    .filter(p => !impactPlayersA.some(ip => ip.playerId === p.playerId))
-                    .map(p => <option key={p.playerId} value={p.playerId}>{p.playerName} ({p.role})</option>)}
-                </select>
-              )}
-              {!lineups.teamA && <span className="scoring-admin__hint">No lineup saved for this team. Save lineup in the score update page first.</span>}
+              {impactPlayersA.length < 4 && (() => {
+                const playingXIIds = new Set((lineups.teamA?.players || []).map(p => p.playerId));
+                const remainingSquad = soldPlayers
+                  .filter(p => (p.teamId === selectedMatch.teamA.id || p.teamName === selectedMatch.teamA.name) && !playingXIIds.has(p.id))
+                  .filter(p => !impactPlayersA.some(ip => ip.playerId === p.id));
+                return remainingSquad.length > 0 ? (
+                  <select
+                    className="scoring-admin__select"
+                    onChange={e => {
+                      const player = remainingSquad.find(p => p.id === e.target.value);
+                      if (player) {
+                        addImpactPlayer('A', { playerId: player.id, playerName: player.name, role: player.role || 'Unknown', imageUrl: player.imageUrl });
+                        e.target.value = '';
+                      }
+                    }}
+                    defaultValue=""
+                  >
+                    <option value="">+ Add impact sub from remaining squad...</option>
+                    {remainingSquad.map(p => <option key={p.id} value={p.id}>{p.name} ({p.role || 'Unknown'})</option>)}
+                  </select>
+                ) : (
+                  <span className="scoring-admin__hint">
+                    {lineups.teamA ? 'No remaining players in squad (all in playing XI)' : 'Save lineup first to see remaining squad'}
+                  </span>
+                );
+              })()}
             </div>
           </div>
 
           {/* Team B Impact Players */}
           <div style={{ marginTop: '1rem' }}>
-            <h4 style={{ color: selectedMatch.teamB.primaryColor || '#ef4444', margin: '0 0 0.5rem' }}>{selectedMatch.teamB.name}</h4>
+            <h4 style={{ color: selectedMatch.teamB.primaryColor || '#ef4444', margin: '0 0 0.5rem' }}>{selectedMatch.teamB.name} — Impact Subs</h4>
             <div className="scoring-admin__impact-list">
               {impactPlayersB.map(p => (
                 <div key={p.playerId} className="scoring-admin__impact-item">
@@ -1733,25 +1742,32 @@ function PreMatchTab({ matches, config, setConfig, onFeedback }: {
                   </button>
                 </div>
               ))}
-              {impactPlayersB.length < 4 && lineups.teamB && (
-                <select
-                  className="scoring-admin__select"
-                  onChange={e => {
-                    const player = lineups.teamB?.players.find(p => p.playerId === e.target.value);
-                    if (player) {
-                      addImpactPlayer('B', { playerId: player.playerId, playerName: player.playerName, role: player.role });
-                      e.target.value = '';
-                    }
-                  }}
-                  defaultValue=""
-                >
-                  <option value="">+ Add impact player...</option>
-                  {lineups.teamB.players
-                    .filter(p => !impactPlayersB.some(ip => ip.playerId === p.playerId))
-                    .map(p => <option key={p.playerId} value={p.playerId}>{p.playerName} ({p.role})</option>)}
-                </select>
-              )}
-              {!lineups.teamB && <span className="scoring-admin__hint">No lineup saved for this team. Save lineup in the score update page first.</span>}
+              {impactPlayersB.length < 4 && (() => {
+                const playingXIIds = new Set((lineups.teamB?.players || []).map(p => p.playerId));
+                const remainingSquad = soldPlayers
+                  .filter(p => (p.teamId === selectedMatch.teamB.id || p.teamName === selectedMatch.teamB.name) && !playingXIIds.has(p.id))
+                  .filter(p => !impactPlayersB.some(ip => ip.playerId === p.id));
+                return remainingSquad.length > 0 ? (
+                  <select
+                    className="scoring-admin__select"
+                    onChange={e => {
+                      const player = remainingSquad.find(p => p.id === e.target.value);
+                      if (player) {
+                        addImpactPlayer('B', { playerId: player.id, playerName: player.name, role: player.role || 'Unknown', imageUrl: player.imageUrl });
+                        e.target.value = '';
+                      }
+                    }}
+                    defaultValue=""
+                  >
+                    <option value="">+ Add impact sub from remaining squad...</option>
+                    {remainingSquad.map(p => <option key={p.id} value={p.id}>{p.name} ({p.role || 'Unknown'})</option>)}
+                  </select>
+                ) : (
+                  <span className="scoring-admin__hint">
+                    {lineups.teamB ? 'No remaining players in squad (all in playing XI)' : 'Save lineup first to see remaining squad'}
+                  </span>
+                );
+              })()}
             </div>
           </div>
         </div>

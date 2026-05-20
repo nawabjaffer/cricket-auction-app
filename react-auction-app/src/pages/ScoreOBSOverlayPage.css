@@ -2363,6 +2363,76 @@
   letter-spacing: 0.08em;
 }
 
+/* Squad body layout (grid + impact panel) */
+.score-obs__squad-body {
+  flex: 1;
+  display: flex;
+  gap: 20px;
+  padding: 0;
+}
+
+/* Impact Subs Panel — Right side column */
+.score-obs__impact-subs-panel {
+  width: 200px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  background: linear-gradient(180deg, rgba(139, 92, 246, 0.08), rgba(88, 28, 135, 0.12));
+  border-left: 2px solid rgba(139, 92, 246, 0.3);
+  padding: 16px 12px;
+}
+
+.score-obs__impact-subs-header {
+  text-align: center;
+  padding: 8px 0 12px;
+  border-bottom: 1px solid rgba(139, 92, 246, 0.25);
+  margin-bottom: 12px;
+}
+
+.score-obs__impact-subs-header span {
+  font-size: 12px;
+  font-weight: 800;
+  color: #a78bfa;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+}
+
+.score-obs__impact-subs-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.score-obs__impact-sub-item {
+  display: flex;
+  flex-direction: column;
+  padding: 8px 10px;
+  background: rgba(139, 92, 246, 0.1);
+  border: 1px solid rgba(139, 92, 246, 0.2);
+  border-radius: 8px;
+  transition: background 0.2s;
+}
+
+.score-obs__impact-sub-item:hover {
+  background: rgba(139, 92, 246, 0.18);
+}
+
+.score-obs__impact-sub-name {
+  font-size: 12px;
+  font-weight: 700;
+  color: #e9d5ff;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.score-obs__impact-sub-role {
+  font-size: 10px;
+  font-weight: 600;
+  color: rgba(167, 139, 250, 0.7);
+  text-transform: capitalize;
+  margin-top: 2px;
+}
+
 /* Match ready phase */
 .score-obs__intro-ready {
   display: flex;

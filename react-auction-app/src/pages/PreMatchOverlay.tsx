@@ -7,9 +7,10 @@ import { useEffect, useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type {
   MatchSetup, MatchLineup, PreMatchState, ScoringOverlayConfig,
-  ImpactPlayer, MatchSquadPlayer,
+  ImpactPlayer,
 } from '../types/scoring';
 import './PreMatchOverlay.css';
+import './ScoreOBSOverlayPage.css';
 
 interface PreMatchOverlayProps {
   match: MatchSetup;
@@ -28,7 +29,7 @@ export default function PreMatchOverlay({ match, preMatch, config, lineups, play
     <div className="prematch-overlay">
       <AnimatePresence mode="wait">
         {phase === 'squad_display' && (
-          <SquadDisplayOverlay key="squad" match={match} lineups={lineups} config={config} playerImages={playerImages} />
+          <SquadDisplayOverlay key="squad" match={match} lineups={lineups} config={config} playerImages={playerImages} impactPlayers={preMatch.impactPlayers} />
         )}
         {phase === 'toss_animation' && (
           <TossAnimationOverlay key="toss" match={match} preMatch={preMatch} config={config} />
@@ -44,6 +45,8 @@ export default function PreMatchOverlay({ match, preMatch, config, lineups, play
             revealedIds={preMatch.revealedPlayersTeamA || []}
             revealConfig={preMatch.squadRevealConfig}
             playerImages={playerImages}
+            impactPlayers={preMatch.impactPlayers.teamA || []}
+            config={config}
           />
         )}
         {phase === 'squad_reveal_teamB' && lineups.teamB && (
@@ -54,10 +57,12 @@ export default function PreMatchOverlay({ match, preMatch, config, lineups, play
             revealedIds={preMatch.revealedPlayersTeamB || []}
             revealConfig={preMatch.squadRevealConfig}
             playerImages={playerImages}
+            impactPlayers={preMatch.impactPlayers.teamB || []}
+            config={config}
           />
         )}
         {phase === 'impact_players' && (
-          <ImpactPlayersOverlay key="impact" match={match} impactPlayers={preMatch.impactPlayers} />
+          <ImpactPlayersOverlay key="impact" match={match} impactPlayers={preMatch.impactPlayers} playerImages={playerImages} />
         )}
       </AnimatePresence>
     </div>
@@ -68,11 +73,12 @@ export default function PreMatchOverlay({ match, preMatch, config, lineups, play
 // SQUAD DISPLAY — Both teams' full squads side by side
 // ═══════════════════════════════════════════════════════════════════════════════
 
-function SquadDisplayOverlay({ match, lineups, config, playerImages }: {
+function SquadDisplayOverlay({ match, lineups, config, playerImages, impactPlayers }: {
   match: MatchSetup;
   lineups: { teamA: MatchLineup | null; teamB: MatchLineup | null };
   config: ScoringOverlayConfig;
   playerImages?: Record<string, string>;
+  impactPlayers?: { teamA: ImpactPlayer[]; teamB: ImpactPlayer[] };
 }) {
   return (
     <motion.div
@@ -97,22 +103,28 @@ function SquadDisplayOverlay({ match, lineups, config, playerImages }: {
           team={match.teamA}
           lineup={lineups.teamA}
           playerImages={playerImages}
+          impactPlayerIds={(impactPlayers?.teamA || []).map(p => p.playerId)}
+          impactPlayers={impactPlayers?.teamA || []}
         />
         <div className="prematch-squad-display__divider" />
         <TeamSquadColumn
           team={match.teamB}
           lineup={lineups.teamB}
           playerImages={playerImages}
+          impactPlayerIds={(impactPlayers?.teamB || []).map(p => p.playerId)}
+          impactPlayers={impactPlayers?.teamB || []}
         />
       </div>
     </motion.div>
   );
 }
 
-function TeamSquadColumn({ team, lineup, playerImages }: {
+function TeamSquadColumn({ team, lineup, playerImages, impactPlayerIds, impactPlayers }: {
   team: { name: string; logoUrl?: string; primaryColor?: string };
   lineup: MatchLineup | null;
   playerImages?: Record<string, string>;
+  impactPlayerIds?: string[];
+  impactPlayers?: ImpactPlayer[];
 }) {
   return (
     <div className="prematch-squad-col" style={{ '--team-color': team.primaryColor || '#3b82f6' } as React.CSSProperties}>
@@ -158,6 +170,25 @@ function TeamSquadColumn({ team, lineup, playerImages }: {
           <p className="prematch-squad-col__empty">Lineup not set</p>
         )}
       </div>
+
+      {/* Impact Subs Section */}
+      {impactPlayers && impactPlayers.length > 0 && (
+        <div className="prematch-squad-col__impact-section">
+          <div className="prematch-squad-col__impact-header">⚡ IMPACT SUBS</div>
+          {impactPlayers.map((p, i) => (
+            <motion.div
+              key={p.playerId}
+              className="prematch-squad-col__impact-player"
+              initial={{ opacity: 0, x: -10 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: 0.8 + i * 0.1, duration: 0.3 }}
+            >
+              <span className="prematch-squad-col__impact-name">{p.playerName}</span>
+              <span className="prematch-squad-col__impact-role">{p.role}</span>
+            </motion.div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -438,12 +469,14 @@ function TossResultOverlay({ match, preMatch, config }: {
 // SQUAD REVEAL — Animated player-by-player reveal
 // ═══════════════════════════════════════════════════════════════════════════════
 
-function SquadRevealOverlay({ team, lineup, revealedIds, revealConfig, playerImages }: {
+function SquadRevealOverlay({ team, lineup, revealedIds, revealConfig, playerImages, impactPlayers, config }: {
   team: { name: string; logoUrl?: string; primaryColor?: string };
   lineup: MatchLineup;
   revealedIds: string[];
   revealConfig: PreMatchState['squadRevealConfig'];
   playerImages?: Record<string, string>;
+  impactPlayers?: ImpactPlayer[];
+  config?: ScoringOverlayConfig;
 }) {
   const [localRevealed, setLocalRevealed] = useState<string[]>(revealedIds);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -477,53 +510,137 @@ function SquadRevealOverlay({ team, lineup, revealedIds, revealConfig, playerIma
     }
   }, [revealedIds, localRevealed.length]);
 
+  const revealedPlayers = lineup.players.filter(p => localRevealed.includes(p.playerId));
+  const topRow = revealedPlayers.slice(0, 6);
+  const bottomRow = revealedPlayers.slice(6, 11);
+  const hasImpactSubs = impactPlayers && impactPlayers.length > 0;
+
   return (
     <motion.div
-      className="prematch-reveal"
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      style={{ '--team-color': team.primaryColor || '#3b82f6' } as React.CSSProperties}
+      className="score-obs__squad-reveal"
+      initial={{ scale: 0.85, opacity: 0 }}
+      animate={{ scale: 1, opacity: 1 }}
+      exit={{ scale: 0.85, opacity: 0 }}
+      transition={{ type: 'spring', stiffness: 180, damping: 22 }}
     >
-      <div className="prematch-reveal__header">
-        {team.logoUrl && <img src={team.logoUrl} alt="" className="prematch-reveal__logo" />}
-        <h2 className="prematch-reveal__title">{team.name}</h2>
-        <p className="prematch-reveal__subtitle">Playing XI</p>
+      {/* Header */}
+      <div className="score-obs__squad-header" style={{ background: `linear-gradient(90deg, #08082f, ${team.primaryColor || '#004be2'}80, #08082f)` }}>
+        {team.logoUrl && <img src={team.logoUrl} alt="" className="score-obs__squad-header-logo score-obs__squad-header-logo--left" />}
+        <div className="score-obs__squad-header-center">
+          <h1 className="score-obs__squad-team-name">{team.name}</h1>
+          {config?.tournamentName && (
+            <div className="score-obs__squad-tournament-badge">
+              <span>{config.tournamentName}</span>
+            </div>
+          )}
+        </div>
+        {config?.broadcastPartnerLogo && <img src={config.broadcastPartnerLogo} alt="" className="score-obs__squad-header-logo score-obs__squad-header-logo--right" />}
       </div>
 
-      <div className="prematch-reveal__grid">
-        {lineup.players.map((player, i) => {
-          const isRevealed = localRevealed.includes(player.playerId);
-          const imgUrl = player.imageUrl || playerImages?.[player.playerId];
-          return (
-            <AnimatePresence key={player.playerId}>
-              {isRevealed && (
+      {/* Main content: Playing XI grid + Impact Subs column */}
+      <div className="score-obs__squad-body" style={{ display: 'flex', gap: '20px' }}>
+        {/* Playing XI */}
+        <div className="score-obs__squad-grid-container" style={{ flex: 1 }}>
+          {/* Top Row (up to 6) */}
+          <div className="score-obs__squad-grid score-obs__squad-grid--top">
+            {topRow.map((player, i) => {
+              const imgUrl = player.imageUrl || playerImages?.[player.playerId];
+              return (
                 <motion.div
-                  className="prematch-reveal__player"
-                  initial={{ opacity: 0, scale: 0.5, rotateY: 90 }}
-                  animate={{ opacity: 1, scale: 1, rotateY: 0 }}
-                  transition={{ type: 'spring', stiffness: 200, damping: 20 }}
+                  key={player.playerId}
+                  className={`score-obs__squad-card ${player.isCaptain ? 'score-obs__squad-card--captain' : ''}`}
+                  initial={{ y: 30, opacity: 0 }}
+                  animate={{ y: 0, opacity: 1 }}
+                  transition={{ delay: i * 0.1, type: 'spring', stiffness: 200, damping: 20 }}
                 >
-                  <div className="prematch-reveal__player-num">{i + 1}</div>
-                  {imgUrl && (
-                    <img src={imgUrl} alt="" className="prematch-reveal__player-img" />
-                  )}
-                  <div className="prematch-reveal__player-info">
-                    <span className="prematch-reveal__player-name">
-                      {player.playerName}
-                      {player.isCaptain && <span className="prematch-reveal__badge prematch-reveal__badge--captain">C</span>}
-                      {player.isWicketKeeper && <span className="prematch-reveal__badge prematch-reveal__badge--keeper">WK</span>}
-                    </span>
-                    <span className="prematch-reveal__player-role" data-role={getRoleCategory(player.role)}>
-                      {player.role}
-                    </span>
+                  {player.isCaptain && <div className="score-obs__squad-captain-badge">C</div>}
+                  {player.isWicketKeeper && <div className="score-obs__squad-wk-badge">WK</div>}
+                  <div className="score-obs__squad-card-img">
+                    {imgUrl
+                      ? <img src={imgUrl} alt={player.playerName} />
+                      : <span className="score-obs__squad-card-placeholder">{player.playerName.charAt(0)}</span>
+                    }
+                  </div>
+                  <div className="score-obs__squad-card-name">
+                    <span>{player.playerName}</span>
+                  </div>
+                  <div className="score-obs__squad-card-role">
+                    <span>{player.role}</span>
                   </div>
                 </motion.div>
-              )}
-            </AnimatePresence>
-          );
-        })}
+              );
+            })}
+          </div>
+          {/* Bottom Row (remaining, centered) */}
+          {bottomRow.length > 0 && (
+            <div className="score-obs__squad-grid score-obs__squad-grid--bottom">
+              {bottomRow.map((player, i) => {
+                const imgUrl = player.imageUrl || playerImages?.[player.playerId];
+                return (
+                  <motion.div
+                    key={player.playerId}
+                    className={`score-obs__squad-card ${player.isCaptain ? 'score-obs__squad-card--captain' : ''}`}
+                    initial={{ y: 30, opacity: 0 }}
+                    animate={{ y: 0, opacity: 1 }}
+                    transition={{ delay: (i + 6) * 0.1, type: 'spring', stiffness: 200, damping: 20 }}
+                  >
+                    {player.isCaptain && <div className="score-obs__squad-captain-badge">C</div>}
+                    {player.isWicketKeeper && <div className="score-obs__squad-wk-badge">WK</div>}
+                    <div className="score-obs__squad-card-img">
+                      {imgUrl
+                        ? <img src={imgUrl} alt={player.playerName} />
+                        : <span className="score-obs__squad-card-placeholder">{player.playerName.charAt(0)}</span>
+                      }
+                    </div>
+                    <div className="score-obs__squad-card-name">
+                      <span>{player.playerName}</span>
+                    </div>
+                    <div className="score-obs__squad-card-role">
+                      <span>{player.role}</span>
+                    </div>
+                  </motion.div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Impact Subs Column (separate section with distinct styling) */}
+        {hasImpactSubs && (
+          <motion.div
+            className="score-obs__impact-subs-panel"
+            initial={{ x: 40, opacity: 0 }}
+            animate={{ x: 0, opacity: 1 }}
+            transition={{ delay: 0.6, type: 'spring', stiffness: 180, damping: 22 }}
+          >
+            <div className="score-obs__impact-subs-header">
+              <span>⚡ IMPACT SUBS</span>
+            </div>
+            <div className="score-obs__impact-subs-list">
+              {impactPlayers!.map((p, i) => (
+                <motion.div
+                  key={p.playerId}
+                  className="score-obs__impact-sub-item"
+                  initial={{ opacity: 0, x: 20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: 0.8 + i * 0.12 }}
+                >
+                  <span className="score-obs__impact-sub-name">{p.playerName}</span>
+                  <span className="score-obs__impact-sub-role">{p.role}</span>
+                </motion.div>
+              ))}
+            </div>
+          </motion.div>
+        )}
       </div>
+
+      {/* Footer */}
+      {config?.titleSponsorName && (
+        <div className="score-obs__squad-footer">
+          {config.titleSponsorLogo && <img src={config.titleSponsorLogo} alt="" className="score-obs__squad-footer-sponsor" />}
+          <span className="score-obs__squad-footer-text">{config.titleSponsorName}</span>
+        </div>
+      )}
     </motion.div>
   );
 }
@@ -532,56 +649,90 @@ function SquadRevealOverlay({ team, lineup, revealedIds, revealConfig, playerIma
 // IMPACT PLAYERS — 4 per team on right side
 // ═══════════════════════════════════════════════════════════════════════════════
 
-function ImpactPlayersOverlay({ match, impactPlayers }: {
+function ImpactPlayersOverlay({ match, impactPlayers, playerImages }: {
   match: MatchSetup;
   impactPlayers: { teamA: ImpactPlayer[]; teamB: ImpactPlayer[] };
+  playerImages?: Record<string, string>;
 }) {
   return (
     <motion.div
       className="prematch-impact"
-      initial={{ x: 100, opacity: 0 }}
-      animate={{ x: 0, opacity: 1 }}
-      exit={{ x: 100, opacity: 0 }}
-      transition={{ type: 'spring', stiffness: 180, damping: 22 }}
+      initial={{ opacity: 0, scale: 0.9 }}
+      animate={{ opacity: 1, scale: 1 }}
+      exit={{ opacity: 0, scale: 0.9 }}
+      transition={{ duration: 0.5 }}
     >
-      <div className="prematch-impact__title">IMPACT PLAYERS</div>
-
-      <div className="prematch-impact__team" style={{ '--team-color': match.teamA.primaryColor || '#3b82f6' } as React.CSSProperties}>
-        <div className="prematch-impact__team-header">
-          {match.teamA.logoUrl && <img src={match.teamA.logoUrl} alt="" className="prematch-impact__team-logo" />}
-          <span className="prematch-impact__team-name">{match.teamA.name}</span>
-        </div>
-        {(impactPlayers.teamA || []).map((p, i) => (
-          <motion.div
-            key={p.playerId}
-            className="prematch-impact__player"
-            initial={{ opacity: 0, x: 30 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: 0.3 + i * 0.15 }}
-          >
-            <span className="prematch-impact__player-name">{p.playerName}</span>
-            <span className="prematch-impact__player-role">{p.role}</span>
-          </motion.div>
-        ))}
+      <div className="prematch-impact__header">
+        <h2 className="prematch-impact__title">⚡ IMPACT PLAYERS</h2>
       </div>
 
-      <div className="prematch-impact__team" style={{ '--team-color': match.teamB.primaryColor || '#ef4444' } as React.CSSProperties}>
-        <div className="prematch-impact__team-header">
-          {match.teamB.logoUrl && <img src={match.teamB.logoUrl} alt="" className="prematch-impact__team-logo" />}
-          <span className="prematch-impact__team-name">{match.teamB.name}</span>
+      <div className="prematch-impact__teams">
+        {/* Team A */}
+        <div className="prematch-impact__team" style={{ '--team-color': match.teamA.primaryColor || '#3b82f6' } as React.CSSProperties}>
+          <div className="prematch-impact__team-header">
+            {match.teamA.logoUrl && <img src={match.teamA.logoUrl} alt="" className="prematch-impact__team-logo" />}
+            <span className="prematch-impact__team-name">{match.teamA.name}</span>
+          </div>
+          <div className="prematch-impact__cards">
+            {(impactPlayers.teamA || []).map((p, i) => {
+              const imgUrl = p.imageUrl || playerImages?.[p.playerId];
+              return (
+                <motion.div
+                  key={p.playerId}
+                  className="prematch-impact__card"
+                  initial={{ opacity: 0, y: 30, scale: 0.8 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  transition={{ type: 'spring', stiffness: 200, damping: 20, delay: 0.2 + i * 0.15 }}
+                >
+                  <div className="prematch-impact__card-img">
+                    {imgUrl ? (
+                      <img src={imgUrl} alt={p.playerName} />
+                    ) : (
+                      <span className="prematch-impact__card-placeholder">{p.playerName.charAt(0)}</span>
+                    )}
+                  </div>
+                  <div className="prematch-impact__card-name">{p.playerName}</div>
+                  <div className="prematch-impact__card-role">{p.role}</div>
+                </motion.div>
+              );
+            })}
+          </div>
         </div>
-        {(impactPlayers.teamB || []).map((p, i) => (
-          <motion.div
-            key={p.playerId}
-            className="prematch-impact__player"
-            initial={{ opacity: 0, x: 30 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: 0.6 + i * 0.15 }}
-          >
-            <span className="prematch-impact__player-name">{p.playerName}</span>
-            <span className="prematch-impact__player-role">{p.role}</span>
-          </motion.div>
-        ))}
+
+        {/* Divider */}
+        <div className="prematch-impact__divider" />
+
+        {/* Team B */}
+        <div className="prematch-impact__team" style={{ '--team-color': match.teamB.primaryColor || '#ef4444' } as React.CSSProperties}>
+          <div className="prematch-impact__team-header">
+            {match.teamB.logoUrl && <img src={match.teamB.logoUrl} alt="" className="prematch-impact__team-logo" />}
+            <span className="prematch-impact__team-name">{match.teamB.name}</span>
+          </div>
+          <div className="prematch-impact__cards">
+            {(impactPlayers.teamB || []).map((p, i) => {
+              const imgUrl = p.imageUrl || playerImages?.[p.playerId];
+              return (
+                <motion.div
+                  key={p.playerId}
+                  className="prematch-impact__card"
+                  initial={{ opacity: 0, y: 30, scale: 0.8 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  transition={{ type: 'spring', stiffness: 200, damping: 20, delay: 0.5 + i * 0.15 }}
+                >
+                  <div className="prematch-impact__card-img">
+                    {imgUrl ? (
+                      <img src={imgUrl} alt={p.playerName} />
+                    ) : (
+                      <span className="prematch-impact__card-placeholder">{p.playerName.charAt(0)}</span>
+                    )}
+                  </div>
+                  <div className="prematch-impact__card-name">{p.playerName}</div>
+                  <div className="prematch-impact__card-role">{p.role}</div>
+                </motion.div>
+              );
+            })}
+          </div>
+        </div>
       </div>
     </motion.div>
   );
