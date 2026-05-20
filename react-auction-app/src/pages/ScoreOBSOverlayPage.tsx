@@ -1107,6 +1107,34 @@ function ChromaKeyVideo({ src, chromaColor, similarity, className }: {
   const animRef = useRef<number>(0);
   const drawingRef = useRef(false);
   const [corsFailed, setCorsFailed] = useState(false);
+  const [blobUrl, setBlobUrl] = useState<string | null>(null);
+
+  // Fetch video as blob to bypass CORS restrictions on canvas
+  useEffect(() => {
+    let cancelled = false;
+    const fetchBlob = async () => {
+      try {
+        const response = await fetch(src, { mode: 'cors' });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const blob = await response.blob();
+        if (!cancelled) {
+          setBlobUrl(URL.createObjectURL(blob));
+        }
+      } catch {
+        // CORS fetch failed — try without CORS mode (opaque response won't help for blob)
+        // Fall back to direct src with crossOrigin (original approach)
+        if (!cancelled) {
+          setBlobUrl(null);
+          // Will use direct src approach which may get tainted
+        }
+      }
+    };
+    fetchBlob();
+    return () => {
+      cancelled = true;
+      setBlobUrl(prev => { if (prev) URL.revokeObjectURL(prev); return null; });
+    };
+  }, [src]);
 
   useEffect(() => {
     if (corsFailed) return;
@@ -1187,22 +1215,25 @@ function ChromaKeyVideo({ src, chromaColor, similarity, className }: {
       video.removeEventListener('playing', startDrawing);
       video.removeEventListener('error', handleError);
     };
-  }, [chromaColor, similarity, corsFailed]);
+  }, [chromaColor, similarity, corsFailed, blobUrl]);
 
   // CORS failed — render video directly without chroma key
   if (corsFailed) {
     return <AutoPlayVideo src={src} className={className ? `${className} score-obs__celebration-video` : 'score-obs__celebration-video'} />;
   }
 
+  // Use blob URL if available (bypasses CORS), otherwise fall back to src with crossOrigin
+  const videoSrc = blobUrl || src;
+
   return (
     <div className={className} style={{ position: 'relative', width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <video
         ref={videoRef}
-        src={src}
+        src={videoSrc}
         autoPlay
         muted
         playsInline
-        crossOrigin="anonymous"
+        crossOrigin={blobUrl ? undefined : 'anonymous'}
         onError={() => setCorsFailed(true)}
         style={{ position: 'absolute', width: 0, height: 0, opacity: 0, pointerEvents: 'none' }}
       />
@@ -1268,9 +1299,7 @@ function BoundaryOverlay({ type, animConfig }: { type: 'four' | 'six'; animConfi
   }
 
   if (hasVideo) {
-    // Skip chroma key for Firebase Storage URLs when CORS isn't configured
-    const isFirebaseStorage = animConfig!.mediaUrl!.includes('firebasestorage.googleapis.com');
-    const useChromaKey = animConfig!.chromaKeyEnabled && !isFirebaseStorage;
+    const useChromaKey = !!animConfig!.chromaKeyEnabled;
     return (
       <motion.div
         className={`score-obs__celebration score-obs__celebration--${type}`}
@@ -1331,8 +1360,7 @@ function WicketOverlay({ imageUrl, animConfig }: { imageUrl?: string; animConfig
   }
 
   if (hasVideo) {
-    const isFirebaseStorage = animConfig!.mediaUrl!.includes('firebasestorage.googleapis.com');
-    const useChromaKey = animConfig!.chromaKeyEnabled && !isFirebaseStorage;
+    const useChromaKey = !!animConfig!.chromaKeyEnabled;
     return (
       <motion.div
         className="score-obs__celebration score-obs__celebration--wicket"
@@ -1391,8 +1419,7 @@ function DuckOutOverlay({ imageUrl, animConfig }: { imageUrl?: string; animConfi
   const hasImage = animConfig?.mediaUrl && (animConfig.type === 'image' || animConfig.mediaUrl.match(/\.(png|gif|jpg|jpeg|webp|svg)(\?|$)/i));
 
   if (hasVideo) {
-    const isFirebaseStorage = animConfig!.mediaUrl!.includes('firebasestorage.googleapis.com');
-    const useChromaKey = animConfig!.chromaKeyEnabled && !isFirebaseStorage;
+    const useChromaKey = !!animConfig!.chromaKeyEnabled;
     return (
       <motion.div
         className="score-obs__celebration score-obs__celebration--duck"
@@ -1456,8 +1483,7 @@ function HatTrickOverlay({ imageUrl, animConfig }: { imageUrl?: string; animConf
   const hasImage = animConfig?.mediaUrl && (animConfig.type === 'image' || animConfig.mediaUrl.match(/\.(png|gif|jpg|jpeg|webp|svg)(\?|$)/i));
 
   if (hasVideo) {
-    const isFirebaseStorage = animConfig!.mediaUrl!.includes('firebasestorage.googleapis.com');
-    const useChromaKey = animConfig!.chromaKeyEnabled && !isFirebaseStorage;
+    const useChromaKey = !!animConfig!.chromaKeyEnabled;
     return (
       <motion.div
         className="score-obs__celebration score-obs__celebration--hattrick"
@@ -1553,7 +1579,11 @@ function StatsListOverlay({ title, items, playerImages }: {
   const isOrange = title.toLowerCase().includes('run') || title.toLowerCase().includes('four') || title.toLowerCase().includes('orange');
   const isPurple = title.toLowerCase().includes('wicket') || title.toLowerCase().includes('purple') || title.toLowerCase().includes('dot');
   const isMvp = title.toLowerCase().includes('mvp');
-  const accentColor = isPurple ? '#a855f7' : isMvp ? '#fbbf24' : '#f97316';
+  const isSixes = title.toLowerCase().includes('six');
+  const accentColor = isPurple ? '#a855f7' : isMvp ? '#fbbf24' : isSixes ? '#06b6d4' : '#f97316';
+
+  // Determine the value column header based on stat type
+  const valueHeader = isPurple ? 'Wickets' : isSixes ? 'Sixes' : title.toLowerCase().includes('four') ? 'Fours' : isMvp ? 'Points' : 'Runs';
 
   return (
     <motion.div
@@ -1567,8 +1597,18 @@ function StatsListOverlay({ title, items, playerImages }: {
         {/* Left: Content */}
         <div className="score-obs__lb-content">
           {/* Header */}
-          <div className="score-obs__lb-header" style={{ borderBottomColor: `${accentColor}60` }}>
+          <div className="score-obs__lb-header" style={{ background: `linear-gradient(135deg, ${accentColor}18, transparent)`, borderBottomColor: `${accentColor}40` }}>
+            <div className="score-obs__lb-header-icon" style={{ color: accentColor }}>
+              {isPurple ? '🟣' : isMvp ? '🏆' : isSixes ? '6️⃣' : isOrange ? '🟠' : '🏏'}
+            </div>
             <span className="score-obs__lb-title" style={{ color: accentColor }}>{title}</span>
+          </div>
+
+          {/* Column Headers */}
+          <div className="score-obs__lb-col-headers">
+            <span className="score-obs__lb-col-player">Player</span>
+            <span className="score-obs__lb-col-matches">Matches</span>
+            <span className="score-obs__lb-col-value">{valueHeader}</span>
           </div>
 
           {/* Rows */}
@@ -1576,8 +1616,8 @@ function StatsListOverlay({ title, items, playerImages }: {
             {items.slice(0, 5).map((item, i) => (
               <motion.div
                 key={i}
-                className={`score-obs__lb-row ${i === 0 ? 'score-obs__lb-row--first' : ''}`}
-                style={i === 0 ? { background: `linear-gradient(90deg, ${accentColor}cc, ${accentColor}99)` } : undefined}
+                className={`score-obs__lb-row ${i === 0 ? 'score-obs__lb-row--first' : i % 2 === 0 ? 'score-obs__lb-row--alt' : ''}`}
+                style={i === 0 ? { background: `linear-gradient(90deg, ${accentColor}dd, ${accentColor}88)` } : undefined}
                 initial={{ x: -30, opacity: 0 }}
                 animate={{ x: 0, opacity: 1 }}
                 transition={{ delay: i * 0.08 }}
@@ -1589,7 +1629,7 @@ function StatsListOverlay({ title, items, playerImages }: {
                     {item.team && <span className="score-obs__lb-player-team">{item.team}</span>}
                   </div>
                 </div>
-                <span className="score-obs__lb-player-value">{item.value}</span>
+                <span className="score-obs__lb-player-value" style={i === 0 ? { color: '#fff' } : undefined}>{item.value}</span>
               </motion.div>
             ))}
           </div>
@@ -1597,8 +1637,9 @@ function StatsListOverlay({ title, items, playerImages }: {
 
         {/* Right: Player image spotlight */}
         {topPlayerImg && (
-          <div className="score-obs__lb-player-spotlight">
+          <div className="score-obs__lb-player-spotlight" style={{ background: `linear-gradient(180deg, ${accentColor}10, ${accentColor}30)` }}>
             <img src={topPlayerImg} alt={topPlayer?.name || ''} className="score-obs__lb-player-img" />
+            <div className="score-obs__lb-spotlight-gradient" style={{ background: `linear-gradient(180deg, transparent 40%, ${accentColor}40 100%)` }} />
           </div>
         )}
       </div>
@@ -1765,26 +1806,34 @@ function AwardOverlay({ title, subtitle, color, playerName, value, imageUrl }: {
         {/* Left: Info */}
         <div className="score-obs__award-v2-content">
           {/* Award badge header */}
-          <div className="score-obs__award-v2-badge" style={{ background: `linear-gradient(135deg, ${color}, ${color}cc)` }}>
-            <span className="score-obs__award-v2-badge-title">{title}</span>
-            <span className="score-obs__award-v2-badge-sub">{subtitle}</span>
+          <div className="score-obs__award-v2-badge" style={{ background: `linear-gradient(135deg, ${color}, ${color}99)` }}>
+            <div className="score-obs__award-v2-badge-icon">
+              {title.toLowerCase().includes('orange') ? '🟠' : title.toLowerCase().includes('purple') ? '🟣' : '🏆'}
+            </div>
+            <div className="score-obs__award-v2-badge-text">
+              <span className="score-obs__award-v2-badge-title">{title}</span>
+              <span className="score-obs__award-v2-badge-sub">{subtitle}</span>
+            </div>
           </div>
 
           {/* Player name */}
           <div className="score-obs__award-v2-player">
+            <span className="score-obs__award-v2-rank">1</span>
             <span className="score-obs__award-v2-name">{playerName}</span>
           </div>
 
           {/* Value */}
           <div className="score-obs__award-v2-value-row">
             <span className="score-obs__award-v2-value" style={{ color }}>{value}</span>
+            <span className="score-obs__award-v2-value-label">{subtitle.toLowerCase().includes('run') || title.toLowerCase().includes('orange') ? 'RUNS' : title.toLowerCase().includes('purple') ? 'WICKETS' : 'POINTS'}</span>
           </div>
         </div>
 
         {/* Right: Player image */}
         {imageUrl && (
-          <div className="score-obs__award-v2-image">
+          <div className="score-obs__award-v2-image" style={{ background: `linear-gradient(180deg, ${color}10, ${color}30)` }}>
             <img src={imageUrl} alt={playerName} className="score-obs__award-v2-img" />
+            <div className="score-obs__award-v2-img-gradient" style={{ background: `linear-gradient(180deg, transparent 50%, ${color}40 100%)` }} />
           </div>
         )}
       </div>
@@ -2359,76 +2408,186 @@ function MatchIntroOverlay({ match, config, lineups, playerImages }: {
         {phase === 1 && lineups.teamA && (
           <motion.div
             key="teamA"
-            className="score-obs__intro-squad"
-            initial={{ x: -200, opacity: 0 }}
-            animate={{ x: 0, opacity: 1 }}
-            exit={{ x: 200, opacity: 0 }}
+            className="score-obs__squad-reveal"
+            initial={{ scale: 0.85, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            exit={{ scale: 0.85, opacity: 0 }}
             transition={{ type: 'spring', stiffness: 180, damping: 22 }}
           >
-            <div className="score-obs__intro-squad-header" style={{ borderColor: match.teamA.primaryColor || '#3b82f6' }}>
-              {match.teamA.logoUrl && <img src={match.teamA.logoUrl} alt="" className="score-obs__intro-squad-logo" />}
-              <span>{match.teamA.name}</span>
-            </div>
-            <div className="score-obs__intro-squad-players">
-              {lineups.teamA.players.slice(0, 11).map((p, i) => (
-                <motion.div
-                  key={p.playerId}
-                  className="score-obs__intro-player"
-                  initial={{ opacity: 0, x: -30 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: i * 0.15 }}
-                >
-                  <div className="score-obs__intro-player-img">
-                    {imgMap[p.playerId]
-                      ? <img src={imgMap[p.playerId]} alt="" />
-                      : <span>{p.playerName.charAt(0)}</span>
-                    }
+            {/* Header */}
+            <div className="score-obs__squad-header" style={{ background: `linear-gradient(90deg, #08082f, ${match.teamA.primaryColor || '#004be2'}80, #08082f)` }}>
+              {match.teamA.logoUrl && <img src={match.teamA.logoUrl} alt="" className="score-obs__squad-header-logo score-obs__squad-header-logo--left" />}
+              <div className="score-obs__squad-header-center">
+                <h1 className="score-obs__squad-team-name">{match.teamA.name}</h1>
+                {config.tournamentName && (
+                  <div className="score-obs__squad-tournament-badge">
+                    <span>{config.tournamentName}</span>
                   </div>
-                  <span className="score-obs__intro-player-name">{p.playerName}</span>
-                  <span className="score-obs__intro-player-role">{p.role}</span>
-                  {p.isCaptain && <span className="score-obs__intro-badge">C</span>}
-                  {p.isWicketKeeper && <span className="score-obs__intro-badge">WK</span>}
-                </motion.div>
-              ))}
+                )}
+              </div>
+              {config.broadcastPartnerLogo && <img src={config.broadcastPartnerLogo} alt="" className="score-obs__squad-header-logo score-obs__squad-header-logo--right" />}
             </div>
+
+            {/* Players Grid */}
+            <div className="score-obs__squad-grid-container">
+              {/* Top Row (up to 6) */}
+              <div className="score-obs__squad-grid score-obs__squad-grid--top">
+                {lineups.teamA.players.slice(0, 6).map((p, i) => (
+                  <motion.div
+                    key={p.playerId}
+                    className={`score-obs__squad-card ${p.isCaptain ? 'score-obs__squad-card--captain' : ''}`}
+                    initial={{ y: 30, opacity: 0 }}
+                    animate={{ y: 0, opacity: 1 }}
+                    transition={{ delay: i * 0.1, type: 'spring', stiffness: 200, damping: 20 }}
+                  >
+                    {p.isCaptain && <div className="score-obs__squad-captain-badge">C</div>}
+                    {p.isWicketKeeper && <div className="score-obs__squad-wk-badge">WK</div>}
+                    <div className="score-obs__squad-card-img">
+                      {imgMap[p.playerId]
+                        ? <img src={imgMap[p.playerId]} alt={p.playerName} />
+                        : <span className="score-obs__squad-card-placeholder">{p.playerName.charAt(0)}</span>
+                      }
+                    </div>
+                    <div className="score-obs__squad-card-name">
+                      <span>{p.playerName}</span>
+                    </div>
+                    <div className="score-obs__squad-card-role">
+                      <span>{p.role}</span>
+                    </div>
+                  </motion.div>
+                ))}
+              </div>
+              {/* Bottom Row (remaining, centered) */}
+              {lineups.teamA.players.length > 6 && (
+                <div className="score-obs__squad-grid score-obs__squad-grid--bottom">
+                  {lineups.teamA.players.slice(6, 11).map((p, i) => (
+                    <motion.div
+                      key={p.playerId}
+                      className={`score-obs__squad-card ${p.isCaptain ? 'score-obs__squad-card--captain' : ''}`}
+                      initial={{ y: 30, opacity: 0 }}
+                      animate={{ y: 0, opacity: 1 }}
+                      transition={{ delay: (i + 6) * 0.1, type: 'spring', stiffness: 200, damping: 20 }}
+                    >
+                      {p.isCaptain && <div className="score-obs__squad-captain-badge">C</div>}
+                      {p.isWicketKeeper && <div className="score-obs__squad-wk-badge">WK</div>}
+                      <div className="score-obs__squad-card-img">
+                        {imgMap[p.playerId]
+                          ? <img src={imgMap[p.playerId]} alt={p.playerName} />
+                          : <span className="score-obs__squad-card-placeholder">{p.playerName.charAt(0)}</span>
+                        }
+                      </div>
+                      <div className="score-obs__squad-card-name">
+                        <span>{p.playerName}</span>
+                      </div>
+                      <div className="score-obs__squad-card-role">
+                        <span>{p.role}</span>
+                      </div>
+                    </motion.div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            {config.titleSponsorName && (
+              <div className="score-obs__squad-footer">
+                {config.titleSponsorLogo && <img src={config.titleSponsorLogo} alt="" className="score-obs__squad-footer-sponsor" />}
+                <span className="score-obs__squad-footer-text">{config.titleSponsorName}</span>
+              </div>
+            )}
           </motion.div>
         )}
 
         {phase === 2 && lineups.teamB && (
           <motion.div
             key="teamB"
-            className="score-obs__intro-squad"
-            initial={{ x: 200, opacity: 0 }}
-            animate={{ x: 0, opacity: 1 }}
-            exit={{ x: -200, opacity: 0 }}
+            className="score-obs__squad-reveal"
+            initial={{ scale: 0.85, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            exit={{ scale: 0.85, opacity: 0 }}
             transition={{ type: 'spring', stiffness: 180, damping: 22 }}
           >
-            <div className="score-obs__intro-squad-header" style={{ borderColor: match.teamB.primaryColor || '#ef4444' }}>
-              {match.teamB.logoUrl && <img src={match.teamB.logoUrl} alt="" className="score-obs__intro-squad-logo" />}
-              <span>{match.teamB.name}</span>
-            </div>
-            <div className="score-obs__intro-squad-players">
-              {lineups.teamB.players.slice(0, 11).map((p, i) => (
-                <motion.div
-                  key={p.playerId}
-                  className="score-obs__intro-player"
-                  initial={{ opacity: 0, x: 30 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: i * 0.15 }}
-                >
-                  <div className="score-obs__intro-player-img">
-                    {imgMap[p.playerId]
-                      ? <img src={imgMap[p.playerId]} alt="" />
-                      : <span>{p.playerName.charAt(0)}</span>
-                    }
+            {/* Header */}
+            <div className="score-obs__squad-header" style={{ background: `linear-gradient(90deg, #08082f, ${match.teamB.primaryColor || '#ef4444'}80, #08082f)` }}>
+              {match.teamB.logoUrl && <img src={match.teamB.logoUrl} alt="" className="score-obs__squad-header-logo score-obs__squad-header-logo--left" />}
+              <div className="score-obs__squad-header-center">
+                <h1 className="score-obs__squad-team-name">{match.teamB.name}</h1>
+                {config.tournamentName && (
+                  <div className="score-obs__squad-tournament-badge">
+                    <span>{config.tournamentName}</span>
                   </div>
-                  <span className="score-obs__intro-player-name">{p.playerName}</span>
-                  <span className="score-obs__intro-player-role">{p.role}</span>
-                  {p.isCaptain && <span className="score-obs__intro-badge">C</span>}
-                  {p.isWicketKeeper && <span className="score-obs__intro-badge">WK</span>}
-                </motion.div>
-              ))}
+                )}
+              </div>
+              {config.broadcastPartnerLogo && <img src={config.broadcastPartnerLogo} alt="" className="score-obs__squad-header-logo score-obs__squad-header-logo--right" />}
             </div>
+
+            {/* Players Grid */}
+            <div className="score-obs__squad-grid-container">
+              {/* Top Row (up to 6) */}
+              <div className="score-obs__squad-grid score-obs__squad-grid--top">
+                {lineups.teamB.players.slice(0, 6).map((p, i) => (
+                  <motion.div
+                    key={p.playerId}
+                    className={`score-obs__squad-card ${p.isCaptain ? 'score-obs__squad-card--captain' : ''}`}
+                    initial={{ y: 30, opacity: 0 }}
+                    animate={{ y: 0, opacity: 1 }}
+                    transition={{ delay: i * 0.1, type: 'spring', stiffness: 200, damping: 20 }}
+                  >
+                    {p.isCaptain && <div className="score-obs__squad-captain-badge">C</div>}
+                    {p.isWicketKeeper && <div className="score-obs__squad-wk-badge">WK</div>}
+                    <div className="score-obs__squad-card-img">
+                      {imgMap[p.playerId]
+                        ? <img src={imgMap[p.playerId]} alt={p.playerName} />
+                        : <span className="score-obs__squad-card-placeholder">{p.playerName.charAt(0)}</span>
+                      }
+                    </div>
+                    <div className="score-obs__squad-card-name">
+                      <span>{p.playerName}</span>
+                    </div>
+                    <div className="score-obs__squad-card-role">
+                      <span>{p.role}</span>
+                    </div>
+                  </motion.div>
+                ))}
+              </div>
+              {/* Bottom Row (remaining, centered) */}
+              {lineups.teamB.players.length > 6 && (
+                <div className="score-obs__squad-grid score-obs__squad-grid--bottom">
+                  {lineups.teamB.players.slice(6, 11).map((p, i) => (
+                    <motion.div
+                      key={p.playerId}
+                      className={`score-obs__squad-card ${p.isCaptain ? 'score-obs__squad-card--captain' : ''}`}
+                      initial={{ y: 30, opacity: 0 }}
+                      animate={{ y: 0, opacity: 1 }}
+                      transition={{ delay: (i + 6) * 0.1, type: 'spring', stiffness: 200, damping: 20 }}
+                    >
+                      {p.isCaptain && <div className="score-obs__squad-captain-badge">C</div>}
+                      {p.isWicketKeeper && <div className="score-obs__squad-wk-badge">WK</div>}
+                      <div className="score-obs__squad-card-img">
+                        {imgMap[p.playerId]
+                          ? <img src={imgMap[p.playerId]} alt={p.playerName} />
+                          : <span className="score-obs__squad-card-placeholder">{p.playerName.charAt(0)}</span>
+                        }
+                      </div>
+                      <div className="score-obs__squad-card-name">
+                        <span>{p.playerName}</span>
+                      </div>
+                      <div className="score-obs__squad-card-role">
+                        <span>{p.role}</span>
+                      </div>
+                    </motion.div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            {config.titleSponsorName && (
+              <div className="score-obs__squad-footer">
+                {config.titleSponsorLogo && <img src={config.titleSponsorLogo} alt="" className="score-obs__squad-footer-sponsor" />}
+                <span className="score-obs__squad-footer-text">{config.titleSponsorName}</span>
+              </div>
+            )}
           </motion.div>
         )}
 

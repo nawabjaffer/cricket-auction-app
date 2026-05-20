@@ -635,16 +635,19 @@
 /* ── Leaderboard Overlay (StatsListOverlay v2) ─────────────────────────── */
 
 .score-obs__leaderboard {
-  width: 620px;
+  width: 680px;
   padding: 0;
   overflow: hidden;
-  border-radius: 14px;
+  border-radius: 16px;
+  background: #0b1120;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
 }
 
 .score-obs__lb-layout {
   display: flex;
   align-items: stretch;
-  min-height: 280px;
+  min-height: 320px;
 }
 
 .score-obs__lb-content {
@@ -654,8 +657,15 @@
 }
 
 .score-obs__lb-header {
-  padding: 14px 20px;
-  border-bottom: 2px solid rgba(255, 255, 255, 0.1);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 16px 24px;
+  border-bottom: 2px solid rgba(255, 255, 255, 0.08);
+}
+
+.score-obs__lb-header-icon {
+  font-size: 18px;
 }
 
 .score-obs__lb-title {
@@ -665,19 +675,57 @@
   text-transform: uppercase;
 }
 
+.score-obs__lb-col-headers {
+  display: flex;
+  align-items: center;
+  padding: 8px 24px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.score-obs__lb-col-player {
+  flex: 1;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: #64748b;
+  padding-left: 40px;
+}
+
+.score-obs__lb-col-matches {
+  width: 70px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: #64748b;
+  text-align: center;
+}
+
+.score-obs__lb-col-value {
+  width: 70px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: #64748b;
+  text-align: right;
+  padding-right: 4px;
+}
+
 .score-obs__lb-rows {
   flex: 1;
   display: flex;
   flex-direction: column;
-  padding: 6px 0;
+  padding: 4px 0;
 }
 
 .score-obs__lb-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 10px 20px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  padding: 12px 24px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
   transition: background 0.2s;
 }
 
@@ -686,9 +734,14 @@
 }
 
 .score-obs__lb-row--first {
-  border-radius: 4px;
+  border-radius: 6px;
   margin: 4px 8px;
-  padding: 12px 16px;
+  padding: 14px 18px;
+  border-bottom: none;
+}
+
+.score-obs__lb-row--alt {
+  background: rgba(255, 255, 255, 0.015);
 }
 
 .score-obs__lb-row--first .score-obs__lb-rank {
@@ -712,10 +765,10 @@
 }
 
 .score-obs__lb-rank {
-  width: 28px;
-  height: 28px;
+  width: 30px;
+  height: 30px;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.06);
   color: #94a3b8;
   display: flex;
   align-items: center;
@@ -750,18 +803,17 @@
 .score-obs__lb-player-value {
   font-weight: 800;
   color: #fbbf24;
-  font-size: 18px;
+  font-size: 20px;
   letter-spacing: 0.02em;
 }
 
 .score-obs__lb-player-spotlight {
-  width: 200px;
+  width: 220px;
   position: relative;
   overflow: hidden;
   display: flex;
   align-items: flex-end;
   justify-content: center;
-  background: linear-gradient(180deg, transparent, rgba(0, 0, 0, 0.3));
 }
 
 .score-obs__lb-player-img {
@@ -769,6 +821,12 @@
   height: 100%;
   object-fit: cover;
   object-position: top center;
+}
+
+.score-obs__lb-spotlight-gradient {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
 }
 
 /* ── Match Summary Overlay v2 ──────────────────────────────────────────── */
@@ -924,16 +982,19 @@
 /* ── Award Overlay v2 ──────────────────────────────────────────────────── */
 
 .score-obs__award-v2 {
-  width: 500px;
+  width: 560px;
   padding: 0;
   overflow: hidden;
-  border-radius: 14px;
+  border-radius: 16px;
+  background: #0b1120;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
 }
 
 .score-obs__award-v2-layout {
   display: flex;
   align-items: stretch;
-  min-height: 200px;
+  min-height: 240px;
 }
 
 .score-obs__award-v2-content {
@@ -941,16 +1002,26 @@
   display: flex;
   flex-direction: column;
   justify-content: center;
-  padding: 24px;
-  gap: 12px;
+  padding: 28px;
+  gap: 16px;
 }
 
 .score-obs__award-v2-badge {
-  display: inline-flex;
-  flex-direction: column;
+  display: flex;
+  align-items: center;
   align-self: flex-start;
-  padding: 8px 16px;
-  border-radius: 6px;
+  padding: 10px 18px;
+  border-radius: 8px;
+  gap: 10px;
+}
+
+.score-obs__award-v2-badge-icon {
+  font-size: 22px;
+}
+
+.score-obs__award-v2-badge-text {
+  display: flex;
+  flex-direction: column;
   gap: 2px;
 }
 
@@ -971,7 +1042,23 @@
 }
 
 .score-obs__award-v2-player {
+  display: flex;
+  align-items: center;
+  gap: 12px;
   margin-top: 4px;
+}
+
+.score-obs__award-v2-rank {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.1);
+  color: #fbbf24;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 900;
 }
 
 .score-obs__award-v2-name {
@@ -983,22 +1070,32 @@
 }
 
 .score-obs__award-v2-value-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
   margin-top: 2px;
 }
 
 .score-obs__award-v2-value {
-  font-size: 20px;
-  font-weight: 800;
+  font-size: 28px;
+  font-weight: 900;
+}
+
+.score-obs__award-v2-value-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
 }
 
 .score-obs__award-v2-image {
-  width: 180px;
+  width: 200px;
   position: relative;
   overflow: hidden;
   display: flex;
   align-items: flex-end;
   justify-content: center;
-  background: linear-gradient(180deg, transparent, rgba(0, 0, 0, 0.4));
 }
 
 .score-obs__award-v2-img {
@@ -1006,6 +1103,12 @@
   height: 100%;
   object-fit: cover;
   object-position: top center;
+}
+
+.score-obs__award-v2-img-gradient {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
 }
 
 /* ── Match Summary Overlay (legacy — keep for compat) ──────────────────── */
@@ -2033,6 +2136,231 @@
   background: rgba(212, 175, 55, 0.3);
   color: #d4af37;
   font-weight: 700;
+}
+
+/* ── Squad Reveal v2 (Broadcast-style grid) ─────────────────────────────────── */
+
+.score-obs__squad-reveal {
+  width: 1600px;
+  max-width: 90vw;
+  background: rgba(8, 8, 47, 0.88);
+  border-radius: 24px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(24px);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.score-obs__squad-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 40px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.score-obs__squad-header-logo {
+  width: 56px;
+  height: 56px;
+  object-fit: contain;
+  filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.3));
+}
+
+.score-obs__squad-header-logo--left {
+  order: 0;
+}
+
+.score-obs__squad-header-logo--right {
+  order: 2;
+}
+
+.score-obs__squad-header-center {
+  order: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.score-obs__squad-team-name {
+  font-size: 28px;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: #fff;
+  margin: 0;
+  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.4);
+}
+
+.score-obs__squad-tournament-badge {
+  padding: 3px 14px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.score-obs__squad-tournament-badge span {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.score-obs__squad-grid-container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 28px 40px 24px;
+}
+
+.score-obs__squad-grid {
+  display: grid;
+  gap: 14px;
+  justify-content: center;
+}
+
+.score-obs__squad-grid--top {
+  grid-template-columns: repeat(6, 1fr);
+}
+
+.score-obs__squad-grid--bottom {
+  grid-template-columns: repeat(5, 1fr);
+}
+
+.score-obs__squad-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  border-radius: 14px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+  width: 160px;
+}
+
+.score-obs__squad-card--captain {
+  border-color: rgba(239, 68, 68, 0.4);
+  box-shadow: 0 0 16px rgba(239, 68, 68, 0.15);
+}
+
+.score-obs__squad-captain-badge {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #ef4444;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 900;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+}
+
+.score-obs__squad-wk-badge {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(212, 175, 55, 0.9);
+  color: #000;
+  font-size: 9px;
+  font-weight: 800;
+  z-index: 2;
+  letter-spacing: 0.05em;
+}
+
+.score-obs__squad-card-img {
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.02) 0%, rgba(0, 0, 0, 0.2) 100%);
+}
+
+.score-obs__squad-card-img img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: top center;
+}
+
+.score-obs__squad-card-placeholder {
+  font-size: 36px;
+  font-weight: 800;
+  color: rgba(255, 255, 255, 0.2);
+}
+
+.score-obs__squad-card-name {
+  width: 100%;
+  padding: 8px 6px 4px;
+  background: linear-gradient(135deg, #1e3a5f, #0f2137);
+  text-align: center;
+}
+
+.score-obs__squad-card-name span {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: block;
+}
+
+.score-obs__squad-card-role {
+  width: 100%;
+  padding: 3px 6px 6px;
+  background: linear-gradient(135deg, #1e3a5f, #0f2137);
+  text-align: center;
+}
+
+.score-obs__squad-card-role span {
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #a3e635;
+}
+
+.score-obs__squad-footer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 12px 40px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.score-obs__squad-footer-sponsor {
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
+}
+
+.score-obs__squad-footer-text {
+  font-size: 12px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.5);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
 }
 
 /* Match ready phase */
