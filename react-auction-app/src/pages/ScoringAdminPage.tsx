@@ -1612,6 +1612,14 @@ function PreMatchTab({ matches, config, setConfig, onFeedback }: {
             <label>Chroma Key Color</label>
             <input type="color" value={tossConfig.chromaKeyColor} onChange={e => setTossConfig(prev => ({ ...prev, chromaKeyColor: e.target.value }))} />
           </div>
+          <div className="scoring-admin__field">
+            <label>Chroma Key Sensitivity (0.1 - 1.0)</label>
+            <input type="number" min="0.1" max="1" step="0.05" value={tossConfig.chromaKeySimilarity || 0.4} onChange={e => setTossConfig(prev => ({ ...prev, chromaKeySimilarity: parseFloat(e.target.value) || 0.4 }))} className="scoring-admin__input" />
+          </div>
+          <div className="scoring-admin__field">
+            <label>Toss Display Duration (seconds)</label>
+            <input type="number" min="3" max="30" step="1" value={tossConfig.tossDurationSeconds || 5} onChange={e => setTossConfig(prev => ({ ...prev, tossDurationSeconds: parseInt(e.target.value) || 5 }))} className="scoring-admin__input" />
+          </div>
         </div>
         <div className="scoring-admin__form-actions">
           <button className="scoring-admin__btn scoring-admin__btn--primary" onClick={handleSaveTossConfig} disabled={saving}>

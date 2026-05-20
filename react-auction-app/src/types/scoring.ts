@@ -500,6 +500,8 @@ export interface TossConfig {
   tailsVideoUrl?: string;   // Video file for tails animation
   chromaKeyEnabled: boolean; // Apply chroma green matte effect
   chromaKeyColor: string;    // Default '#00FF00'
+  chromaKeySimilarity?: number; // 0-1, how aggressively to remove chroma color (default 0.4)
+  tossDurationSeconds?: number; // How many seconds to show the toss animation (default 5)
 }
 
 export interface PreMatchState {
