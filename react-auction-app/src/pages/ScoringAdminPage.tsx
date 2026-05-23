@@ -17,7 +17,8 @@ import { tenantPath } from '../services/tenantPath';
 import { realtimeSync } from '../services/realtimeSync';
 import { scoringService } from '../services/scoring';
 import { uploadFileToStorage } from '../services';
-import type { MatchSetup, ScoringAd, ScoringOverlayConfig, LiveQuestion, MatchScoringConfig, PreMatchState, PreMatchPhase, ImpactPlayer, TossConfig, MatchLineup, TickerConfig, OBSWebSocketConfig, MVPWeights, DEFAULT_MVP_WEIGHTS, AnimationConfig } from '../types/scoring';
+import { DEFAULT_MVP_WEIGHTS } from '../types/scoring';
+import type { MatchSetup, ScoringAd, ScoringOverlayConfig, LiveQuestion, MatchScoringConfig, PreMatchState, PreMatchPhase, ImpactPlayer, TossConfig, MatchLineup, TickerConfig, OBSWebSocketConfig, MVPWeights, AnimationConfig } from '../types/scoring';
 import type { SoldPlayer } from '../types';
 import './ScoringAdminPage.css';
 
@@ -602,11 +603,32 @@ function MatchesTab({ matches, teams, soldPlayers, onFeedback, saving, setSaving
             <SquadSelectionModal
               match={sqMatch}
               soldPlayers={soldPlayers}
-              onSave={async (matchId, lineupA, lineupB) => {
+              onSave={async (matchId, lineupA, lineupB, impactA, impactB) => {
                 try {
                   await scoringService.saveLineup(matchId, lineupA);
                   await scoringService.saveLineup(matchId, lineupB);
-                  onFeedback('Squad saved successfully');
+
+                  const existingState = await scoringService.getPreMatchState(matchId);
+                  const mergedState: PreMatchState = {
+                    matchId,
+                    phase: existingState?.phase || 'idle',
+                    tossResult: existingState?.tossResult,
+                    squadRevealConfig: existingState?.squadRevealConfig || {
+                      autoReveal: true,
+                      delayAfterTossSeconds: 10,
+                      playerRevealIntervalMs: 2000,
+                    },
+                    impactPlayers: {
+                      teamA: impactA,
+                      teamB: impactB,
+                    },
+                    revealedPlayersTeamA: existingState?.revealedPlayersTeamA || [],
+                    revealedPlayersTeamB: existingState?.revealedPlayersTeamB || [],
+                    lastUpdated: Date.now(),
+                  };
+
+                  await scoringService.savePreMatchState(matchId, mergedState);
+                  onFeedback('Squad + impact subs saved successfully');
                   setSquadMatchId(null);
                 } catch (err) {
                   onFeedback(`Failed to save squad: ${err}`);
@@ -1804,7 +1826,7 @@ function PreMatchTab({ matches, config, setConfig, onFeedback, soldPlayers }: {
 function SquadSelectionModal({ match, soldPlayers, onSave, onClose }: {
   match: MatchSetup;
   soldPlayers: SoldPlayer[];
-  onSave: (matchId: string, lineupA: MatchLineup, lineupB: MatchLineup) => void;
+  onSave: (matchId: string, lineupA: MatchLineup, lineupB: MatchLineup, impactA: ImpactPlayer[], impactB: ImpactPlayer[]) => void;
   onClose: () => void;
 }) {
   const [activeTeam, setActiveTeam] = useState<'A' | 'B'>('A');
@@ -1868,7 +1890,7 @@ function SquadSelectionModal({ match, soldPlayers, onSave, onClose }: {
       if (team === 'A' && wkA === playerId) setWkA('');
       if (team === 'B' && captainB === playerId) setCaptainB('');
       if (team === 'B' && wkB === playerId) setWkB('');
-    } else if (selected.length < 11) {
+    } else {
       setter([...selected, playerId]);
     }
   };
@@ -1876,13 +1898,13 @@ function SquadSelectionModal({ match, soldPlayers, onSave, onClose }: {
   const selectAll = (team: 'A' | 'B') => {
     const players = team === 'A' ? teamAPlayers : teamBPlayers;
     const setter = team === 'A' ? setSelectedA : setSelectedB;
-    setter(players.slice(0, 11).map(p => p.id));
+    setter(players.map(p => p.id));
   };
 
   const buildLineup = (teamId: string, players: SoldPlayer[], selected: string[], captain: string, wk: string): MatchLineup => ({
     matchId: match.id,
     teamId,
-    players: selected.map((id, idx) => {
+    players: selected.slice(0, 11).map((id, idx) => {
       const p = players.find(pl => pl.id === id);
       return {
         playerId: id,
@@ -1895,14 +1917,38 @@ function SquadSelectionModal({ match, soldPlayers, onSave, onClose }: {
     }),
   });
 
+  const buildImpactPlayers = (players: SoldPlayer[], selected: string[]): ImpactPlayer[] => (
+    selected.slice(11, 15).map((id) => {
+      const p = players.find(pl => pl.id === id);
+      return {
+        playerId: id,
+        playerName: p?.name || 'Unknown',
+        role: p?.role || 'Uncategorized',
+        imageUrl: p?.imageUrl,
+      };
+    })
+  );
+
   const handleSave = async () => {
     if (selectedA.length === 0 && selectedB.length === 0) return;
     setSaving(true);
     const lineupA = buildLineup(match.teamA.id, teamAPlayers, selectedA, captainA, wkA);
     const lineupB = buildLineup(match.teamB.id, teamBPlayers, selectedB, captainB, wkB);
-    await onSave(match.id, lineupA, lineupB);
+    const impactA = buildImpactPlayers(teamAPlayers, selectedA);
+    const impactB = buildImpactPlayers(teamBPlayers, selectedB);
+    await onSave(match.id, lineupA, lineupB, impactA, impactB);
     setSaving(false);
   };
+
+  useEffect(() => {
+    if (captainA && selectedA.indexOf(captainA) >= 11) setCaptainA('');
+    if (wkA && selectedA.indexOf(wkA) >= 11) setWkA('');
+  }, [selectedA, captainA, wkA]);
+
+  useEffect(() => {
+    if (captainB && selectedB.indexOf(captainB) >= 11) setCaptainB('');
+    if (wkB && selectedB.indexOf(wkB) >= 11) setWkB('');
+  }, [selectedB, captainB, wkB]);
 
   const renderTeamSquad = (team: 'A' | 'B') => {
     const teamInfo = team === 'A' ? match.teamA : match.teamB;
@@ -1919,10 +1965,12 @@ function SquadSelectionModal({ match, soldPlayers, onSave, onClose }: {
           {teamInfo.logoUrl && <img src={teamInfo.logoUrl} alt="" className="squad-modal__team-logo" />}
           <div>
             <h3 className="squad-modal__team-name" style={{ color: teamInfo.primaryColor || '#3b82f6' }}>{teamInfo.name}</h3>
-            <span className="squad-modal__count">{selected.length}/11 selected · {players.length} available</span>
+            <span className="squad-modal__count">
+              XI: {Math.min(selected.length, 11)}/11 · Impact: {Math.max(0, selected.length - 11)} · {players.length} available
+            </span>
           </div>
           {players.length >= 11 && selected.length === 0 && (
-            <button className="scoring-admin__btn scoring-admin__btn--sm" onClick={() => selectAll(team)}>Select All 11</button>
+            <button className="scoring-admin__btn scoring-admin__btn--sm" onClick={() => selectAll(team)}>Select All Squad</button>
           )}
         </div>
 
@@ -1931,6 +1979,8 @@ function SquadSelectionModal({ match, soldPlayers, onSave, onClose }: {
             const isSelected = selected.includes(p.id);
             const isCap = captain === p.id;
             const isWk = wk === p.id;
+            const selectedIndex = selected.indexOf(p.id);
+            const isImpactCandidate = isSelected && selectedIndex >= 11;
             return (
               <div
                 key={p.id}
@@ -1938,7 +1988,7 @@ function SquadSelectionModal({ match, soldPlayers, onSave, onClose }: {
                 onClick={() => togglePlayer(p.id, team)}
               >
                 <div className="squad-modal__player-check">
-                  {isSelected ? '✓' : ''}
+                  {isSelected ? String(selectedIndex + 1) : ''}
                 </div>
                 <div className="squad-modal__player-info">
                   <span className="squad-modal__player-name">{p.name}</span>
@@ -1947,8 +1997,9 @@ function SquadSelectionModal({ match, soldPlayers, onSave, onClose }: {
                 <div className="squad-modal__player-badges">
                   {isCap && <span className="squad-modal__badge squad-modal__badge--cap">C</span>}
                   {isWk && <span className="squad-modal__badge squad-modal__badge--wk">WK</span>}
+                  {isImpactCandidate && <span className="squad-modal__badge">IMPACT</span>}
                 </div>
-                {isSelected && (
+                {isSelected && !isImpactCandidate && (
                   <div className="squad-modal__player-actions" onClick={e => e.stopPropagation()}>
                     <button
                       className={`squad-modal__role-btn ${isCap ? 'active' : ''}`}
@@ -1978,7 +2029,7 @@ function SquadSelectionModal({ match, soldPlayers, onSave, onClose }: {
       <motion.div className="squad-modal" initial={{ scale: 0.9, y: 30 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.9, y: 30 }} onClick={e => e.stopPropagation()}>
         <div className="squad-modal__header">
           <div>
-            <h2 className="squad-modal__title">Select Playing XI</h2>
+            <h2 className="squad-modal__title">Select Playing XI + Impact Subs</h2>
             <p className="squad-modal__subtitle">{match.teamA.name} vs {match.teamB.name} · {match.venue}</p>
           </div>
           <button className="scoring-admin__close-btn" onClick={onClose}><IoClose size={20} /></button>
@@ -2189,19 +2240,7 @@ function StatsTab({ config, setConfig, onFeedback }: {
   onFeedback: (msg: string) => void;
 }) {
   const [saving, setSaving] = useState(false);
-  const weights = config.mvpWeights || {
-    run: 1,
-    four: 1,
-    six: 2,
-    wicket: 25,
-    catch_taken: 10,
-    runout: 10,
-    stumping: 10,
-    maidenOver: 12,
-    dotBall: 1,
-    economyBonus: 5,
-    strikeRateBonus: 5,
-  };
+  const weights: MVPWeights = config.mvpWeights || DEFAULT_MVP_WEIGHTS;
 
   const updateWeights = (updates: Partial<MVPWeights>) => {
     const updated = { ...weights, ...updates };
@@ -2234,7 +2273,7 @@ function StatsTab({ config, setConfig, onFeedback }: {
               type="number"
               className="scoring-admin__input"
               value={value}
-              onChange={e => updateWeights({ [key]: Number(e.target.value) })}
+              onChange={e => updateWeights({ [key]: Number(e.target.value) } as Partial<MVPWeights>)}
               step={0.5}
               min={0}
             />
@@ -2247,7 +2286,7 @@ function StatsTab({ config, setConfig, onFeedback }: {
         <input
           type="number"
           className="scoring-admin__input"
-          value={config.minBallsForSR || 10}
+          value={config.minBallsForSR || 4}
           onChange={e => setConfig({ ...config, minBallsForSR: Number(e.target.value) })}
           min={1}
         />

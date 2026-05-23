@@ -15,7 +15,6 @@ import { ManualScoringAdapter } from '../services/scoring/ManualScoringAdapter';
 import type {
   LiveScore, MatchSetup, MatchLineup, Innings, BallOutcome,
   WicketDetail, MatchSquadPlayer, OverlayControlState, OverlayType,
-  BowlerInnings,
 } from '../types/scoring';
 
 interface ScoringState {
@@ -225,7 +224,11 @@ export function useScoringState(matchId: string | undefined) {
           if (inn1) allInnings.push(inn1);
           allInnings.push(updatedInnings);
         }
-        const matchStats = statsEngine.computeMatchStats(matchId, allInnings, state.match);
+        const lineups = state.lineups ? {
+          teamA: state.lineups.teamA || undefined,
+          teamB: state.lineups.teamB || undefined,
+        } : undefined;
+        const matchStats = statsEngine.computeMatchStats(matchId, allInnings, state.match, lineups);
         await statsEngine.saveMatchStats(matchId, matchStats);
       }
 

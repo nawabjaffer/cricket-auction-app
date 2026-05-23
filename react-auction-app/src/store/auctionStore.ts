@@ -1098,10 +1098,9 @@ export const useAuctionStore = create<AuctionStore>()(
             basePrice: soldPlayer.basePrice ?? soldPlayer.soldAmount,
             imageUrl: soldPlayer.imageUrl || '',
             matches: soldPlayer.matches || '',
-            battingAverage: soldPlayer.battingAverage || '',
-            bowlingAverage: soldPlayer.bowlingAverage || '',
-            strikeRate: soldPlayer.strikeRate || '',
-            economyRate: soldPlayer.economyRate || '',
+            runs: soldPlayer.runs || '',
+            wickets: soldPlayer.wickets || '',
+            battingBestFigures: soldPlayer.battingBestFigures || '',
             bowlingBestFigures: soldPlayer.bowlingBestFigures || '',
           };
 

@@ -22,6 +22,45 @@ interface PreMatchOverlayProps {
 
 export default function PreMatchOverlay({ match, preMatch, config, lineups, playerImages }: PreMatchOverlayProps) {
   const { phase } = preMatch;
+  const impactByTeam = preMatch.impactPlayers || { teamA: [], teamB: [] };
+  const impactTeamA = preMatch.impactPlayers?.teamA;
+  const impactTeamB = preMatch.impactPlayers?.teamB;
+  const preloadCacheRef = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    const cache = preloadCacheRef.current;
+    const urls: string[] = [];
+
+    const addUrl = (url?: string) => {
+      if (url) urls.push(url);
+    };
+
+    const collectLineup = (lineup: MatchLineup | null) => {
+      if (!lineup) return;
+      lineup.players.forEach(player => {
+        addUrl(player.imageUrl || playerImages?.[player.playerId]);
+      });
+    };
+
+    const collectImpact = (impactPlayers?: ImpactPlayer[]) => {
+      if (!impactPlayers) return;
+      impactPlayers.forEach(player => {
+        addUrl(player.imageUrl || playerImages?.[player.playerId]);
+      });
+    };
+
+    collectLineup(lineups.teamA);
+    collectLineup(lineups.teamB);
+    collectImpact(impactTeamA);
+    collectImpact(impactTeamB);
+
+    urls.forEach(url => {
+      if (cache.has(url)) return;
+      cache.add(url);
+      const img = new Image();
+      img.src = url;
+    });
+  }, [lineups.teamA, lineups.teamB, playerImages, impactTeamA, impactTeamB]);
 
   if (phase === 'idle' || phase === 'match_ready') return null;
 
@@ -29,7 +68,7 @@ export default function PreMatchOverlay({ match, preMatch, config, lineups, play
     <div className="prematch-overlay">
       <AnimatePresence mode="wait">
         {phase === 'squad_display' && (
-          <SquadDisplayOverlay key="squad" match={match} lineups={lineups} config={config} playerImages={playerImages} impactPlayers={preMatch.impactPlayers} />
+          <SquadDisplayOverlay key="squad" match={match} lineups={lineups} config={config} playerImages={playerImages} impactPlayers={impactByTeam} />
         )}
         {phase === 'toss_animation' && (
           <TossAnimationOverlay key="toss" match={match} preMatch={preMatch} config={config} />
@@ -45,7 +84,7 @@ export default function PreMatchOverlay({ match, preMatch, config, lineups, play
             revealedIds={preMatch.revealedPlayersTeamA || []}
             revealConfig={preMatch.squadRevealConfig}
             playerImages={playerImages}
-            impactPlayers={preMatch.impactPlayers.teamA || []}
+            impactPlayers={impactByTeam.teamA || []}
             config={config}
           />
         )}
@@ -57,12 +96,12 @@ export default function PreMatchOverlay({ match, preMatch, config, lineups, play
             revealedIds={preMatch.revealedPlayersTeamB || []}
             revealConfig={preMatch.squadRevealConfig}
             playerImages={playerImages}
-            impactPlayers={preMatch.impactPlayers.teamB || []}
+            impactPlayers={impactByTeam.teamB || []}
             config={config}
           />
         )}
         {phase === 'impact_players' && (
-          <ImpactPlayersOverlay key="impact" match={match} impactPlayers={preMatch.impactPlayers} playerImages={playerImages} />
+          <ImpactPlayersOverlay key="impact" match={match} impactPlayers={impactByTeam} playerImages={playerImages} />
         )}
       </AnimatePresence>
     </div>
@@ -103,7 +142,6 @@ function SquadDisplayOverlay({ match, lineups, config, playerImages, impactPlaye
           team={match.teamA}
           lineup={lineups.teamA}
           playerImages={playerImages}
-          impactPlayerIds={(impactPlayers?.teamA || []).map(p => p.playerId)}
           impactPlayers={impactPlayers?.teamA || []}
         />
         <div className="prematch-squad-display__divider" />
@@ -111,7 +149,6 @@ function SquadDisplayOverlay({ match, lineups, config, playerImages, impactPlaye
           team={match.teamB}
           lineup={lineups.teamB}
           playerImages={playerImages}
-          impactPlayerIds={(impactPlayers?.teamB || []).map(p => p.playerId)}
           impactPlayers={impactPlayers?.teamB || []}
         />
       </div>
@@ -119,11 +156,10 @@ function SquadDisplayOverlay({ match, lineups, config, playerImages, impactPlaye
   );
 }
 
-function TeamSquadColumn({ team, lineup, playerImages, impactPlayerIds, impactPlayers }: {
+function TeamSquadColumn({ team, lineup, playerImages, impactPlayers }: {
   team: { name: string; logoUrl?: string; primaryColor?: string };
   lineup: MatchLineup | null;
   playerImages?: Record<string, string>;
-  impactPlayerIds?: string[];
   impactPlayers?: ImpactPlayer[];
 }) {
   return (
@@ -221,12 +257,25 @@ function ChromaKeyTossVideo({ src, chromaColor, similarity }: {
   // Fetch video as blob to bypass CORS for canvas pixel access
   useEffect(() => {
     let cancelled = false;
+    let objectUrl: string | null = null;
     const fetchBlob = async () => {
       try {
+        const source = (src || '').trim();
+        if (!source || source.startsWith('blob:') || source.startsWith('data:')) {
+          return;
+        }
+
+        // Skip blob-fetch for cross-origin URLs; this often triggers noisy CORS failures.
+        const parsed = new URL(source, window.location.href);
+        if (parsed.origin !== window.location.origin) {
+          return;
+        }
+
         const response = await fetch(src, { mode: 'cors' });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const blob = await response.blob();
-        if (!cancelled) setBlobUrl(URL.createObjectURL(blob));
+        objectUrl = URL.createObjectURL(blob);
+        if (!cancelled) setBlobUrl(objectUrl);
       } catch {
         if (!cancelled) setBlobUrl(null);
       }
@@ -234,7 +283,7 @@ function ChromaKeyTossVideo({ src, chromaColor, similarity }: {
     fetchBlob();
     return () => {
       cancelled = true;
-      setBlobUrl(prev => { if (prev) URL.revokeObjectURL(prev); return null; });
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
   }, [src]);
 
@@ -316,7 +365,6 @@ function ChromaKeyTossVideo({ src, chromaColor, similarity }: {
         autoPlay
         muted
         playsInline
-        crossOrigin={blobUrl ? undefined : 'anonymous'}
         onError={() => setFallback(true)}
         style={{ position: 'absolute', width: 0, height: 0, opacity: 0, pointerEvents: 'none' }}
       />

@@ -229,7 +229,9 @@ export function TeamSquadView({
     }
 
     // Threshold for auction slots only (iconic players shown separately)
-    const iconicNotInAuction = iconicSlotsData.filter(p => !p.alreadyInTeam).length;
+    const iconicNotInAuction = reduceThresholdByIconPlayers
+      ? iconicSlotsData.filter(p => !p.alreadyInTeam).length
+      : 0;
     const effectiveThreshold = Math.max(
       (activeTeam.totalPlayerThreshold || teamPlayers.length) - iconicNotInAuction,
       teamPlayers.length,
@@ -251,7 +253,7 @@ export function TeamSquadView({
     }
 
     return slots;
-  }, [activeTeam, teamPlayers, iconicSlotsData]);
+  }, [activeTeam, teamPlayers, iconicSlotsData, reduceThresholdByIconPlayers]);
 
   const captainData = useMemo(() => {
     // Support multiple iconic players
@@ -300,7 +302,9 @@ export function TeamSquadView({
     });
   }, [activeTeam, allPlayers, teamPlayers]);
 
-  const iconicCount = activeTeam?.iconicPlayers?.length || (activeTeam?.captain ? 1 : 0);
+  const iconicCount = reduceThresholdByIconPlayers
+    ? (activeTeam?.iconicPlayers?.length || (activeTeam?.captain ? 1 : 0))
+    : 0;
   const squadTargetCount = Math.max(
     (activeTeam?.totalPlayerThreshold || teamPlayers.length) - iconicCount,
     teamPlayers.length,
@@ -615,7 +619,7 @@ export function TeamSquadView({
               {/* Show brand owners if available, otherwise show icon players */}
               {(() => {
                 const owners = teamOwners[activeTeam.id];
-                if (owners?.length) {
+                if (squadViewMode === 'owners' && owners?.length) {
                   return (
                     <div className="tsv-owners-panel">
                       <span className="tsv-captain-badge">BRAND OWNERS</span>

@@ -64,22 +64,59 @@ export default function ScoreOBSOverlayPage() {
 
   // Local overlay state (for keyboard-triggered overlays)
   const [localOverlay, setLocalOverlay] = useState<OverlayType>('none');
+  const localOverlayRef = useRef<OverlayType>('none');
   const [showAd, setShowAd] = useState(false);
   const adIndexRef = useRef(0);
   const questionIndexRef = useRef(0);
   const autoDismissRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const celebrationActiveRef = useRef(false);
+  const queuedOverlayRef = useRef<{ type: OverlayType; durationMs: number } | null>(null);
+  const overEndOverlayRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const configRef = useRef(config);
   configRef.current = config;
   const [matchStats, setMatchStats] = useState<MatchStatsSnapshot | null>(null);
   const [tournamentStats, setTournamentStats] = useState<TournamentStats | null>(null);
   const [innings, setInnings] = useState<Record<string, Innings>>({});
-  const [replayTrigger, setReplayTrigger] = useState<ReplayTrigger | null>(null);
+  const [, setReplayTrigger] = useState<ReplayTrigger | null>(null);
+  const [tickerVisible, setTickerVisible] = useState(false);
   const [allMatches, setAllMatches] = useState<Record<string, { setup: MatchSetup; final?: MatchScore }>>({});
   const [allTeams, setAllTeams] = useState<{ id: string; name: string; logoUrl?: string }[]>([]);
   const [inningsIntroPhase, setInningsIntroPhase] = useState<'batsmen' | 'bowler' | 'done'>('done');
   const inningsIntroShownRef = useRef(false);
   const [activeFieldPlacement, setActiveFieldPlacement] = useState<FieldPlacement | null>(null);
+  const [sponsorIntroPhase, setSponsorIntroPhase] = useState<'countdown' | 'lets_start' | 'done'>('done');
+  const [sponsorCountdown, setSponsorCountdown] = useState(3);
+  const sponsorIntroKeyRef = useRef<string | null>(null);
+  const preloadedUrlsRef = useRef(new Set<string>());
+
+  useEffect(() => {
+    localOverlayRef.current = localOverlay;
+  }, [localOverlay]);
+
+  // Auto-dismiss overlay after duration
+  const triggerOverlay = useCallback((type: OverlayType, durationMs = 5000) => {
+    const celebrationTypes: OverlayType[] = ['boundary_four', 'boundary_six', 'wicket', 'duck_out', 'hat_trick'];
+    const isCelebration = celebrationTypes.includes(type);
+
+    // Never overwrite an active celebration with a stats overlay
+    if (!isCelebration && celebrationActiveRef.current) {
+      queuedOverlayRef.current = { type, durationMs };
+      return;
+    }
+
+    setLocalOverlay(type);
+    if (autoDismissRef.current) clearTimeout(autoDismissRef.current);
+    if (isCelebration) celebrationActiveRef.current = true;
+
+    if (type !== 'none' && type !== 'full_scorecard') {
+      autoDismissRef.current = setTimeout(() => {
+        setLocalOverlay('none');
+        if (isCelebration) {
+          celebrationActiveRef.current = false;
+        }
+      }, durationMs);
+    }
+  }, []);
 
   // Get matchId from URL params
   useEffect(() => {
@@ -259,7 +296,7 @@ export default function ScoreOBSOverlayPage() {
     }
   }, [match, rawLineups]);
 
-  // Preload animation assets (video/image) to eliminate latency on trigger
+  // Preload animation assets (video/image) and key logos to eliminate latency
   useEffect(() => {
     const urls: string[] = [];
     if (config.fourAnimation?.mediaUrl) urls.push(config.fourAnimation.mediaUrl);
@@ -270,9 +307,46 @@ export default function ScoreOBSOverlayPage() {
     if (config.duckOutImageUrl) urls.push(config.duckOutImageUrl);
     if (config.hatTrickImageUrl) urls.push(config.hatTrickImageUrl);
     if (config.wicketImageUrl) urls.push(config.wicketImageUrl);
+    if (config.tossConfig?.headsVideoUrl) urls.push(config.tossConfig.headsVideoUrl);
+    if (config.tossConfig?.tailsVideoUrl) urls.push(config.tossConfig.tailsVideoUrl);
+    if (config.tournamentLogo) urls.push(config.tournamentLogo);
+    if (config.broadcastPartnerLogo) urls.push(config.broadcastPartnerLogo);
+    if (config.titleSponsorLogo) urls.push(config.titleSponsorLogo);
+    if (match?.teamA.logoUrl) urls.push(match.teamA.logoUrl);
+    if (match?.teamB.logoUrl) urls.push(match.teamB.logoUrl);
+    allTeams.forEach(team => { if (team.logoUrl) urls.push(team.logoUrl); });
 
+    Object.values(playerImages).forEach(url => { if (url) urls.push(url); });
+    [lineups.teamA, lineups.teamB].forEach(l => {
+      l?.players?.forEach(p => { if (p.imageUrl) urls.push(p.imageUrl); });
+    });
+
+    const collectStatImages = (entries?: { imageUrl?: string }[]) => {
+      entries?.forEach(p => { if (p.imageUrl) urls.push(p.imageUrl); });
+    };
+    if (matchStats) {
+      collectStatImages(matchStats.topRunScorers);
+      collectStatImages(matchStats.topWicketTakers);
+      collectStatImages(matchStats.topFours);
+      collectStatImages(matchStats.topSixes);
+      collectStatImages(matchStats.topStrikeRates);
+      collectStatImages(matchStats.topDotBowlers);
+      collectStatImages(matchStats.mvpPoints);
+    }
+    if (tournamentStats) {
+      if (tournamentStats.orangeCap?.imageUrl) urls.push(tournamentStats.orangeCap.imageUrl);
+      if (tournamentStats.purpleCap?.imageUrl) urls.push(tournamentStats.purpleCap.imageUrl);
+      collectStatImages(tournamentStats.topRunScorers);
+      collectStatImages(tournamentStats.topWicketTakers);
+      collectStatImages(tournamentStats.topSixHitters);
+      collectStatImages(tournamentStats.topFourHitters);
+      collectStatImages(tournamentStats.topStrikeRates);
+    }
+
+    const seen = preloadedUrlsRef.current;
     urls.forEach(url => {
-      if (!url) return;
+      if (!url || seen.has(url)) return;
+      seen.add(url);
       const ext = url.split('.').pop()?.toLowerCase() || '';
       if (['mp4', 'webm', 'mov'].includes(ext)) {
         // Preload video by creating a hidden element and loading metadata+data
@@ -287,7 +361,7 @@ export default function ScoreOBSOverlayPage() {
         img.src = url;
       }
     });
-  }, [config]);
+  }, [config, match, allTeams, playerImages, lineups, matchStats, tournamentStats]);
 
   // Innings start intro sequence — show batsmen then bowler when live first appears
   useEffect(() => {
@@ -299,17 +373,28 @@ export default function ScoreOBSOverlayPage() {
     return () => { clearTimeout(t1); clearTimeout(t2); };
   }, [live]);
 
-  // Auto-dismiss overlay after duration
-  const triggerOverlay = useCallback((type: OverlayType, durationMs = 5000) => {
-    // Never overwrite an active celebration with a stats overlay
-    const celebrationTypes: OverlayType[] = ['boundary_four', 'boundary_six', 'wicket', 'duck_out', 'hat_trick'];
-    if (!celebrationTypes.includes(type) && celebrationActiveRef.current) return;
-    setLocalOverlay(type);
-    if (autoDismissRef.current) clearTimeout(autoDismissRef.current);
-    if (type !== 'none' && type !== 'full_scorecard') {
-      autoDismissRef.current = setTimeout(() => setLocalOverlay('none'), durationMs);
+  useEffect(() => {
+    if (!matchId || !config.titleSponsorLogo || live) {
+      setSponsorIntroPhase('done');
+      return;
     }
-  }, []);
+
+    const introKey = `${matchId}:${config.titleSponsorLogo}`;
+    if (sponsorIntroKeyRef.current === introKey) return;
+    sponsorIntroKeyRef.current = introKey;
+
+    setSponsorCountdown(3);
+    setSponsorIntroPhase('countdown');
+
+    const timers: Array<ReturnType<typeof setTimeout>> = [];
+    [3, 2, 1].forEach((value, index) => {
+      timers.push(setTimeout(() => setSponsorCountdown(value), index * 1000));
+    });
+    timers.push(setTimeout(() => setSponsorIntroPhase('lets_start'), 3000));
+    timers.push(setTimeout(() => setSponsorIntroPhase('done'), 4500));
+
+    return () => timers.forEach(clearTimeout);
+  }, [matchId, config.titleSponsorLogo, live]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -335,6 +420,16 @@ export default function ScoreOBSOverlayPage() {
     return () => window.removeEventListener('keydown', handleKey);
   }, [triggerOverlay, config]);
 
+  // Flush any queued overlay once celebrations are done
+  useEffect(() => {
+    if (localOverlay !== 'none') return;
+    if (celebrationActiveRef.current) return;
+    if (!queuedOverlayRef.current) return;
+    const queued = queuedOverlayRef.current;
+    queuedOverlayRef.current = null;
+    triggerOverlay(queued.type, queued.durationMs);
+  }, [localOverlay, triggerOverlay]);
+
   // Auto-show stats ONLY on contextual events: over end, new bowler, new batsman
   const prevLiveRef = useRef<LiveScore | null>(null);
   useEffect(() => {
@@ -343,6 +438,11 @@ export default function ScoreOBSOverlayPage() {
     prevLiveRef.current = live;
     if (!prev) return;
 
+    if (overEndOverlayRef.current) {
+      clearTimeout(overEndOverlayRef.current);
+      overEndOverlayRef.current = null;
+    }
+
     // Don't interrupt celebration animations or manually triggered overlays
     const celebrationTypes: OverlayType[] = ['boundary_four', 'boundary_six', 'wicket', 'duck_out', 'hat_trick'];
     const manualOverlays: OverlayType[] = ['field_placement', 'full_scorecard', 'match_intro', 'points_table', 'match_summary', 'live_question'];
@@ -350,7 +450,26 @@ export default function ScoreOBSOverlayPage() {
 
     // Over just completed → show bowler stats briefly
     if (live.overs > prev.overs && (live.currentOverBalls?.length || 0) === 0) {
-      triggerOverlay('bowler', 5000);
+      const lastCompleted = live.lastCompletedOverBalls || [];
+      const lastBall = lastCompleted[lastCompleted.length - 1];
+      const parsedRuns = lastBall ? Number.parseInt(lastBall, 10) : NaN;
+      const cfg = configRef.current;
+      const boundaryDelay = parsedRuns === 6
+        ? (cfg.sixAnimation?.durationMs || 4000)
+        : parsedRuns === 4
+          ? (cfg.fourAnimation?.durationMs || 3000)
+          : 0;
+
+      const showBowlerOverlay = () => {
+        if (manualOverlays.includes(localOverlayRef.current)) return;
+        triggerOverlay('bowler', 5000);
+      };
+
+      if (boundaryDelay > 0) {
+        overEndOverlayRef.current = setTimeout(showBowlerOverlay, boundaryDelay);
+      } else {
+        showBowlerOverlay();
+      }
       return;
     }
 
@@ -425,6 +544,25 @@ export default function ScoreOBSOverlayPage() {
             {config.broadcastPartnerName && <span className="score-obs__partner-name">{config.broadcastPartnerName}</span>}
           </div>
         </motion.div>
+        <AnimatePresence>
+          {config.titleSponsorLogo && sponsorIntroPhase !== 'done' && (
+            <motion.div
+              className="score-obs__sponsor-intro"
+              initial={{ opacity: 0, scale: 0.92 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.92 }}
+              transition={{ type: 'spring', stiffness: 160, damping: 20 }}
+            >
+              <img src={config.titleSponsorLogo} alt="" className="score-obs__sponsor-intro-logo" />
+              {sponsorIntroPhase === 'countdown' && (
+                <div className="score-obs__sponsor-intro-countdown">{sponsorCountdown}</div>
+              )}
+              {sponsorIntroPhase === 'lets_start' && (
+                <div className="score-obs__sponsor-intro-start">LET'S START</div>
+              )}
+            </motion.div>
+          )}
+        </AnimatePresence>
         <MatchIntroOverlay match={match} config={config} lineups={lineups} playerImages={playerImages} impactPlayers={preMatch?.impactPlayers} />
         {/* Show tournament overlays even without live score */}
         <AnimatePresence mode="wait">
@@ -442,16 +580,16 @@ export default function ScoreOBSOverlayPage() {
               imageUrl={tournamentStats.purpleCap?.imageUrl} />
           )}
           {localOverlay === 'tournament_fours' && tournamentStats && (
-            <StatsListOverlay title="MOST FOURS — TOURNAMENT" items={tournamentStats.topFourHitters?.map(p => ({ name: p.playerName, value: String(p.fours), team: p.teamName, imageUrl: p.imageUrl })) || []} playerImages={playerImages} />
+            <StatsListOverlay title="MOST FOURS — TOURNAMENT" items={tournamentStats.topFourHitters?.map(p => ({ name: p.playerName, value: String(p.fours), team: p.teamName, imageUrl: p.imageUrl, playerId: p.playerId })) || []} playerImages={playerImages} />
           )}
           {localOverlay === 'tournament_sixes' && tournamentStats && (
-            <StatsListOverlay title="MOST SIXES — TOURNAMENT" items={tournamentStats.topSixHitters?.map(p => ({ name: p.playerName, value: String(p.sixes), team: p.teamName, imageUrl: p.imageUrl })) || []} playerImages={playerImages} />
+            <StatsListOverlay title="MOST SIXES — TOURNAMENT" items={tournamentStats.topSixHitters?.map(p => ({ name: p.playerName, value: String(p.sixes), team: p.teamName, imageUrl: p.imageUrl, playerId: p.playerId })) || []} playerImages={playerImages} />
           )}
           {localOverlay === 'tournament_sr' && tournamentStats && (
-            <StatsListOverlay title="BEST STRIKE RATE — TOURNAMENT" items={tournamentStats.topStrikeRates?.map(p => ({ name: p.playerName, value: String(p.strikeRate), team: p.teamName, imageUrl: p.imageUrl })) || []} playerImages={playerImages} />
+            <StatsListOverlay title="BEST STRIKE RATE — TOURNAMENT" items={tournamentStats.topStrikeRates?.map(p => ({ name: p.playerName, value: String(p.strikeRate), team: p.teamName, imageUrl: p.imageUrl, playerId: p.playerId })) || []} playerImages={playerImages} />
           )}
           {localOverlay === 'tournament_mvp' && tournamentStats && (
-            <StatsListOverlay title="MVP — TOURNAMENT" items={tournamentStats.mvpLeaderboard?.slice(0, 5).map(p => ({ name: p.playerName, value: String(p.total.toFixed(1)), team: p.teamId })) || []} playerImages={playerImages} />
+            <StatsListOverlay title="MVP — TOURNAMENT" items={tournamentStats.mvpLeaderboard?.slice(0, 5).map(p => ({ name: p.playerName, value: String(p.total.toFixed(1)), team: p.teamId, playerId: p.playerId })) || []} playerImages={playerImages} />
           )}
           {/* Animation overlays work even before innings starts */}
           {localOverlay === 'boundary_four' && (
@@ -540,11 +678,12 @@ export default function ScoreOBSOverlayPage() {
           config={config}
           lineups={lineups}
           playerImages={playerImages}
+          onTickerVisibleChange={setTickerVisible}
         />
       )}
 
       {/* ── Title Sponsor Strip ────────────────────────────────────── */}
-      {config.titleSponsorLogo && (
+      {config.titleSponsorLogo && tickerVisible && (
         <div className="score-obs__sponsor-strip">
           <img src={config.titleSponsorLogo} alt="" className="score-obs__sponsor-logo" />
           {config.titleSponsorName && <span className="score-obs__sponsor-name">{config.titleSponsorName}</span>}
@@ -596,7 +735,6 @@ export default function ScoreOBSOverlayPage() {
       </AnimatePresence>
 
       {/* ── Celebration Animation Overlays (immediate, no wait) ─── */}
-      {effectiveOverlay !== 'none' && console.log('[OBS-Overlay] Render check:', effectiveOverlay, 'enableBoundary:', config.enableBoundaryAnimation, 'enableSixer:', config.enableSixerAnimation, 'fourAnim:', config.fourAnimation, 'sixAnim:', config.sixAnimation)}
       <AnimatePresence>
         {effectiveOverlay === 'boundary_four' && (
           <BoundaryOverlay key="overlay-four" type="four" animConfig={config.fourAnimation} />
@@ -639,6 +777,7 @@ export default function ScoreOBSOverlayPage() {
               name: p.playerName,
               value: String(p.fours),
               imageUrl: p.imageUrl,
+              playerId: p.playerId,
             })) || []}
             playerImages={playerImages}
           />
@@ -650,6 +789,7 @@ export default function ScoreOBSOverlayPage() {
               name: p.playerName,
               value: String(p.sixes),
               imageUrl: p.imageUrl,
+              playerId: p.playerId,
             })) || []}
             playerImages={playerImages}
           />
@@ -661,6 +801,7 @@ export default function ScoreOBSOverlayPage() {
               name: p.playerName,
               value: String(p.strikeRate),
               imageUrl: p.imageUrl,
+              playerId: p.playerId,
             })) || []}
             playerImages={playerImages}
           />
@@ -672,9 +813,11 @@ export default function ScoreOBSOverlayPage() {
               name: p.playerName,
               value: String(p.totalPoints.toFixed(1)),
               imageUrl: p.imageUrl,
+              playerId: p.playerId,
             })) || matchStats.mvpLeaderboard?.slice(0, 5).map(p => ({
               name: p.playerName,
               value: String(p.total.toFixed(1)),
+              playerId: p.playerId,
             })) || []}
             playerImages={playerImages}
           />
@@ -687,6 +830,7 @@ export default function ScoreOBSOverlayPage() {
               value: String(p.fours),
               team: p.teamName,
               imageUrl: p.imageUrl,
+              playerId: p.playerId,
             })) || []}
             playerImages={playerImages}
           />
@@ -699,6 +843,7 @@ export default function ScoreOBSOverlayPage() {
               value: String(p.sixes),
               team: p.teamName,
               imageUrl: p.imageUrl,
+              playerId: p.playerId,
             })) || []}
             playerImages={playerImages}
           />
@@ -711,6 +856,7 @@ export default function ScoreOBSOverlayPage() {
               value: String(p.strikeRate),
               team: p.teamName,
               imageUrl: p.imageUrl,
+              playerId: p.playerId,
             })) || []}
             playerImages={playerImages}
           />
@@ -721,6 +867,7 @@ export default function ScoreOBSOverlayPage() {
             items={tournamentStats.mvpLeaderboard?.slice(0, 5).map(p => ({
               name: p.playerName,
               value: String(p.total.toFixed(1)),
+              playerId: p.playerId,
             })) || []}
             playerImages={playerImages}
           />
@@ -785,15 +932,6 @@ export default function ScoreOBSOverlayPage() {
 // ═══════════════════════════════════════════════════════════════════════════════
 // OVERLAY SUB-COMPONENTS
 // ═══════════════════════════════════════════════════════════════════════════════
-
-function getBallClass(ball: string): string {
-  if (ball === 'W' || ball.includes('·W')) return 'score-obs__ball--wicket';
-  if (ball === '4') return 'score-obs__ball--four';
-  if (ball === '6') return 'score-obs__ball--six';
-  if (ball === '0') return 'score-obs__ball--dot';
-  if (ball === 'B' || ball === 'LB' || ball.includes('WD') || ball.includes('NB')) return 'score-obs__ball--extra';
-  return '';
-}
 
 function BatsmanStatsOverlay({ batsman, playerImages, lineups }: {
   batsman: { playerId: string; playerName: string; runs: number; balls: number; fours: number; sixes: number; strikeRate: number; isOnStrike: boolean };
@@ -1571,11 +1709,17 @@ function QuestionOverlay({ question }: { question: LiveQuestion }) {
 
 function StatsListOverlay({ title, items, playerImages }: {
   title: string;
-  items: { name: string; value: string; team?: string; imageUrl?: string }[];
+  items: { name: string; value: string; team?: string; imageUrl?: string; playerId?: string }[];
   playerImages?: Record<string, string>;
 }) {
   const topPlayer = items[0];
-  const topPlayerImg = topPlayer?.imageUrl || (playerImages && topPlayer ? playerImages[topPlayer.name] : undefined);
+  const getItemImage = (item?: { imageUrl?: string; playerId?: string }) => {
+    if (!item) return undefined;
+    if (item.imageUrl) return item.imageUrl;
+    if (playerImages && item.playerId) return playerImages[item.playerId];
+    return undefined;
+  };
+  const topPlayerImg = getItemImage(topPlayer);
   // Determine color theme from title
   const isOrange = title.toLowerCase().includes('run') || title.toLowerCase().includes('four') || title.toLowerCase().includes('orange');
   const isPurple = title.toLowerCase().includes('wicket') || title.toLowerCase().includes('purple') || title.toLowerCase().includes('dot');
@@ -1625,6 +1769,19 @@ function StatsListOverlay({ title, items, playerImages }: {
               >
                 <div className="score-obs__lb-row-left">
                   <span className="score-obs__lb-rank">{i + 1}</span>
+                  {i === 0 && (
+                    getItemImage(item)
+                      ? (
+                        <div className="score-obs__lb-player-thumb">
+                          <img src={getItemImage(item)} alt={item.name} loading="eager" />
+                        </div>
+                      )
+                      : (
+                        <div className="score-obs__lb-player-thumb score-obs__lb-player-thumb--placeholder">
+                          {item.name?.charAt(0) || '-'}
+                        </div>
+                      )
+                  )}
                   <div className="score-obs__lb-player-info">
                     <span className="score-obs__lb-player-name">{item.name}</span>
                     {item.team && <span className="score-obs__lb-player-team">{item.team}</span>}
@@ -1639,7 +1796,7 @@ function StatsListOverlay({ title, items, playerImages }: {
         {/* Right: Player image spotlight */}
         {topPlayerImg && (
           <div className="score-obs__lb-player-spotlight" style={{ background: `linear-gradient(180deg, ${accentColor}10, ${accentColor}30)` }}>
-            <img src={topPlayerImg} alt={topPlayer?.name || ''} className="score-obs__lb-player-img" />
+            <img src={topPlayerImg} alt={topPlayer?.name || ''} className="score-obs__lb-player-img" loading="eager" />
             <div className="score-obs__lb-spotlight-gradient" style={{ background: `linear-gradient(180deg, transparent 40%, ${accentColor}40 100%)` }} />
           </div>
         )}
@@ -1718,7 +1875,7 @@ function MatchSummaryOverlay({ matchStats, match, innings }: {
 
               {/* Top Bowlers (from bowling team) */}
               <div className="score-obs__ms-stats-col">
-                {inn1.bowlers.sort((a, b) => b.wickets - a.wickets || a.economy - b.economy).slice(0, 4).map(b => (
+                {inn1.bowlers.filter(b => b.wickets > 0).sort((a, b) => b.wickets - a.wickets || a.economy - b.economy).slice(0, 4).map(b => (
                   <div key={b.playerId} className="score-obs__ms-stat-row">
                     <span className="score-obs__ms-player-name">{b.playerName.toUpperCase()}</span>
                     <div className="score-obs__ms-player-figures">
@@ -1844,7 +2001,7 @@ function AwardOverlay({ title, subtitle, color, playerName, value, imageUrl }: {
 
 // ── Ticker With Intro Animation ──
 
-function TickerWithIntro({ live, match, battingTeam, bowlingTeam, config, lineups, playerImages }: {
+function TickerWithIntro({ live, match, battingTeam, bowlingTeam, config, lineups, playerImages, onTickerVisibleChange }: {
   live: LiveScore;
   match: MatchSetup;
   battingTeam: string;
@@ -1852,12 +2009,17 @@ function TickerWithIntro({ live, match, battingTeam, bowlingTeam, config, lineup
   config: ScoringOverlayConfig;
   lineups: { teamA: MatchLineup | null; teamB: MatchLineup | null };
   playerImages: Record<string, string>;
+  onTickerVisibleChange?: (visible: boolean) => void;
 }) {
   // Skip intro if match is already in progress (balls bowled) — only show intro on fresh match start
   const matchAlreadyStarted = live.overs > 0 || (live.currentOverBalls?.length || 0) > 0;
   const [introPhase, setIntroPhase] = useState<'venue' | 'logos' | 'reveal' | 'done'>(matchAlreadyStarted ? 'done' : 'venue');
   const ticker = config.tickerConfig;
   const position = ticker?.position || 'bottom';
+
+  useEffect(() => {
+    onTickerVisibleChange?.(introPhase === 'done');
+  }, [introPhase, onTickerVisibleChange]);
 
   useEffect(() => {
     if (matchAlreadyStarted) return; // No intro needed
@@ -1983,6 +2145,21 @@ function ScorecardTicker({ live, match, battingTeam, bowlingTeam, config, lineup
   const position = ticker?.position || 'bottom';
   const design = ticker?.design || 'glass';
   const dotBallSymbol = ticker?.dotBallSymbol || '0';
+  const infoMode = ticker?.infoMode || 'batsmen';
+  const hasTarget = live.currentInnings === 2 && live.target !== undefined;
+  const resolvedInfoMode = infoMode === 'target' && !hasTarget ? 'batsmen' : infoMode;
+  const ballsBowled = Math.floor(live.overs) * 6 + Math.round((live.overs % 1) * 10);
+  const ballsRemaining = Math.max(0, match.maxOvers * 6 - ballsBowled);
+  const runsNeeded = live.target !== undefined ? Math.max(0, live.target - live.runs) : 0;
+  const projectedScore = ballsBowled > 0
+    ? Math.round((live.runs / ballsBowled) * match.maxOvers * 6)
+    : 0;
+  const projectedText = ballsBowled > 0 ? String(projectedScore) : '--';
+  const overIndex = Math.floor(live.overs);
+  const runRateText = Number.isFinite(live.runRate) ? live.runRate.toFixed(2) : '0.00';
+  const requiredRateText = live.requiredRate !== undefined && Number.isFinite(live.requiredRate)
+    ? live.requiredRate.toFixed(2)
+    : undefined;
 
   const battingLogo = live.battingTeamId === match.teamA.id ? match.teamA.logoUrl : match.teamB.logoUrl;
   const bowlingLogo = live.bowlingTeamId === match.teamA.id ? match.teamA.logoUrl : match.teamB.logoUrl;
@@ -1993,7 +2170,61 @@ function ScorecardTicker({ live, match, battingTeam, bowlingTeam, config, lineup
     l?.players?.forEach(p => { if (p.imageUrl) playerImageMap[p.playerId] = p.imageUrl; });
   });
 
-  const designClass = design === 'premium' ? ' score-ticker--premium' : '';
+  const renderInfoPanel = (variant: 'glass' | 'premium') => {
+    const panelClass = [
+      'score-ticker__info-panel',
+      variant === 'premium' ? 'score-ticker__info-panel--premium' : '',
+      resolvedInfoMode === 'target' ? 'score-ticker__info-panel--target' : 'score-ticker__info-panel--projection',
+    ].filter(Boolean).join(' ');
+
+    if (resolvedInfoMode === 'target') {
+      return (
+        <div className={panelClass}>
+          <div className="score-ticker__info-title">TARGET</div>
+          <div className="score-ticker__target-info">
+            Need {runsNeeded} off {ballsRemaining}
+          </div>
+          {requiredRateText && (
+            <div className="score-ticker__info-sub">RRR {requiredRateText}</div>
+          )}
+        </div>
+      );
+    }
+
+    if (resolvedInfoMode === 'projection') {
+      return (
+        <div className={panelClass}>
+          <div className="score-ticker__info-title">PROJECTION</div>
+          <div className="score-ticker__info-row">
+            <span className="score-ticker__info-label">CRR</span>
+            <motion.span
+              key={`rr-${overIndex}`}
+              className="score-ticker__info-value"
+              initial={{ y: 6, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              transition={{ duration: 0.25 }}
+            >
+              {runRateText}
+            </motion.span>
+          </div>
+          <div className="score-ticker__info-row">
+            <span className="score-ticker__info-label">PROJ</span>
+            <motion.span
+              key={`proj-${overIndex}`}
+              className="score-ticker__info-value score-ticker__info-value--accent"
+              initial={{ y: 6, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              transition={{ duration: 0.25 }}
+            >
+              {projectedText}
+            </motion.span>
+          </div>
+        </div>
+      );
+    }
+
+    return null;
+  };
 
   // ── Premium Design ──
   if (design === 'premium') {
@@ -2024,26 +2255,39 @@ function ScorecardTicker({ live, match, battingTeam, bowlingTeam, config, lineup
         </div>
 
         {/* Middle: Batsmen with full-height transparent PNG portraits */}
-        <div className="score-ticker__prem-batsmen">
-          {(live.currentBatsmen || []).map(b => (
-            <div key={b.playerId} className="score-ticker__prem-bat">
-              <div className="score-ticker__prem-bat-portrait">
-                {playerImageMap[b.playerId]
-                  ? <img src={playerImageMap[b.playerId]} alt={b.playerName} className="score-ticker__prem-bat-img" />
-                  : <div className="score-ticker__prem-bat-placeholder">{b.playerName.charAt(0)}</div>
-                }
-              </div>
-              <div className="score-ticker__prem-bat-info">
-                <span className="score-ticker__prem-bat-name">{b.playerName.split(' ').slice(0, 2).join(' ').toUpperCase()}</span>
-                <div className="score-ticker__prem-bat-stats">
-                  <span className="score-ticker__prem-bat-runs">{b.runs}</span>
-                  <span className="score-ticker__prem-bat-balls">{b.balls}</span>
-                  {b.isOnStrike && <span className="score-ticker__prem-bat-icon">🏏</span>}
+        {resolvedInfoMode === 'batsmen' ? (
+          <div className="score-ticker__prem-batsmen">
+            {(live.currentBatsmen || []).map(b => {
+              // Check if this player is an impact sub in either lineup
+              const isImpactInTeamA = lineups.teamA?.players?.find(p => p.playerId === b.playerId && p.isImpactSub);
+              const isImpactInTeamB = lineups.teamB?.players?.find(p => p.playerId === b.playerId && p.isImpactSub);
+              const isImpactSub = isImpactInTeamA || isImpactInTeamB;
+              return (
+                <div key={b.playerId} className="score-ticker__prem-bat" style={{ position: 'relative' }}>
+                  <div className="score-ticker__prem-bat-portrait">
+                    {playerImageMap[b.playerId]
+                      ? <img src={playerImageMap[b.playerId]} alt={b.playerName} className="score-ticker__prem-bat-img" />
+                      : <div className="score-ticker__prem-bat-placeholder">{b.playerName.charAt(0)}</div>
+                    }
+                  </div>
+                  <div className="score-ticker__prem-bat-info">
+                    <span className="score-ticker__prem-bat-name">{b.playerName.split(' ').slice(0, 2).join(' ').toUpperCase()}</span>
+                    <div className="score-ticker__prem-bat-stats">
+                      <span className="score-ticker__prem-bat-runs">{b.runs}</span>
+                      <span className="score-ticker__prem-bat-balls">{b.balls}</span>
+                      {b.isOnStrike && <span className="score-ticker__prem-bat-icon">🏏</span>}
+                    </div>
+                  </div>
+                  {isImpactSub && (
+                    <div className="score-ticker__impact-badge" title="Impact Substitute">⭐</div>
+                  )}
                 </div>
-              </div>
-            </div>
-          ))}
-        </div>
+              );
+            })}
+          </div>
+        ) : (
+          renderInfoPanel('premium')
+        )}
 
         {/* Right: Gold panel with bowler image + stats + over balls */}
         <div className="score-ticker__gold-panel">
@@ -2067,7 +2311,8 @@ function ScorecardTicker({ live, match, battingTeam, bowlingTeam, config, lineup
                 const ballsToShow = (live.currentOverBalls || []).length > 0
                   ? live.currentOverBalls
                   : (live.lastCompletedOverBalls || []);
-                return Array.from({ length: 6 }).map((_, i) => {
+                const ballCount = Math.max(6, ballsToShow.length);
+                return Array.from({ length: ballCount }).map((_, i) => {
                   const ball = ballsToShow[i];
                   return (
                     <span
@@ -2102,12 +2347,6 @@ function ScorecardTicker({ live, match, battingTeam, bowlingTeam, config, lineup
           <div className="score-ticker__powerplay">PP</div>
         )}
 
-        {/* Target chase info */}
-        {live.target !== undefined && live.currentInnings === 2 && (
-          <div className="score-ticker__target-info">
-            Need {live.target - live.runs} off {Math.max(0, (match.maxOvers * 6 - Math.floor(live.overs) * 6 - Math.round((live.overs % 1) * 10)))}
-          </div>
-        )}
       </motion.div>
     );
   }
@@ -2129,20 +2368,24 @@ function ScorecardTicker({ live, match, battingTeam, bowlingTeam, config, lineup
       </div>
 
       {/* Batsmen stats */}
-      <div className="score-ticker__batsmen">
-        {(live.currentBatsmen || []).map(b => (
-          <div key={b.playerId} className={`score-ticker__bat ${b.isOnStrike ? 'score-ticker__bat--strike' : ''}`}>
-            <div className="score-ticker__bat-indicator">
-              {b.isOnStrike && <span className="score-ticker__strike-icon" />}
+      {resolvedInfoMode === 'batsmen' ? (
+        <div className="score-ticker__batsmen">
+          {(live.currentBatsmen || []).map(b => (
+            <div key={b.playerId} className={`score-ticker__bat ${b.isOnStrike ? 'score-ticker__bat--strike' : ''}`}>
+              <div className="score-ticker__bat-indicator">
+                {b.isOnStrike && <span className="score-ticker__strike-icon" />}
+              </div>
+              <span className="score-ticker__bat-name">{b.playerName.split(' ').pop()?.toUpperCase()}</span>
+              <div className="score-ticker__bat-figures">
+                <span className="score-ticker__bat-runs">{b.runs}</span>
+                <span className="score-ticker__bat-balls">{b.balls}</span>
+              </div>
             </div>
-            <span className="score-ticker__bat-name">{b.playerName.split(' ').pop()?.toUpperCase()}</span>
-            <div className="score-ticker__bat-figures">
-              <span className="score-ticker__bat-runs">{b.runs}</span>
-              <span className="score-ticker__bat-balls">{b.balls}</span>
-            </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      ) : (
+        renderInfoPanel('glass')
+      )}
 
       {/* Center score pill */}
       <div className="score-ticker__center-pill">
@@ -2181,7 +2424,8 @@ function ScorecardTicker({ live, match, battingTeam, bowlingTeam, config, lineup
             const ballsToShow = (live.currentOverBalls || []).length > 0
               ? live.currentOverBalls
               : (live.lastCompletedOverBalls || []);
-            return Array.from({ length: 6 }).map((_, i) => {
+            const ballCount = Math.max(6, ballsToShow.length);
+            return Array.from({ length: ballCount }).map((_, i) => {
               const ball = ballsToShow[i];
               return (
                 <span
@@ -2215,12 +2459,6 @@ function ScorecardTicker({ live, match, battingTeam, bowlingTeam, config, lineup
         <div className="score-ticker__powerplay">PP</div>
       )}
 
-      {/* Target chase info */}
-      {live.target !== undefined && live.currentInnings === 2 && (
-        <div className="score-ticker__target-info">
-          Need {live.target - live.runs} off {Math.max(0, (match.maxOvers * 6 - Math.floor(live.overs) * 6 - Math.round((live.overs % 1) * 10)))}
-        </div>
-      )}
     </motion.div>
   );
 }
@@ -2331,16 +2569,18 @@ function PointsTableOverlay({ allMatches, allTeams }: {
 function MatchIntroOverlay({ match, config, lineups, playerImages, impactPlayers }: {
   match: MatchSetup;
   config: ScoringOverlayConfig;
-  lineups: { teamA: MatchLineup | null; teamB: MatchLineup | null };
-  playerImages: Record<string, string>;
+  lineups?: { teamA: MatchLineup | null; teamB: MatchLineup | null };
+  playerImages?: Record<string, string>;
   impactPlayers?: { teamA: ImpactPlayer[]; teamB: ImpactPlayer[] };
 }) {
+  const safeLineups = lineups || { teamA: null, teamB: null };
+  const safeImpactPlayers = impactPlayers || { teamA: [], teamB: [] };
   const [phase, setPhase] = useState(0); // 0=matchup, 1=teamA, 2=teamB, 3=ready
   const lineupsLoadedRef = useRef(false);
 
   useEffect(() => {
-    const hasTeamA = lineups.teamA && lineups.teamA.players.length > 0;
-    const hasTeamB = lineups.teamB && lineups.teamB.players.length > 0;
+    const hasTeamA = safeLineups.teamA && safeLineups.teamA.players.length > 0;
+    const hasTeamB = safeLineups.teamB && safeLineups.teamB.players.length > 0;
 
     // If lineups arrived late, restart the sequence from the beginning
     if ((hasTeamA || hasTeamB) && !lineupsLoadedRef.current) {
@@ -2365,11 +2605,11 @@ function MatchIntroOverlay({ match, config, lineups, playerImages, impactPlayers
       timers.push(setTimeout(() => setPhase(3), 6000));
     }
     return () => timers.forEach(clearTimeout);
-  }, [lineups.teamA, lineups.teamB]);
+  }, [safeLineups.teamA, safeLineups.teamB]);
 
   // Build player image map
-  const imgMap: Record<string, string> = { ...playerImages };
-  [lineups.teamA, lineups.teamB].forEach(l => {
+  const imgMap: Record<string, string> = { ...(playerImages || {}) };
+  [safeLineups.teamA, safeLineups.teamB].forEach(l => {
     l?.players?.forEach(p => { if (p.imageUrl) imgMap[p.playerId] = p.imageUrl; });
   });
 
@@ -2407,7 +2647,7 @@ function MatchIntroOverlay({ match, config, lineups, playerImages, impactPlayers
           </motion.div>
         )}
 
-        {phase === 1 && lineups.teamA && (
+        {phase === 1 && safeLineups.teamA && (
           <motion.div
             key="teamA"
             className="score-obs__squad-reveal"
@@ -2435,7 +2675,7 @@ function MatchIntroOverlay({ match, config, lineups, playerImages, impactPlayers
               <div className="score-obs__squad-grid-container">
                 {/* Top Row (up to 6) */}
                 <div className="score-obs__squad-grid score-obs__squad-grid--top">
-                  {lineups.teamA.players.slice(0, 6).map((p, i) => (
+                  {safeLineups.teamA.players.slice(0, 6).map((p, i) => (
                     <motion.div
                       key={p.playerId}
                       className={`score-obs__squad-card ${p.isCaptain ? 'score-obs__squad-card--captain' : ''}`}
@@ -2461,9 +2701,9 @@ function MatchIntroOverlay({ match, config, lineups, playerImages, impactPlayers
                   ))}
                 </div>
                 {/* Bottom Row (remaining, centered) */}
-                {lineups.teamA.players.length > 6 && (
+                {safeLineups.teamA.players.length > 6 && (
                   <div className="score-obs__squad-grid score-obs__squad-grid--bottom">
-                    {lineups.teamA.players.slice(6, 11).map((p, i) => (
+                    {safeLineups.teamA.players.slice(6, 11).map((p, i) => (
                       <motion.div
                         key={p.playerId}
                         className={`score-obs__squad-card ${p.isCaptain ? 'score-obs__squad-card--captain' : ''}`}
@@ -2492,7 +2732,7 @@ function MatchIntroOverlay({ match, config, lineups, playerImages, impactPlayers
               </div>
 
               {/* Impact Subs Panel */}
-              {impactPlayers?.teamA && impactPlayers.teamA.length > 0 && (
+              {safeImpactPlayers.teamA.length > 0 && (
                 <motion.div
                   className="score-obs__impact-subs-panel"
                   initial={{ x: 40, opacity: 0 }}
@@ -2503,7 +2743,7 @@ function MatchIntroOverlay({ match, config, lineups, playerImages, impactPlayers
                     <span>⚡ IMPACT SUBS</span>
                   </div>
                   <div className="score-obs__impact-subs-list">
-                    {impactPlayers.teamA.map((p, i) => (
+                    {safeImpactPlayers.teamA.map((p, i) => (
                       <motion.div
                         key={p.playerId}
                         className="score-obs__impact-sub-item"
@@ -2530,7 +2770,7 @@ function MatchIntroOverlay({ match, config, lineups, playerImages, impactPlayers
           </motion.div>
         )}
 
-        {phase === 2 && lineups.teamB && (
+        {phase === 2 && safeLineups.teamB && (
           <motion.div
             key="teamB"
             className="score-obs__squad-reveal"
@@ -2558,7 +2798,7 @@ function MatchIntroOverlay({ match, config, lineups, playerImages, impactPlayers
               <div className="score-obs__squad-grid-container">
                 {/* Top Row (up to 6) */}
                 <div className="score-obs__squad-grid score-obs__squad-grid--top">
-                  {lineups.teamB.players.slice(0, 6).map((p, i) => (
+                  {safeLineups.teamB.players.slice(0, 6).map((p, i) => (
                     <motion.div
                       key={p.playerId}
                       className={`score-obs__squad-card ${p.isCaptain ? 'score-obs__squad-card--captain' : ''}`}
@@ -2584,9 +2824,9 @@ function MatchIntroOverlay({ match, config, lineups, playerImages, impactPlayers
                   ))}
                 </div>
                 {/* Bottom Row (remaining, centered) */}
-                {lineups.teamB.players.length > 6 && (
+                {safeLineups.teamB.players.length > 6 && (
                   <div className="score-obs__squad-grid score-obs__squad-grid--bottom">
-                    {lineups.teamB.players.slice(6, 11).map((p, i) => (
+                    {safeLineups.teamB.players.slice(6, 11).map((p, i) => (
                       <motion.div
                         key={p.playerId}
                         className={`score-obs__squad-card ${p.isCaptain ? 'score-obs__squad-card--captain' : ''}`}
@@ -2615,7 +2855,7 @@ function MatchIntroOverlay({ match, config, lineups, playerImages, impactPlayers
               </div>
 
               {/* Impact Subs Panel */}
-              {impactPlayers?.teamB && impactPlayers.teamB.length > 0 && (
+              {safeImpactPlayers.teamB.length > 0 && (
                 <motion.div
                   className="score-obs__impact-subs-panel"
                   initial={{ x: 40, opacity: 0 }}
@@ -2626,7 +2866,7 @@ function MatchIntroOverlay({ match, config, lineups, playerImages, impactPlayers
                     <span>⚡ IMPACT SUBS</span>
                   </div>
                   <div className="score-obs__impact-subs-list">
-                    {impactPlayers.teamB.map((p, i) => (
+                    {safeImpactPlayers.teamB.map((p, i) => (
                       <motion.div
                         key={p.playerId}
                         className="score-obs__impact-sub-item"

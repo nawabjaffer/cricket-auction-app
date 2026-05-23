@@ -5,12 +5,12 @@
 
 import { motion, AnimatePresence } from 'framer-motion';
 import { IoClose, IoTrophy } from 'react-icons/io5';
-import type { SoldPlayer, Team } from '../../types';
+import type { SoldPlayer } from '../../types';
 import { useCurrencySuffix } from '../../store';
 import './TopPicksOverlay.css';
 
 interface TopBuyEntry extends SoldPlayer {
-  team?: Team;
+  team?: { logoUrl?: string; name?: string };
 }
 
 interface TopPicksOverlayProps {

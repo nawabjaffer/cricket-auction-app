@@ -677,6 +677,7 @@ export interface TournamentAward {
 
 export type TickerMode = 'html' | 'png';
 export type TickerDesign = 'glass' | 'premium';
+export type TickerInfoMode = 'batsmen' | 'target' | 'projection';
 
 export interface TickerConfig {
   mode: TickerMode;
@@ -686,6 +687,7 @@ export interface TickerConfig {
   showBowlerOnRight?: boolean;
   animationSpeed?: number;
   dotBallSymbol?: string;      // custom emoji/symbol for dot balls (default '0')
+  infoMode?: TickerInfoMode;   // batsmen | target | projection
   // HTML/CSS mode
   customHTML?: string;
   customCSS?: string;

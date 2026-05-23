@@ -6,7 +6,7 @@
 import { ref, get, set, onValue, type Database } from 'firebase/database';
 import type {
   MatchStatsSnapshot, TournamentStats, PlayerMVPPoints, PlayerMatchStats,
-  MVPWeights, LiveScore, BallEvent, Innings, BatsmanInnings, BowlerInnings,
+  MVPWeights, Innings, BatsmanInnings, BowlerInnings,
   MatchSetup, PlayerCareerStats,
 } from '../../types/scoring';
 import { DEFAULT_MVP_WEIGHTS, createEmptyCareerStats } from '../../types/scoring';
@@ -58,7 +58,7 @@ export class StatsEngine {
       batting += stats.batting.fours * weights.fourBonus;
       batting += stats.batting.sixes * weights.sixBonus;
       // Strike rate bonus
-      if (stats.batting.balls >= 10 && stats.batting.strikeRate >= weights.srBonusThreshold) {
+      if (stats.batting.balls >= 4 && stats.batting.strikeRate >= weights.srBonusThreshold) {
         bonus += weights.srBonusPoints;
       }
       // Milestone bonuses
@@ -103,11 +103,14 @@ export class StatsEngine {
   computeMatchStats(
     matchId: string,
     innings: Innings[],
-    match: MatchSetup,
-    minBallsForSR = 10,
+    _match: MatchSetup,
+    lineups?: { teamA?: { players: Array<{ playerId: string; playerName: string }> }; teamB?: { players: Array<{ playerId: string; playerName: string }> } },
+    minBallsForSR = 4,
   ): MatchStatsSnapshot {
     const allBatsmen: (BatsmanInnings & { teamId: string })[] = [];
     const allBowlers: (BowlerInnings & { teamId: string })[] = [];
+    const mvpLeaderboard: PlayerMVPPoints[] = [];
+    const weights = DEFAULT_MVP_WEIGHTS;
 
     for (const inn of innings) {
       for (const bat of inn.batsmen) {
@@ -117,6 +120,49 @@ export class StatsEngine {
         allBowlers.push({ ...bowl, teamId: inn.bowlingTeamId });
       }
     }
+
+    // Compute MVP for all squad players (including those with no impact yet)
+    if (lineups && (lineups.teamA || lineups.teamB)) {
+      const allSquadPlayers = [
+        ...(lineups.teamA?.players || []).map(p => ({ ...p, teamId: innings[0]?.battingTeamId || 'unknown' })),
+        ...(lineups.teamB?.players || []).map(p => ({ ...p, teamId: innings[0]?.bowlingTeamId || 'unknown' })),
+      ];
+
+      for (const player of allSquadPlayers) {
+        const batterStats = allBatsmen.find(b => b.playerId === player.playerId);
+        const bowlerStats = allBowlers.find(b => b.playerId === player.playerId);
+
+        const matchStats: PlayerMatchStats = {
+          matchId,
+          playerId: player.playerId,
+          batting: batterStats ? {
+            runs: batterStats.runs,
+            balls: batterStats.balls,
+            fours: batterStats.fours,
+            sixes: batterStats.sixes,
+            strikeRate: batterStats.strikeRate,
+            dismissal: batterStats.dismissal,
+            isNotOut: !batterStats.isOut,
+          } : undefined,
+          bowling: bowlerStats ? {
+            overs: bowlerStats.overs,
+            maidens: bowlerStats.maidens,
+            runs: bowlerStats.runs,
+            wickets: bowlerStats.wickets,
+            economy: bowlerStats.economy,
+            dots: bowlerStats.dots,
+            wides: 0,
+            noBalls: 0,
+          } : undefined,
+          fielding: undefined,
+        };
+
+        const mvpPoints = this.computeMVPPoints(matchStats, player.playerName, player.teamId, weights);
+        mvpLeaderboard.push(mvpPoints);
+      }
+    }
+
+    mvpLeaderboard.sort((a, b) => b.total - a.total);
 
     // Highest dot ball bowler (min 10 balls = ~1.4 overs)
     const eligibleBowlers = allBowlers.filter(b => {
@@ -203,14 +249,19 @@ export class StatsEngine {
         runs: topSR.runs,
         balls: topSR.balls,
       } : null,
-      mvpLeaderboard: [],
+      mvpLeaderboard,
       topRunScorers,
       topWicketTakers,
       topFours,
       topSixes,
       topStrikeRates,
       topDotBowlers,
-      mvpPoints: [],
+      mvpPoints: mvpLeaderboard.map(m => ({
+        playerId: m.playerId,
+        playerName: m.playerName,
+        teamId: m.teamId,
+        totalPoints: m.total,
+      })),
       lastUpdated: Date.now(),
     };
   }
@@ -405,7 +456,7 @@ export class StatsEngine {
   extractPlayerMatchStats(
     matchId: string,
     innings: Innings[],
-    match: MatchSetup,
+    _match: MatchSetup,
   ): PlayerMatchStats[] {
     const statsMap: Record<string, PlayerMatchStats> = {};
 
@@ -550,6 +601,11 @@ export class StatsEngine {
       bestStrikeRate: null,
       mostDotBalls: null,
       mvpLeaderboard: [],
+      topRunScorers: [],
+      topWicketTakers: [],
+      topSixHitters: [],
+      topFourHitters: [],
+      topStrikeRates: [],
       lastUpdated: Date.now(),
     };
   }
