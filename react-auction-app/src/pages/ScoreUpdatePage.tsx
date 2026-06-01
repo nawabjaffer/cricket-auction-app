@@ -11,6 +11,7 @@ import { GiCricketBat, GiBowlingStrike } from 'react-icons/gi';
 import { useAdminAuth } from '../hooks/useAdminAuth';
 import { useTenantNavigate as useNavigate } from '../hooks/useTenantNavigate';
 import { useScoringState } from '../hooks/useScoringState';
+import { scoringService } from '../services/scoring';
 import type { BallOutcome, DismissalType, WicketDetail, MatchSquadPlayer } from '../types/scoring';
 import FieldPlacementEditor from '../components/FieldPlacementEditor/FieldPlacementEditor';
 import './ScoreUpdatePage.css';
@@ -81,6 +82,7 @@ export default function ScoreUpdatePage() {
     undoStack, recordBall, undoLastBall, initInnings,
     setOverlay, changeBatsman, changeBowler, swapStrike,
     completeMatch, isInningsComplete, isMatchComplete, needsBowlerChange,
+    addPlayerToLineup,
   } = useScoringState(matchId);
 
   const [showWicketModal, setShowWicketModal] = useState(false);
@@ -93,6 +95,8 @@ export default function ScoreUpdatePage() {
   const [expandedExtra, setExpandedExtra] = useState<'NB' | 'WD' | 'B' | 'LB' | null>(null);
   const [pendingExtraOutcome, setPendingExtraOutcome] = useState<BallOutcome | null>(null); // for wicket-on-extra flow
   const [showFieldEditor, setShowFieldEditor] = useState(false);
+  const [showAddPlayerModal, setShowAddPlayerModal] = useState(false);
+  const [showPlayerStatsModal, setShowPlayerStatsModal] = useState(false);
 
   // Auto-show bowler picker at end of over
   useEffect(() => {
@@ -484,6 +488,12 @@ export default function ScoreUpdatePage() {
         >
           New Innings
         </button>
+        <button
+          className="score-update__btn score-update__btn--secondary"
+          onClick={() => setShowAddPlayerModal(true)}
+        >
+          + Add Player
+        </button>
       </div>
 
       {/* ── Overlay Trigger Buttons ───────────────────────────────────── */}
@@ -521,6 +531,12 @@ export default function ScoreUpdatePage() {
           onClick={() => setShowFieldEditor(v => !v)}
         >
           🟢 Edit Field
+        </button>
+        <button
+          className="score-update__overlay-btn"
+          onClick={() => setShowPlayerStatsModal(true)}
+        >
+          📊 Player Stats
         </button>
       </div>
 
@@ -718,6 +734,28 @@ export default function ScoreUpdatePage() {
           </motion.div>
         </div>
       )}
+
+      {/* ── Add Player Modal (injury replacement) ─────────────────────── */}
+      {showAddPlayerModal && match && liveScore && (
+        <AddPlayerModal
+          match={match}
+          lineups={lineups}
+          onAdd={(teamId, player) => {
+            addPlayerToLineup(teamId, player);
+            setShowAddPlayerModal(false);
+          }}
+          onClose={() => setShowAddPlayerModal(false)}
+        />
+      )}
+
+      {/* ── Player Stats Notes Modal ──────────────────────────────────── */}
+      {showPlayerStatsModal && matchId && (
+        <PlayerStatsNotesModal
+          matchId={matchId}
+          lineups={lineups}
+          onClose={() => setShowPlayerStatsModal(false)}
+        />
+      )}
     </div>
   );
 }
@@ -904,6 +942,17 @@ function InitInningsModal({ match, lineups, defaults, onStart, onClose }: {
   const battingPlayers = (battingTeamId === match.teamA.id ? lineups.teamA : lineups.teamB)?.players || [];
   const bowlingPlayers = (bowlingTeamId === match.teamA.id ? lineups.teamA : lineups.teamB)?.players || [];
 
+  // Sort batting players: Batsman → All-rounder → Bowler
+  const battingRoleOrder = ['batsman', 'wicket keeper', 'batting all-rounder', 'all-rounder', 'bowling all-rounder', 'bowler', 'uncategorized'];
+  const bowlingRoleOrder = ['bowler', 'bowling all-rounder', 'all-rounder', 'batting all-rounder', 'batsman', 'wicket keeper', 'uncategorized'];
+  const getRoleIdx = (role: string, order: string[]) => {
+    const n = role.toLowerCase().trim();
+    const idx = order.findIndex(r => n.includes(r));
+    return idx >= 0 ? idx : order.length;
+  };
+  const sortedBattingPlayers = [...battingPlayers].sort((a, b) => getRoleIdx(a.role, battingRoleOrder) - getRoleIdx(b.role, battingRoleOrder));
+  const sortedBowlingPlayers = [...bowlingPlayers].sort((a, b) => getRoleIdx(a.role, bowlingRoleOrder) - getRoleIdx(b.role, bowlingRoleOrder));
+
   const handleStart = () => {
     const o1 = battingPlayers.find(p => p.playerId === opener1);
     const o2 = battingPlayers.find(p => p.playerId === opener2);
@@ -945,7 +994,7 @@ function InitInningsModal({ match, lineups, defaults, onStart, onClose }: {
             <label>Opener 1 (Striker)</label>
             <select value={opener1} onChange={e => setOpener1(e.target.value)} className="score-update__select">
               <option value="">Select</option>
-              {battingPlayers.map(p => <option key={p.playerId} value={p.playerId}>{p.playerName}</option>)}
+              {sortedBattingPlayers.map(p => <option key={p.playerId} value={p.playerId}>{p.playerName} ({p.role})</option>)}
             </select>
           </div>
 
@@ -953,7 +1002,7 @@ function InitInningsModal({ match, lineups, defaults, onStart, onClose }: {
             <label>Opener 2 (Non-Striker)</label>
             <select value={opener2} onChange={e => setOpener2(e.target.value)} className="score-update__select">
               <option value="">Select</option>
-              {battingPlayers.filter(p => p.playerId !== opener1).map(p => <option key={p.playerId} value={p.playerId}>{p.playerName}</option>)}
+              {sortedBattingPlayers.filter(p => p.playerId !== opener1).map(p => <option key={p.playerId} value={p.playerId}>{p.playerName} ({p.role})</option>)}
             </select>
           </div>
 
@@ -961,7 +1010,7 @@ function InitInningsModal({ match, lineups, defaults, onStart, onClose }: {
             <label>Opening Bowler</label>
             <select value={bowlerId} onChange={e => setBowlerId(e.target.value)} className="score-update__select">
               <option value="">Select</option>
-              {bowlingPlayers.map(p => <option key={p.playerId} value={p.playerId}>{p.playerName}</option>)}
+              {sortedBowlingPlayers.map(p => <option key={p.playerId} value={p.playerId}>{p.playerName} ({p.role})</option>)}
             </select>
           </div>
 
@@ -998,12 +1047,27 @@ function PlayerPickerModal({ title, players, disabledPlayerId, disabledReason, o
   onSelect: (p: MatchSquadPlayer) => void;
   onClose: () => void;
 }) {
+  // Sort players by role: for batting selectors show Batsman → All-rounder → Bowler
+  // For bowling selectors show Bowler → All-rounder → Batsman
+  const isBowlerPicker = title.toLowerCase().includes('bowler');
+  const roleOrder = isBowlerPicker
+    ? ['bowler', 'bowling all-rounder', 'all-rounder', 'batting all-rounder', 'batsman', 'wicket keeper', 'uncategorized']
+    : ['batsman', 'wicket keeper', 'batting all-rounder', 'all-rounder', 'bowling all-rounder', 'bowler', 'uncategorized'];
+
+  const getRoleWeight = (role: string) => {
+    const normalized = role.toLowerCase().trim();
+    const idx = roleOrder.findIndex(r => normalized.includes(r));
+    return idx >= 0 ? idx : roleOrder.length;
+  };
+
+  const sortedPlayers = [...players].sort((a, b) => getRoleWeight(a.role) - getRoleWeight(b.role));
+
   return (
     <div className="score-update__modal-overlay" onClick={onClose}>
       <div className="score-update__modal" onClick={e => e.stopPropagation()}>
         <h3>{title}</h3>
         <div className="score-update__player-list">
-          {players.map(p => {
+          {sortedPlayers.map(p => {
             const isDisabled = p.playerId === disabledPlayerId;
             return (
               <button
@@ -1015,6 +1079,7 @@ function PlayerPickerModal({ title, players, disabledPlayerId, disabledReason, o
                 {p.playerName}
                 <span className="score-update__player-role">
                   {isDisabled ? disabledReason : p.role}
+                  {p.isImpactSub ? ' ⭐' : ''}
                 </span>
               </button>
             );
@@ -1022,6 +1087,202 @@ function PlayerPickerModal({ title, players, disabledPlayerId, disabledReason, o
         </div>
         <div className="score-update__modal-actions">
           <button className="score-update__btn" onClick={onClose}>Cancel</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Add Player Modal (injury replacement mid-match) ──────────────────────────
+
+function AddPlayerModal({ match, lineups, onAdd, onClose }: {
+  match: { id: string; teamA: { id: string; name: string }; teamB: { id: string; name: string } };
+  lineups: { teamA: { players: MatchSquadPlayer[] } | null; teamB: { players: MatchSquadPlayer[] } | null };
+  onAdd: (teamId: string, player: MatchSquadPlayer) => void;
+  onClose: () => void;
+}) {
+  const [teamId, setTeamId] = useState(match.teamA.id);
+  const [playerName, setPlayerName] = useState('');
+  const [role, setRole] = useState('Batsman');
+
+  const handleAdd = () => {
+    if (!playerName.trim()) return;
+    const newPlayer: MatchSquadPlayer = {
+      playerId: `sub_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      playerName: playerName.trim(),
+      role,
+      battingOrder: 99,
+      isImpactSub: true,
+    };
+    onAdd(teamId, newPlayer);
+  };
+
+  return (
+    <div className="score-update__modal-overlay" onClick={onClose}>
+      <div className="score-update__modal" onClick={e => e.stopPropagation()}>
+        <h3>Add Player (Injury Replacement)</h3>
+        <div className="score-update__modal-field">
+          <label>Team</label>
+          <select value={teamId} onChange={e => setTeamId(e.target.value)} className="score-update__select">
+            <option value={match.teamA.id}>{match.teamA.name}</option>
+            <option value={match.teamB.id}>{match.teamB.name}</option>
+          </select>
+        </div>
+        <div className="score-update__modal-field">
+          <label>Player Name</label>
+          <input
+            type="text"
+            value={playerName}
+            onChange={e => setPlayerName(e.target.value)}
+            placeholder="Enter player name"
+            className="score-update__input"
+            autoFocus
+          />
+        </div>
+        <div className="score-update__modal-field">
+          <label>Role</label>
+          <select value={role} onChange={e => setRole(e.target.value)} className="score-update__select">
+            <option value="Batsman">Batsman</option>
+            <option value="Bowler">Bowler</option>
+            <option value="All-rounder">All-rounder</option>
+            <option value="Wicket Keeper">Wicket Keeper</option>
+          </select>
+        </div>
+        <p style={{ fontSize: '12px', color: '#9ca3af', margin: '8px 0' }}>
+          Current squad: {teamId === match.teamA.id
+            ? lineups.teamA?.players.length || 0
+            : lineups.teamB?.players.length || 0} players
+        </p>
+        <div className="score-update__modal-actions">
+          <button
+            className="score-update__btn score-update__btn--primary"
+            onClick={handleAdd}
+            disabled={!playerName.trim()}
+          >
+            Add to Squad
+          </button>
+          <button className="score-update__btn" onClick={onClose}>Cancel</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Player Stats Notes Modal (input/edit stats mid-match) ────────────────────
+
+function PlayerStatsNotesModal({ matchId, lineups, onClose }: {
+  matchId: string;
+  lineups: { teamA: { players: MatchSquadPlayer[] } | null; teamB: { players: MatchSquadPlayer[] } | null };
+  onClose: () => void;
+}) {
+  const [selectedPlayer, setSelectedPlayer] = useState('');
+  const [statKey, setStatKey] = useState('');
+  const [statValue, setStatValue] = useState('');
+  const [notes, setNotes] = useState<Record<string, { stats: { stat: string; value: string }[] }>>({});
+  const [saving, setSaving] = useState(false);
+
+  const allPlayers = [
+    ...(lineups.teamA?.players || []),
+    ...(lineups.teamB?.players || []),
+  ];
+
+  useEffect(() => {
+    scoringService.getPlayerMatchNotes(matchId).then(setNotes);
+  }, [matchId]);
+
+  const handleAdd = async () => {
+    if (!selectedPlayer || !statKey.trim() || !statValue.trim()) return;
+    setSaving(true);
+    await scoringService.savePlayerMatchNote(matchId, selectedPlayer, { stat: statKey.trim(), value: statValue.trim() });
+    const updated = await scoringService.getPlayerMatchNotes(matchId);
+    setNotes(updated);
+    setStatKey('');
+    setStatValue('');
+    setSaving(false);
+  };
+
+  const handleDelete = async (playerId: string, stat: string) => {
+    await scoringService.deletePlayerMatchNote(matchId, playerId, stat);
+    const updated = await scoringService.getPlayerMatchNotes(matchId);
+    setNotes(updated);
+  };
+
+  const playerName = (id: string) => allPlayers.find(p => p.playerId === id)?.playerName || id;
+
+  return (
+    <div className="score-update__modal-overlay" onClick={onClose}>
+      <div className="score-update__modal score-update__modal--wide" onClick={e => e.stopPropagation()}>
+        <h3>📊 Player Stats & Notes</h3>
+        <p style={{ fontSize: '12px', color: '#9ca3af', marginBottom: '12px' }}>
+          Add stats or notes for players during the match. These can be displayed in overlays.
+        </p>
+
+        {/* Input form */}
+        <div className="score-update__modal-grid">
+          <div className="score-update__modal-field">
+            <label>Player</label>
+            <select value={selectedPlayer} onChange={e => setSelectedPlayer(e.target.value)} className="score-update__select">
+              <option value="">Select Player</option>
+              {allPlayers.map(p => (
+                <option key={p.playerId} value={p.playerId}>{p.playerName} ({p.role})</option>
+              ))}
+            </select>
+          </div>
+          <div className="score-update__modal-field">
+            <label>Stat Name</label>
+            <input
+              type="text"
+              value={statKey}
+              onChange={e => setStatKey(e.target.value)}
+              placeholder="e.g. Season Avg, Last 5 Inns, Strike Rate"
+              className="score-update__input"
+            />
+          </div>
+          <div className="score-update__modal-field">
+            <label>Value</label>
+            <input
+              type="text"
+              value={statValue}
+              onChange={e => setStatValue(e.target.value)}
+              placeholder="e.g. 45.5, 3/25, 156.2"
+              className="score-update__input"
+            />
+          </div>
+        </div>
+        <button
+          className="score-update__btn score-update__btn--primary"
+          onClick={handleAdd}
+          disabled={!selectedPlayer || !statKey.trim() || !statValue.trim() || saving}
+          style={{ marginTop: '8px' }}
+        >
+          {saving ? 'Saving...' : 'Add Stat'}
+        </button>
+
+        {/* Display existing notes */}
+        <div style={{ marginTop: '16px', maxHeight: '300px', overflow: 'auto' }}>
+          {Object.entries(notes).filter(([, v]) => v.stats && v.stats.length > 0).map(([playerId, data]) => (
+            <div key={playerId} style={{ marginBottom: '12px', padding: '8px', background: 'rgba(255,255,255,0.05)', borderRadius: '8px' }}>
+              <strong style={{ color: '#fbbf24', fontSize: '13px' }}>{playerName(playerId)}</strong>
+              {data.stats.map((s, i) => (
+                <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 0', fontSize: '12px' }}>
+                  <span style={{ color: '#9ca3af' }}>{s.stat}: <strong style={{ color: '#fff' }}>{s.value}</strong></span>
+                  <button
+                    onClick={() => handleDelete(playerId, s.stat)}
+                    style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '12px' }}
+                  >
+                    ✕
+                  </button>
+                </div>
+              ))}
+            </div>
+          ))}
+          {Object.keys(notes).length === 0 && (
+            <p style={{ color: '#6b7280', fontSize: '12px', textAlign: 'center' }}>No stats added yet</p>
+          )}
+        </div>
+
+        <div className="score-update__modal-actions">
+          <button className="score-update__btn" onClick={onClose}>Close</button>
         </div>
       </div>
     </div>

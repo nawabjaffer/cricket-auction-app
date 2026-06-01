@@ -161,6 +161,40 @@ export class ScoringService {
     return snapshot.exists() ? snapshot.val() : null;
   }
 
+  // ── Player Match Notes/Stats ────────────────────────────────────────────────
+
+  async savePlayerMatchNote(matchId: string, playerId: string, note: { stat: string; value: string }): Promise<void> {
+    const db = this.ensureDb();
+    const path = `${this.basePath}/matches/${matchId}/playerNotes/${playerId}`;
+    const snapshot = await get(ref(db, path));
+    const existing = snapshot.exists() ? snapshot.val() : { stats: [] };
+    const stats = Array.isArray(existing.stats) ? existing.stats : [];
+    // Replace if same stat key exists, otherwise add
+    const idx = stats.findIndex((s: { stat: string }) => s.stat === note.stat);
+    if (idx >= 0) {
+      stats[idx] = note;
+    } else {
+      stats.push(note);
+    }
+    await set(ref(db, path), { stats, lastUpdated: Date.now() });
+  }
+
+  async getPlayerMatchNotes(matchId: string): Promise<Record<string, { stats: { stat: string; value: string }[] }>> {
+    const db = this.ensureDb();
+    const snapshot = await get(ref(db, `${this.basePath}/matches/${matchId}/playerNotes`));
+    return snapshot.exists() ? snapshot.val() : {};
+  }
+
+  async deletePlayerMatchNote(matchId: string, playerId: string, statKey: string): Promise<void> {
+    const db = this.ensureDb();
+    const path = `${this.basePath}/matches/${matchId}/playerNotes/${playerId}`;
+    const snapshot = await get(ref(db, path));
+    if (!snapshot.exists()) return;
+    const existing = snapshot.val();
+    const stats = Array.isArray(existing.stats) ? existing.stats.filter((s: { stat: string }) => s.stat !== statKey) : [];
+    await set(ref(db, path), { stats, lastUpdated: Date.now() });
+  }
+
   // ── Innings ─────────────────────────────────────────────────────────────────
 
   async getInnings(matchId: string, inningsNumber: 1 | 2): Promise<Innings | null> {

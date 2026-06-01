@@ -765,7 +765,7 @@ export default function ScoreOBSOverlayPage() {
           <BowlerStatsOverlay key="overlay-bowler" bowler={live.currentBowler} playerImages={playerImages} lineups={lineups} />
         )}
         {effectiveOverlay === 'full_scorecard' && (
-          <FullScorecardOverlay key="overlay-scorecard" live={live} battingTeam={battingTeamName} bowlingTeam={bowlingTeamName} />
+          <FullScorecardOverlay key="overlay-scorecard" live={live} battingTeam={battingTeamName} bowlingTeam={bowlingTeamName} innings={innings} match={match} />
         )}
         {effectiveOverlay === 'live_question' && currentQuestion && (
           <QuestionOverlay key="overlay-question" question={currentQuestion} />
@@ -1085,11 +1085,19 @@ function BowlerStatsOverlay({ bowler, playerImages, lineups }: {
   );
 }
 
-function FullScorecardOverlay({ live, battingTeam, bowlingTeam }: {
+function FullScorecardOverlay({ live, battingTeam, bowlingTeam, innings, match }: {
   live: LiveScore; battingTeam: string; bowlingTeam: string;
+  innings?: Record<string, Innings>;
+  match?: MatchSetup | null;
 }) {
   const allBatsmen = live.allBatsmen || [];
   const allBowlers = live.allBowlers || [];
+  // Show 1st innings summary when in 2nd innings
+  const inn1 = innings?.['1'];
+  const showInn1Summary = live.currentInnings === 2 && inn1;
+  const inn1TeamName = showInn1Summary && match
+    ? (inn1.battingTeamId === match.teamA.id ? match.teamA.name : match.teamB.name)
+    : '';
 
   return (
     <motion.div
@@ -1108,6 +1116,14 @@ function FullScorecardOverlay({ live, battingTeam, bowlingTeam }: {
           {live.runs}/{live.wickets} ({live.overs} ov)
         </div>
       </div>
+
+      {/* 1st Innings Summary (shown during 2nd innings) */}
+      {showInn1Summary && (
+        <div className="score-obs__sc-inn1-summary">
+          <span className="score-obs__sc-inn1-team">{inn1TeamName.toUpperCase()}</span>
+          <span className="score-obs__sc-inn1-score">{inn1.totalRuns}/{inn1.totalWickets} ({inn1.totalOvers} ov)</span>
+        </div>
+      )}
 
       {/* Batting Section */}
       <div className="score-obs__sc-batting">

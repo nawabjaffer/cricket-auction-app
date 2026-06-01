@@ -30,10 +30,19 @@ export default function FieldPlacementEditor({ matchId, onClose }: Props) {
       const all = [...DEFAULT_FIELD_PLACEMENTS.filter(d => !saved.find(s => s.id === d.id)), ...saved];
       setPlacements(all);
       const active = await scoringService.getActiveFieldPlacement(matchId);
-      setActiveId(active);
       if (active) {
+        setActiveId(active);
         const found = all.find(p => p.id === active);
         if (found) setEditingPlacement(found);
+      } else {
+        // Auto-activate first default placement if none is set
+        const defaultPlacement = all.find(p => p.isDefault) || all[0];
+        if (defaultPlacement) {
+          await scoringService.saveFieldPlacement(matchId, defaultPlacement);
+          await scoringService.setActiveFieldPlacement(matchId, defaultPlacement.id);
+          setActiveId(defaultPlacement.id);
+          setEditingPlacement(defaultPlacement);
+        }
       }
     };
     load();

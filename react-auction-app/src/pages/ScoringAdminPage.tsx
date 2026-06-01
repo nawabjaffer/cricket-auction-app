@@ -1904,7 +1904,7 @@ function SquadSelectionModal({ match, soldPlayers, onSave, onClose }: {
   const buildLineup = (teamId: string, players: SoldPlayer[], selected: string[], captain: string, wk: string): MatchLineup => ({
     matchId: match.id,
     teamId,
-    players: selected.slice(0, 11).map((id, idx) => {
+    players: selected.map((id, idx) => {
       const p = players.find(pl => pl.id === id);
       return {
         playerId: id,
@@ -1913,6 +1913,7 @@ function SquadSelectionModal({ match, soldPlayers, onSave, onClose }: {
         battingOrder: idx + 1,
         isCaptain: id === captain,
         isWicketKeeper: id === wk,
+        isImpactSub: idx >= 11,
       };
     }),
   });

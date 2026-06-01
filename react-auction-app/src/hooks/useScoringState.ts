@@ -432,6 +432,34 @@ export function useScoringState(matchId: string | undefined) {
     await dbSet(ref(dbRef.current, `${tenantPath('scoring')}/matches/${matchId}/live`), live);
   }, [matchId, state.liveScore]);
 
+  // Add player to lineup mid-match (injury replacement)
+  const addPlayerToLineup = useCallback(async (teamId: string, player: MatchSquadPlayer) => {
+    if (!matchId || !dbRef.current) return;
+    const teamKey = state.lineups.teamA?.teamId === teamId ? 'teamA' : 'teamB';
+    const currentLineup = state.lineups[teamKey];
+    if (!currentLineup) return;
+
+    // Don't add duplicates
+    if (currentLineup.players.some(p => p.playerId === player.playerId)) return;
+
+    const updatedLineup = {
+      ...currentLineup,
+      players: [...currentLineup.players, player],
+    };
+
+    // Save to Firebase
+    await dbSet(
+      ref(dbRef.current, `${tenantPath('scoring')}/matches/${matchId}/lineups/${teamId}`),
+      updatedLineup,
+    );
+
+    // Update local state
+    setState(s => ({
+      ...s,
+      lineups: { ...s.lineups, [teamKey]: updatedLineup },
+    }));
+  }, [matchId, state.lineups]);
+
   // Complete match manually
   const completeMatch = useCallback(async () => {
     if (!matchId || !state.match || !adapterRef.current) return;
@@ -472,5 +500,6 @@ export function useScoringState(matchId: string | undefined) {
     changeBowler,
     swapStrike,
     completeMatch,
+    addPlayerToLineup,
   };
 }

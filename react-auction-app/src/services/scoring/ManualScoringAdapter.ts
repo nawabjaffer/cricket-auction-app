@@ -144,18 +144,20 @@ export class ManualScoringAdapter implements IScoringAdapter {
     const nextIsFreehit = isNoBall || (currentLive.isFreehit && !isLegal);
 
     // Strike swap rules:
-    // - Legal ball: swap if batsman ran odd OR over completed
-    // - No-ball: swap if batsman ran odd (NB doesn't end over, but running swaps)
-    // - Wide: swap if total extras beyond the +1 wide are odd (they ran odd times)
-    //   e.g. WD=no swap (no running), WD+1=1 run taken → swap, WD+2=2 runs → no swap
-    // - Bye/Leg-bye: runs are extras but batsmen physically run → swap on odd extras
-    // - Over completed: always swap (end of over)
+    // In cricket, strike changes for two independent reasons:
+    //   1. Odd runs scored (batsmen physically cross) — applies to batsman runs, wide runs taken, bye/LB runs
+    //   2. End of over (bowling switches ends)
+    // When BOTH happen on the same ball (e.g. single off last ball), they cancel out.
+    // The correct logic is XOR: swap if exactly ONE reason applies, not both.
     const isByeOrLegbye = parsed.extraType === 'bye' || parsed.extraType === 'legbye';
     const wideRunsTaken = isWide ? (totalRuns - 1) : 0; // subtract the automatic +1 wide extra
-    const shouldSwapStrike = overCompleted ||
+    const oddRunsScored =
       (!isWide && !isByeOrLegbye && batsmanRuns % 2 === 1) ||  // normal/NB: odd batsman runs
       (isWide && wideRunsTaken % 2 === 1) ||                    // wide: odd runs taken
       (isByeOrLegbye && extras % 2 === 1);                      // bye/lb: odd extras (they ran)
+
+    // XOR: swap only if one is true but not both
+    const shouldSwapStrike = overCompleted !== oddRunsScored;
 
     // Update batsmen stats
     let updatedBatsmen = this.updateBatsmenStats(
