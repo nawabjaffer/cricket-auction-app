@@ -1,0 +1,19 @@
+{
+  "name": "Cricket Scorer Camera",
+  "short_name": "Scorer Cam",
+  "description": "Film matches on your phone with the live score ticker burned into the recorded video.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "landscape",
+  "background_color": "#0b1020",
+  "theme_color": "#0b1020",
+  "icons": [
+    {
+      "src": "/vite.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

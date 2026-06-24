@@ -21,6 +21,7 @@ import PlatformAdminPage from './pages/PlatformAdminPage'
 import ScoringAdminPage from './pages/ScoringAdminPage'
 import ScoreUpdatePage from './pages/ScoreUpdatePage'
 import ScoreOBSOverlayPage from './pages/ScoreOBSOverlayPage'
+import ScoreCameraPage from './pages/ScoreCameraPage'
 import ScoreOBSControlDock from './pages/ScoreOBSControlDock'
 import LiveQuestionPage from './pages/LiveQuestionPage'
 import { TenantGate } from './components/TenantGate/TenantGate'
@@ -87,6 +88,7 @@ createRoot(document.getElementById('root')!).render(
             <Route path="/cricket/scorer/admin" element={<ScoringAdminPage />} />
             <Route path="/cricket/scorer/update" element={<ScoreUpdatePage />} />
             <Route path="/cricket/scorer/obs-overlay" element={<ScoreOBSOverlayPage />} />
+            <Route path="/cricket/scorer/camera" element={<ScoreCameraPage />} />
             <Route path="/cricket/scorer/obs-dock" element={<ScoreOBSControlDock />} />
             <Route path="/cricket/scorer/live-question" element={<LiveQuestionPage />} />
             {/* Legacy scorer routes (redirects) */}
@@ -114,6 +116,7 @@ createRoot(document.getElementById('root')!).render(
             <Route path="/:tenantSlug/cricket/scorer/admin" element={<TenantGate><ScoringAdminPage /></TenantGate>} />
             <Route path="/:tenantSlug/cricket/scorer/update" element={<TenantGate><ScoreUpdatePage /></TenantGate>} />
             <Route path="/:tenantSlug/cricket/scorer/obs-overlay" element={<TenantGate><ScoreOBSOverlayPage /></TenantGate>} />
+            <Route path="/:tenantSlug/cricket/scorer/camera" element={<TenantGate><ScoreCameraPage /></TenantGate>} />
             <Route path="/:tenantSlug/cricket/scorer/obs-dock" element={<TenantGate><ScoreOBSControlDock /></TenantGate>} />
             <Route path="/:tenantSlug/cricket/scorer/live-question" element={<TenantGate><LiveQuestionPage /></TenantGate>} />
             {/* Legacy scorer routes */}

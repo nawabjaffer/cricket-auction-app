@@ -133,6 +133,9 @@ export default function ScoringAdminPage() {
         <button className="scoring-admin__quick-btn" onClick={() => window.open(`${baseUrl}/cricket/scorer/obs-overlay`, '_blank')}>
           <IoDesktop size={14} /> OBS Overlay
         </button>
+        <button className="scoring-admin__quick-btn" onClick={() => window.open(`${baseUrl}/cricket/scorer/camera`, '_blank')}>
+          <IoVideocam size={14} /> Camera Recorder
+        </button>
         <button className="scoring-admin__quick-btn" onClick={() => window.open(`${baseUrl}/cricket/scorer/obs-dock`, '_blank')}>
           <IoGameController size={14} /> OBS Control Dock
         </button>
@@ -563,6 +566,9 @@ function MatchesTab({ matches, teams, soldPlayers, onFeedback, saving, setSaving
               </button>
               <button className="scoring-admin__link-btn" onClick={() => window.open(`${baseUrl}/cricket/scorer/obs-overlay?matchId=${match.id}`, '_blank')} title="Open OBS Overlay">
                 <IoDesktop size={13} /> OBS Overlay
+              </button>
+              <button className="scoring-admin__link-btn" onClick={() => window.open(`${baseUrl}/cricket/scorer/camera?matchId=${match.id}`, '_blank')} title="Mobile Camera Recorder">
+                <IoVideocam size={13} /> Camera
               </button>
               <button className="scoring-admin__link-btn" onClick={() => { navigator.clipboard.writeText(`${baseUrl}/cricket/scorer/obs-overlay?matchId=${match.id}`); onFeedback('OBS URL copied'); }} title="Copy OBS URL">
                 <IoLink size={13} /> Copy URL
