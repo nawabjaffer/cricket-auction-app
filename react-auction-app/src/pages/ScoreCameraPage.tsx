@@ -511,8 +511,31 @@ export default function ScoreCameraPage() {
   const [includeAudio, setIncludeAudio] = useState(true);
   const [mimeType] = useState(pickMimeType);
   const [shareSupported] = useState(() => typeof navigator !== 'undefined' && typeof (navigator as Navigator & { share?: unknown }).share === 'function');
+  const [startingStep, setStartingStep] = useState('');
+  // PWA install prompt (Android Chrome fires `beforeinstallprompt`)
+  const installPromptRef = useRef<(Event & { prompt?: () => void }) | null>(null);
+  const [showInstallBanner, setShowInstallBanner] = useState(false);
+  const [isIOS] = useState(() => /iphone|ipad|ipod/i.test(navigator.userAgent));
+  const [isStandalone] = useState(() => window.matchMedia('(display-mode: standalone)').matches || (navigator as Navigator & { standalone?: boolean }).standalone === true);
+  const [showInstallHint, setShowInstallHint] = useState(false);
 
-  // Keep refs in sync with state
+  // PWA install prompt effect — Android Chrome/Edge fire `beforeinstallprompt`
+  useEffect(() => {
+    const handler = (e: Event) => {
+      e.preventDefault();
+      installPromptRef.current = e as Event & { prompt?: () => void };
+      if (!isStandalone) setShowInstallBanner(true);
+    };
+    window.addEventListener('beforeinstallprompt', handler);
+    return () => window.removeEventListener('beforeinstallprompt', handler);
+  }, [isStandalone]);
+
+  const triggerInstall = useCallback(async () => {
+    const p = installPromptRef.current;
+    if (p?.prompt) { await p.prompt(); }
+    setShowInstallBanner(false);
+  }, []);
+
   useEffect(() => { liveRef.current = live; }, [live]);
   useEffect(() => { matchRef.current = match; }, [match]);
   useEffect(() => { facingRef.current = facing; }, [facing]);
@@ -598,29 +621,51 @@ export default function ScoreCameraPage() {
   // ── Camera ───────────────────────────────────────────────────────────────
   const startCamera = useCallback(async (mode: 'environment' | 'user') => {
     setError('');
+    setStartingStep('');
     setStarting(true);
     try {
       if (!navigator.mediaDevices?.getUserMedia) {
         throw new Error('unsupported');
       }
       mediaStreamRef.current?.getTracks().forEach(t => t.stop());
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode: { ideal: mode },
-          width: { ideal: 1920 }, height: { ideal: 1080 },
-          frameRate: { ideal: 30 },
-        },
-        audio: { echoCancellation: true, noiseSuppression: true },
-      });
+
+      // Cascade: try 1080p → 720p → bare constraints so all phones work
+      const videoConstraintSets = [
+        { facingMode: { ideal: mode }, width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 30 } },
+        { facingMode: { ideal: mode }, width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 } },
+        { facingMode: { ideal: mode } },
+      ];
+      let stream: MediaStream | null = null;
+      let lastErr: Error | null = null;
+      for (const vc of videoConstraintSets) {
+        try {
+          setStartingStep(stream === null && vc === videoConstraintSets[0] ? 'Requesting camera permission…' : 'Trying lower resolution…');
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: vc,
+            audio: { echoCancellation: true, noiseSuppression: true },
+          });
+          break;
+        } catch (e) {
+          lastErr = e as Error;
+          const n = (e as Error).name;
+          // Permission denied — no point retrying lower res
+          if (n === 'NotAllowedError' || n === 'SecurityError') throw e;
+          // OverconstrainedError / NotFoundError / etc → try next tier
+        }
+      }
+      if (!stream) throw lastErr ?? new Error('no-camera');
+
       mediaStreamRef.current = stream;
       facingRef.current = mode;
       setFacing(mode);
 
+      setStartingStep('Opening camera preview…');
       const video = videoElRef.current!;
       video.srcObject = stream;
       video.muted = true;
       await video.play();
 
+      setStartingStep('Preparing recorder…');
       // Fixed 1080p landscape recording canvas regardless of the device sensor orientation.
       const canvas = canvasRef.current!;
       canvas.width = 1920;
@@ -628,13 +673,24 @@ export default function ScoreCameraPage() {
 
       void enterImmersive();
       setCameraReady(true);
+      setStartingStep('');
       cancelAnimationFrame(rafRef.current);
       rafRef.current = requestAnimationFrame(drawFrame);
-    } catch {
-      setError('Unable to access the camera. Allow camera + microphone permissions, and make sure you are on HTTPS.');
+    } catch (e) {
+      const n = (e as Error).name || '';
+      if (n === 'NotAllowedError' || n === 'SecurityError') {
+        setError('Camera permission was denied. Please allow camera & microphone access in your browser settings, then try again.');
+      } else if (n === 'NotFoundError' || n === 'DevicesNotFoundError') {
+        setError('No camera found on this device.');
+      } else if ((e as Error).message === 'unsupported') {
+        setError('Your browser does not support camera access. Please use Chrome, Safari 14+, or Firefox.');
+      } else {
+        setError('Unable to start camera. Ensure you are on HTTPS and have granted camera + microphone permissions.');
+      }
       setCameraReady(false);
     } finally {
       setStarting(false);
+      setStartingStep('');
     }
   }, [drawFrame]);
 
@@ -798,21 +854,62 @@ export default function ScoreCameraPage() {
       {/* Center prompt before camera starts */}
       {!cameraReady && (
         <div className="score-cam__center">
-          <IoVideocam size={56} color="#fbbf24" />
-          <h1>Match Camera Recorder</h1>
-          <p>Film the match and record with the live score ticker burned into the video.</p>
-          {!matchId && (
-            <p className="score-cam__hint">
-              Tip: open this page from the Scoring Admin so the live ticker can attach to a match.
-            </p>
+          {/* Loading spinner — shown while starting */}
+          {starting ? (
+            <>
+              <div className="score-cam__spinner" />
+              <p className="score-cam__loading-text">{startingStep || 'Starting camera…'}</p>
+              <p className="score-cam__loading-sub">This may take a few seconds.<br />Allow camera &amp; microphone when prompted.</p>
+            </>
+          ) : (
+            <>
+              <IoVideocam size={56} color="#fbbf24" />
+              <h1>Match Camera Recorder</h1>
+              <p>Film the match and record with the live score ticker burned into the video.</p>
+              {!matchId && (
+                <p className="score-cam__hint">
+                  Tip: open this page from the Scoring Admin so the live ticker can attach to a match.
+                </p>
+              )}
+              {error && <p className="score-cam__error">{error}</p>}
+              <button className="score-cam__start" onClick={() => startCamera('environment')} disabled={starting}>
+                Start Camera
+              </button>
+              <div className="score-cam__rotate-hint">
+                <IoTabletLandscape size={16} /> Rotate to landscape for best results
+              </div>
+
+              {/* PWA install — Android */}
+              {showInstallBanner && !isStandalone && (
+                <div className="score-cam__install-banner">
+                  <div className="score-cam__install-text">
+                    <strong>Install as app</strong>
+                    <span>Add to home screen for the best native camera experience</span>
+                  </div>
+                  <button className="score-cam__install-btn" onClick={triggerInstall}>Install</button>
+                  <button className="score-cam__install-dismiss" onClick={() => setShowInstallBanner(false)}>✕</button>
+                </div>
+              )}
+
+              {/* iOS install hint */}
+              {isIOS && !isStandalone && (
+                <button className="score-cam__ios-hint" onClick={() => setShowInstallHint(v => !v)}>
+                  📲 Install as iPhone app
+                </button>
+              )}
+              {isIOS && !isStandalone && showInstallHint && (
+                <div className="score-cam__ios-steps">
+                  <p>To install on iPhone / iPad:</p>
+                  <ol>
+                    <li>Tap the <strong>Share</strong> button <span className="score-cam__share-icon">⎙</span> at the bottom of Safari</li>
+                    <li>Scroll down and tap <strong>"Add to Home Screen"</strong></li>
+                    <li>Tap <strong>Add</strong> — the app icon will appear on your home screen</li>
+                  </ol>
+                  <p className="score-cam__ios-note">Works offline once installed. Opens full-screen like a native app.</p>
+                </div>
+              )}
+            </>
           )}
-          {error && <p className="score-cam__error">{error}</p>}
-          <button className="score-cam__start" onClick={() => startCamera('environment')} disabled={starting}>
-            {starting ? 'Starting…' : 'Start Camera'}
-          </button>
-          <div className="score-cam__rotate-hint">
-            <IoTabletLandscape size={16} /> Rotate to landscape for best results
-          </div>
         </div>
       )}
 
