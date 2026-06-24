@@ -14,13 +14,15 @@
   touch-action: manipulation;
 }
 
-/* Hidden raw camera feed — only used as the draw source for the canvas */
+/* Hidden raw camera feed — only used as the draw source for the canvas.
+   MUST stay within the viewport (top:0 left:0) — iOS Safari will stop
+   rendering frames for video elements that are clipped far off-screen. */
 .score-cam__src {
   position: absolute;
-  width: 2px;
-  height: 2px;
-  top: -9999px;
-  left: -9999px;
+  top: 0;
+  left: 0;
+  width: 1px;
+  height: 1px;
   opacity: 0;
   pointer-events: none;
 }

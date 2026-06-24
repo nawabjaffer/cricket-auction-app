@@ -653,7 +653,15 @@ export default function ScoreCameraPage() {
           // OverconstrainedError / NotFoundError / etc → try next tier
         }
       }
-      if (!stream) throw lastErr ?? new Error('no-camera');
+      if (!stream) {
+        // Last resort: video-only (iOS PWA sometimes rejects audio+video)
+        try {
+          setStartingStep('Trying without microphone…');
+          stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: mode } } });
+        } catch (e2) {
+          throw lastErr ?? (e2 as Error);
+        }
+      }
 
       mediaStreamRef.current = stream;
       facingRef.current = mode;
@@ -663,7 +671,29 @@ export default function ScoreCameraPage() {
       const video = videoElRef.current!;
       video.srcObject = stream;
       video.muted = true;
-      await video.play();
+      video.setAttribute('playsinline', 'true');
+      video.setAttribute('webkit-playsinline', 'true');
+
+      // Wait for metadata then play — `video.play()` alone can hang on iOS Safari.
+      await new Promise<void>((resolve, reject) => {
+        const timeout = setTimeout(() => resolve(), 5000); // safety net after 5 s
+        video.onloadedmetadata = () => {
+          clearTimeout(timeout);
+          video.play().then(resolve).catch(err => {
+            // AbortError is benign on iOS when srcObject is set late
+            if ((err as Error).name === 'AbortError') resolve();
+            else reject(err);
+          });
+        };
+        // If metadata already loaded (srcObject set on a re-use)
+        if (video.readyState >= 1 && video.videoWidth > 0) {
+          clearTimeout(timeout);
+          video.play().then(resolve).catch(err => {
+            if ((err as Error).name === 'AbortError') resolve();
+            else reject(err);
+          });
+        }
+      });
 
       setStartingStep('Preparing recorder…');
       // Fixed 1080p landscape recording canvas regardless of the device sensor orientation.
