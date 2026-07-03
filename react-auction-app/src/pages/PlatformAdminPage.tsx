@@ -57,10 +57,18 @@ export default function PlatformAdminPage() {
   };
 
   const toggleSport = async (t: TenantRecord, sport: SportKey) => {
-    const current = t.sports && t.sports.length ? t.sports : (['cricket'] as SportKey[]);
+    const current = t.sports?.length ? t.sports : (['cricket'] as SportKey[]);
     const next = current.includes(sport) ? current.filter((s) => s !== sport) : [...current, sport];
-    await tenantService.updateTenant(t.id, { sports: next });
-    refresh();
+    if (next.length === 0) { setError('A tournament must have at least one sport enabled.'); return; }
+    // Optimistic local update so the UI reflects immediately (no stale read).
+    setTenants((prev) => prev.map((x) => (x.id === t.id ? { ...x, sports: next } : x)));
+    setError(null);
+    try {
+      await tenantService.setTenantSports(t.id, next);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+      refresh(); // revert to server truth on failure
+    }
   };
 
   return (
@@ -103,7 +111,8 @@ export default function PlatformAdminPage() {
           {loading ? <p style={{ opacity: 0.7 }}>Loading…</p> : (
             <div style={{ marginTop: 12, display: 'grid', gap: 10 }}>
               {tenants.map((t) => {
-                const sports = t.sports && t.sports.length ? t.sports : (['cricket'] as SportKey[]);
+                const sports = t.sports?.length ? t.sports : (['cricket'] as SportKey[]);
+                const onlyFootball = sports.length === 1 && sports[0] === 'football';
                 return (
                 <div key={t.id} style={rowCard}>
                   <div style={{ flex: 1 }}>
@@ -117,11 +126,13 @@ export default function PlatformAdminPage() {
                       <span style={{ fontSize: 11, opacity: 0.6, textTransform: 'uppercase', letterSpacing: 0.5 }}>Sports:</span>
                       {ALL_SPORTS.map((sp) => {
                         const on = sports.includes(sp.key);
+                        const onBg = sp.key === 'football' ? '#e11d1d' : '#2563eb';
                         return (
                           <button key={sp.key} onClick={() => toggleSport(t, sp.key)}
+                            title={on ? `Disable ${sp.label}` : `Enable ${sp.label}`}
                             style={{
                               ...sportChip,
-                              background: on ? (sp.key === 'football' ? '#e11d1d' : '#2563eb') : 'transparent',
+                              background: on ? onBg : 'transparent',
                               borderColor: on ? 'transparent' : '#374151',
                               color: on ? '#fff' : '#94a3b8',
                             }}>
@@ -129,12 +140,18 @@ export default function PlatformAdminPage() {
                           </button>
                         );
                       })}
-                      {sports.includes('cricket') && <a href={`/${t.slug}/cricket/scorer/admin`} style={sportLink}>Cricket Scorer →</a>}
-                      {sports.includes('football') && <a href={`/${t.slug}/football/scorer/admin`} style={sportLink}>Football Scorer →</a>}
+                    </div>
+                    <div style={{ marginTop: 8, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                      {sports.includes('cricket') && <a href={`/${t.slug}/cricket/scorer/admin`} style={sportLink}>🏏 Open Cricket Scorer →</a>}
+                      {sports.includes('football') && <a href={`/${t.slug}/football/scorer/admin`} style={{ ...sportLink, color: '#f87171' }}>⚽ Open Football Scorer →</a>}
                     </div>
                   </div>
                   <div style={{ display: 'flex', gap: 8 }}>
-                    <a href={`/${t.slug}/`} style={btnGhost}>Open</a>
+                    {/* Primary manage button jumps straight to the sport when only one is enabled */}
+                    <a href={onlyFootball ? `/${t.slug}/football/scorer/admin` : `/${t.slug}/cricket/scorer/admin`}
+                      style={{ ...btnPrimary, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}>
+                      Manage {onlyFootball ? '⚽' : (sports.includes('cricket') ? '🏏' : '⚽')}
+                    </a>
                     <a href={`/${t.slug}/admin`} style={btnGhost}>Admin</a>
                     <button onClick={() => toggle(t)} style={btnGhost}>
                       {t.isActive ? 'Deactivate' : 'Activate'}

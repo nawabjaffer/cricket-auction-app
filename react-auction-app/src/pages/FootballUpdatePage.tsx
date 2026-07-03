@@ -111,9 +111,12 @@ export default function FootballUpdatePage() {
     } else {
       const half = l.half === 'not_started' ? 'first_half' : l.half;
       await persist({ ...l, running: true, half, clockStartedAt: Date.now() });
-      if (l.half === 'not_started') fireOverlay({ activeOverlay: 'kickoff', lastUpdated: Date.now() });
+      if (l.half === 'not_started') {
+        fireOverlay({ activeOverlay: 'kickoff', lastUpdated: Date.now() });
+        if (matchId) footballService.updateMatchStatus(matchId, 'live');
+      }
     }
-  }, [persist, fireOverlay]);
+  }, [persist, fireOverlay, matchId]);
 
   const nextPhase = useCallback(async () => {
     const l = liveRef.current;

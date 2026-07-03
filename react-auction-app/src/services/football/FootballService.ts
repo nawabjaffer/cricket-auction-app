@@ -52,6 +52,29 @@ class FootballService {
     return value;
   }
 
+  /**
+   * Firebase RTDB does not store empty arrays/objects, so reading back a live
+   * state may return one without `events`, or with numeric fields missing.
+   * Normalize every read so the UI can safely rely on the shape.
+   */
+  private normalizeLive(raw: Partial<FootballLiveState> | null, matchId: string): FootballLiveState {
+    const base = createEmptyFootballLiveState(matchId);
+    if (!raw) return base;
+    return {
+      ...base,
+      ...raw,
+      matchId,
+      homeScore: raw.homeScore ?? 0,
+      awayScore: raw.awayScore ?? 0,
+      baseElapsedSec: raw.baseElapsedSec ?? 0,
+      addedTimeMin: raw.addedTimeMin ?? 0,
+      clockStartedAt: raw.clockStartedAt ?? 0,
+      running: raw.running ?? false,
+      half: raw.half ?? 'not_started',
+      events: Array.isArray(raw.events) ? raw.events : [],
+    };
+  }
+
   // ── Teams ──────────────────────────────────────────────────────────────────
 
   async saveTeam(team: FootballTeam): Promise<void> {
@@ -159,7 +182,7 @@ class FootballService {
   async getLive(matchId: string): Promise<FootballLiveState> {
     const db = this.ensureDb();
     const snap = await get(ref(db, `${this.basePath}/matches/${matchId}/live`));
-    return snap.exists() ? (snap.val() as FootballLiveState) : createEmptyFootballLiveState(matchId);
+    return this.normalizeLive(snap.exists() ? (snap.val() as Partial<FootballLiveState>) : null, matchId);
   }
 
   async saveLive(live: FootballLiveState): Promise<void> {
@@ -170,7 +193,7 @@ class FootballService {
   subscribeLive(matchId: string, cb: (live: FootballLiveState | null) => void): () => void {
     const db = this.ensureDb();
     return onValue(ref(db, `${this.basePath}/matches/${matchId}/live`), (snap) => {
-      cb(snap.exists() ? (snap.val() as FootballLiveState) : null);
+      cb(snap.exists() ? this.normalizeLive(snap.val() as Partial<FootballLiveState>, matchId) : null);
     });
   }
 

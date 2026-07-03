@@ -58,7 +58,11 @@ export default function FootballOBSOverlayPage() {
     const base = tenantPath('football');
     const unsubs = [
       onValue(ref(fbDb, `${base}/matches/${matchId}/setup`), (s) => s.exists() && setMatch(s.val())),
-      onValue(ref(fbDb, `${base}/matches/${matchId}/live`), (s) => s.exists() && setLive(s.val())),
+      onValue(ref(fbDb, `${base}/matches/${matchId}/live`), (s) => {
+        if (!s.exists()) return;
+        const raw = s.val() as FootballLiveState;
+        setLive({ ...raw, homeScore: raw.homeScore ?? 0, awayScore: raw.awayScore ?? 0, addedTimeMin: raw.addedTimeMin ?? 0, events: Array.isArray(raw.events) ? raw.events : [] });
+      }),
       onValue(ref(fbDb, `${base}/overlayConfig`), (s) => setConfig(s.exists() ? { ...DEFAULT_FOOTBALL_OVERLAY_CONFIG, ...s.val() } : DEFAULT_FOOTBALL_OVERLAY_CONFIG)),
       onValue(ref(fbDb, `${base}/matches/${matchId}/overlay`), (s) => setControl(s.exists() ? s.val() : null)),
     ];

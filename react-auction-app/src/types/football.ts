@@ -231,10 +231,11 @@ export interface FootballTopScorer {
 /** Compute the live match minute from a live state snapshot. */
 export function computeMatchMinute(live: FootballLiveState | null): { minute: number; second: number } {
   if (!live) return { minute: 0, second: 0 };
-  let elapsedSec = live.baseElapsedSec;
+  let elapsedSec = live.baseElapsedSec ?? 0;
   if (live.running && live.clockStartedAt) {
     elapsedSec += Math.max(0, Math.floor((Date.now() - live.clockStartedAt) / 1000));
   }
+  if (!Number.isFinite(elapsedSec) || elapsedSec < 0) elapsedSec = 0;
   return { minute: Math.floor(elapsedSec / 60), second: elapsedSec % 60 };
 }
 

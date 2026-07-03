@@ -98,6 +98,18 @@ class TenantService {
     await update(ref(db, `${TENANT_REGISTRY_PATH()}/${id}`), patch);
   }
 
+  /**
+   * Replace a tenant's enabled sports. Uses `set` on the exact `sports` node so
+   * the array is fully overwritten (avoids Firebase array-merge leftovers when
+   * the new list is shorter than the old one).
+   */
+  async setTenantSports(id: string, sports: SportKey[]): Promise<void> {
+    const db = await this.getDb();
+    if (!db) return;
+    const unique = Array.from(new Set(sports));
+    await set(ref(db, `${TENANT_REGISTRY_PATH()}/${id}/sports`), unique);
+  }
+
   /** Ensure the default tenant record exists (one-time bootstrap). */
   async ensureDefaultTenant(): Promise<TenantRecord> {
     const existing = await this.getTenant(DEFAULT_TENANT_ID);

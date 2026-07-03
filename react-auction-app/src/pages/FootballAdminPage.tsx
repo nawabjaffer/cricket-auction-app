@@ -201,13 +201,18 @@ function TeamEditor({ team, onClose, onSaved }: { team: FootballTeam; onClose: (
   const [draft, setDraft] = useState<FootballTeam>(team);
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [uploadError, setUploadError] = useState('');
 
   const upload = async (file: File) => {
     setUploading(true);
+    setUploadError('');
     try {
-      const url = await uploadFileToStorage(file, `${tenantPath('football')}/teams/${draft.id}/logo_${Date.now()}`);
+      const url = await uploadFileToStorage(file, `media/football/teams/${draft.id}/logo_${Date.now()}`);
       setDraft((d) => ({ ...d, logoUrl: url }));
-    } catch { onSaved('Logo upload failed'); }
+    } catch (err) {
+      console.error('[FootballAdmin] logo upload failed:', err);
+      setUploadError('Logo upload failed. Please try again.');
+    }
     finally { setUploading(false); }
   };
 
@@ -241,6 +246,7 @@ function TeamEditor({ team, onClose, onSaved }: { team: FootballTeam; onClose: (
               <input type="file" accept="image/*" hidden onChange={(e) => e.target.files?.[0] && upload(e.target.files[0])} />
             </label>
           </div>
+          {uploadError && <div className="fb-upload-error">{uploadError}</div>}
 
           <label className="fb-field">
             <span>Team Name</span>
@@ -365,13 +371,18 @@ function PlayerEditor({ player, teams, onClose, onSaved }: { player: FootballPla
   const [draft, setDraft] = useState<FootballPlayer>(player);
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [uploadError, setUploadError] = useState('');
 
   const upload = async (file: File) => {
     setUploading(true);
+    setUploadError('');
     try {
-      const url = await uploadFileToStorage(file, `${tenantPath('football')}/players/${draft.id}/photo_${Date.now()}`);
+      const url = await uploadFileToStorage(file, `media/football/players/${draft.id}/photo_${Date.now()}`);
       setDraft((d) => ({ ...d, photoUrl: url }));
-    } catch { onSaved('Photo upload failed'); }
+    } catch (err) {
+      console.error('[FootballAdmin] photo upload failed:', err);
+      setUploadError('Photo upload failed. Please try again.');
+    }
     finally { setUploading(false); }
   };
 
@@ -403,6 +414,7 @@ function PlayerEditor({ player, teams, onClose, onSaved }: { player: FootballPla
               <input type="file" accept="image/*" hidden onChange={(e) => e.target.files?.[0] && upload(e.target.files[0])} />
             </label>
           </div>
+          {uploadError && <div className="fb-upload-error">{uploadError}</div>}
 
           <div className="fb-field-row">
             <label className="fb-field fb-field--grow">
@@ -583,9 +595,12 @@ function OverlayTab({ config, onSave, onFlash }: { config: FootballOverlayConfig
   const uploadLogo = async (file: File, key: 'tournamentLogo' | 'broadcastPartnerLogo') => {
     setUploadingKey(key);
     try {
-      const url = await uploadFileToStorage(file, `${tenantPath('football')}/overlay/${key}_${Date.now()}`);
+      const url = await uploadFileToStorage(file, `media/football/overlay/${key}_${Date.now()}`);
       setDraft((d) => ({ ...d, [key]: url }));
-    } catch { onFlash('Upload failed'); }
+    } catch (err) {
+      console.error('[FootballAdmin] overlay logo upload failed:', err);
+      onFlash('Upload failed');
+    }
     finally { setUploadingKey(null); }
   };
 
