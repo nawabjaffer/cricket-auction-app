@@ -13,32 +13,36 @@ import {
 } from 'react-icons/io5';
 import { useAdminAuth } from '../hooks/useAdminAuth';
 import { useTenantNavigate as useNavigate } from '../hooks/useTenantNavigate';
-import { tenantPath } from '../services/tenantPath';
+import { tenantPath, getActiveTenant } from '../services/tenantPath';
 import { realtimeSync } from '../services/realtimeSync';
 import { footballService } from '../services/football';
+import { tenantService } from '../services/tenantService';
 import {
-  computeMatchMinute, halfBaseMinute, FOOTBALL_HALF_LABELS, createEmptyFootballLiveState,
+  computeMatchMinute, halfBaseMinute, halfLimitMinute, FOOTBALL_HALF_LABELS,
+  createEmptyFootballLiveState, DEFAULT_FOOTBALL_RULES,
 } from '../types/football';
 import type {
   FootballMatchSetup, FootballLiveState, FootballPlayer, FootballHalf,
-  FootballMatchEvent, FootballEventType, FootballOverlayControl,
+  FootballMatchEvent, FootballEventType, FootballOverlayControl, FootballRulesConfig,
 } from '../types/football';
 import './FootballUpdatePage.css';
 
 const uid = (p: string) => `${p}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
 
-// Progression of match phases when tapping "Next Phase".
-const NEXT_HALF: Record<FootballHalf, FootballHalf> = {
-  not_started: 'first_half',
-  first_half: 'half_time',
-  half_time: 'second_half',
-  second_half: 'full_time',
-  extra_first: 'extra_break',
-  extra_break: 'extra_second',
-  extra_second: 'penalties',
-  penalties: 'full_time',
-  full_time: 'full_time',
-};
+// Rules-aware progression of match phases when tapping "Next Phase".
+function nextHalfFor(half: FootballHalf, rules: FootballRulesConfig): FootballHalf {
+  switch (half) {
+    case 'not_started': return 'first_half';
+    case 'first_half': return 'half_time';
+    case 'half_time': return 'second_half';
+    case 'second_half': return rules.extraTimeEnabled ? 'extra_first' : 'full_time';
+    case 'extra_first': return 'extra_break';
+    case 'extra_break': return 'extra_second';
+    case 'extra_second': return rules.penaltiesEnabled ? 'penalties' : 'full_time';
+    case 'penalties': return 'full_time';
+    default: return 'full_time';
+  }
+}
 
 export default function FootballUpdatePage() {
   const navigate = useNavigate();
@@ -50,11 +54,14 @@ export default function FootballUpdatePage() {
   const [match, setMatch] = useState<FootballMatchSetup | null>(null);
   const [live, setLive] = useState<FootballLiveState | null>(null);
   const [players, setPlayers] = useState<FootballPlayer[]>([]);
+  const [rules, setRules] = useState<FootballRulesConfig>(DEFAULT_FOOTBALL_RULES);
   const [, setTick] = useState(0); // forces clock re-render each second
   const [eventModal, setEventModal] = useState<null | { type: FootballEventType; teamId: string }>(null);
 
   const liveRef = useRef<FootballLiveState | null>(null);
+  const rulesRef = useRef<FootballRulesConfig>(DEFAULT_FOOTBALL_RULES);
   useEffect(() => { liveRef.current = live; }, [live]);
+  useEffect(() => { rulesRef.current = rules; }, [rules]);
 
   // ── Init ──
   useEffect(() => {
@@ -64,6 +71,11 @@ export default function FootballUpdatePage() {
         const db = realtimeSync.getDatabase();
         if (db) footballService.initialize(db, tenantPath('football'));
       } catch (err) { console.warn('[FootballUpdate] init warning:', err); }
+      // Load this tournament's football rules (timings/format) from Platform Admin.
+      try {
+        const t = await tenantService.getTenant(getActiveTenant());
+        if (t?.footballRules) setRules({ ...DEFAULT_FOOTBALL_RULES, ...t.footballRules });
+      } catch (err) { console.warn('[FootballUpdate] rules load warning:', err); }
       setReady(true);
     })();
   }, []);
@@ -121,12 +133,20 @@ export default function FootballUpdatePage() {
   const nextPhase = useCallback(async () => {
     const l = liveRef.current;
     if (!l) return;
-    const target = NEXT_HALF[l.half];
-    // Reset the running clock to the new half's base minute.
-    const base = halfBaseMinute(target) * 60;
+    const target = nextHalfFor(l.half, rulesRef.current);
+    // Reset the running clock to the new half's base minute (rules-aware).
+    const base = halfBaseMinute(target, rulesRef.current) * 60;
     await persist({ ...l, half: target, running: false, clockStartedAt: 0, baseElapsedSec: base, addedTimeMin: 0 });
     if (target === 'half_time') fireOverlay({ activeOverlay: 'half_time', lastUpdated: Date.now() });
     if (target === 'full_time') { fireOverlay({ activeOverlay: 'full_time', lastUpdated: Date.now() }); if (matchId) footballService.updateMatchStatus(matchId, 'completed'); }
+  }, [persist, fireOverlay, matchId]);
+
+  const endMatch = useCallback(async () => {
+    const l = liveRef.current;
+    if (!l) return;
+    await persist({ ...l, half: 'full_time', running: false, clockStartedAt: 0 });
+    fireOverlay({ activeOverlay: 'full_time', lastUpdated: Date.now() });
+    if (matchId) footballService.updateMatchStatus(matchId, 'completed');
   }, [persist, fireOverlay, matchId]);
 
   const setAddedTime = useCallback(async (delta: number) => {
@@ -187,12 +207,19 @@ export default function FootballUpdatePage() {
   const displayClock = `${String(minute).padStart(2, '0')}:${String(second).padStart(2, '0')}`;
   const homePlayers = players.filter((p) => p.teamId === match.teamA.id);
   const awayPlayers = players.filter((p) => p.teamId === match.teamB.id);
+  const limit = halfLimitMinute(live.half, rules);
+  const overLimit = limit != null && minute >= limit;
+  const nextTarget = nextHalfFor(live.half, rules);
+  const atFullTime = live.half === 'full_time';
 
   return (
     <div className="fbu">
       <header className="fbu__top">
         <button className="fbu__back" onClick={() => navigate('/football/scorer/admin')}>← Admin</button>
-        <div className="fbu__competition">{match.competition || 'Match'} · {match.venue}</div>
+        <div className="fbu__competition">
+          {match.competition || 'Match'} · {match.venue}
+          <span className="fbu__format">{rules.format} · {rules.playersPerSide}-a-side · {rules.halfDurationMin}′×{rules.numberOfHalves}</span>
+        </div>
         <button className="fbu__overlay-link" onClick={() => window.open(`/football/scorer/obs-overlay?matchId=${matchId}`, '_blank')}>Open Overlay</button>
       </header>
 
@@ -202,19 +229,27 @@ export default function FootballUpdatePage() {
           color={match.teamA.primaryColor} score={live.homeScore} onAdd={() => adjustScore('home', 1)} onSub={() => adjustScore('home', -1)} />
 
         <div className="fbu__center">
-          <div className="fbu__clock" data-running={live.running}>
+          <div className={`fbu__clock ${overLimit ? 'fbu__clock--over' : ''}`} data-running={live.running}>
             <IoTime size={16} /> {displayClock}
             {live.addedTimeMin > 0 && <span className="fbu__added">+{live.addedTimeMin}</span>}
           </div>
-          <div className="fbu__half">{FOOTBALL_HALF_LABELS[live.half]}</div>
+          <div className="fbu__half">
+            {FOOTBALL_HALF_LABELS[live.half]}
+            {limit != null && <span className="fbu__limit"> / {limit}′{overLimit ? ' — time up' : ''}</span>}
+          </div>
           <div className="fbu__timer-controls">
-            <button className={`fbu__timer-btn ${live.running ? 'fbu__timer-btn--pause' : 'fbu__timer-btn--play'}`} onClick={toggleClock}>
+            <button className={`fbu__timer-btn ${live.running ? 'fbu__timer-btn--pause' : 'fbu__timer-btn--play'}`} onClick={toggleClock} disabled={atFullTime}>
               {live.running ? <IoPause size={20} /> : <IoPlay size={20} />}
               {live.running ? 'Pause' : 'Start'}
             </button>
-            <button className="fbu__timer-btn fbu__timer-btn--next" onClick={nextPhase}>
-              <IoArrowForward size={18} /> Next: {FOOTBALL_HALF_LABELS[NEXT_HALF[live.half]]}
-            </button>
+            {!atFullTime && (
+              <button className="fbu__timer-btn fbu__timer-btn--next" onClick={nextPhase}>
+                <IoArrowForward size={18} /> Next: {FOOTBALL_HALF_LABELS[nextTarget]}
+              </button>
+            )}
+            {(live.half === 'second_half' || live.half === 'extra_second') && nextTarget !== 'full_time' && (
+              <button className="fbu__timer-btn fbu__timer-btn--end" onClick={endMatch}>End Match</button>
+            )}
           </div>
           <div className="fbu__added-controls">
             <span>Added time</span>

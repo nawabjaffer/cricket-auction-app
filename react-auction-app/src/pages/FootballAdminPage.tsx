@@ -14,16 +14,17 @@ import {
 import { useAdminAuth } from '../hooks/useAdminAuth';
 import { useTenantNavigate as useNavigate, getTenantSlugFromPath } from '../hooks/useTenantNavigate';
 import { useLocation } from 'react-router-dom';
-import { tenantPath } from '../services/tenantPath';
+import { tenantPath, getActiveTenant } from '../services/tenantPath';
 import { realtimeSync } from '../services/realtimeSync';
 import { footballService } from '../services/football';
+import { tenantService } from '../services/tenantService';
 import { uploadFileToStorage } from '../services';
 import {
-  FOOTBALL_POSITIONS, FOOTBALL_FORMATIONS, DEFAULT_FOOTBALL_OVERLAY_CONFIG,
+  FOOTBALL_POSITIONS, FOOTBALL_FORMATIONS, DEFAULT_FOOTBALL_OVERLAY_CONFIG, DEFAULT_FOOTBALL_RULES,
 } from '../types/football';
 import type {
   FootballTeam, FootballPlayer, FootballMatchSetup, FootballOverlayConfig,
-  FootballPosition, FootballFormation, FootballTeamRef,
+  FootballPosition, FootballFormation, FootballTeamRef, FootballRulesConfig,
 } from '../types/football';
 import './FootballAdminPage.css';
 
@@ -47,6 +48,7 @@ export default function FootballAdminPage() {
   const [players, setPlayers] = useState<FootballPlayer[]>([]);
   const [matches, setMatches] = useState<FootballMatchSetup[]>([]);
   const [overlayConfig, setOverlayConfig] = useState<FootballOverlayConfig>(DEFAULT_FOOTBALL_OVERLAY_CONFIG);
+  const [rules, setRules] = useState<FootballRulesConfig>(DEFAULT_FOOTBALL_RULES);
 
   // ── Init Firebase + football service ──
   useEffect(() => {
@@ -58,6 +60,10 @@ export default function FootballAdminPage() {
       } catch (err) {
         console.warn('[FootballAdmin] init warning:', err);
       }
+      try {
+        const t = await tenantService.getTenant(getActiveTenant());
+        if (t?.footballRules) setRules({ ...DEFAULT_FOOTBALL_RULES, ...t.footballRules });
+      } catch (err) { console.warn('[FootballAdmin] rules load warning:', err); }
       setReady(true);
     })();
   }, []);
@@ -137,7 +143,7 @@ export default function FootballAdminPage() {
         {ready && activeTab === 'teams' && <TeamsTab teams={teams} onFlash={flash} />}
         {ready && activeTab === 'players' && <PlayersTab teams={teams} players={players} onFlash={flash} />}
         {ready && activeTab === 'matches' && (
-          <MatchesTab teams={teams} matches={matches} baseUrl={baseUrl} onFlash={flash} onChanged={refreshMatches} />
+          <MatchesTab teams={teams} matches={matches} baseUrl={baseUrl} rules={rules} onFlash={flash} onChanged={refreshMatches} />
         )}
         {ready && activeTab === 'overlay' && (
           <OverlayTab config={overlayConfig} onSave={async (c) => { await footballService.saveOverlayConfig(c); flash('Overlay saved'); }} onFlash={flash} />
@@ -485,8 +491,8 @@ function PlayerEditor({ player, teams, onClose, onSaved }: { player: FootballPla
 // MATCHES TAB
 // ════════════════════════════════════════════════════════════════════════════
 
-function MatchesTab({ teams, matches, baseUrl, onFlash, onChanged }: {
-  teams: FootballTeam[]; matches: FootballMatchSetup[]; baseUrl: string;
+function MatchesTab({ teams, matches, baseUrl, rules, onFlash, onChanged }: {
+  teams: FootballTeam[]; matches: FootballMatchSetup[]; baseUrl: string; rules: FootballRulesConfig;
   onFlash: (m: string) => void; onChanged: () => void;
 }) {
   const [creating, setCreating] = useState(false);
@@ -504,7 +510,7 @@ function MatchesTab({ teams, matches, baseUrl, onFlash, onChanged }: {
     if (!home || !away || home.id === away.id) { onFlash('Pick two different teams'); return; }
     const match: FootballMatchSetup = {
       id: uid('match'), teamA: toRef(home), teamB: toRef(away), venue, competition,
-      date, halfDurationMin: 45, status: 'scheduled', createdAt: Date.now(), updatedAt: Date.now(),
+      date, halfDurationMin: rules.halfDurationMin, status: 'scheduled', createdAt: Date.now(), updatedAt: Date.now(),
     };
     await footballService.saveMatch(match);
     setCreating(false); setHomeId(''); setAwayId(''); setVenue(''); setCompetition('');
@@ -518,6 +524,14 @@ function MatchesTab({ teams, matches, baseUrl, onFlash, onChanged }: {
         <button className="fb-btn fb-btn--primary" disabled={teams.length < 2} onClick={() => setCreating((v) => !v)}>
           <IoAdd size={18} /> New Match
         </button>
+      </div>
+      <div className="fb-rules-banner">
+        Format: <strong>{rules.format} · {rules.playersPerSide}-a-side</strong> ·
+        {' '}Halves: <strong>{rules.numberOfHalves} × {rules.halfDurationMin}′</strong> ·
+        {' '}HT break: <strong>{rules.halfTimeBreakMin}′</strong>
+        {rules.extraTimeEnabled && <> · ET: <strong>{rules.extraTimeHalfMin}′ × 2</strong></>}
+        {rules.penaltiesEnabled && <> · <strong>Penalties</strong></>}
+        <span className="fb-rules-banner__hint">Configure in Platform Admin → Football Rules</span>
       </div>
       {teams.length < 2 && <div className="fb-empty">Add at least two teams to create a match.</div>}
 

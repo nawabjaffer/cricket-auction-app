@@ -290,6 +290,22 @@
   padding: 8px 12px;
 }
 
+.fb-rules-banner {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding: 10px 14px;
+  margin-bottom: 16px;
+  background: rgba(250, 204, 21, 0.08);
+  border: 1px solid rgba(250, 204, 21, 0.25);
+  border-radius: 10px;
+  font-size: 0.82rem;
+  color: #d4d4d8;
+}
+.fb-rules-banner strong { color: #facc15; }
+.fb-rules-banner__hint { margin-left: auto; font-size: 0.72rem; color: #71717a; }
+
 /* ── Match form / list ────────────────────────────────────────────────────── */
 .fb-match-form {
   padding: 18px;

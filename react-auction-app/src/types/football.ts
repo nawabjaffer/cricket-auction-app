@@ -211,6 +211,87 @@ export const DEFAULT_FOOTBALL_OVERLAY_CONFIG: FootballOverlayConfig = {
   redCardAnimation: { enabled: true, durationMs: 4000, text: 'RED CARD' },
 };
 
+// ── Rules & regulations (per-tournament, configured from Platform Admin) ─────
+
+/** Match format — players per side. */
+export type FootballFormat = '5s' | '7s' | '9s' | '11s';
+
+export const FOOTBALL_FORMATS: { value: FootballFormat; label: string }[] = [
+  { value: '5s', label: '5-a-side' },
+  { value: '7s', label: '7-a-side' },
+  { value: '9s', label: '9-a-side' },
+  { value: '11s', label: '11-a-side' },
+];
+
+export interface FootballRulesConfig {
+  format: FootballFormat;
+  playersPerSide: number;
+  // Timing
+  halfDurationMin: number;     // duration of each half (minutes)
+  numberOfHalves: number;      // usually 2
+  halfTimeBreakMin: number;    // interval between halves
+  // Extra time
+  extraTimeEnabled: boolean;
+  extraTimeHalfMin: number;    // each ET half duration
+  // Penalties
+  penaltiesEnabled: boolean;
+  penaltyShootoutBest: number; // best-of N (e.g. 5)
+  // Substitutions
+  maxSubstitutions: number;    // per team (use 99 for unlimited/rolling)
+  rollingSubs: boolean;
+  squadSize: number;           // total squad incl. subs
+  // Discipline
+  yellowCardsForSuspension: number; // accumulation → suspension
+  sinBinEnabled: boolean;      // temporary suspension (common in small-sided)
+  sinBinMinutes: number;
+  // Play
+  offsideEnabled: boolean;
+  // Free note for match officials
+  notes?: string;
+}
+
+/** Sensible presets per format. Admins can override any field afterwards. */
+export const FOOTBALL_FORMAT_PRESETS: Record<FootballFormat, FootballRulesConfig> = {
+  '5s': {
+    format: '5s', playersPerSide: 5,
+    halfDurationMin: 20, numberOfHalves: 2, halfTimeBreakMin: 5,
+    extraTimeEnabled: false, extraTimeHalfMin: 5,
+    penaltiesEnabled: true, penaltyShootoutBest: 3,
+    maxSubstitutions: 99, rollingSubs: true, squadSize: 10,
+    yellowCardsForSuspension: 2, sinBinEnabled: true, sinBinMinutes: 2,
+    offsideEnabled: false,
+  },
+  '7s': {
+    format: '7s', playersPerSide: 7,
+    halfDurationMin: 25, numberOfHalves: 2, halfTimeBreakMin: 5,
+    extraTimeEnabled: false, extraTimeHalfMin: 5,
+    penaltiesEnabled: true, penaltyShootoutBest: 5,
+    maxSubstitutions: 99, rollingSubs: true, squadSize: 12,
+    yellowCardsForSuspension: 2, sinBinEnabled: true, sinBinMinutes: 2,
+    offsideEnabled: false,
+  },
+  '9s': {
+    format: '9s', playersPerSide: 9,
+    halfDurationMin: 30, numberOfHalves: 2, halfTimeBreakMin: 10,
+    extraTimeEnabled: false, extraTimeHalfMin: 10,
+    penaltiesEnabled: true, penaltyShootoutBest: 5,
+    maxSubstitutions: 5, rollingSubs: true, squadSize: 14,
+    yellowCardsForSuspension: 2, sinBinEnabled: false, sinBinMinutes: 0,
+    offsideEnabled: true,
+  },
+  '11s': {
+    format: '11s', playersPerSide: 11,
+    halfDurationMin: 45, numberOfHalves: 2, halfTimeBreakMin: 15,
+    extraTimeEnabled: true, extraTimeHalfMin: 15,
+    penaltiesEnabled: true, penaltyShootoutBest: 5,
+    maxSubstitutions: 5, rollingSubs: false, squadSize: 18,
+    yellowCardsForSuspension: 2, sinBinEnabled: false, sinBinMinutes: 0,
+    offsideEnabled: true,
+  },
+};
+
+export const DEFAULT_FOOTBALL_RULES: FootballRulesConfig = FOOTBALL_FORMAT_PRESETS['11s'];
+
 // ── Aggregated stats (for the OBS dock) ──
 
 export interface FootballTopScorer {
@@ -239,13 +320,31 @@ export function computeMatchMinute(live: FootballLiveState | null): { minute: nu
   return { minute: Math.floor(elapsedSec / 60), second: elapsedSec % 60 };
 }
 
-/** The clock offset (minutes) at which each half begins, for display. */
-export function halfBaseMinute(half: FootballHalf): number {
+/** The clock offset (minutes) at which each half begins, for display.
+ *  Rules-aware: uses the configured half duration so 5s/7s/11s all work. */
+export function halfBaseMinute(half: FootballHalf, rules?: FootballRulesConfig | null): number {
+  const h = rules?.halfDurationMin ?? 45;
+  const et = rules?.extraTimeHalfMin ?? 15;
+  const regulation = h * (rules?.numberOfHalves ?? 2);
   switch (half) {
-    case 'second_half': return 45;
-    case 'extra_first': return 90;
-    case 'extra_second': return 105;
+    case 'second_half': return h;
+    case 'extra_first': return regulation;
+    case 'extra_second': return regulation + et;
     default: return 0;
+  }
+}
+
+/** The scheduled end minute (limit) of the given half — for whistle cues. */
+export function halfLimitMinute(half: FootballHalf, rules?: FootballRulesConfig | null): number | null {
+  const h = rules?.halfDurationMin ?? 45;
+  const et = rules?.extraTimeHalfMin ?? 15;
+  const regulation = h * (rules?.numberOfHalves ?? 2);
+  switch (half) {
+    case 'first_half': return h;
+    case 'second_half': return regulation;
+    case 'extra_first': return regulation + et;
+    case 'extra_second': return regulation + et * 2;
+    default: return null;
   }
 }
 

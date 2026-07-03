@@ -28,7 +28,11 @@
   font-size: 0.8rem; font-weight: 600; cursor: pointer;
 }
 .fbu__overlay-link:hover, .fbu__back:hover { border-color: #facc15; color: #facc15; }
-.fbu__competition { font-size: 0.82rem; color: #a1a1aa; }
+.fbu__competition { font-size: 0.82rem; color: #a1a1aa; display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.fbu__format {
+  font-size: 0.68rem; font-weight: 700; letter-spacing: 0.4px;
+  color: #facc15; text-transform: uppercase;
+}
 
 /* ── Scoreboard ───────────────────────────────────────────────────────────── */
 .fbu__scoreboard {
@@ -66,11 +70,14 @@
   background: #18181b; border: 1px solid #3f3f46;
 }
 .fbu__clock[data-running="true"] { border-color: #22c55e; color: #4ade80; }
+.fbu__clock--over { border-color: #facc15 !important; color: #facc15 !important; animation: fbu-pulse 1s ease-in-out infinite; }
+@keyframes fbu-pulse { 50% { opacity: 0.55; } }
 .fbu__added { color: #facc15; font-size: 1.1rem; }
 .fbu__half {
   font-size: 0.8rem; font-weight: 800; text-transform: uppercase; letter-spacing: 1px;
   color: #e11d1d; padding: 3px 12px; border-radius: 999px; background: rgba(225, 29, 29, 0.12);
 }
+.fbu__limit { color: #a1a1aa; font-weight: 600; }
 .fbu__timer-controls { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
 .fbu__timer-btn {
   display: inline-flex; align-items: center; gap: 6px;
@@ -81,6 +88,9 @@
 .fbu__timer-btn--pause { background: #f59e0b; color: #0a0a0a; }
 .fbu__timer-btn--next { background: #27272a; border: 1px solid #3f3f46; }
 .fbu__timer-btn--next:hover { border-color: #facc15; }
+.fbu__timer-btn--end { background: #7f1d1d; border: 1px solid #e11d1d; }
+.fbu__timer-btn--end:hover { background: #e11d1d; }
+.fbu__timer-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
 .fbu__added-controls {
   display: flex; align-items: center; gap: 8px;

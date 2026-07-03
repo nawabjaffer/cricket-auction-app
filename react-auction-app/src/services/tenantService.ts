@@ -8,6 +8,7 @@
 import { get, ref, set, update } from 'firebase/database';
 import { realtimeSync } from './realtimeSync';
 import { DEFAULT_TENANT_ID, platformPath } from './tenantPath';
+import type { FootballRulesConfig } from '../types/football';
 
 export type TenantPlan = 'free' | 'basic' | 'pro' | 'enterprise';
 
@@ -31,6 +32,9 @@ export interface TenantRecord {
   logoUrl?: string;
   // Enabled sports for this tournament (default: cricket only).
   sports?: SportKey[];
+  // Football rules & regulations (format, timings, subs, discipline).
+  // Configured from Platform Admin, consumed by the football scorer.
+  footballRules?: FootballRulesConfig;
   // Franchise branding / contact
   franchiseName?: string;
   contactEmail?: string;
@@ -108,6 +112,17 @@ class TenantService {
     if (!db) return;
     const unique = Array.from(new Set(sports));
     await set(ref(db, `${TENANT_REGISTRY_PATH()}/${id}/sports`), unique);
+  }
+
+  /** Save the football rules & regulations for a tournament. */
+  async setFootballRules(id: string, rules: FootballRulesConfig): Promise<void> {
+    const db = await this.getDb();
+    if (!db) return;
+    // Firebase rejects `undefined` — drop optional empty fields.
+    const clean = Object.fromEntries(
+      Object.entries(rules).filter(([, v]) => v !== undefined),
+    ) as FootballRulesConfig;
+    await set(ref(db, `${TENANT_REGISTRY_PATH()}/${id}/footballRules`), clean);
   }
 
   /** Ensure the default tenant record exists (one-time bootstrap). */
