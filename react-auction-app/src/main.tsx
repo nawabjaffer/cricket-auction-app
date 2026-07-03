@@ -1,6 +1,6 @@
 import { Component, StrictMode, type ReactNode } from 'react'
 import { createRoot } from 'react-dom/client'
-import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { setupDebugConsole } from './utils/logger'
 
@@ -24,6 +24,10 @@ import ScoreOBSOverlayPage from './pages/ScoreOBSOverlayPage'
 import ScoreCameraPage from './pages/ScoreCameraPage'
 import ScoreOBSControlDock from './pages/ScoreOBSControlDock'
 import LiveQuestionPage from './pages/LiveQuestionPage'
+import FootballAdminPage from './pages/FootballAdminPage'
+import FootballUpdatePage from './pages/FootballUpdatePage'
+import FootballOBSOverlayPage from './pages/FootballOBSOverlayPage'
+import FootballOBSDockPage from './pages/FootballOBSDockPage'
 import { TenantGate } from './components/TenantGate/TenantGate'
 import './index.css'
 
@@ -91,6 +95,11 @@ createRoot(document.getElementById('root')!).render(
             <Route path="/cricket/scorer/camera" element={<ScoreCameraPage />} />
             <Route path="/cricket/scorer/obs-dock" element={<ScoreOBSControlDock />} />
             <Route path="/cricket/scorer/live-question" element={<LiveQuestionPage />} />
+            {/* Football scorer (legacy top-level — default tenant) */}
+            <Route path="/football/scorer/admin" element={<FootballAdminPage />} />
+            <Route path="/football/scorer/update" element={<FootballUpdatePage />} />
+            <Route path="/football/scorer/obs-overlay" element={<FootballOBSOverlayPage />} />
+            <Route path="/football/scorer/obs-dock" element={<FootballOBSDockPage />} />
             {/* Legacy scorer routes (redirects) */}
             <Route path="/scoring/admin" element={<ScoringAdminPage />} />
             <Route path="/match/score/update" element={<ScoreUpdatePage />} />
@@ -119,11 +128,18 @@ createRoot(document.getElementById('root')!).render(
             <Route path="/:tenantSlug/cricket/scorer/camera" element={<TenantGate><ScoreCameraPage /></TenantGate>} />
             <Route path="/:tenantSlug/cricket/scorer/obs-dock" element={<TenantGate><ScoreOBSControlDock /></TenantGate>} />
             <Route path="/:tenantSlug/cricket/scorer/live-question" element={<TenantGate><LiveQuestionPage /></TenantGate>} />
+            {/* Football scorer (tenant-scoped) */}
+            <Route path="/:tenantSlug/football/scorer/admin" element={<TenantGate><FootballAdminPage /></TenantGate>} />
+            <Route path="/:tenantSlug/football/scorer/update" element={<TenantGate><FootballUpdatePage /></TenantGate>} />
+            <Route path="/:tenantSlug/football/scorer/obs-overlay" element={<TenantGate><FootballOBSOverlayPage /></TenantGate>} />
+            <Route path="/:tenantSlug/football/scorer/obs-dock" element={<TenantGate><FootballOBSDockPage /></TenantGate>} />
             {/* Legacy scorer routes */}
             <Route path="/:tenantSlug/scoring/admin" element={<TenantGate><ScoringAdminPage /></TenantGate>} />
             <Route path="/:tenantSlug/match/score/update" element={<TenantGate><ScoreUpdatePage /></TenantGate>} />
             <Route path="/:tenantSlug/score/obs-overlay" element={<TenantGate><ScoreOBSOverlayPage /></TenantGate>} />
             <Route path="/:tenantSlug/score/obs-dock" element={<TenantGate><ScoreOBSControlDock /></TenantGate>} />
+            {/* Unknown route → main admin login */}
+            <Route path="*" element={<Navigate to="/admin/login" replace />} />
           </Routes>
         </BrowserRouter>
       </QueryClientProvider>

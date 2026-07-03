@@ -1,0 +1,182 @@
+/* ============================================================================
+   FOOTBALL UPDATE PAGE — scorer control (red / yellow / black)
+   ============================================================================ */
+
+.fbu {
+  min-height: 100vh;
+  background: #0a0a0a;
+  color: #f4f4f5;
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  padding-bottom: 40px;
+}
+
+.fbu__empty, .fbu__empty-sm { padding: 40px; text-align: center; color: #71717a; }
+.fbu__empty-sm { padding: 16px; font-size: 0.85rem; }
+
+.fbu__top {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 14px 20px;
+  background: linear-gradient(120deg, #1a0505, #0a0a0a 60%);
+  border-bottom: 2px solid #e11d1d;
+}
+.fbu__back, .fbu__overlay-link {
+  padding: 8px 14px;
+  border: 1px solid #3f3f46;
+  border-radius: 8px;
+  background: transparent;
+  color: #d4d4d8;
+  font-size: 0.8rem; font-weight: 600; cursor: pointer;
+}
+.fbu__overlay-link:hover, .fbu__back:hover { border-color: #facc15; color: #facc15; }
+.fbu__competition { font-size: 0.82rem; color: #a1a1aa; }
+
+/* ── Scoreboard ───────────────────────────────────────────────────────────── */
+.fbu__scoreboard {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: 16px;
+  align-items: start;
+  padding: 24px 20px;
+  max-width: 1000px;
+  margin: 0 auto;
+}
+
+.fbu__team { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.fbu__team-logo {
+  width: 72px; height: 72px; border-radius: 16px;
+  display: flex; align-items: center; justify-content: center;
+  color: #fff; overflow: hidden;
+}
+.fbu__team-logo img { width: 100%; height: 100%; object-fit: contain; }
+.fbu__team-name { font-weight: 800; font-size: 1.1rem; letter-spacing: 0.5px; }
+.fbu__team-score { font-size: 3.5rem; font-weight: 900; line-height: 1; color: #facc15; }
+.fbu__team-score-controls { display: flex; gap: 8px; }
+.fbu__team-score-controls button {
+  width: 40px; height: 40px; border-radius: 10px;
+  border: 1px solid #3f3f46; background: #18181b; color: #fff; cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.fbu__team-score-controls button:hover { border-color: #e11d1d; background: #e11d1d; }
+
+.fbu__center { display: flex; flex-direction: column; align-items: center; gap: 10px; min-width: 240px; }
+.fbu__clock {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 1.6rem; font-weight: 900; font-variant-numeric: tabular-nums;
+  color: #fff; padding: 6px 16px; border-radius: 10px;
+  background: #18181b; border: 1px solid #3f3f46;
+}
+.fbu__clock[data-running="true"] { border-color: #22c55e; color: #4ade80; }
+.fbu__added { color: #facc15; font-size: 1.1rem; }
+.fbu__half {
+  font-size: 0.8rem; font-weight: 800; text-transform: uppercase; letter-spacing: 1px;
+  color: #e11d1d; padding: 3px 12px; border-radius: 999px; background: rgba(225, 29, 29, 0.12);
+}
+.fbu__timer-controls { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+.fbu__timer-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 10px 16px; border: none; border-radius: 10px;
+  font-weight: 700; font-size: 0.85rem; cursor: pointer; color: #fff;
+}
+.fbu__timer-btn--play { background: #22c55e; }
+.fbu__timer-btn--pause { background: #f59e0b; color: #0a0a0a; }
+.fbu__timer-btn--next { background: #27272a; border: 1px solid #3f3f46; }
+.fbu__timer-btn--next:hover { border-color: #facc15; }
+
+.fbu__added-controls {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 0.78rem; color: #a1a1aa;
+}
+.fbu__added-controls button {
+  width: 26px; height: 26px; border-radius: 7px;
+  border: 1px solid #3f3f46; background: #18181b; color: #fff; cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.fbu__added-controls strong { color: #facc15; min-width: 28px; text-align: center; }
+
+/* ── Action buttons ───────────────────────────────────────────────────────── */
+.fbu__actions {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 16px;
+  max-width: 1000px; margin: 0 auto; padding: 0 20px;
+}
+.fbu__action-col {
+  background: #141417; border: 1px solid #27272a; border-radius: 14px; padding: 16px;
+}
+.fbu__action-col h3 { margin: 0 0 12px; font-size: 0.95rem; font-weight: 800; }
+.fbu__event-buttons { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.fbu__eb {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  padding: 12px 10px; border: 1px solid #3f3f46; border-radius: 10px;
+  background: #18181b; color: #e4e4e7; font-weight: 700; font-size: 0.82rem; cursor: pointer;
+}
+.fbu__eb:hover { transform: translateY(-1px); }
+.fbu__eb--goal:hover { border-color: #22c55e; color: #4ade80; }
+.fbu__eb--pen:hover { border-color: #22c55e; }
+.fbu__eb--yellow { color: #facc15; }
+.fbu__eb--yellow:hover { border-color: #facc15; background: rgba(250, 204, 21, 0.1); }
+.fbu__eb--red { color: #f87171; }
+.fbu__eb--red:hover { border-color: #e11d1d; background: rgba(225, 29, 29, 0.12); }
+.fbu__eb--sub:hover { border-color: #3b82f6; color: #60a5fa; }
+.fbu__eb--og:hover { border-color: #f97316; color: #fb923c; }
+
+/* ── Timeline ─────────────────────────────────────────────────────────────── */
+.fbu__timeline {
+  max-width: 1000px; margin: 20px auto 0; padding: 0 20px;
+}
+.fbu__timeline h3 { font-size: 0.95rem; font-weight: 800; margin: 0 0 12px; }
+.fbu__events { display: flex; flex-direction: column; gap: 8px; }
+.fbu__event {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 14px; border-radius: 10px;
+  background: #141417; border: 1px solid #27272a;
+  border-left: 3px solid #3f3f46;
+}
+.fbu__event--home { border-left-color: #e11d1d; }
+.fbu__event--away { border-left-color: #facc15; }
+.fbu__event-min { font-weight: 800; color: #facc15; min-width: 34px; }
+.fbu__event-icon { font-size: 1.1rem; }
+.fbu__event-text { flex: 1; font-size: 0.86rem; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.fbu__event-text em { color: #a1a1aa; font-style: normal; font-size: 0.8rem; }
+.fbu__event-type { margin-left: auto; font-size: 0.72rem; text-transform: uppercase; color: #71717a; letter-spacing: 0.5px; }
+.fbu__event-del {
+  width: 28px; height: 28px; border-radius: 7px;
+  border: 1px solid #3f3f46; background: transparent; color: #a1a1aa; cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.fbu__event-del:hover { border-color: #e11d1d; color: #f87171; }
+
+/* ── Modal ────────────────────────────────────────────────────────────────── */
+.fbu__modal {
+  position: fixed; inset: 0; z-index: 200;
+  display: flex; align-items: center; justify-content: center; padding: 20px;
+  background: rgba(0, 0, 0, 0.75); backdrop-filter: blur(4px);
+}
+.fbu__modal-card {
+  width: 100%; max-width: 420px;
+  background: #141417; border: 1px solid #3f3f46; border-radius: 18px;
+}
+.fbu__modal-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 16px 18px; border-bottom: 1px solid #27272a;
+}
+.fbu__modal-head h3 { margin: 0; font-size: 1rem; font-weight: 800; }
+.fbu__modal-head button { background: none; border: none; color: #a1a1aa; cursor: pointer; }
+.fbu__modal-body { padding: 18px; display: flex; flex-direction: column; gap: 14px; }
+.fbu__modal-foot { display: flex; justify-content: flex-end; gap: 10px; padding: 14px 18px; border-top: 1px solid #27272a; }
+.fbu__field { display: flex; flex-direction: column; gap: 5px; }
+.fbu__field > span { font-size: 0.74rem; color: #a1a1aa; font-weight: 600; text-transform: uppercase; }
+.fbu__field select {
+  background: #18181b; border: 1px solid #3f3f46; border-radius: 8px;
+  color: #f4f4f5; padding: 10px; font-size: 0.9rem;
+}
+.fbu__btn-ghost, .fbu__btn-primary {
+  padding: 10px 18px; border-radius: 9px; font-weight: 700; font-size: 0.85rem; cursor: pointer;
+}
+.fbu__btn-ghost { background: #27272a; border: 1px solid #3f3f46; color: #e4e4e7; }
+.fbu__btn-primary { background: #e11d1d; border: none; color: #fff; }
+.fbu__btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }
+
+@media (max-width: 640px) {
+  .fbu__scoreboard { grid-template-columns: 1fr; gap: 24px; }
+  .fbu__actions { grid-template-columns: 1fr; }
+  .fbu__team-score { font-size: 2.8rem; }
+}

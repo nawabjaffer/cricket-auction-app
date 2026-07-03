@@ -11,6 +11,14 @@ import { DEFAULT_TENANT_ID, platformPath } from './tenantPath';
 
 export type TenantPlan = 'free' | 'basic' | 'pro' | 'enterprise';
 
+/** Sports a tenant (tournament) has enabled. */
+export type SportKey = 'cricket' | 'football';
+
+export const ALL_SPORTS: { key: SportKey; label: string }[] = [
+  { key: 'cricket', label: 'Cricket' },
+  { key: 'football', label: 'Football' },
+];
+
 export interface TenantRecord {
   id: string;              // e.g. "epl_2026"
   slug: string;            // e.g. "epl-2026"
@@ -21,6 +29,8 @@ export interface TenantRecord {
   createdBy?: string;
   theme?: string;
   logoUrl?: string;
+  // Enabled sports for this tournament (default: cricket only).
+  sports?: SportKey[];
   // Franchise branding / contact
   franchiseName?: string;
   contactEmail?: string;

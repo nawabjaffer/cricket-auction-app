@@ -1,0 +1,254 @@
+/* ============================================================================
+   FOOTBALL OBS OVERLAY — transparent broadcast scoreboard
+   Theme vars (--fb-primary/secondary/accent/text) injected from admin config.
+   Defaults: primary=black, secondary=red, accent=yellow.
+   ============================================================================ */
+
+.fbo {
+  position: fixed;
+  inset: 0;
+  background: transparent;
+  font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  color: var(--fb-text, #fff);
+  overflow: hidden;
+  --fb-primary: #0a0a0a;
+  --fb-secondary: #e11d1d;
+  --fb-accent: #facc15;
+  --fb-text: #ffffff;
+}
+.fbo[data-empty="true"] { background: transparent; }
+
+/* ── Scoreboard placement ─────────────────────────────────────────────────── */
+.fbo__scoreboard {
+  position: absolute;
+  top: 28px;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  filter: drop-shadow(0 8px 24px rgba(0, 0, 0, 0.5));
+}
+.fbo--top-left .fbo__scoreboard { left: 32px; align-items: flex-start; }
+.fbo--top-center .fbo__scoreboard { left: 50%; transform: translateX(-50%); align-items: center; }
+.fbo--top-right .fbo__scoreboard { right: 32px; align-items: flex-end; }
+
+/* ── Tournament logo above the strip ──────────────────────────────────────── */
+.fbo__tourn-logo {
+  margin-bottom: 8px;
+  height: 46px;
+}
+.fbo__tourn-logo img { height: 100%; width: auto; object-fit: contain; }
+
+/* ── Main score strip ─────────────────────────────────────────────────────── */
+.fbo__strip {
+  display: flex;
+  align-items: stretch;
+  height: 56px;
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--fb-primary);
+  border: 2px solid rgba(255, 255, 255, 0.08);
+}
+
+.fbo__team {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 14px;
+  background: var(--fb-primary);
+}
+.fbo__team--home { padding-left: 12px; }
+.fbo__team--away { padding-right: 12px; }
+
+.fbo__team-logo {
+  width: 38px;
+  height: 38px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  flex-shrink: 0;
+  font-weight: 800;
+  font-size: 0.7rem;
+}
+.fbo__team-logo img { width: 100%; height: 100%; object-fit: contain; }
+
+.fbo__team-name {
+  font-size: 1.3rem;
+  font-weight: 800;
+  letter-spacing: 1px;
+  color: var(--fb-text);
+}
+
+/* ── Score block (center, accent gradient) ────────────────────────────────── */
+.fbo__score {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 18px;
+  background: linear-gradient(180deg, var(--fb-secondary), color-mix(in srgb, var(--fb-secondary) 70%, #000));
+  min-width: 96px;
+}
+.fbo__score-num {
+  font-size: 1.9rem;
+  font-weight: 900;
+  color: #fff;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+.fbo__score-sep { font-size: 1.3rem; font-weight: 700; color: rgba(255, 255, 255, 0.7); }
+
+/* ── Status / timer bar ───────────────────────────────────────────────────── */
+.fbo__status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 6px;
+  padding: 5px 12px;
+  border-radius: 8px;
+  background: var(--fb-primary);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.fbo__live {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 1px;
+  color: #fff;
+  background: var(--fb-secondary);
+  padding: 2px 8px;
+  border-radius: 5px;
+}
+.fbo__live-dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: #fff;
+  animation: fbo-blink 1s steps(2, start) infinite;
+}
+@keyframes fbo-blink { to { opacity: 0.2; } }
+
+.fbo__clock {
+  font-size: 1.05rem;
+  font-weight: 900;
+  color: var(--fb-accent);
+  font-variant-numeric: tabular-nums;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 2px;
+}
+.fbo__added { font-size: 0.75rem; color: #fff; margin-left: 2px; }
+
+.fbo__half {
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--fb-text);
+  opacity: 0.85;
+}
+.fbo__pens {
+  font-size: 0.72rem;
+  font-weight: 800;
+  color: var(--fb-accent);
+  padding: 2px 7px;
+  border-radius: 5px;
+  background: rgba(0, 0, 0, 0.4);
+}
+
+/* ── Broadcast partner logo (opposite corner) ─────────────────────────────── */
+.fbo__partner {
+  position: absolute;
+  top: 28px;
+  right: 32px;
+  height: 54px;
+  padding: 6px 10px;
+  background: rgba(255, 255, 255, 0.9);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+}
+.fbo--top-right .fbo__partner { right: auto; left: 32px; }
+.fbo__partner img { height: 100%; width: auto; object-fit: contain; }
+
+/* ── Celebrations ─────────────────────────────────────────────────────────── */
+.fbo__celeb {
+  position: absolute;
+  left: 50%;
+  bottom: 12%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  z-index: 10;
+}
+
+.fbo__celeb--goal { bottom: 18%; }
+.fbo__celeb-big {
+  font-size: 6rem;
+  font-weight: 900;
+  letter-spacing: 4px;
+  text-shadow: 0 6px 30px rgba(0, 0, 0, 0.7);
+  -webkit-text-stroke: 2px rgba(0, 0, 0, 0.35);
+}
+.fbo__celeb-media { max-width: 60vw; max-height: 50vh; object-fit: contain; }
+.fbo__celeb-player {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 22px;
+  border-radius: 12px;
+  background: var(--fb-primary);
+  border-left: 5px solid var(--fb-secondary);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5);
+}
+.fbo__celeb-min { font-size: 1.1rem; font-weight: 900; color: var(--fb-accent); }
+.fbo__celeb-name { font-size: 1.5rem; font-weight: 800; color: #fff; }
+.fbo__celeb-assist { font-size: 0.9rem; color: rgba(255, 255, 255, 0.6); }
+
+/* Cards */
+.fbo__celeb--card { flex-direction: row; align-items: center; gap: 18px; }
+.fbo__card {
+  width: 74px; height: 100px; border-radius: 8px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
+}
+.fbo__card--yellow { background: #facc15; }
+.fbo__card--red { background: #e11d1d; }
+.fbo__celeb-title { font-size: 2rem; font-weight: 900; letter-spacing: 2px; text-shadow: 0 4px 16px rgba(0,0,0,0.6); }
+.fbo__celeb-sub { font-size: 1.1rem; color: rgba(255, 255, 255, 0.85); margin-top: 4px; display: flex; gap: 12px; }
+
+/* Sub */
+.fbo__celeb--sub { flex-direction: row; align-items: center; gap: 16px; padding: 14px 26px; background: var(--fb-primary); border-radius: 14px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+.fbo__sub-icon { font-size: 2.4rem; }
+.fbo__sub-in { color: #4ade80; font-weight: 700; }
+.fbo__sub-out { color: #f87171; font-weight: 700; }
+
+/* Banners */
+.fbo__banner {
+  font-size: 3.2rem;
+  font-weight: 900;
+  letter-spacing: 6px;
+  padding: 16px 48px;
+  border-radius: 14px;
+  color: #fff;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
+  text-shadow: 0 3px 12px rgba(0, 0, 0, 0.4);
+}
+
+/* ── Responsive: mobile live telecast scaling ─────────────────────────────── */
+@media (max-width: 720px) {
+  .fbo__scoreboard { top: 16px; }
+  .fbo--top-left .fbo__scoreboard { left: 12px; }
+  .fbo--top-right .fbo__scoreboard { right: 12px; }
+  .fbo__strip { height: 46px; }
+  .fbo__team-name { font-size: 1rem; }
+  .fbo__team-logo { width: 30px; height: 30px; }
+  .fbo__score-num { font-size: 1.4rem; }
+  .fbo__partner { height: 40px; top: 16px; right: 12px; }
+  .fbo__celeb-big { font-size: 3.4rem; }
+  .fbo__celeb-name { font-size: 1.1rem; }
+  .fbo__banner { font-size: 1.8rem; padding: 12px 28px; letter-spacing: 3px; }
+}

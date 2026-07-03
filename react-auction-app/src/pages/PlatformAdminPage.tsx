@@ -8,7 +8,7 @@
 // ============================================================================
 
 import { useEffect, useState } from 'react';
-import { tenantService, type TenantRecord, type TenantPlan } from '../services/tenantService';
+import { tenantService, type TenantRecord, type TenantPlan, type SportKey, ALL_SPORTS } from '../services/tenantService';
 
 const PLAN_OPTIONS: TenantPlan[] = ['free', 'basic', 'pro', 'enterprise'];
 
@@ -56,6 +56,13 @@ export default function PlatformAdminPage() {
     refresh();
   };
 
+  const toggleSport = async (t: TenantRecord, sport: SportKey) => {
+    const current = t.sports && t.sports.length ? t.sports : (['cricket'] as SportKey[]);
+    const next = current.includes(sport) ? current.filter((s) => s !== sport) : [...current, sport];
+    await tenantService.updateTenant(t.id, { sports: next });
+    refresh();
+  };
+
   return (
     <div style={{ minHeight: '100vh', background: '#0b1020', color: '#e2e8f0', padding: 32, fontFamily: 'system-ui, sans-serif' }}>
       <div style={{ maxWidth: 960, margin: '0 auto' }}>
@@ -95,14 +102,35 @@ export default function PlatformAdminPage() {
           <h2 style={{ margin: 0, fontSize: 16 }}>Tournaments ({tenants.length})</h2>
           {loading ? <p style={{ opacity: 0.7 }}>Loading…</p> : (
             <div style={{ marginTop: 12, display: 'grid', gap: 10 }}>
-              {tenants.map((t) => (
+              {tenants.map((t) => {
+                const sports = t.sports && t.sports.length ? t.sports : (['cricket'] as SportKey[]);
+                return (
                 <div key={t.id} style={rowCard}>
-                  <div>
+                  <div style={{ flex: 1 }}>
                     <div style={{ fontWeight: 700 }}>{t.name}</div>
                     <div style={{ fontSize: 12, opacity: 0.7 }}>
                       id: <code>{t.id}</code> · slug: <code>{t.slug}</code> · plan: <code>{t.plan}</code>
                       {' · '}
                       <span style={{ color: t.isActive ? '#34d399' : '#f87171' }}>{t.isActive ? 'active' : 'inactive'}</span>
+                    </div>
+                    <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                      <span style={{ fontSize: 11, opacity: 0.6, textTransform: 'uppercase', letterSpacing: 0.5 }}>Sports:</span>
+                      {ALL_SPORTS.map((sp) => {
+                        const on = sports.includes(sp.key);
+                        return (
+                          <button key={sp.key} onClick={() => toggleSport(t, sp.key)}
+                            style={{
+                              ...sportChip,
+                              background: on ? (sp.key === 'football' ? '#e11d1d' : '#2563eb') : 'transparent',
+                              borderColor: on ? 'transparent' : '#374151',
+                              color: on ? '#fff' : '#94a3b8',
+                            }}>
+                            {sp.key === 'football' ? '⚽' : '🏏'} {sp.label} {on ? '✓' : ''}
+                          </button>
+                        );
+                      })}
+                      {sports.includes('cricket') && <a href={`/${t.slug}/cricket/scorer/admin`} style={sportLink}>Cricket Scorer →</a>}
+                      {sports.includes('football') && <a href={`/${t.slug}/football/scorer/admin`} style={sportLink}>Football Scorer →</a>}
                     </div>
                   </div>
                   <div style={{ display: 'flex', gap: 8 }}>
@@ -113,7 +141,8 @@ export default function PlatformAdminPage() {
                     </button>
                   </div>
                 </div>
-              ))}
+                );
+              })}
               {tenants.length === 0 && <p style={{ opacity: 0.7 }}>No tournaments yet.</p>}
             </div>
           )}
@@ -138,4 +167,11 @@ const btnGhost: React.CSSProperties = {
 const rowCard: React.CSSProperties = {
   background: '#111827', border: '1px solid #1f2937', borderRadius: 12, padding: 14,
   display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
+};
+const sportChip: React.CSSProperties = {
+  border: '1px solid #374151', padding: '5px 11px', borderRadius: 999,
+  fontSize: 12, fontWeight: 600, cursor: 'pointer',
+};
+const sportLink: React.CSSProperties = {
+  fontSize: 11, color: '#60a5fa', textDecoration: 'none', marginLeft: 4,
 };

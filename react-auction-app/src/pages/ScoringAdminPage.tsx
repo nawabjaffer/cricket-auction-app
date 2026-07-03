@@ -5,7 +5,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { IoAdd, IoTrash, IoSave, IoClose, IoPlay, IoStop, IoTrophy, IoSettings, IoImage, IoFlash, IoVideocam, IoLink, IoDesktop, IoPencil, IoPeople, IoGameController } from 'react-icons/io5';
+import { IoAdd, IoTrash, IoSave, IoClose, IoPlay, IoStop, IoTrophy, IoSettings, IoImage, IoFlash, IoVideocam, IoLink, IoDesktop, IoPencil, IoPeople, IoGameController, IoFootball } from 'react-icons/io5';
 import { GiCricketBat } from 'react-icons/gi';
 import { useAdminAuth } from '../hooks/useAdminAuth';
 import { useTenantNavigate as useNavigate } from '../hooks/useTenantNavigate';
@@ -138,6 +138,9 @@ export default function ScoringAdminPage() {
         </button>
         <button className="scoring-admin__quick-btn" onClick={() => window.open(`${baseUrl}/cricket/scorer/obs-dock`, '_blank')}>
           <IoGameController size={14} /> OBS Control Dock
+        </button>
+        <button className="scoring-admin__quick-btn" onClick={() => navigate('/football/scorer/admin')} title="Football Scorer">
+          <IoFootball size={14} /> Football Scorer
         </button>
         <button className="scoring-admin__quick-btn" onClick={() => navigate('/admin')}>
           <IoSettings size={14} /> Auction Admin
