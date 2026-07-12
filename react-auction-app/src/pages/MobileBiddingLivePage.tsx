@@ -8,7 +8,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { GiCricketBat } from 'react-icons/gi';
-import { IoSwapVertical, IoRefresh, IoPeople, IoChevronDown, IoSearch, IoClose, IoFlash, IoPersonCircle, IoList, IoTrophy, IoWallet, IoStatsChart, IoEllipsisHorizontal, IoHeart, IoHeartOutline, IoStar, IoCall, IoLogoWhatsapp } from 'react-icons/io5';
+import { IoSwapVertical, IoRefresh, IoPeople, IoChevronDown, IoSearch, IoClose, IoFlash, IoPersonCircle, IoList, IoTrophy, IoWallet, IoStatsChart, IoEllipsisHorizontal, IoHeart, IoHeartOutline, IoStar, IoCall, IoLogoWhatsapp, IoCheckmarkCircle } from 'react-icons/io5';
 import { authService } from '../services';
 import type { AuthSession } from '../services';
 import { auctionPersistence, type SponsorRecord, type AdminSettings, type SpecialCategory, type BudgetRulesConfig } from '../services/auctionPersistence';
@@ -348,6 +348,20 @@ export function MobileBiddingLivePage() {
     })();
     return () => { unsub?.(); };
   }, [session?.teamId]);
+
+  // Release/refund is only a valid flow when the organizer has budgetMode set
+  // to 'releaseRefund'. If the admin switches back to 'constraint' mid-auction,
+  // clear any lingering request so the alert can never reappear for the wrong
+  // mode (this was the source of the alert showing under budget-constraint).
+  useEffect(() => {
+    const teamId = session?.teamId;
+    if (!teamId || !adminSettings) return;
+    if (adminSettings.budgetMode !== 'releaseRefund' && releaseRequest) {
+      auctionPersistence.clearReleaseRequest(teamId).catch(() => {});
+      setReleaseRequest(null);
+      setShowReleaseModal(false);
+    }
+  }, [adminSettings, releaseRequest, session?.teamId]);
 
   // Real-time subscription for the logged-in team's wishlist (private)
   useEffect(() => {
@@ -2379,9 +2393,9 @@ export function MobileBiddingLivePage() {
         )}
       </AnimatePresence>
 
-      {/* Player Release/Refund Modal */}
+      {/* Player Release/Refund Modal — mobile bottom sheet, only for budgetMode: releaseRefund */}
       <AnimatePresence>
-        {showReleaseModal && releaseRequest && session && (
+        {showReleaseModal && releaseRequest && session && adminSettings?.budgetMode === 'releaseRefund' && (
           <motion.div
             className="cb-release-overlay"
             initial={{ opacity: 0 }}
@@ -2390,11 +2404,13 @@ export function MobileBiddingLivePage() {
           >
             <motion.div
               className="cb-release-modal"
-              initial={{ scale: 0.85, y: 30 }}
-              animate={{ scale: 1, y: 0 }}
-              exit={{ scale: 0.85, y: 30 }}
+              initial={{ y: '100%' }}
+              animate={{ y: 0 }}
+              exit={{ y: '100%' }}
+              transition={{ type: 'spring', damping: 28, stiffness: 300 }}
               onClick={(e) => e.stopPropagation()}
             >
+              <div className="cb-release-drag-handle" />
               <div className="cb-release-header">
                 <IoWallet size={22} color="#ef4444" />
                 <h3>Budget Exceeded — Release a Player</h3>
@@ -2415,7 +2431,7 @@ export function MobileBiddingLivePage() {
                         <PlayerImage
                           imageUrl={player?.imageUrl || ''}
                           playerName={player?.name || record.id}
-                          size="sm"
+                          size="md"
                           fallbackSrc="/placeholder_player.png"
                         />
                         <div className="cb-release-player-info">
@@ -2423,6 +2439,9 @@ export function MobileBiddingLivePage() {
                           <span className="cb-release-player-role">{player?.role || 'Unknown'}</span>
                         </div>
                         <span className="cb-release-player-amount">₹{record.soldAmount}{currencySuffix}</span>
+                        {releasingPlayerId === record.id && (
+                          <IoCheckmarkCircle size={22} color="#ef4444" className="cb-release-player-check" />
+                        )}
                       </div>
                     );
                   })}

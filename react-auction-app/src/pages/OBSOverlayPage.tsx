@@ -196,6 +196,8 @@ export default function OBSOverlayPage({ browserMode = false }: { readonly brows
     teamSquadTeamId?: string | null;
     lastUpdate?: number;
   } | null>(null);
+  const [showRecentBid, setShowRecentBid] = useState(false);
+  const latestVisibleBidKeyRef = useRef<string>('');
   const [activeOverlay, setActiveOverlay] = useState<'sold' | 'unsold' | null>(null);
   const [connected,     setConnected]    = useState(false);
   const [sponsors,      setSponsors]     = useState<SponsorRecord[]>([]);
@@ -326,6 +328,23 @@ export default function OBSOverlayPage({ browserMode = false }: { readonly brows
   const isTopPicks    = broadcastMode === 'topPicks';
   const overlayModeActive = isBreak || isStandings || isTeamSquad || isTeamStandings || isTopPicks;
   const hasPlayer     = !!currentPlayer && !activeOverlay && !overlayModeActive;
+  const latestBid = bidHistory.at(-1) ?? null;
+  const latestBidKey = latestBid ? `${latestBid.teamId}-${latestBid.amount}-${latestBid.timestamp}` : '';
+
+  // Show recent bid panel briefly, then hide to keep only active team card visible.
+  useEffect(() => {
+    if (!hasPlayer || !latestBidKey) {
+      setShowRecentBid(false);
+      return;
+    }
+
+    if (latestBidKey === latestVisibleBidKeyRef.current) return;
+
+    latestVisibleBidKeyRef.current = latestBidKey;
+    setShowRecentBid(true);
+    const timer = setTimeout(() => setShowRecentBid(false), 3000);
+    return () => clearTimeout(timer);
+  }, [hasPlayer, latestBidKey]);
 
   // Focused team for standings panel
   const standingsTeam = useMemo(() => {
@@ -511,20 +530,20 @@ export default function OBSOverlayPage({ browserMode = false }: { readonly brows
 
       {/* ── BID HISTORY (shown above the player card) ─────────────────── */}
       <AnimatePresence>
-        {hasPlayer && bidHistory.length > 1 && (
+        {hasPlayer && latestBid && showRecentBid && (
           <motion.div className="obs-bid-history"
             initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 20 }}>
-            <span className="obs-bid-history__title">BID HISTORY</span>
+            <span className="obs-bid-history__title">LATEST BID</span>
             <div className="obs-bid-history__list">
-              {bidHistory.slice(-5).reverse().map((b, i) => (
-                <motion.div key={`${b.teamId}-${b.amount}-${b.timestamp}`}
-                  className={`obs-bid-history__item ${i === 0 ? 'obs-bid-history__item--latest' : ''}`}
-                  initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: i * 0.05 }}>
-                  <span className="obs-bid-history__team">{b.teamName}</span>
-                  <span className="obs-bid-history__amt">{fmt(b.amount)}</span>
-                </motion.div>
-              ))}
+              <motion.div
+                key={latestBidKey}
+                className="obs-bid-history__item obs-bid-history__item--latest"
+                initial={{ opacity: 0, x: -16 }}
+                animate={{ opacity: 1, x: 0 }}
+              >
+                <span className="obs-bid-history__team">{latestBid.teamName}</span>
+                <span className="obs-bid-history__amt">{fmt(latestBid.amount)}</span>
+              </motion.div>
             </div>
           </motion.div>
         )}

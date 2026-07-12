@@ -182,6 +182,45 @@
     0 20px 60px rgba(0, 0, 0, 0.6),
     0 0 0 1px rgba(255, 255, 255, 0.06),
     inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  animation: obs-pcard-glow 4s ease-in-out infinite;
+}
+
+/* Extraordinary broadcast touch: a slow-breathing, color-shifting halo around
+   the whole card. Pure box-shadow so it is never clipped by the card's own
+   overflow:hidden (needed to keep the image/rounded corners crisp). */
+@keyframes obs-pcard-glow {
+  0%, 100% {
+    box-shadow:
+      0 20px 60px rgba(0, 0, 0, 0.6),
+      0 0 0 1px rgba(255, 255, 255, 0.06),
+      inset 0 1px 0 rgba(255, 255, 255, 0.08),
+      0 0 40px rgba(167, 240, 45, 0.25),
+      0 0 90px rgba(96, 165, 250, 0.1);
+  }
+  50% {
+    box-shadow:
+      0 20px 60px rgba(0, 0, 0, 0.6),
+      0 0 0 1px rgba(255, 255, 255, 0.1),
+      inset 0 1px 0 rgba(255, 255, 255, 0.08),
+      0 0 55px rgba(244, 114, 182, 0.32),
+      0 0 100px rgba(167, 240, 45, 0.16);
+  }
+}
+
+/* Diagonal sheen sweep — clipped to the card's rounded shape */
+.obs-pcard::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(115deg, transparent 30%, rgba(255, 255, 255, 0.14) 48%, transparent 66%);
+  background-size: 240% 240%;
+  animation: obs-pcard-sheen 6s ease-in-out infinite;
+  pointer-events: none;
+  z-index: 5;
+}
+@keyframes obs-pcard-sheen {
+  0%   { background-position: 220% 0%; }
+  55%, 100% { background-position: -40% 0%; }
 }
 
 /* ── Player image section ── */
@@ -231,6 +270,7 @@
 
 /* ── Body (name + stats + base) ── */
 .obs-pcard__body {
+  position: relative;
   flex: 1;
   display: flex;
   flex-direction: column;
@@ -238,6 +278,17 @@
   padding: 21px 26px;
   gap: 8px;
   border-right: 1px solid rgba(255, 255, 255, 0.08);
+}
+.obs-pcard__body::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 26px;
+  right: 26px;
+  height: 2px;
+  background: linear-gradient(90deg, #a7f02d, #60a5fa, #f472b6, #fbbf24);
+  opacity: 0.75;
+  z-index: 6;
 }
 .obs-pcard__name {
   font-size: 1.95rem;
@@ -343,12 +394,17 @@
   color: #ffffff;
   letter-spacing: -0.02em;
   line-height: 1;
-  text-shadow: 0 2px 12px rgba(167, 240, 45, 0.3);
+  animation: obs-bid-amount-pulse 2.4s ease-in-out infinite;
+}
+@keyframes obs-bid-amount-pulse {
+  0%, 100% { text-shadow: 0 2px 12px rgba(167, 240, 45, 0.3); }
+  50% { text-shadow: 0 2px 24px rgba(167, 240, 45, 0.7), 0 0 34px rgba(167, 240, 45, 0.3); }
 }
 .obs-pcard__bid-amount--base {
   font-size: 2rem;
   text-shadow: none;
   color: rgba(255, 255, 255, 0.8);
+  animation: none;
 }
 .obs-pcard__bid-label {
   font-size: 0.72rem;

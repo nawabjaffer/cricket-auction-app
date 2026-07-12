@@ -2762,29 +2762,38 @@
   }
 }
 
-/* ═══════ Player Release/Refund Modal ═══════ */
+/* ═══════ Player Release/Refund Modal — mobile bottom sheet ═══════ */
 .cb-release-overlay {
   position: fixed;
   inset: 0;
   z-index: 9999;
   background: rgba(0, 0, 0, 0.75);
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   justify-content: center;
-  padding: 1rem;
+  padding: 0;
   backdrop-filter: blur(4px);
 }
 
 .cb-release-modal {
   background: #1a1a2e;
-  border-radius: 16px;
-  max-width: 420px;
+  border-radius: 20px 20px 0 0;
+  max-width: 560px;
   width: 100%;
-  max-height: 80vh;
+  max-height: 86vh;
   overflow-y: auto;
-  padding: 1.5rem;
+  padding: 0.75rem 1.25rem calc(1.5rem + var(--cb-safe-bottom));
   border: 1px solid rgba(239, 68, 68, 0.3);
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+  border-bottom: none;
+  box-shadow: 0 -12px 40px rgba(0, 0, 0, 0.5);
+}
+
+.cb-release-drag-handle {
+  width: 42px;
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.25);
+  margin: 0.35rem auto 1rem;
 }
 
 .cb-release-header {
@@ -2795,20 +2804,20 @@
 }
 
 .cb-release-header h3 {
-  font-size: 1rem;
+  font-size: 1.05rem;
   font-weight: 700;
   color: #ef4444;
   margin: 0;
 }
 
 .cb-release-reason {
-  font-size: 0.85rem;
-  color: rgba(255, 255, 255, 0.7);
+  font-size: 0.88rem;
+  color: rgba(255, 255, 255, 0.75);
   margin: 0 0 0.5rem;
 }
 
 .cb-release-hint {
-  font-size: 0.78rem;
+  font-size: 0.8rem;
   color: rgba(255, 255, 255, 0.5);
   margin: 0 0 1rem;
 }
@@ -2816,54 +2825,66 @@
 .cb-release-players {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
-  margin-bottom: 1rem;
+  gap: 0.6rem;
+  margin-bottom: 1.1rem;
+  max-height: 46vh;
+  overflow-y: auto;
 }
 
 .cb-release-player-row {
   display: flex;
   align-items: center;
-  gap: 0.6rem;
-  padding: 0.6rem 0.8rem;
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.04);
+  gap: 0.85rem;
+  padding: 0.75rem 0.9rem;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.05);
   border: 2px solid transparent;
   cursor: pointer;
   transition: border-color 0.2s, background 0.2s;
 }
 
 .cb-release-player-row:hover {
-  background: rgba(255, 255, 255, 0.07);
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .cb-release-player-row.releasing {
   border-color: #ef4444;
-  background: rgba(239, 68, 68, 0.1);
+  background: rgba(239, 68, 68, 0.12);
 }
 
 .cb-release-player-info {
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 0.1rem;
+  gap: 0.15rem;
+  min-width: 0;
 }
 
 .cb-release-player-name {
-  font-size: 0.85rem;
-  font-weight: 600;
+  font-size: 0.95rem;
+  font-weight: 700;
   color: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .cb-release-player-role {
-  font-size: 0.7rem;
+  font-size: 0.72rem;
   color: rgba(255, 255, 255, 0.5);
   text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
 
 .cb-release-player-amount {
-  font-size: 0.85rem;
+  font-size: 0.92rem;
   font-weight: 700;
   color: #fbbf24;
+  flex-shrink: 0;
+}
+
+.cb-release-player-check {
+  flex-shrink: 0;
 }
 
 .cb-release-actions {
@@ -2874,13 +2895,13 @@
 
 .cb-release-btn-confirm {
   width: 100%;
-  padding: 0.75rem;
-  border-radius: 10px;
+  padding: 0.9rem;
+  border-radius: 12px;
   border: none;
   background: #ef4444;
   color: #fff;
   font-weight: 700;
-  font-size: 0.9rem;
+  font-size: 0.95rem;
   cursor: pointer;
   transition: opacity 0.2s;
 }
@@ -2892,13 +2913,137 @@
 
 .cb-release-btn-cancel {
   width: 100%;
-  padding: 0.6rem;
-  border-radius: 10px;
+  padding: 0.7rem;
+  border-radius: 12px;
   border: 1px solid rgba(255, 255, 255, 0.2);
   background: transparent;
   color: rgba(255, 255, 255, 0.7);
   font-weight: 500;
-  font-size: 0.82rem;
+  font-size: 0.85rem;
   cursor: pointer;
+}
+
+/* ═══════ Super Admin: Quick-login divider ═══════ */
+.cb-quick-sa-divider {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 0.25rem 0;
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+.cb-quick-sa-divider::before,
+.cb-quick-sa-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.15);
+}
+
+/* ═══════ Super Admin: Unified Admin Controls ═══════ */
+.cb-admin-controls-card {
+  border: 1px solid rgba(139, 92, 246, 0.25);
+}
+
+.cb-admin-cmd-row {
+  display: flex;
+  gap: 0.6rem;
+  margin-bottom: 0.75rem;
+}
+
+.cb-admin-cmd-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  padding: 0.7rem 0.5rem;
+  border-radius: 10px;
+  border: none;
+  font-weight: 700;
+  font-size: 0.8rem;
+  cursor: pointer;
+  color: #fff;
+  transition: opacity 0.2s, transform 0.1s;
+}
+.cb-admin-cmd-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+.cb-admin-cmd-btn--undo {
+  background: linear-gradient(135deg, #64748b, #475569);
+}
+.cb-admin-cmd-btn--sold {
+  background: linear-gradient(135deg, #22c55e, #16a34a);
+}
+.cb-admin-cmd-btn--unsold {
+  background: linear-gradient(135deg, #ef4444, #b91c1c);
+}
+.cb-admin-cmd-btn--go {
+  background: linear-gradient(135deg, #8b5cf6, #6d28d9);
+  flex: 0 0 auto;
+  padding: 0.7rem 1.1rem;
+}
+
+.cb-admin-search-row {
+  display: flex;
+  gap: 0.6rem;
+}
+
+.cb-admin-search-field {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0 0.75rem;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.cb-admin-search-input {
+  flex: 1;
+  border: none;
+  background: transparent;
+  color: #fff;
+  padding: 0.7rem 0;
+  font-size: 0.9rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  outline: none;
+  min-width: 0;
+  text-transform: uppercase;
+}
+.cb-admin-search-input::placeholder {
+  color: rgba(255, 255, 255, 0.3);
+  text-transform: none;
+  font-weight: 500;
+}
+
+/* ═══════ Super Admin: Seating order customization ═══════ */
+.cb-team-reorder-controls {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.4rem;
+}
+
+.cb-reorder-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.4rem;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  cursor: pointer;
+}
+.cb-reorder-btn:disabled {
+  opacity: 0.25;
+  cursor: not-allowed;
 }
 

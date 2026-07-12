@@ -2087,6 +2087,7 @@ function AuctionApp({ mirrorMode = false }: { mirrorMode?: boolean }) {
           titleSponsor={adminSettings?.branding?.showTitleSponsorInTeamView !== false ? titleSponsor : null}
           reduceThresholdByIconPlayers={adminSettings?.branding?.reduceThresholdByIconPlayers !== false}
           squadViewMode={adminSettings?.branding?.squadViewMode || 'iconPlayers'}
+          squadTheme={adminSettings?.branding?.squadTheme || 'default'}
           onClose={() => {
             setShowTeamSquadView(false);
             setSelectedTeamForSquad('');

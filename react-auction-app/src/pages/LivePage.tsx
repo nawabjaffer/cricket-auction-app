@@ -1061,8 +1061,8 @@ export default function LivePage() {
               background: 'rgba(0, 0, 0, 0.9)',
               backdropFilter: 'blur(20px)',
               borderRadius: '16px',
-              padding: '20px',
-              minWidth: '320px',
+              padding: '28px',
+              minWidth: '420px',
               maxHeight: '80vh',
               overflow: 'auto',
               zIndex: 100,
@@ -1079,10 +1079,10 @@ export default function LivePage() {
                 />
               )}
               <div>
-                <h3 style={{ margin: 0, color: teams[selectedTeamIndex]?.primaryColor || '#fff', fontSize: '1.25rem' }}>
+                <h3 style={{ margin: 0, color: teams[selectedTeamIndex]?.primaryColor || '#fff', fontSize: '1.65rem' }}>
                   {selectedTeamName}
                 </h3>
-                <p style={{ margin: 0, fontSize: '0.8rem', opacity: 0.7 }}>
+                <p style={{ margin: 0, fontSize: '1rem', opacity: 0.7 }}>
                   Team {selectedTeamIndex + 1} of {teams.length}
                 </p>
               </div>
@@ -1094,7 +1094,7 @@ export default function LivePage() {
               justifyContent: 'center', 
               gap: '8px', 
               marginBottom: '16px',
-              fontSize: '0.75rem',
+              fontSize: '0.9rem',
               opacity: 0.6
             }}>
               <span>[ P ← Prev</span>
@@ -1105,89 +1105,89 @@ export default function LivePage() {
             </div>
 
             {/* Team Stats */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
               <div style={{ 
                 background: 'rgba(255,255,255,0.1)', 
-                padding: '12px', 
-                borderRadius: '8px',
+                padding: '16px', 
+                borderRadius: '10px',
                 textAlign: 'center'
               }}>
-                <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#4ade80' }}>
+                <div style={{ fontSize: '2.1rem', fontWeight: 'bold', color: '#4ade80' }}>
                   {teams[selectedTeamIndex]?.playersBought || 0}
                 </div>
-                <div style={{ fontSize: '0.75rem', opacity: 0.7 }}>Players Bought</div>
+                <div style={{ fontSize: '0.95rem', opacity: 0.75 }}>Players Bought</div>
               </div>
               <div style={{ 
                 background: 'rgba(255,255,255,0.1)', 
-                padding: '12px', 
-                borderRadius: '8px',
+                padding: '16px', 
+                borderRadius: '10px',
                 textAlign: 'center'
               }}>
-                <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#fbbf24' }}>
+                <div style={{ fontSize: '2.1rem', fontWeight: 'bold', color: '#fbbf24' }}>
                   ₹{(selectedTeamRemainingPurse / 100000).toFixed(1)}L
                 </div>
-                <div style={{ fontSize: '0.75rem', opacity: 0.7 }}>Remaining Purse</div>
+                <div style={{ fontSize: '0.95rem', opacity: 0.75 }}>Remaining Purse</div>
               </div>
               <div style={{ 
                 background: 'rgba(255,255,255,0.1)', 
-                padding: '12px', 
-                borderRadius: '8px',
+                padding: '16px', 
+                borderRadius: '10px',
                 textAlign: 'center'
               }}>
-                <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#60a5fa' }}>
+                <div style={{ fontSize: '2.1rem', fontWeight: 'bold', color: '#60a5fa' }}>
                   {teams[selectedTeamIndex]?.totalPlayerThreshold || 15}
                 </div>
-                <div style={{ fontSize: '0.75rem', opacity: 0.7 }}>Max Slots</div>
+                <div style={{ fontSize: '0.95rem', opacity: 0.75 }}>Max Slots</div>
               </div>
               <div style={{ 
                 background: 'rgba(255,255,255,0.1)', 
-                padding: '12px', 
-                borderRadius: '8px',
+                padding: '16px', 
+                borderRadius: '10px',
                 textAlign: 'center'
               }}>
-                <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#f472b6' }}>
+                <div style={{ fontSize: '2.1rem', fontWeight: 'bold', color: '#f472b6' }}>
                   {teams[selectedTeamIndex]?.remainingPlayers || 0}
                 </div>
-                <div style={{ fontSize: '0.75rem', opacity: 0.7 }}>Open Slots</div>
+                <div style={{ fontSize: '0.95rem', opacity: 0.75 }}>Open Slots</div>
               </div>
             </div>
 
             {/* Highest Bid & Captain Info */}
-            <div style={{ marginTop: '16px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+            <div style={{ marginTop: '18px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
               <div style={{ 
                 background: 'rgba(255,255,255,0.1)', 
-                padding: '12px', 
-                borderRadius: '8px',
+                padding: '16px', 
+                borderRadius: '10px',
                 textAlign: 'center'
               }}>
-                <div style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#a78bfa' }}>
+                <div style={{ fontSize: '1.65rem', fontWeight: 'bold', color: '#a78bfa' }}>
                   ₹{(selectedTeamHighestBid / 100000).toFixed(1)}L
                 </div>
-                <div style={{ fontSize: '0.75rem', opacity: 0.7 }}>Highest Bid</div>
+                <div style={{ fontSize: '0.95rem', opacity: 0.75 }}>Highest Bid</div>
               </div>
               <div style={{ 
                 background: 'rgba(255,255,255,0.1)', 
-                padding: '12px', 
-                borderRadius: '8px',
+                padding: '16px', 
+                borderRadius: '10px',
                 textAlign: 'center'
               }}>
-                <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#34d399' }}>
+                <div style={{ fontSize: '1.3rem', fontWeight: 'bold', color: '#34d399' }}>
                   {teams[selectedTeamIndex]?.captain || 'None'}
                 </div>
-                <div style={{ fontSize: '0.75rem', opacity: 0.7 }}>Icon Player</div>
+                <div style={{ fontSize: '0.95rem', opacity: 0.75 }}>Icon Player</div>
               </div>
             </div>
 
             {/* Additional Info */}
-            <div style={{ marginTop: '16px', padding: '12px', background: 'rgba(255,255,255,0.05)', borderRadius: '8px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', marginBottom: '8px' }}>
-                <span style={{ opacity: 0.7 }}>Allocated Amount:</span>
-                <span style={{ color: '#60a5fa' }}>₹{(selectedTeamAllocated / 100000).toFixed(1)}L</span>
+            <div style={{ marginTop: '18px', padding: '16px', background: 'rgba(255,255,255,0.05)', borderRadius: '10px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '1.05rem', marginBottom: '10px' }}>
+                <span style={{ opacity: 0.75 }}>Allocated Amount:</span>
+                <span style={{ color: '#60a5fa', fontWeight: 700 }}>₹{(selectedTeamAllocated / 100000).toFixed(1)}L</span>
               </div>
               {(teams[selectedTeamIndex]?.underAgePlayers || 0) > 0 && (
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem' }}>
-                <span style={{ opacity: 0.7 }}>Under-age Players:</span>
-                <span style={{ color: '#fbbf24' }}>{teams[selectedTeamIndex]?.underAgePlayers || 0}</span>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '1.05rem' }}>
+                <span style={{ opacity: 0.75 }}>Under-age Players:</span>
+                <span style={{ color: '#fbbf24', fontWeight: 700 }}>{teams[selectedTeamIndex]?.underAgePlayers || 0}</span>
               </div>
               )}
             </div>

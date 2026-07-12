@@ -301,6 +301,15 @@ export interface AdminSettings {
   playerPlaceholderImage?: string;
   // When true, mirror screen preload persists across sessions (localStorage) for faster reload
   mirrorPreloadPersist?: boolean;
+  /**
+   * Lightweight username/password (separate from the email-based admin login)
+   * that unlocks Super Admin Mode directly on /connect-bidding-admin — designed
+   * for quick mobile access without needing the full admin email sign-in.
+   */
+  superAdminUsername?: string;
+  superAdminPassword?: string;
+  /** Persisted seating-arrangement order of team IDs for Super Admin Mode's team grid */
+  superAdminTeamOrder?: string[];
   // Branding placement controls
   branding?: {
     /** Show title sponsor logo on sold/unsold overlays */
@@ -321,6 +330,8 @@ export interface AdminSettings {
     showTeamOwnersInBreak?: boolean;
     /** Squad view right panel: 'iconPlayers' | 'owners' */
     squadViewMode?: 'iconPlayers' | 'owners';
+    /** Squad view visual theme variant */
+    squadTheme?: 'default' | 'premium' | 'royal';
   };
 }
 
@@ -550,6 +561,16 @@ class AuctionPersistenceService {
     if (!snapshot.exists()) return null;
 
     return snapshot.val() as AdminSettings;
+  }
+
+  /**
+   * Partially update just the Super Admin team seating order without
+   * overwriting the rest of the admin settings document. Safe to call from
+   * lightweight mobile screens that don't have the full settings loaded.
+   */
+  async updateSuperAdminTeamOrder(order: string[]): Promise<void> {
+    if (!this.db) throw new Error('Database not initialized');
+    await set(ref(this.db, `${DB_PATHS.ADMIN_SETTINGS}/superAdminTeamOrder`), order);
   }
 
   // ==================== TEAMS ====================

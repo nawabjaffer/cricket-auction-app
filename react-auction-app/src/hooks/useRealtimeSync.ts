@@ -24,6 +24,10 @@ export function useRealtimeDesktopSync(enabled = true): void {
   const teams = useAuctionStore(state => state.teams);
   const bidHistory = useAuctionStore(state => state.bidHistory);
   const raiseBidForTeam = useAuctionStore(state => state.raiseBidForTeam);
+  const markAsSold = useAuctionStore(state => state.markAsSold);
+  const markAsUnsold = useAuctionStore(state => state.markAsUnsold);
+  const decrementBid = useAuctionStore(state => state.decrementBid);
+  const jumpToPlayerId = useAuctionStore(state => state.jumpToPlayerId);
   const auctionState = useAuctionStore(state => state.auctionState);
   const storeActiveOverlay = useAuctionStore(state => state.activeOverlay);
   
@@ -97,10 +101,31 @@ export function useRealtimeDesktopSync(enabled = true): void {
       }
     });
 
+    // Subscribe to Super Admin remote commands (sold/unsold/undo/jumpToPlayer)
+    const unsubscribeAdminCommand = realtimeSyncService.onAdminCommand((command) => {
+      if (import.meta.env.DEV) console.log('[useRealtimeDesktopSync] 🛡️ Admin command received:', command);
+
+      switch (command.type) {
+        case 'sold':
+          markAsSold();
+          break;
+        case 'unsold':
+          markAsUnsold();
+          break;
+        case 'undo':
+          decrementBid();
+          break;
+        case 'jumpToPlayer':
+          if (command.playerId) jumpToPlayerId(command.playerId);
+          break;
+      }
+    });
+
     return () => {
       unsubscribe();
+      unsubscribeAdminCommand();
     };
-  }, [enabled, raiseBidForTeam, currentPlayer, currentBid, selectedTeam, teams, auctionState.isAuctionActive]);
+  }, [enabled, raiseBidForTeam, markAsSold, markAsUnsold, decrementBid, jumpToPlayerId, currentPlayer, currentBid, selectedTeam, teams, auctionState.isAuctionActive]);
 
   // Broadcast state changes
   useEffect(() => {
@@ -178,6 +203,8 @@ export interface RealtimeMobileSyncState {
   lastUpdate: number;
   lastSessionReset: number;
   submitBid: (teamId: string, amount: number, type?: 'raise' | 'stop') => Promise<boolean>;
+  /** Super Admin Mode: send a remote sold/unsold/undo/jumpToPlayer command to the desktop */
+  submitAdminCommand: (type: 'sold' | 'unsold' | 'undo' | 'jumpToPlayer', playerId?: string) => Promise<boolean>;
   mobileBiddingConfig: {
     maxStatsToShow: number;
     enableRaiseBid: boolean;
@@ -205,6 +232,8 @@ export function useRealtimeMobileSync(enabled = true): RealtimeMobileSyncState {
   const [lastSessionReset, setLastSessionReset] = useState(0);
   const isInitialized = useRef(false);
   const syncStateRef = useRef(syncState);
+  const lastStateEventAtRef = useRef(0);
+  const disconnectCandidateAtRef = useRef<number | null>(null);
   
   // Keep ref updated
   useEffect(() => {
@@ -233,12 +262,32 @@ export function useRealtimeMobileSync(enabled = true): RealtimeMobileSyncState {
         });
       }
       setSyncState(state);
+      lastStateEventAtRef.current = Date.now();
+      disconnectCandidateAtRef.current = null;
       setIsConnected(true);
     });
 
     // Check connection status periodically
     const connectionCheck = setInterval(() => {
-      setIsConnected(realtimeSyncService.isDesktopConnected());
+      const now = Date.now();
+      const connectedByService = realtimeSyncService.isDesktopConnected();
+      const connectedByRecentEvent = (now - lastStateEventAtRef.current) < 14000;
+
+      if (connectedByService || connectedByRecentEvent) {
+        disconnectCandidateAtRef.current = null;
+        setIsConnected(true);
+        return;
+      }
+
+      if (disconnectCandidateAtRef.current === null) {
+        disconnectCandidateAtRef.current = now;
+        return;
+      }
+
+      // Require sustained stale state before flipping to offline to avoid flicker.
+      if ((now - disconnectCandidateAtRef.current) > 6000) {
+        setIsConnected(false);
+      }
     }, 2000);
 
     // Subscribe to session reset events
@@ -283,6 +332,14 @@ export function useRealtimeMobileSync(enabled = true): RealtimeMobileSyncState {
       currentState.currentPlayer.id,
       type
     );
+  }, []);
+
+  // Super Admin Mode: submit a remote sold/unsold/undo/jumpToPlayer command
+  const submitAdminCommand = useCallback(async (
+    type: 'sold' | 'unsold' | 'undo' | 'jumpToPlayer',
+    playerId?: string,
+  ): Promise<boolean> => {
+    return realtimeSyncService.submitAdminCommand(type, playerId);
   }, []);
 
   // Convert state to Player/Team types
@@ -358,6 +415,7 @@ export function useRealtimeMobileSync(enabled = true): RealtimeMobileSyncState {
     lastUpdate: syncState.lastUpdate,
     lastSessionReset,
     submitBid,
+    submitAdminCommand,
     mobileBiddingConfig,
   };
 }

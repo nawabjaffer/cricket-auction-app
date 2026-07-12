@@ -114,7 +114,7 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
     }) ?? null;
   };
 
-  const [activeTab, setActiveTab] = useState<'theme' | 'teams' | 'sponsors' | 'players' | 'export' | 'features' | 'streaming' | 'storage' | 'reset'>('theme');
+  const [activeTab, setActiveTab] = useState<'theme' | 'teams' | 'purse' | 'sponsors' | 'players' | 'export' | 'features' | 'streaming' | 'storage' | 'reset'>('theme');
   const [isSaving, setIsSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'success' | 'error'>('idle');
 
@@ -131,6 +131,9 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
   const [auctionRoleOrder, setAuctionRoleOrder] = useState<AuctionRoleCategory[]>([...DEFAULT_AUCTION_ROLE_ORDER]);
   // Easy login mode for /connect-bidding — true = tap team card, false = username/password
   const [easyLoginMode, setEasyLoginMode] = useState(true);
+  // Super Admin Mode quick-access credentials for /connect-bidding-admin (mobile)
+  const [superAdminUsername, setSuperAdminUsername] = useState('');
+  const [superAdminPassword, setSuperAdminPassword] = useState('');
 
   // Branding placement controls
   const [brandingSettings, setBrandingSettings] = useState({
@@ -143,6 +146,7 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
     showSponsorsInBreak: true,
     showTeamOwnersInBreak: false,
     squadViewMode: 'iconPlayers' as 'iconPlayers' | 'owners',
+    squadTheme: 'default' as 'default' | 'premium' | 'royal',
   });
 
   // Currency suffix (L = Lakhs, T = Thousands, etc.)
@@ -249,6 +253,41 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
     return map;
   }, [editingTeams]);
 
+  // Amount already spent by the team currently open in the editor — computed
+  // from real sold-player records so the budget field always reflects truth,
+  // never a stale cached remainingPurse.
+  const teamDraftSpent = useMemo(() => {
+    if (!editingTeamId || !teamDraft) return 0;
+    return soldPlayers
+      .filter(sp => sp.teamId === editingTeamId || sp.teamName === teamDraft.name)
+      .reduce((sum, sp) => sum + (sp.soldAmount || 0), 0);
+  }, [editingTeamId, teamDraft?.name, soldPlayers]);
+
+  // Per-team purse summary for the "Purse Control" tab — always derived from
+  // actual sold-player records, never from a possibly-stale cached value.
+  const purseControlRows = useMemo(() => {
+    return editingTeams.map((team) => {
+      const soldForTeam = soldPlayers.filter(sp => sp.teamId === team.id || sp.teamName === team.name);
+      const spent = soldForTeam.reduce((sum, sp) => sum + (sp.soldAmount || 0), 0);
+      const allocated = team.allocatedAmount ?? 0;
+      const threshold = team.totalPlayerThreshold ?? 0;
+      const bought = soldForTeam.length;
+      return {
+        team,
+        spent,
+        remaining: Math.max(0, allocated - spent),
+        allocated,
+        threshold,
+        bought,
+        remainingSlots: Math.max(0, threshold - bought),
+      };
+    });
+  }, [editingTeams, soldPlayers]);
+
+  const updatePurseField = (teamId: string, field: 'allocatedAmount' | 'totalPlayerThreshold', value: number) => {
+    setEditingTeams((current) => current.map((t) => (t.id === teamId ? { ...t, [field]: value } : t)));
+  };
+
   // Available teams for icon player assignment (teams that don't already have an icon player, or the current player's team)
   const availableTeamsForIcon = useMemo(() => {
     return editingTeams.filter(t => {
@@ -331,6 +370,8 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
             setAuctionRoleOrder(settings.auctionRoleOrder);
           }
           setEasyLoginMode(settings.easyLoginMode !== false); // default true
+          setSuperAdminUsername(settings.superAdminUsername ?? '');
+          setSuperAdminPassword(settings.superAdminPassword ?? '');
           if (settings.branding) {
             setBrandingSettings(prev => ({ ...prev, ...settings.branding }));
           }
@@ -438,6 +479,11 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
         updatedAt: Date.now(),
         auctionRoleOrder,
         easyLoginMode,
+        superAdminUsername: superAdminUsername || undefined,
+        superAdminPassword: superAdminPassword || undefined,
+        // Preserve the seating order saved from the mobile Super Admin screen —
+        // this form has no editor for it, so never let a theme save clobber it.
+        superAdminTeamOrder: loadedAdminSettings?.superAdminTeamOrder,
         bidIncrementRanges: bidIncrementRanges.length > 0 ? bidIncrementRanges : undefined,
         currencySuffix: currencySuffix || 'L',
         budgetMode: budgetMode,
@@ -807,9 +853,7 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
     // displayed "remaining" never drifts when admin edits a team mid-auction.
     // allocatedAmount is the source of truth for "total budget"; remainingPurse
     // is derived = allocatedAmount - sum(soldPlayer.soldAmount for this team).
-    const teamSpent = soldPlayers
-      .filter(sp => sp.teamId === editingTeamId || sp.teamName === teamDraft.name)
-      .reduce((sum, sp) => sum + (sp.soldAmount || 0), 0);
+    const teamSpent = teamDraftSpent;
     const newAllocated = Math.max(teamDraft.allocatedAmount ?? 0, teamSpent);
     const newRemaining = Math.max(0, newAllocated - teamSpent);
 
@@ -1879,6 +1923,12 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
           Teams
         </button>
         <button
+          className={`admin-tab ${activeTab === 'purse' ? 'active' : ''}`}
+          onClick={() => setActiveTab('purse')}
+        >
+          Purse Control
+        </button>
+        <button
           className={`admin-tab ${activeTab === 'sponsors' ? 'active' : ''}`}
           onClick={() => setActiveTab('sponsors')}
         >
@@ -2202,6 +2252,35 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
                     </small>
                   </div>
 
+                  <h3 style={{ marginTop: '2rem' }}>Super Admin Mobile Access</h3>
+                  <p style={{ color: '#64748b', fontSize: '0.82rem', marginBottom: '1rem' }}>
+                    Set a lightweight username/password (separate from your admin email login) so a helper
+                    can open <code>/connect-bidding-admin</code> on their phone and control every team's
+                    bidding, sold/unsold, undo, and player search without needing full admin access.
+                  </p>
+                  <div className="form-row">
+                    <div className="form-group">
+                      <label htmlFor="super-admin-username">Super Admin Username</label>
+                      <input
+                        id="super-admin-username"
+                        type="text"
+                        value={superAdminUsername}
+                        onChange={(e) => setSuperAdminUsername(e.target.value.trim())}
+                        placeholder="e.g. organizer"
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label htmlFor="super-admin-password">Super Admin Password</label>
+                      <input
+                        id="super-admin-password"
+                        type="text"
+                        value={superAdminPassword}
+                        onChange={(e) => setSuperAdminPassword(e.target.value.trim())}
+                        placeholder="Shared with trusted helpers only"
+                      />
+                    </div>
+                  </div>
+
                   <h3 style={{ marginTop: '2rem' }}>Theme Colors</h3>
 
                   <div className="color-grid">
@@ -2412,6 +2491,40 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
                           <span>Brand Owners (owner photos & brand images)</span>
                         </label>
                       </div>
+
+                      <div className="admin-branding-radio-group" style={{ marginTop: '0.75rem' }}>
+                        <span className="admin-branding-radio-title">Squad view style</span>
+                        <label className="admin-branding-radio">
+                          <input
+                            type="radio"
+                            name="squadTheme"
+                            value="default"
+                            checked={brandingSettings.squadTheme === 'default'}
+                            onChange={() => setBrandingSettings(prev => ({ ...prev, squadTheme: 'default' }))}
+                          />
+                          <span>Default</span>
+                        </label>
+                        <label className="admin-branding-radio">
+                          <input
+                            type="radio"
+                            name="squadTheme"
+                            value="premium"
+                            checked={brandingSettings.squadTheme === 'premium'}
+                            onChange={() => setBrandingSettings(prev => ({ ...prev, squadTheme: 'premium' }))}
+                          />
+                          <span>Premium (IPL-like glass cards)</span>
+                        </label>
+                        <label className="admin-branding-radio">
+                          <input
+                            type="radio"
+                            name="squadTheme"
+                            value="royal"
+                            checked={brandingSettings.squadTheme === 'royal'}
+                            onChange={() => setBrandingSettings(prev => ({ ...prev, squadTheme: 'royal' }))}
+                          />
+                          <span>Royal (gold-accent highlight)</span>
+                        </label>
+                      </div>
                     </div>
                   </div>
 
@@ -2531,6 +2644,77 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
                     disabled={isSaving}
                   >
                     <IoSave size={18} /> Bulk Save All Teams
+                  </button>
+                </div>
+              )}
+
+              {/* Purse Control Tab */}
+              {activeTab === 'purse' && (
+                <div className="admin-section">
+                  <h3>Team Purse Control</h3>
+                  <p style={{ color: '#64748b', fontSize: '0.85rem', marginBottom: '1rem' }}>
+                    Correct each team's total budget and squad size threshold here. Spent and remaining
+                    amounts are always calculated live from actual sold players, so they can never drift
+                    after a restart. To edit or undo an individual sale, use the Export tab's sold-players table.
+                  </p>
+
+                  <div className="admin-purse-table-wrapper">
+                    <table className="admin-purse-table">
+                      <thead>
+                        <tr>
+                          <th>Team</th>
+                          <th>Total Budget (₹L)</th>
+                          <th>Spent (₹L)</th>
+                          <th>Remaining (₹L)</th>
+                          <th>Threshold</th>
+                          <th>Bought</th>
+                          <th>Slots Left</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {purseControlRows.map(({ team, spent, remaining, allocated, threshold, bought, remainingSlots }) => (
+                          <tr key={team.id}>
+                            <td className="admin-purse-team-name">{team.name}</td>
+                            <td>
+                              <input
+                                type="number"
+                                className="admin-purse-input"
+                                value={allocated}
+                                min={0}
+                                onChange={(e) => updatePurseField(team.id, 'allocatedAmount', Number.parseInt(e.target.value || '0', 10) || 0)}
+                              />
+                            </td>
+                            <td className="admin-purse-readonly">₹{spent}</td>
+                            <td className="admin-purse-readonly admin-purse-remaining">₹{remaining}</td>
+                            <td>
+                              <input
+                                type="number"
+                                className="admin-purse-input admin-purse-input-narrow"
+                                value={threshold}
+                                min={0}
+                                onChange={(e) => updatePurseField(team.id, 'totalPlayerThreshold', Number.parseInt(e.target.value || '0', 10) || 0)}
+                              />
+                            </td>
+                            <td className="admin-purse-readonly">{bought}</td>
+                            <td className="admin-purse-readonly">{remainingSlots}</td>
+                          </tr>
+                        ))}
+                        {purseControlRows.length === 0 && (
+                          <tr>
+                            <td colSpan={7} className="admin-empty-state">No teams yet. Add a team in the Teams tab first.</td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <button
+                    className="admin-btn admin-btn-primary"
+                    onClick={handleSaveTeams}
+                    disabled={isSaving}
+                    style={{ marginTop: '1.25rem' }}
+                  >
+                    <IoSave size={18} /> Save Purse Changes
                   </button>
                 </div>
               )}
@@ -3362,15 +3546,22 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
                         />
                       </div>
                       <div className="form-group">
-                        <label>Initial Purse (₹L)</label>
+                        <label>Total Budget (₹L)</label>
                         <input
                           type="number"
-                          value={teamDraft.remainingPurse}
+                          value={teamDraft.allocatedAmount ?? 0}
                           onChange={(e) => {
-                            const newPurse = Number.parseInt(e.target.value || '0', 10) || 0;
-                            setTeamDraft({ ...teamDraft, remainingPurse: newPurse, allocatedAmount: newPurse });
+                            const newAllocated = Number.parseInt(e.target.value || '0', 10) || 0;
+                            setTeamDraft({
+                              ...teamDraft,
+                              allocatedAmount: newAllocated,
+                              remainingPurse: Math.max(0, newAllocated - teamDraftSpent),
+                            });
                           }}
                         />
+                        <small className="admin-field-hint">
+                          Already spent: ₹{teamDraftSpent}L · Remaining after save: ₹{Math.max(0, (teamDraft.allocatedAmount ?? 0) - teamDraftSpent)}L
+                        </small>
                       </div>
                     </div>
 

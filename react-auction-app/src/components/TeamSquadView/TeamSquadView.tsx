@@ -39,6 +39,8 @@ interface TeamSquadViewProps {
   readonly reduceThresholdByIconPlayers?: boolean;
   /** 'iconPlayers' shows icon players, 'owners' shows brand owner images */
   readonly squadViewMode?: 'iconPlayers' | 'owners';
+  /** Visual style variant for squad UI */
+  readonly squadTheme?: 'default' | 'premium' | 'royal';
 }
 
 /**
@@ -61,6 +63,7 @@ export function TeamSquadView({
   titleSponsor,
   reduceThresholdByIconPlayers = true,
   squadViewMode = 'iconPlayers',
+  squadTheme = 'default',
 }: TeamSquadViewProps) {
   const currencySuffix = useCurrencySuffix();
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
@@ -352,7 +355,7 @@ export function TeamSquadView({
   return (
     <AnimatePresence>
       <motion.div
-        className="team-squad-view"
+        className={`team-squad-view team-squad-view--${squadTheme}`}
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}

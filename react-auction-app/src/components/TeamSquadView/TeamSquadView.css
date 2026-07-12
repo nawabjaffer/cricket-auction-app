@@ -17,6 +17,219 @@
   cursor: pointer;
 }
 
+.team-squad-view--premium .tsv-header-bar,
+.team-squad-view--premium .tsv-player-item,
+.team-squad-view--premium .tsv-captain-panel,
+.team-squad-view--premium .tsv-team-stats-panel {
+  background: linear-gradient(155deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.04));
+  border-color: rgba(255, 255, 255, 0.18);
+  box-shadow: 0 20px 44px rgba(2, 6, 23, 0.4);
+}
+
+.team-squad-view--premium .tsv-stat-item {
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.09), rgba(255, 255, 255, 0.03));
+  border: 1px solid rgba(255, 255, 255, 0.14);
+}
+
+.team-squad-view--premium .tsv-stat-value {
+  font-size: 1.08rem;
+}
+
+.team-squad-view--royal .tsv-header-bar,
+.team-squad-view--royal .tsv-player-item,
+.team-squad-view--royal .tsv-captain-panel,
+.team-squad-view--royal .tsv-team-stats-panel {
+  background: linear-gradient(145deg, rgba(38, 23, 9, 0.58), rgba(13, 26, 49, 0.56));
+  border-color: rgba(228, 190, 117, 0.36);
+  box-shadow: 0 22px 48px rgba(0, 0, 0, 0.45), inset 0 0 0 1px rgba(228, 190, 117, 0.16);
+}
+
+.team-squad-view--royal .tsv-stat-item {
+  background: linear-gradient(160deg, rgba(228, 190, 117, 0.14), rgba(255, 255, 255, 0.03));
+  border: 1px solid rgba(228, 190, 117, 0.34);
+}
+
+.team-squad-view--royal .tsv-stat-value,
+.team-squad-view--royal .tsv-captain-name,
+.team-squad-view--royal .tsv-team-name {
+  color: #f5deb0;
+}
+
+.team-squad-view--royal .tsv-stats-heading,
+.team-squad-view--royal .tsv-stat-label,
+.team-squad-view--royal .tsv-team-subtitle {
+  color: rgba(245, 222, 176, 0.7);
+}
+
+/* ============================================================================
+   PREMIUM LAYOUT \u2014 IPL-style broadcast squad card
+   Reflows the SAME data into a stats-first, wider-split, ribboned-card layout.
+   ============================================================================ */
+.team-squad-view--premium .tsv-content {
+  flex-direction: row;
+}
+
+.team-squad-view--premium .tsv-left-section {
+  flex: 1 1 58%;
+}
+
+.team-squad-view--premium .tsv-right-section {
+  flex: 0 0 min(42%, 560px);
+  width: min(42%, 560px);
+  max-width: 560px;
+  gap: 1rem;
+}
+
+/* Stats-first emphasis: team stats panel leads, captain/owners panel follows */
+.team-squad-view--premium .tsv-team-stats-panel {
+  order: -2;
+  border-radius: 22px;
+  position: relative;
+  overflow: hidden;
+}
+.team-squad-view--premium .tsv-team-stats-panel::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(120deg, transparent 0%, rgba(255, 255, 255, 0.16) 45%, transparent 55%);
+  background-size: 220% 220%;
+  animation: tsv-premium-shimmer 5s ease-in-out infinite;
+  pointer-events: none;
+}
+.team-squad-view--premium .tsv-title-sponsor {
+  order: -1;
+}
+.team-squad-view--premium .tsv-captain-panel {
+  border-radius: 22px;
+}
+
+@keyframes tsv-premium-shimmer {
+  0%   { background-position: 0% 50%; }
+  50%  { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+.team-squad-view--premium .tsv-header-bar {
+  border-radius: 22px;
+  position: relative;
+  padding-bottom: 1.1rem;
+}
+.team-squad-view--premium .tsv-header-bar::after {
+  content: '';
+  position: absolute;
+  left: 1rem; right: 1rem; bottom: 0.6rem;
+  height: 3px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #60a5fa, #a78bfa, #f472b6);
+}
+
+.team-squad-view--premium .tsv-squad-label {
+  letter-spacing: 0.4em;
+}
+
+/* Ribboned player cards with a diagonal corner tag, tighter masonry rhythm */
+.team-squad-view--premium .tsv-players-grid {
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+}
+.team-squad-view--premium .tsv-player-item:nth-child(3n+2) {
+  transform: translateY(0.6rem);
+}
+.team-squad-view--premium .tsv-player-card {
+  border-radius: 20px;
+}
+.team-squad-view--premium .tsv-player-card::before {
+  content: '';
+  position: absolute;
+  top: 0; right: 0;
+  width: 0; height: 0;
+  border-style: solid;
+  border-width: 0 42px 42px 0;
+  border-color: transparent rgba(96, 165, 250, 0.85) transparent transparent;
+  z-index: 2;
+}
+
+/* ============================================================================
+   ROYAL LAYOUT \u2014 centered ornamental gallery with gold framing
+   Reflows the SAME data into a symmetrical, gallery-style presentation.
+   ============================================================================ */
+.team-squad-view--royal .tsv-content {
+  flex-direction: row;
+}
+
+.team-squad-view--royal .tsv-left-section {
+  flex: 1 1 68%;
+  align-items: center;
+}
+
+.team-squad-view--royal .tsv-right-section {
+  flex: 0 0 min(32%, 480px);
+  width: min(32%, 480px);
+  max-width: 480px;
+}
+
+/* Header becomes a centered, stacked crest: logo above name, not beside it */
+.team-squad-view--royal .tsv-header-bar {
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  border-radius: 8px;
+  border-width: 2px;
+  padding: 1.5rem 1rem 1.25rem;
+}
+.team-squad-view--royal .tsv-header-logo-shell {
+  width: 120px;
+  margin-bottom: 0.5rem;
+}
+.team-squad-view--royal .tsv-team-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.team-squad-view--royal .tsv-team-underline {
+  background: linear-gradient(90deg, transparent, #e4be75, transparent);
+  height: 2px;
+  width: 220px;
+}
+.team-squad-view--royal .tsv-team-details {
+  align-items: center;
+  text-align: center;
+}
+.team-squad-view--royal .tsv-team-stats {
+  justify-content: center;
+}
+
+/* Sponsor takes pride of place at the top of the right rail */
+.team-squad-view--royal .tsv-title-sponsor {
+  order: -1;
+  border-radius: 4px;
+}
+
+/* Gallery-style squad: centered, generously spaced, fewer columns */
+.team-squad-view--royal .tsv-players-list {
+  align-items: center;
+}
+.team-squad-view--royal .tsv-players-grid {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  justify-content: center;
+  gap: 1rem;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+.team-squad-view--royal .tsv-player-card {
+  border-radius: 999px 999px 14px 14px;
+  border-width: 2px;
+}
+.team-squad-view--royal .tsv-player-item {
+  animation: none;
+  opacity: 1;
+}
+
+@media (max-width: 1200px) {
+  .team-squad-view--royal .tsv-players-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
 /* Decorative Elements Container */
 .tsv-decorative-elements {
   position: absolute;

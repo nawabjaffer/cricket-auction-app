@@ -8,12 +8,16 @@
 
 import { useState, useCallback, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { IoClose, IoShieldCheckmark, IoPeople, IoShield } from 'react-icons/io5';
+import { ref, onValue } from 'firebase/database';
+import { IoClose, IoShieldCheckmark, IoPeople, IoShield, IoArrowUp, IoArrowDown, IoSearch, IoArrowUndo, IoCheckmarkCircle, IoCloseCircle, IoSwapVertical } from 'react-icons/io5';
 import { GiCricketBat } from 'react-icons/gi';
 import { useRealtimeMobileSync } from '../hooks/useRealtimeSync';
 import { useAdminAuth } from '../hooks/useAdminAuth';
 import { useFeatureFlags } from '../hooks/useFeatureFlags';
 import { authService, type AuthSession } from '../services/auth';
+import { realtimeSync } from '../services/realtimeSync';
+import { auctionPersistence, type AdminSettings } from '../services/auctionPersistence';
+import { tenantPath } from '../services/tenantPath';
 import { TeamLogo } from '../components/TeamLogo/TeamLogo';
 import { PlayerImage } from '../components/PlayerImage/PlayerImage';
 import { getRoleLabel, getRoleBadgeClass } from '../utils/playerStats';
@@ -34,6 +38,21 @@ export default function ConnectBiddingAdminPage() {
   const [email, setEmail] = useState('');
   // Super admin mode (skip team login, control all teams)
   const [superAdminMode, setSuperAdminMode] = useState(false);
+  // Lightweight username/password quick-access for Super Admin Mode, configured
+  // in Admin Panel — lets a trusted helper skip the email-based admin login
+  // entirely on mobile.
+  const [adminSettings, setAdminSettings] = useState<AdminSettings | null>(null);
+  const [quickSuperAdminUnlocked, setQuickSuperAdminUnlocked] = useState(false);
+  const [quickSAUsername, setQuickSAUsername] = useState('');
+  const [quickSAPassword, setQuickSAPassword] = useState('');
+  const [quickSAError, setQuickSAError] = useState('');
+  // Super Admin unified control bar: undo/sold/unsold + jump-to-player search
+  const [jumpIdInput, setJumpIdInput] = useState('');
+  const [adminCmdBusy, setAdminCmdBusy] = useState(false);
+  // Seating-arrangement customization for the Super Admin team grid
+  const [customizeOrderMode, setCustomizeOrderMode] = useState(false);
+  const [orderedTeamIds, setOrderedTeamIds] = useState<string[]>([]);
+  const [isSavingOrder, setIsSavingOrder] = useState(false);
   // Team login (for team selection)
   const [teamSession, setTeamSession] = useState<AuthSession | null>(authService.getSession());
   const [username, setUsername] = useState('');
@@ -55,6 +74,7 @@ export default function ConnectBiddingAdminPage() {
     isConnected,
     lastUpdate,
     submitBid,
+    submitAdminCommand,
   } = useRealtimeMobileSync();
 
   // Build runtime credentials from live team data (same as MobileBiddingLivePage)
@@ -88,6 +108,125 @@ export default function ConnectBiddingAdminPage() {
     const timer = setTimeout(() => setFeedback(null), 3000);
     return () => clearTimeout(timer);
   }, [feedback]);
+
+  // Live subscription to admin settings — needed for Super Admin quick-login
+  // credentials and the saved team seating order.
+  useEffect(() => {
+    let cancelled = false;
+    let unsub: (() => void) | null = null;
+    (async () => {
+      try {
+        await realtimeSync.ensureInitialized();
+        const db = realtimeSync.getDatabase();
+        if (!db || cancelled) return;
+        auctionPersistence.initialize(db);
+        const settingsRef = ref(db, tenantPath('auction/adminSettings'));
+        unsub = onValue(settingsRef, (snap) => {
+          if (cancelled) return;
+          if (snap.exists()) setAdminSettings(snap.val() as AdminSettings);
+        });
+      } catch { /* ignore — quick access simply stays unavailable */ }
+    })();
+    return () => { cancelled = true; unsub?.(); };
+  }, []);
+
+  // Super Admin quick login — validated against Admin Panel-configured credentials
+  const handleSuperAdminQuickLogin = useCallback(() => {
+    const validUser = adminSettings?.superAdminUsername?.trim();
+    const validPass = adminSettings?.superAdminPassword;
+    if (!validUser || !validPass) {
+      setQuickSAError('Super Admin access hasn\u2019t been set up yet. Configure a username/password in Admin Panel first.');
+      return;
+    }
+    if (quickSAUsername.trim().toLowerCase() === validUser.toLowerCase() && quickSAPassword === validPass) {
+      setQuickSAError('');
+      setQuickSuperAdminUnlocked(true);
+      setSuperAdminMode(true);
+    } else {
+      setQuickSAError('Invalid super admin username or password');
+    }
+  }, [adminSettings, quickSAUsername, quickSAPassword]);
+
+  const handleExitOrLogout = useCallback(() => {
+    if (quickSuperAdminUnlocked) {
+      setQuickSuperAdminUnlocked(false);
+      setSuperAdminMode(false);
+      setQuickSAUsername('');
+      setQuickSAPassword('');
+    } else {
+      adminLogout();
+    }
+  }, [quickSuperAdminUnlocked, adminLogout]);
+
+  // Unified remote control bar: undo / mark sold / mark unsold
+  const handleAdminCommand = useCallback(async (type: 'sold' | 'unsold' | 'undo') => {
+    if (adminCmdBusy) return;
+    setAdminCmdBusy(true);
+    try {
+      const ok = await submitAdminCommand(type);
+      const labels: Record<typeof type, string> = { sold: 'Marked sold', unsold: 'Marked unsold', undo: 'Undo sent' } as const;
+      setFeedback({ type: ok ? 'success' : 'error', message: ok ? labels[type] : 'Command failed — try again', timestamp: Date.now() });
+    } catch {
+      setFeedback({ type: 'error', message: 'Network error', timestamp: Date.now() });
+    } finally {
+      setAdminCmdBusy(false);
+    }
+  }, [adminCmdBusy, submitAdminCommand]);
+
+  // Jump-to-player search — input is normalized to uppercase as the admin types
+  const handleJumpToPlayer = useCallback(async () => {
+    const id = jumpIdInput.trim().toUpperCase();
+    if (!id || adminCmdBusy) return;
+    setAdminCmdBusy(true);
+    try {
+      const ok = await submitAdminCommand('jumpToPlayer', id);
+      setFeedback({ type: ok ? 'success' : 'error', message: ok ? `Jumping to player ${id}` : 'Command failed — try again', timestamp: Date.now() });
+      if (ok) setJumpIdInput('');
+    } catch {
+      setFeedback({ type: 'error', message: 'Network error', timestamp: Date.now() });
+    } finally {
+      setAdminCmdBusy(false);
+    }
+  }, [jumpIdInput, adminCmdBusy, submitAdminCommand]);
+
+  // Effective team seating order: saved order first, then any newer teams appended
+  const orderedTeams = useMemo(() => {
+    const savedOrder = adminSettings?.superAdminTeamOrder;
+    if (!savedOrder?.length) return teams;
+    const byId = new Map(teams.map(t => [t.id, t] as const));
+    const ordered = savedOrder.map(id => byId.get(id)).filter((t): t is typeof teams[number] => !!t);
+    const remaining = teams.filter(t => !savedOrder.includes(t.id));
+    return [...ordered, ...remaining];
+  }, [teams, adminSettings?.superAdminTeamOrder]);
+
+  const beginCustomizeOrder = useCallback(() => {
+    setOrderedTeamIds(orderedTeams.map(t => t.id));
+    setCustomizeOrderMode(true);
+  }, [orderedTeams]);
+
+  const moveTeamOrder = useCallback((teamId: string, direction: -1 | 1) => {
+    setOrderedTeamIds((current) => {
+      const index = current.indexOf(teamId);
+      const targetIndex = index + direction;
+      if (index < 0 || targetIndex < 0 || targetIndex >= current.length) return current;
+      const next = [...current];
+      [next[index], next[targetIndex]] = [next[targetIndex], next[index]];
+      return next;
+    });
+  }, []);
+
+  const saveTeamOrder = useCallback(async () => {
+    setIsSavingOrder(true);
+    try {
+      await auctionPersistence.updateSuperAdminTeamOrder(orderedTeamIds);
+      setFeedback({ type: 'success', message: 'Seating order saved', timestamp: Date.now() });
+      setCustomizeOrderMode(false);
+    } catch {
+      setFeedback({ type: 'error', message: 'Failed to save order', timestamp: Date.now() });
+    } finally {
+      setIsSavingOrder(false);
+    }
+  }, [orderedTeamIds]);
 
 
   // Admin login handler
@@ -177,7 +316,7 @@ export default function ConnectBiddingAdminPage() {
   const themeSecondary = '#24467c';
 
   // ─── Admin Login Screen ───
-  if (!isAuthenticated) {
+  if (!isAuthenticated && !quickSuperAdminUnlocked) {
     return (
       <div className="cb-login-page" style={{ '--cb-primary': themePrimary, '--cb-secondary': themeSecondary } as React.CSSProperties}>
         <div className="cb-login-bg" />
@@ -210,6 +349,40 @@ export default function ConnectBiddingAdminPage() {
                 {authLoading ? <span className="cb-spinner" /> : 'Sign In'}
               </motion.button>
               <div className="cb-login-hint">Use your tournament admin email.</div>
+            </form>
+
+            <div className="cb-quick-sa-divider"><span>OR</span></div>
+
+            <form className="cb-login-form cb-login-form--strict" onSubmit={e => { e.preventDefault(); handleSuperAdminQuickLogin(); }}>
+              <div className="cb-field">
+                <label htmlFor="quick-sa-username" className="cb-field-label">Super Admin Username</label>
+                <input
+                  type="text" id="quick-sa-username" value={quickSAUsername}
+                  onChange={e => setQuickSAUsername(e.target.value)}
+                  placeholder="Quick access username"
+                  autoComplete="username"
+                />
+              </div>
+              <div className="cb-field">
+                <label htmlFor="quick-sa-password" className="cb-field-label">Super Admin Password</label>
+                <input
+                  type="password" id="quick-sa-password" value={quickSAPassword}
+                  onChange={e => setQuickSAPassword(e.target.value)}
+                  placeholder="Quick access password"
+                  autoComplete="current-password"
+                />
+              </div>
+              {quickSAError && <div className="cb-error">{quickSAError}</div>}
+              <motion.button
+                type="submit"
+                className="cb-login-btn"
+                disabled={!quickSAUsername.trim() || !quickSAPassword}
+                whileTap={{ scale: 0.98 }}
+                style={{ background: 'linear-gradient(135deg, #8b5cf6, #6d28d9)' }}
+              >
+                <IoShield size={16} style={{ marginRight: 6 }} /> Super Admin Quick Access
+              </motion.button>
+              <div className="cb-login-hint">For trusted helpers controlling bidding from a phone — no email required.</div>
             </form>
             <div className="cb-login-footer"><p>powered by <b>NJS Creative Labs</b></p></div>
           </motion.div>
@@ -326,7 +499,7 @@ export default function ConnectBiddingAdminPage() {
               <motion.button className="cb-icon-btn" onClick={() => setSuperAdminMode(false)} whileTap={{ scale: 0.9 }} title="Exit Super Admin" style={{ background: 'rgba(255,255,255,0.1)', borderRadius: 8, width: 32, height: 32, border: 'none', color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <IoClose size={16} />
               </motion.button>
-              <motion.button className="cb-icon-btn" onClick={() => adminLogout()} whileTap={{ scale: 0.9 }} title="Logout" style={{ background: 'rgba(239,68,68,0.2)', borderRadius: 8, width: 32, height: 32, border: 'none', color: '#f87171', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <motion.button className="cb-icon-btn" onClick={handleExitOrLogout} whileTap={{ scale: 0.9 }} title="Logout" style={{ background: 'rgba(239,68,68,0.2)', borderRadius: 8, width: 32, height: 32, border: 'none', color: '#f87171', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <IoClose size={16} />
               </motion.button>
             </div>
@@ -366,19 +539,103 @@ export default function ConnectBiddingAdminPage() {
             )}
           </motion.div>
 
+          {/* Unified Admin Controls — undo / sold / unsold / jump-to-player */}
+          <motion.div className="cb-login-card cb-admin-controls-card" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, delay: 0.05 }} style={{ marginTop: '0.75rem' }}>
+            <h3 style={{ margin: '0 0 0.75rem', fontSize: '0.95rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6 }}>
+              <IoShield size={16} /> Admin Controls
+            </h3>
+            <div className="cb-admin-cmd-row">
+              <motion.button
+                type="button"
+                className="cb-admin-cmd-btn cb-admin-cmd-btn--undo"
+                whileTap={{ scale: 0.95 }}
+                disabled={adminCmdBusy || !isConnected}
+                onClick={() => handleAdminCommand('undo')}
+              >
+                <IoArrowUndo size={18} /> Undo
+              </motion.button>
+              <motion.button
+                type="button"
+                className="cb-admin-cmd-btn cb-admin-cmd-btn--sold"
+                whileTap={{ scale: 0.95 }}
+                disabled={adminCmdBusy || !isConnected || !currentPlayer || !selectedTeam}
+                onClick={() => handleAdminCommand('sold')}
+              >
+                <IoCheckmarkCircle size={18} /> Sold
+              </motion.button>
+              <motion.button
+                type="button"
+                className="cb-admin-cmd-btn cb-admin-cmd-btn--unsold"
+                whileTap={{ scale: 0.95 }}
+                disabled={adminCmdBusy || !isConnected || !currentPlayer}
+                onClick={() => handleAdminCommand('unsold')}
+              >
+                <IoCloseCircle size={18} /> Unsold
+              </motion.button>
+            </div>
+            <div className="cb-admin-search-row">
+              <div className="cb-admin-search-field">
+                <IoSearch size={16} />
+                <input
+                  type="text"
+                  value={jumpIdInput}
+                  onChange={(e) => setJumpIdInput(e.target.value.toUpperCase())}
+                  onKeyDown={(e) => { if (e.key === 'Enter') handleJumpToPlayer(); }}
+                  placeholder="ENTER PLAYER ID"
+                  className="cb-admin-search-input"
+                  autoCapitalize="characters"
+                />
+              </div>
+              <motion.button
+                type="button"
+                className="cb-admin-cmd-btn cb-admin-cmd-btn--go"
+                whileTap={{ scale: 0.95 }}
+                disabled={adminCmdBusy || !isConnected || !jumpIdInput.trim()}
+                onClick={handleJumpToPlayer}
+              >
+                Go
+              </motion.button>
+            </div>
+          </motion.div>
+
           {/* All Teams Grid */}
           <motion.div className="cb-login-card" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, delay: 0.1 }} style={{ marginTop: '0.75rem' }}>
-            <div style={{ marginBottom: '0.9rem' }}>
-              <h3 style={{ margin: '0 0 0.35rem', fontSize: '0.95rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6 }}>
-                <IoPeople size={16} /> All Teams — Bid Controls
-              </h3>
-              <p style={{ margin: 0, fontSize: '0.74rem', color: 'rgba(255,255,255,0.65)', lineHeight: 1.5 }}>
-                Tap a team logo to raise the bid instantly.
-              </p>
+            <div style={{ marginBottom: '0.9rem', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
+              <div>
+                <h3 style={{ margin: '0 0 0.35rem', fontSize: '0.95rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <IoPeople size={16} /> All Teams — Bid Controls
+                </h3>
+                <p style={{ margin: 0, fontSize: '0.74rem', color: 'rgba(255,255,255,0.65)', lineHeight: 1.5 }}>
+                  {customizeOrderMode ? 'Use the arrows to arrange teams by seating position, then save.' : 'Tap a team logo to raise the bid instantly.'}
+                </p>
+              </div>
+              {customizeOrderMode ? (
+                <motion.button
+                  type="button"
+                  className="cb-admin-cmd-btn cb-admin-cmd-btn--go"
+                  whileTap={{ scale: 0.95 }}
+                  disabled={isSavingOrder}
+                  onClick={saveTeamOrder}
+                  style={{ flexShrink: 0 }}
+                >
+                  {isSavingOrder ? '...' : 'Save Order'}
+                </motion.button>
+              ) : (
+                <motion.button
+                  type="button"
+                  className="cb-icon-btn"
+                  whileTap={{ scale: 0.9 }}
+                  title="Customize seating order"
+                  onClick={beginCustomizeOrder}
+                  style={{ background: 'rgba(139,92,246,0.2)', borderRadius: 8, width: 32, height: 32, border: 'none', color: '#a78bfa', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
+                >
+                  <IoSwapVertical size={16} />
+                </motion.button>
+              )}
             </div>
 
             <div className="cb-team-card-grid cb-team-bid-grid">
-              {teams.map((team) => {
+              {(customizeOrderMode ? orderedTeamIds.map(id => orderedTeams.find(t => t.id === id)).filter((t): t is typeof orderedTeams[number] => !!t) : orderedTeams).map((team, index, arr) => {
                 const isLeading = selectedTeam?.id === team.id;
                 const canRaiseBid = !!currentPlayer && isConnected && auctionActive && !busyTeamId;
                 return (
@@ -391,12 +648,12 @@ export default function ConnectBiddingAdminPage() {
                       '--card-bg2': team.secondaryColor || '#1e40af',
                       position: 'relative',
                     } as React.CSSProperties}
-                    whileTap={{ scale: canRaiseBid ? 0.96 : 1 }}
-                    disabled={!canRaiseBid}
-                    onClick={() => handleRaiseBid(team.id, team.name)}
+                    whileTap={{ scale: canRaiseBid && !customizeOrderMode ? 0.96 : 1 }}
+                    disabled={!canRaiseBid && !customizeOrderMode}
+                    onClick={() => { if (!customizeOrderMode) handleRaiseBid(team.id, team.name); }}
                     aria-label={`Raise bid for ${team.name}`}
                   >
-                    {isLeading && (
+                    {isLeading && !customizeOrderMode && (
                       <span className="cb-team-bid-badge">LEADING</span>
                     )}
                     <div className="cb-team-bid-logo-wrap">
@@ -407,9 +664,20 @@ export default function ConnectBiddingAdminPage() {
                       )}
                     </div>
                     <span className="cb-team-card-name cb-team-bid-name">{team.name}</span>
-                    <span className="cb-team-bid-hint">
-                      {busyTeamId === team.id ? 'Placing bid...' : 'Tap logo to raise bid'}
-                    </span>
+                    {customizeOrderMode ? (
+                      <div className="cb-team-reorder-controls" onClick={(e) => e.stopPropagation()}>
+                        <button type="button" className="cb-reorder-btn" disabled={index === 0} onClick={() => moveTeamOrder(team.id, -1)} aria-label={`Move ${team.name} earlier`}>
+                          <IoArrowUp size={14} />
+                        </button>
+                        <button type="button" className="cb-reorder-btn" disabled={index === arr.length - 1} onClick={() => moveTeamOrder(team.id, 1)} aria-label={`Move ${team.name} later`}>
+                          <IoArrowDown size={14} />
+                        </button>
+                      </div>
+                    ) : (
+                      <span className="cb-team-bid-hint">
+                        {busyTeamId === team.id ? 'Placing bid...' : 'Tap logo to raise bid'}
+                      </span>
+                    )}
                   </motion.button>
                 );
               })}

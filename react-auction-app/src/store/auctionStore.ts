@@ -65,6 +65,38 @@ const _cachedOrganizerLogo = readCachedOrganizerLogo();
 if (_cachedOrganizerLogo) preloadImageUrl(_cachedOrganizerLogo);
 const _cachedOrganizerName = readCachedOrganizerName();
 
+// Single source of truth for team purse math: `allocatedAmount` is the team's
+// total budget (edited by admin), and every derived number (remainingPurse,
+// playersBought, remainingPlayers, highestBid) is recomputed from the actual
+// sold-player records. This guarantees the numbers can never drift after a
+// restart/restore, regardless of what a previous session had cached.
+function reconcileTeamsWithSoldPlayers(teams: Team[], soldPlayers: SoldPlayer[]): Team[] {
+  if (teams.length === 0) return teams;
+
+  return teams.map((team) => {
+    const soldForTeam = soldPlayers.filter((p) =>
+      p.teamId === team.id || (!!p.teamName && p.teamName === team.name)
+    );
+
+    const spent = soldForTeam.reduce((sum, p) => sum + (p.soldAmount || 0), 0);
+    const allocatedAmount = Math.max(0, team.allocatedAmount || 0);
+    const playersBought = soldForTeam.length;
+    const totalPlayerThreshold = team.totalPlayerThreshold || playersBought;
+    const remainingPlayers = Math.max(totalPlayerThreshold - playersBought, 0);
+    const highestBid = Math.max(0, ...soldForTeam.map((p) => p.soldAmount || 0));
+
+    return {
+      ...team,
+      allocatedAmount,
+      remainingPurse: Math.max(0, allocatedAmount - spent),
+      playersBought,
+      remainingPlayers,
+      totalPlayerThreshold,
+      highestBid,
+    };
+  });
+}
+
 // Initialize persistence with database when available
 const initializePersistence = async () => {
   // Wait for realtime sync to initialize
@@ -330,9 +362,15 @@ export const useAuctionStore = create<AuctionStore>()(
           }
         },
         
-        setTeams: (teams) => set({ teams }),
+        setTeams: (teams) => {
+          const { soldPlayers } = get();
+          set({ teams: reconcileTeamsWithSoldPlayers(teams, soldPlayers) });
+        },
         
-        setSoldPlayers: (players) => set({ soldPlayers: players }),
+        setSoldPlayers: (players) => {
+          const { teams } = get();
+          set({ soldPlayers: players, teams: reconcileTeamsWithSoldPlayers(teams, players) });
+        },
         
         setUnsoldPlayers: (players) => set({ unsoldPlayers: players }),
 

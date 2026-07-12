@@ -1013,7 +1013,7 @@
 .admin-export-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.82rem;
+  font-size: 0.95rem;
 }
 
 .admin-export-table thead {
@@ -1024,20 +1024,21 @@
 
 .admin-export-table th {
   background: #f1f5f9;
-  padding: 0.5rem 0.65rem;
+  padding: 0.65rem 0.8rem;
   text-align: left;
   font-weight: 700;
   color: #334155;
-  font-size: 0.72rem;
+  font-size: 0.82rem;
   text-transform: uppercase;
   letter-spacing: 0.04em;
   border-bottom: 2px solid #e2e8f0;
 }
 
 .admin-export-table td {
-  padding: 0.4rem 0.65rem;
+  padding: 0.6rem 0.8rem;
   border-bottom: 1px solid #f1f5f9;
   color: #475569;
+  font-size: 0.92rem;
 }
 
 .admin-export-table tbody tr:hover {
@@ -1047,6 +1048,88 @@
 .admin-export-amount {
   font-weight: 700;
   color: #059669;
+}
+
+/* ============================================================================
+   PURSE CONTROL TABLE — large, high-contrast, readable at a glance
+   ============================================================================ */
+
+.admin-purse-table-wrapper {
+  overflow-x: auto;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.75rem;
+  margin-top: 0.5rem;
+}
+
+.admin-purse-table {
+  width: 100%;
+  min-width: 640px;
+  border-collapse: collapse;
+  font-size: 1.05rem;
+}
+
+.admin-purse-table th {
+  background: #0f172a;
+  color: #e2e8f0;
+  padding: 0.85rem 1rem;
+  text-align: left;
+  font-weight: 700;
+  font-size: 0.88rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+}
+
+.admin-purse-table td {
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid #e2e8f0;
+  color: #1e293b;
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+
+.admin-purse-table tbody tr:nth-child(even) {
+  background: #f8fafc;
+}
+
+.admin-purse-table tbody tr:hover {
+  background: #eef2ff;
+}
+
+.admin-purse-team-name {
+  font-weight: 800;
+  font-size: 1.1rem;
+  color: #0f172a;
+}
+
+.admin-purse-readonly {
+  color: #334155;
+}
+
+.admin-purse-remaining {
+  color: #059669;
+  font-weight: 800;
+}
+
+.admin-purse-input {
+  width: 6rem;
+  padding: 0.5rem 0.6rem;
+  font-size: 1.05rem;
+  font-weight: 700;
+  border: 1px solid #cbd5e1;
+  border-radius: 0.5rem;
+  color: #0f172a;
+}
+
+.admin-purse-input-narrow {
+  width: 4.5rem;
+}
+
+.admin-field-hint {
+  display: block;
+  margin-top: 0.4rem;
+  font-size: 0.78rem;
+  color: #64748b;
 }
 
 /* ============================================================================
@@ -1686,14 +1769,14 @@
 
 .admin-branding-toggle-label {
   font-size: 0.88rem;
-  color: #e2e8f0;
+  color: #000;
   font-weight: 500;
 }
 
 .admin-branding-hint {
   width: 100%;
   font-size: 0.75rem;
-  color: #64748b;
+  color: #000;
   margin-left: 1.75rem;
   margin-top: 0.15rem;
 }

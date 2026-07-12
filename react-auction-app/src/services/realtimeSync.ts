@@ -37,6 +37,7 @@ const firebaseConfig = {
 // tournament namespace.
 const AUCTION_STATE_PATH          = () => tenantPath('auction/currentState');
 const MOBILE_BIDS_PATH            = () => tenantPath('auction/mobileBids');
+const ADMIN_COMMANDS_PATH         = () => tenantPath('auction/adminCommands');
 const SESSION_RESET_PATH          = () => tenantPath('auction/sessionReset');
 const BROADCAST_CONTROL_PATH      = () => tenantPath('auction/broadcastControl');
 const CAMERA_CONFIG_PATH          = () => tenantPath('auction/cameraConfig');
@@ -161,6 +162,18 @@ export interface RealtimeMobileBid {
   processed: boolean;
 }
 
+// Super Admin remote command (mobile control panel → desktop). Mirrors the
+// mobile-bid pattern: pushed to a queue, desktop consumes + flags processed.
+export interface RealtimeAdminCommand {
+  id?: string;
+  type: 'sold' | 'unsold' | 'undo' | 'jumpToPlayer';
+  /** Player ID to jump to — only used by the 'jumpToPlayer' command */
+  playerId?: string;
+  timestamp: number;
+  clientId: string;
+  processed: boolean;
+}
+
 // Session reset event
 export interface RealtimeSessionReset {
   timestamp: number;
@@ -171,6 +184,7 @@ export interface RealtimeSessionReset {
 // Listeners
 type StateListener = (state: RealtimeAuctionState) => void;
 type BidListener = (bid: RealtimeMobileBid) => void;
+type AdminCommandListener = (command: RealtimeAdminCommand) => void;
 type SessionResetListener = (reset: RealtimeSessionReset) => void;
 
 /**
@@ -187,17 +201,20 @@ class RealtimeSyncService {
   // Listeners
   private readonly stateListeners = new Set<StateListener>();
   private readonly bidListeners = new Set<BidListener>();
+  private readonly adminCommandListeners = new Set<AdminCommandListener>();
   private readonly sessionResetListeners = new Set<SessionResetListener>();
   private unsubscribers: Unsubscribe[] = [];
   // Guards: ensure each Firebase subscription is attached at most once even if
   // `initAsDesktop` / `initAsMobile` are called multiple times across pages.
   private _stateListenerAttached = false;
   private _bidListenerAttached = false;
+  private _adminCommandListenerAttached = false;
   private _sessionResetListenerAttached = false;
   
   // Local state cache
   private currentState: RealtimeAuctionState | null = null;
   private readonly processedBidIds = new Set<string>();
+  private readonly processedAdminCommandIds = new Set<string>();
   private lastSessionReset = 0;
 
   constructor() {
@@ -259,6 +276,8 @@ class RealtimeSyncService {
 
     // Listen for mobile bids
     this.listenForMobileBids();
+    // Listen for Super Admin remote commands (sold/unsold/undo/jump)
+    this.listenForAdminCommands();
   }
 
   /**
@@ -517,6 +536,81 @@ class RealtimeSyncService {
   }
 
   /**
+   * Desktop: Listen for Super Admin remote commands (sold/unsold/undo/jump)
+   */
+  private listenForAdminCommands(): void {
+    if (!this.db || this._adminCommandListenerAttached) return;
+    this._adminCommandListenerAttached = true;
+
+    if (IS_DEV) console.log('[RealtimeSync] Starting admin command listener...');
+
+    const commandsRef = ref(this.db, ADMIN_COMMANDS_PATH());
+    const unsubscribe = onValue(
+      commandsRef,
+      (snapshot) => {
+        if (snapshot.exists()) {
+          snapshot.forEach((childSnapshot) => {
+            const command = {
+              id: childSnapshot.key,
+              ...childSnapshot.val(),
+            } as RealtimeAdminCommand;
+
+            if (!command.processed && command.id && !this.processedAdminCommandIds.has(command.id)) {
+              this.processedAdminCommandIds.add(command.id);
+              if (IS_DEV) console.log('[RealtimeSync] Admin command received:', command);
+              this.notifyAdminCommandListeners(command);
+
+              if (command.id) {
+                set(ref(this.db!, `${ADMIN_COMMANDS_PATH()}/${command.id}/processed`), true)
+                  .catch(err => console.warn('[RealtimeSync] Failed to mark admin command processed:', err));
+              }
+            }
+          });
+
+          if (this.processedAdminCommandIds.size > 100) {
+            const ids = Array.from(this.processedAdminCommandIds);
+            this.processedAdminCommandIds.clear();
+            ids.slice(-50).forEach(id => this.processedAdminCommandIds.add(id));
+          }
+        }
+      },
+      (error) => {
+        console.error('[RealtimeSync] Admin command listener error:', error);
+      }
+    );
+
+    this.unsubscribers.push(unsubscribe);
+  }
+
+  /**
+   * Mobile (Super Admin Mode): Submit a remote command for the desktop to execute.
+   */
+  async submitAdminCommand(type: RealtimeAdminCommand['type'], playerId?: string): Promise<boolean> {
+    if (!this.db) {
+      console.warn('[RealtimeSync] Cannot submit admin command - not initialized');
+      return false;
+    }
+
+    const command: Omit<RealtimeAdminCommand, 'id'> = {
+      type,
+      ...(playerId ? { playerId } : {}),
+      timestamp: Date.now(),
+      clientId: this.sessionId,
+      processed: false,
+    };
+
+    try {
+      const newCommandRef = push(ref(this.db, ADMIN_COMMANDS_PATH()));
+      await set(newCommandRef, command);
+      if (IS_DEV) console.log('[RealtimeSync] Admin command submitted:', newCommandRef.key);
+      return true;
+    } catch (error) {
+      console.error('[RealtimeSync] Failed to submit admin command:', error);
+      return false;
+    }
+  }
+
+  /**
    * Desktop: Broadcast session reset event (forces mobile logout)
    */
   async broadcastSessionReset(reason?: string): Promise<void> {
@@ -589,6 +683,16 @@ class RealtimeSyncService {
   }
 
   /**
+   * Subscribe to Super Admin remote commands (for desktop)
+   */
+  onAdminCommand(listener: AdminCommandListener): () => void {
+    this.adminCommandListeners.add(listener);
+    return () => {
+      this.adminCommandListeners.delete(listener);
+    };
+  }
+
+  /**
    * Subscribe to session reset events (mobile)
    */
   onSessionReset(listener: SessionResetListener): () => void {
@@ -633,6 +737,19 @@ class RealtimeSyncService {
   }
 
   /**
+   * Notify admin command listeners
+   */
+  private notifyAdminCommandListeners(command: RealtimeAdminCommand): void {
+    this.adminCommandListeners.forEach(listener => {
+      try {
+        listener(command);
+      } catch (error) {
+        console.error('[RealtimeSync] Admin command listener error:', error);
+      }
+    });
+  }
+
+  /**
    * Notify session reset listeners
    */
   private notifySessionResetListeners(reset: RealtimeSessionReset): void {
@@ -665,8 +782,10 @@ class RealtimeSyncService {
     this.unsubscribers = [];
     this.stateListeners.clear();
     this.bidListeners.clear();
+    this.adminCommandListeners.clear();
     this.sessionResetListeners.clear();
     this.processedBidIds.clear();
+    this.processedAdminCommandIds.clear();
   }
 
   /**
