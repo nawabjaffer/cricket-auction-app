@@ -40,6 +40,8 @@ const MOBILE_BIDS_PATH            = () => tenantPath('auction/mobileBids');
 const ADMIN_COMMANDS_PATH         = () => tenantPath('auction/adminCommands');
 const SESSION_RESET_PATH          = () => tenantPath('auction/sessionReset');
 const BROADCAST_CONTROL_PATH      = () => tenantPath('auction/broadcastControl');
+const OVERLAY_MARQUEE_PATH        = () => tenantPath('auction/overlayMarquee');
+const OVERLAY_REQUEST_PATH        = () => tenantPath('auction/overlayRequest');
 const CAMERA_CONFIG_PATH          = () => tenantPath('auction/cameraConfig');
 const MOBILE_BIDDING_CONFIG_PATH  = () => tenantPath('auction/mobileBiddingConfig');
 
@@ -62,6 +64,31 @@ export interface BroadcastControlState {
   teamSquadTeamId?: string | null;
   // Top picks carousel (mode === 'topPicks'): which card index is shown.
   topBuysIndex?: number;
+  lastUpdate: number;
+}
+
+/**
+ * Broadcast marquee (bottom info ticker on the OBS overlay). Kept on its OWN
+ * RTDB path so it survives desktop broadcast-control republishes. Controlled
+ * from /connect-bidding-admin. When `text` is empty the overlay auto-builds a
+ * scrolling strip of team purses / picks.
+ */
+export interface OverlayMarqueeState {
+  enabled: boolean;
+  text?: string;
+  lastUpdate: number;
+}
+
+/**
+ * Mobile-initiated overlay request (from /connect-bidding-admin). Kept on its
+ * OWN path so it is NOT clobbered by the desktop, which republishes
+ * `broadcastControl` on every bid (mode='auction'). The OBS overlay prioritizes
+ * a recent, non-auction request over `broadcastControl` for the team-stats /
+ * squad / top-picks views. Setting mode='auction' hands control back to desktop.
+ */
+export interface OverlayRequestState {
+  mode: 'auction' | 'standings' | 'teamSquad' | 'topPicks';
+  teamId?: string | null;
   lastUpdate: number;
 }
 
@@ -820,6 +847,80 @@ class RealtimeSyncService {
       const controlRef = ref(this.db, BROADCAST_CONTROL_PATH());
       unsubRef = onValue(controlRef, (snapshot) => {
         callback(snapshot.exists() ? snapshot.val() as BroadcastControlState : null);
+      });
+      this.unsubscribers.push(unsubRef);
+    };
+
+    setup();
+
+    return () => {
+      cancelled = true;
+      unsubRef?.();
+    };
+  }
+
+  /**
+   * Set the OBS overlay marquee state (bottom ticker). Dedicated path so it is
+   * never clobbered by desktop broadcast-control republishes.
+   */
+  async setOverlayMarquee(state: OverlayMarqueeState): Promise<void> {
+    if (!this.db) await this.ensureInitialized();
+    if (!this.db) return;
+    try {
+      await set(ref(this.db, OVERLAY_MARQUEE_PATH()), state);
+    } catch (error) {
+      console.error('[RealtimeSync] Failed to set overlay marquee:', error);
+    }
+  }
+
+  /** Subscribe to OBS overlay marquee changes. */
+  subscribeOverlayMarquee(callback: (state: OverlayMarqueeState | null) => void): () => void {
+    let unsubRef: (() => void) | null = null;
+    let cancelled = false;
+
+    const setup = async () => {
+      if (!this.db) await this.ensureInitialized();
+      if (!this.db || cancelled) return;
+      const marqueeRef = ref(this.db, OVERLAY_MARQUEE_PATH());
+      unsubRef = onValue(marqueeRef, (snapshot) => {
+        callback(snapshot.exists() ? snapshot.val() as OverlayMarqueeState : null);
+      });
+      this.unsubscribers.push(unsubRef);
+    };
+
+    setup();
+
+    return () => {
+      cancelled = true;
+      unsubRef?.();
+    };
+  }
+
+  /**
+   * Set a mobile-initiated overlay request (team stats / squad / top picks).
+   * Dedicated path so the desktop's per-bid broadcast republish never clobbers it.
+   */
+  async setOverlayRequest(state: OverlayRequestState): Promise<void> {
+    if (!this.db) await this.ensureInitialized();
+    if (!this.db) return;
+    try {
+      await set(ref(this.db, OVERLAY_REQUEST_PATH()), state);
+    } catch (error) {
+      console.error('[RealtimeSync] Failed to set overlay request:', error);
+    }
+  }
+
+  /** Subscribe to mobile overlay-request changes. */
+  subscribeOverlayRequest(callback: (state: OverlayRequestState | null) => void): () => void {
+    let unsubRef: (() => void) | null = null;
+    let cancelled = false;
+
+    const setup = async () => {
+      if (!this.db) await this.ensureInitialized();
+      if (!this.db || cancelled) return;
+      const reqRef = ref(this.db, OVERLAY_REQUEST_PATH());
+      unsubRef = onValue(reqRef, (snapshot) => {
+        callback(snapshot.exists() ? snapshot.val() as OverlayRequestState : null);
       });
       this.unsubscribers.push(unsubRef);
     };

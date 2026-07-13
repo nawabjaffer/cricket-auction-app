@@ -66,6 +66,10 @@ export interface Player {
   dateOfBirth?: string;
   phone?: string;
   whatsappNumber?: string;
+  /** Optional batting style label (e.g. "Right-Hand Bat") shown on broadcast overlay. */
+  battingStyle?: string;
+  /** Optional bowling style label (e.g. "Right-arm Off-break") shown on broadcast overlay. */
+  bowlingStyle?: string;
   // Expanded stats (optional for backward compatibility)
   battingStats?: BattingStats;
   bowlingStats?: BowlingStats;

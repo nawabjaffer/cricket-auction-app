@@ -152,6 +152,10 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
   // Currency suffix (L = Lakhs, T = Thousands, etc.)
   const [currencySuffix, setCurrencySuffix] = useState('L');
 
+  // OBS overlay style + accent (broadcast lower-third configuration)
+  const [obsOverlayStyle, setObsOverlayStyle] = useState<'classic' | 'broadcast' | 'compact'>('classic');
+  const [obsOverlayAccent, setObsOverlayAccent] = useState('#1d4ed8');
+
   // Bid increment ranges
   const [bidIncrementRanges, setBidIncrementRanges] = useState<BidIncrementRange[]>([]);
 
@@ -379,6 +383,8 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
             setCurrencySuffix(settings.currencySuffix);
             useAuctionStore.getState().setCurrencySuffix(settings.currencySuffix);
           }
+          if (settings.obsOverlayStyle) setObsOverlayStyle(settings.obsOverlayStyle);
+          if (settings.obsOverlayAccent) setObsOverlayAccent(settings.obsOverlayAccent);
           if (settings.bidIncrementRanges?.length) {
             setBidIncrementRanges(settings.bidIncrementRanges);
             useAuctionStore.getState().setBidIncrementRanges(settings.bidIncrementRanges);
@@ -486,6 +492,8 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
         superAdminTeamOrder: loadedAdminSettings?.superAdminTeamOrder,
         bidIncrementRanges: bidIncrementRanges.length > 0 ? bidIncrementRanges : undefined,
         currencySuffix: currencySuffix || 'L',
+        obsOverlayStyle,
+        obsOverlayAccent,
         budgetMode: budgetMode,
         branding: brandingSettings,
         // Merge in extended settings (player stats, categories, budget, breaks, etc.)
@@ -2076,6 +2084,49 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
                       <option value="Cr">Cr (Crores)</option>
                     </select>
                     <span style={{ fontSize: '0.8rem', color: '#64748b' }}>Preview: ₹10.00{currencySuffix}</span>
+                  </div>
+
+                  <h3 style={{ marginTop: '2rem' }}>OBS Overlay Style</h3>
+                  <small style={{ color: '#6b7280', display: 'block', marginBottom: '0.75rem' }}>
+                    Choose the live player lower-third design shown on the OBS overlay (<code>/obs-overlay</code>).
+                    The <strong>Broadcast</strong> style shows a TV-quality card with player image, CricHeroes stats,
+                    a big centered bid and a bottom marquee controlled from Connect-Bidding Admin.
+                  </small>
+                  <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap', marginBottom: '0.9rem' }}>
+                    {([
+                      { key: 'classic', label: 'Classic', desc: 'Bottom-center card' },
+                      { key: 'broadcast', label: 'Broadcast', desc: 'TV lower-third + marquee' },
+                      { key: 'compact', label: 'Compact', desc: 'Slim strip' },
+                    ] as const).map((opt) => (
+                      <button
+                        key={opt.key}
+                        type="button"
+                        onClick={() => setObsOverlayStyle(opt.key)}
+                        style={{
+                          flex: '1 1 150px', textAlign: 'left', cursor: 'pointer',
+                          padding: '0.7rem 0.9rem', borderRadius: '10px',
+                          background: obsOverlayStyle === opt.key ? 'rgba(29,78,216,0.22)' : '#1e293b',
+                          border: `1px solid ${obsOverlayStyle === opt.key ? '#3b82f6' : 'rgba(255,255,255,0.1)'}`,
+                          color: '#e2e8f0',
+                        }}
+                      >
+                        <div style={{ fontWeight: 700, fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: 6 }}>
+                          {obsOverlayStyle === opt.key && <span style={{ color: '#60a5fa' }}>●</span>}
+                          {opt.label}
+                        </div>
+                        <div style={{ fontSize: '0.72rem', color: '#94a3b8', marginTop: 2 }}>{opt.desc}</div>
+                      </button>
+                    ))}
+                  </div>
+                  <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginBottom: '1rem' }}>
+                    <label style={{ fontSize: '0.85rem', color: '#e2e8f0' }}>Accent color:</label>
+                    <input
+                      type="color"
+                      value={obsOverlayAccent}
+                      onChange={(e) => setObsOverlayAccent(e.target.value)}
+                      style={{ width: 44, height: 32, borderRadius: 6, border: '1px solid rgba(255,255,255,0.1)', background: 'transparent', cursor: 'pointer' }}
+                    />
+                    <span style={{ fontSize: '0.78rem', color: '#64748b' }}>Blue gradient &amp; highlights on the broadcast overlay.</span>
                   </div>
 
                   <h3 style={{ marginTop: '2rem' }}>Bid Increment Ranges</h3>

@@ -43,6 +43,7 @@ interface OverlayPlayer {
   id: string; name: string; role: string;
   imageUrl: string; basePrice: number;
   age?: number | null;
+  battingStyle?: string; bowlingStyle?: string;
   matches?: string; runs?: string; wickets?: string;
   battingBestFigures?: string; bowlingBestFigures?: string;
   battingStats?: {
@@ -181,6 +182,175 @@ function PlayerStats({ player }: { player: OverlayPlayer }) {
   );
 }
 
+// ── Broadcast style: CricHeroes-style stat set (MAT, WKT, AVG, ECO, BEST) ──────
+function cricHeroesStats(player: OverlayPlayer): Array<{ label: string; value: string }> {
+  const out: Array<{ label: string; value: string }> = [];
+  const matches = player.battingStats?.matches || player.bowlingStats?.matches || player.matches;
+  if (matches && matches !== '0') out.push({ label: 'MATCHES', value: matches });
+
+  const runs = player.battingStats?.runs || player.runs;
+  if (runs && runs !== '0') out.push({ label: 'RUNS', value: runs });
+
+  const wickets = player.bowlingStats?.wickets || player.wickets;
+  if (wickets && wickets !== '0') out.push({ label: 'WICKETS', value: wickets });
+
+  const avg = player.battingStats?.average;
+  if (avg && avg !== '0' && avg !== '0.00') out.push({ label: 'AVERAGE', value: avg });
+
+  const eco = player.bowlingStats?.economy;
+  if (eco && eco !== '0' && eco !== '0.00') out.push({ label: 'ECONOMY', value: eco });
+
+  const best = player.bowlingStats?.bestBowling && player.bowlingStats.bestBowling !== 'N/A'
+    ? player.bowlingStats.bestBowling
+    : (player.battingStats?.highestScore || player.battingBestFigures);
+  if (best) out.push({ label: 'BEST', value: best });
+
+  return out.slice(0, 6);
+}
+
+// Human-friendly meta row: batting style, bowling style, role, age
+function metaRow(player: OverlayPlayer): Array<{ label: string; value: string }> {
+  const role = (player.role || '').toLowerCase();
+  const battingFallback = role.includes('bat') || role.includes('keep') || role.includes('all') ? 'Batter' : '—';
+  const bowlingFallback = role.includes('bowl') || role.includes('all') ? 'Bowler' : '—';
+  return [
+    { label: 'BATTING', value: player.battingStyle || battingFallback },
+    { label: 'BOWLING', value: player.bowlingStyle || bowlingFallback },
+    { label: 'ROLE', value: roleLabel(player.role) },
+    { label: 'AGE', value: player.age ? String(player.age) : '—' },
+  ];
+}
+
+// ── BROADCAST STYLE player lower-third ────────────────────────────────────────
+function BroadcastPlayerCard({
+  player, currentBid, selectedTeam, playerImgSrc, teamLogoSrc, accent, fmt,
+}: Readonly<{
+  player: OverlayPlayer;
+  currentBid: number;
+  selectedTeam: OverlayTeam | null;
+  playerImgSrc: string;
+  teamLogoSrc: string;
+  accent: string;
+  fmt: (n: number) => string;
+}>) {
+  const stats = cricHeroesStats(player);
+  const meta = metaRow(player);
+  const hasBid = !!selectedTeam && currentBid > 0;
+
+  return (
+    <motion.div className="obsb"
+      style={{ '--obsb-accent': accent } as React.CSSProperties}
+      initial={{ opacity: 0, y: 120 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: 100 }}
+      transition={{ type: 'spring', stiffness: 240, damping: 26 }}>
+
+      <div className="obsb__lower">
+        {/* Left: player image with blue gradient (fades near the ears/top) */}
+        <div className="obsb__img">
+          {playerImgSrc ? (
+            <img src={playerImgSrc} alt={player.name} className="obsb__img-el"
+              onError={(e) => { (e.target as HTMLImageElement).style.opacity = '0'; }} />
+          ) : (
+            <div className="obsb__img-fallback">{player.name.charAt(0).toUpperCase()}</div>
+          )}
+          <div className="obsb__img-grad" />
+          <div className="obsb__img-role">{roleLabel(player.role)}</div>
+        </div>
+
+        {/* Middle: round + base boxes, name, meta row */}
+        <div className="obsb__mid">
+          <div className="obsb__topboxes">
+            <div className="obsb__box obsb__box--round">
+              <span className="obsb__box-lbl">PLAYER</span>
+              <span className="obsb__box-val">#{(player.id || '').replace(/\D/g, '').slice(-3) || '—'}</span>
+            </div>
+            <div className="obsb__box obsb__box--base">
+              <span className="obsb__box-lbl">BASE PRICE</span>
+              <span className="obsb__box-val">{fmt(player.basePrice)}</span>
+            </div>
+          </div>
+          <div className="obsb__name">{player.name}</div>
+          <div className="obsb__meta">
+            {meta.map((m) => (
+              <div key={m.label} className="obsb__meta-cell">
+                <span className="obsb__meta-lbl">{m.label}</span>
+                <span className="obsb__meta-val">{m.value}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Center: BIG current bid */}
+        <div className="obsb__bidwrap">
+          <div className="obsb__bid-label">{hasBid ? 'CURRENT BID' : 'BASE PRICE'}</div>
+          <motion.div className="obsb__bid-value"
+            key={`bid-${hasBid ? currentBid : player.basePrice}`}
+            initial={{ scale: 1.25, color: accent }}
+            animate={{ scale: 1, color: '#ffffff' }}
+            transition={{ type: 'spring', stiffness: 300, damping: 15 }}>
+            {fmt(hasBid ? currentBid : player.basePrice)}
+          </motion.div>
+          {hasBid && (
+            <div className="obsb__bid-team">
+              {teamLogoSrc && <img src={teamLogoSrc} alt="" className="obsb__bid-team-logo"
+                onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />}
+              <span>{selectedTeam!.name}</span>
+            </div>
+          )}
+        </div>
+
+        {/* Right: CricHeroes stats */}
+        {stats.length > 0 && (
+          <div className="obsb__stats">
+            <div className="obsb__stats-title">
+              <span className="obsb__stats-dot" /> CRICHEROES STATS
+            </div>
+            <div className="obsb__stats-grid">
+              {stats.map((s) => (
+                <div key={s.label} className="obsb__stat">
+                  <span className="obsb__stat-val">{s.value}</span>
+                  <span className="obsb__stat-lbl">{s.label}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </motion.div>
+  );
+}
+
+// ── Bottom broadcast marquee (purse / picks / custom) ─────────────────────────
+function BroadcastMarquee({
+  teams, customText, fmt,
+}: Readonly<{
+  teams: OverlayTeam[];
+  customText?: string;
+  fmt: (n: number) => string;
+}>) {
+  const items: string[] = customText?.trim()
+    ? [customText.trim()]
+    : teams.map((t) =>
+        `${t.name}  ·  PURSE ${fmt(t.remainingPurse)}  ·  ${t.playersBought ?? 0} PICKED`,
+      );
+  if (items.length === 0) return null;
+  const loop = customText?.trim() ? items : [...items, ...items];
+
+  return (
+    <div className="obsb-marquee">
+      <span className="obsb-marquee__tag">LIVE</span>
+      <div className="obsb-marquee__viewport">
+        <div className="obsb-marquee__track">
+          {loop.map((text, i) => (
+            <span key={`${text}-${i}`} className="obsb-marquee__item">{text}<span className="obsb-marquee__sep">✦</span></span>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ══════════════════════════════════════════════════════════════════════════════
 // Component
 // ══════════════════════════════════════════════════════════════════════════════
@@ -196,6 +366,8 @@ export default function OBSOverlayPage({ browserMode = false }: { readonly brows
     teamSquadTeamId?: string | null;
     lastUpdate?: number;
   } | null>(null);
+  const [marquee, setMarquee] = useState<{ enabled: boolean; text?: string } | null>(null);
+  const [overlayReq, setOverlayReq] = useState<{ mode: string; teamId?: string | null; lastUpdate?: number } | null>(null);
   const [showRecentBid, setShowRecentBid] = useState(false);
   const latestVisibleBidKeyRef = useRef<string>('');
   const [activeOverlay, setActiveOverlay] = useState<'sold' | 'unsold' | null>(null);
@@ -312,7 +484,19 @@ export default function OBSOverlayPage({ browserMode = false }: { readonly brows
         setSoldPlayersObs(list.filter((p): p is typeof list[number] => !!p && typeof p === 'object'));
       }
     );
-    return () => { unsubState(); unsubControl(); unsubSponsors(); unsubAdmin(); unsubSold(); };
+    // Broadcast marquee (dedicated path — controlled from connect-bidding-admin)
+    const pathMarquee = tenantPath('auction/overlayMarquee');
+    const unsubMarquee = onValue(
+      ref(obsDb, pathMarquee),
+      (snap) => { setMarquee(snap.exists() ? snap.val() : null); }
+    );
+    // Mobile overlay request (team stats / squad / top picks) — priority over desktop
+    const pathReq = tenantPath('auction/overlayRequest');
+    const unsubReq = onValue(
+      ref(obsDb, pathReq),
+      (snap) => { setOverlayReq(snap.exists() ? snap.val() : null); }
+    );
+    return () => { unsubState(); unsubControl(); unsubSponsors(); unsubAdmin(); unsubSold(); unsubMarquee(); unsubReq(); };
   }, []);
 
   // ── Derived ───────────────────────────────────────────────────────────────
@@ -321,14 +505,32 @@ export default function OBSOverlayPage({ browserMode = false }: { readonly brows
   const selectedTeam  = state?.selectedTeam  ?? null;
   const teams         = state?.teams         ?? [];
   const bidHistory    = state?.bidHistory    ?? [];
-  const isBreak       = broadcastMode === 'break';
-  const isStandings   = broadcastMode === 'standings';
-  const isTeamSquad   = broadcastMode === 'teamSquad';
-  const isTeamStandings = broadcastMode === 'teamStandings';
-  const isTopPicks    = broadcastMode === 'topPicks';
+  // Effective overlay mode: a recent, non-auction mobile request (from
+  // connect-bidding-admin) overrides the desktop for the stats/squad/top-picks
+  // views. A desktop 'break' always wins (full-screen). Otherwise desktop leads.
+  const reqActive = !!overlayReq && overlayReq.mode !== 'auction'
+    && (Date.now() - (overlayReq.lastUpdate ?? 0) < 10 * 60 * 1000);
+  const desktopMode = broadcastMode;
+  let effectiveMode = desktopMode;
+  if (desktopMode !== 'break' && desktopMode !== 'ad' && reqActive) {
+    effectiveMode = overlayReq!.mode;
+  }
+  const isBreak       = effectiveMode === 'break';
+  const isStandings   = effectiveMode === 'standings';
+  const isTeamSquad   = effectiveMode === 'teamSquad';
+  const isTeamStandings = effectiveMode === 'teamStandings';
+  const isTopPicks    = effectiveMode === 'topPicks';
+  const reqSelectedTeamId = reqActive && effectiveMode === 'standings' ? overlayReq!.teamId : broadcastControl?.selectedTeamId;
+  const reqSquadTeamId = reqActive && effectiveMode === 'teamSquad' ? overlayReq!.teamId : broadcastControl?.teamSquadTeamId;
   const overlayModeActive = isBreak || isStandings || isTeamSquad || isTeamStandings || isTopPicks;
   const hasPlayer     = !!currentPlayer && !activeOverlay && !overlayModeActive;
   const latestBid = bidHistory.at(-1) ?? null;
+  // Overlay visual style (admin-configurable) + broadcast marquee control.
+  const overlayStyle = adminSettings?.obsOverlayStyle ?? 'classic';
+  const isBroadcastStyle = overlayStyle === 'broadcast';
+  const overlayAccent = adminSettings?.obsOverlayAccent || '#1d4ed8';
+  const marqueeEnabled = marquee?.enabled ?? true;
+  const marqueeText = marquee?.text;
   const latestBidKey = latestBid ? `${latestBid.teamId}-${latestBid.amount}-${latestBid.timestamp}` : '';
 
   // Show recent bid panel briefly, then hide to keep only active team card visible.
@@ -349,16 +551,14 @@ export default function OBSOverlayPage({ browserMode = false }: { readonly brows
   // Focused team for standings panel
   const standingsTeam = useMemo(() => {
     if (!isStandings) return null;
-    const id = broadcastControl?.selectedTeamId;
-    return teams.find((t) => t.id === id) ?? teams[0] ?? null;
-  }, [isStandings, broadcastControl?.selectedTeamId, teams]);
+    return teams.find((t) => t.id === reqSelectedTeamId) ?? teams[0] ?? null;
+  }, [isStandings, reqSelectedTeamId, teams]);
 
   // Focused team for teamSquad view
   const squadTeam = useMemo(() => {
     if (!isTeamSquad) return null;
-    const id = broadcastControl?.teamSquadTeamId;
-    return teams.find((t) => t.id === id) ?? teams[0] ?? null;
-  }, [isTeamSquad, broadcastControl?.teamSquadTeamId, teams]);
+    return teams.find((t) => t.id === reqSquadTeamId) ?? teams[0] ?? null;
+  }, [isTeamSquad, reqSquadTeamId, teams]);
 
   // Top picks computed from sold players
   const topBuysObs = useMemo(() => {
@@ -437,10 +637,10 @@ export default function OBSOverlayPage({ browserMode = false }: { readonly brows
         )}
       </AnimatePresence>
 
-      {/* Teams ticker — always visible marquee whenever we have team data and
-          no full-screen overlay (break/squad) is active. */}
+      {/* Teams ticker — classic style only (broadcast style uses its own
+          bottom marquee). Hidden when a full-screen overlay is active. */}
       <AnimatePresence>
-        {teams.length > 0 && !isBreak && !isTeamSquad && !activeOverlay && (
+        {!isBroadcastStyle && teams.length > 0 && !isBreak && !isTeamSquad && !activeOverlay && (
           <motion.div className="obs-ticker"
             initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}
             transition={{ duration: 0.3 }}>
@@ -460,9 +660,36 @@ export default function OBSOverlayPage({ browserMode = false }: { readonly brows
         )}
       </AnimatePresence>
 
-      {/* ── BOTTOM-CENTER PLAYER CARD ────────────────────────────────────── */}
+      {/* ── BROADCAST-STYLE bottom marquee (team purses / picks / custom) ── */}
       <AnimatePresence>
-        {hasPlayer && (
+        {isBroadcastStyle && hasPlayer && marqueeEnabled && teams.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: 40 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 40 }}
+            transition={{ duration: 0.35 }}>
+            <BroadcastMarquee teams={teams} customText={marqueeText} fmt={fmt} />
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ── BROADCAST-STYLE player lower-third ───────────────────────────── */}
+      <AnimatePresence>
+        {isBroadcastStyle && hasPlayer && (
+          <BroadcastPlayerCard
+            key="broadcast-card"
+            player={currentPlayer!}
+            currentBid={currentBid}
+            selectedTeam={selectedTeam}
+            playerImgSrc={playerImgSrc}
+            teamLogoSrc={teamLogoSrc}
+            accent={overlayAccent}
+            fmt={fmt}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* ── CLASSIC BOTTOM-CENTER PLAYER CARD ────────────────────────────── */}
+      <AnimatePresence>
+        {!isBroadcastStyle && hasPlayer && (
           <motion.div className="obs-pcard"
             initial={{ opacity: 0, y: 100, scale: 0.95 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}

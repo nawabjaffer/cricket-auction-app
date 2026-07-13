@@ -9,7 +9,7 @@
 import { useState, useCallback, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ref, onValue } from 'firebase/database';
-import { IoClose, IoShieldCheckmark, IoPeople, IoShield, IoArrowUp, IoArrowDown, IoSearch, IoArrowUndo, IoCheckmarkCircle, IoCloseCircle, IoSwapVertical } from 'react-icons/io5';
+import { IoClose, IoShieldCheckmark, IoPeople, IoShield, IoArrowUp, IoArrowDown, IoSearch, IoArrowUndo, IoCheckmarkCircle, IoCloseCircle, IoSwapVertical, IoTv, IoStatsChart, IoTrophy, IoRadioButtonOn } from 'react-icons/io5';
 import { GiCricketBat } from 'react-icons/gi';
 import { useRealtimeMobileSync } from '../hooks/useRealtimeSync';
 import { useAdminAuth } from '../hooks/useAdminAuth';
@@ -61,6 +61,11 @@ export default function ConnectBiddingAdminPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [feedback, setFeedback] = useState<BidFeedback | null>(null);
   const [busyTeamId, setBusyTeamId] = useState<string | null>(null);
+  // Broadcast/overlay controls (drives the OBS overlay from mobile)
+  const [broadcastMode, setBroadcastMode] = useState<string>('auction');
+  const [marqueeEnabled, setMarqueeEnabled] = useState(true);
+  const [broadcastTeamId, setBroadcastTeamId] = useState<string>('');
+  const [broadcastBusy, setBroadcastBusy] = useState(false);
 
   const { isEnabled } = useFeatureFlags();
   const superAdminEnabled = isEnabled('super-admin-bidding');
@@ -301,6 +306,56 @@ export default function ConnectBiddingAdminPage() {
   }, [currentPlayer, currentBid, isConnected, submitBid, busyTeamId]);
 
   const formatLakhs = (v: number) => `₹${Number.isFinite(v) ? v.toFixed(1) : '0.0'}${currencySuffix}`;
+
+  // ── Broadcast/overlay controls: reflect current mode + push new modes to OBS ──
+  useEffect(() => {
+    const unsubRequest = realtimeSync.subscribeOverlayRequest((req) => {
+      if (!req) return;
+      setBroadcastMode(req.mode ?? 'auction');
+      if (req.teamId) setBroadcastTeamId(req.teamId);
+    });
+    const unsubMarquee = realtimeSync.subscribeOverlayMarquee((m) => {
+      if (m) setMarqueeEnabled(m.enabled);
+    });
+    return () => { unsubRequest(); unsubMarquee(); };
+  }, []);
+
+  const pushBroadcast = useCallback(async (
+    mode: 'auction' | 'standings' | 'teamSquad' | 'topPicks',
+    teamId?: string,
+  ) => {
+    setBroadcastBusy(true);
+    setBroadcastMode(mode);
+    try {
+      await realtimeSync.setOverlayRequest({
+        mode,
+        teamId: (mode === 'standings' || mode === 'teamSquad') ? (teamId ?? null) : null,
+        lastUpdate: Date.now(),
+      });
+      const labels: Record<typeof mode, string> = {
+        auction: 'Back to live auction',
+        standings: 'Showing team stats',
+        teamSquad: 'Showing team squad',
+        topPicks: 'Showing top picks',
+      };
+      setFeedback({ type: 'success', message: labels[mode], timestamp: Date.now() });
+    } catch {
+      setFeedback({ type: 'error', message: 'Overlay control failed', timestamp: Date.now() });
+    } finally {
+      setBroadcastBusy(false);
+    }
+  }, []);
+
+  const toggleMarquee = useCallback(async () => {
+    const next = !marqueeEnabled;
+    setMarqueeEnabled(next);
+    try {
+      await realtimeSync.setOverlayMarquee({ enabled: next, lastUpdate: Date.now() });
+      setFeedback({ type: 'info', message: next ? 'Marquee on' : 'Marquee off', timestamp: Date.now() });
+    } catch {
+      setMarqueeEnabled(!next);
+    }
+  }, [marqueeEnabled]);
 
   const formattedTime = useMemo(() => {
     if (!lastUpdate) return 'Never';
@@ -596,6 +651,58 @@ export default function ConnectBiddingAdminPage() {
                 Go
               </motion.button>
             </div>
+          </motion.div>
+
+          {/* Broadcast / Overlay Controls — drives the OBS live overlay */}
+          <motion.div className="cb-login-card" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, delay: 0.07 }} style={{ marginTop: '0.75rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
+              <h3 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6 }}>
+                <IoTv size={16} /> Live Overlay Controls
+              </h3>
+              <span style={{ fontSize: '0.68rem', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: broadcastMode === 'auction' ? '#94a3b8' : '#4ade80' }}>
+                {broadcastMode === 'auction' ? 'Auction Live' : `Showing: ${broadcastMode}`}
+              </span>
+            </div>
+
+            {/* Team picker for stats / squad views */}
+            <select
+              value={broadcastTeamId}
+              onChange={(e) => setBroadcastTeamId(e.target.value)}
+              className="cb-broadcast-select"
+              style={{ width: '100%', padding: '0.6rem 0.75rem', marginBottom: '0.6rem', borderRadius: 10, background: 'rgba(255,255,255,0.08)', color: '#fff', border: '1px solid rgba(255,255,255,0.15)', fontSize: '0.85rem' }}
+            >
+              <option value="">Select a team (for Stats / Squad)…</option>
+              {teams.map((t) => <option key={t.id} value={t.id} style={{ color: '#111' }}>{t.name}</option>)}
+            </select>
+
+            <div className="cb-broadcast-grid">
+              <motion.button type="button" className="cb-broadcast-btn cb-broadcast-btn--stats"
+                whileTap={{ scale: 0.95 }} disabled={broadcastBusy || !isConnected || !broadcastTeamId}
+                onClick={() => pushBroadcast('standings', broadcastTeamId)}>
+                <IoStatsChart size={18} /> Team Stats
+              </motion.button>
+              <motion.button type="button" className="cb-broadcast-btn cb-broadcast-btn--squad"
+                whileTap={{ scale: 0.95 }} disabled={broadcastBusy || !isConnected || !broadcastTeamId}
+                onClick={() => pushBroadcast('teamSquad', broadcastTeamId)}>
+                <IoPeople size={18} /> Squad View
+              </motion.button>
+              <motion.button type="button" className="cb-broadcast-btn cb-broadcast-btn--top"
+                whileTap={{ scale: 0.95 }} disabled={broadcastBusy || !isConnected}
+                onClick={() => pushBroadcast('topPicks')}>
+                <IoTrophy size={18} /> Top Picks
+              </motion.button>
+              <motion.button type="button" className="cb-broadcast-btn cb-broadcast-btn--live"
+                whileTap={{ scale: 0.95 }} disabled={broadcastBusy || !isConnected}
+                onClick={() => pushBroadcast('auction')}>
+                <IoRadioButtonOn size={18} /> Back to Live
+              </motion.button>
+            </div>
+
+            <button type="button" onClick={toggleMarquee} disabled={!isConnected}
+              className={`cb-broadcast-marquee-toggle ${marqueeEnabled ? 'is-on' : ''}`}>
+              <span>Bottom Marquee (purse · picks)</span>
+              <span className="cb-broadcast-switch" aria-hidden><span className="cb-broadcast-switch__dot" /></span>
+            </button>
           </motion.div>
 
           {/* All Teams Grid */}

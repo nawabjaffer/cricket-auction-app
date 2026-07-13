@@ -295,6 +295,15 @@ export interface AdminSettings {
   bidIncrementRanges?: BidIncrementRange[];
   // Currency suffix displayed after amounts (default 'L' for Lakhs, can be 'T' for Thousands etc.)
   currencySuffix?: string;
+  /**
+   * OBS overlay visual style for the live player lower-third.
+   * 'classic'   → original bottom-center card
+   * 'broadcast' → new TV-style lower-third (image + info + big bid + CricHeroes stats + marquee)
+   * 'compact'   → slim single-row strip
+   */
+  obsOverlayStyle?: 'classic' | 'broadcast' | 'compact';
+  /** Accent color for the broadcast overlay gradient (default deep blue). */
+  obsOverlayAccent?: string;
   // Budget enforcement mode: 'constraint' blocks bids, 'releaseRefund' prompts player drop
   budgetMode?: 'constraint' | 'releaseRefund';
   // Custom player placeholder image URL (default /placeholder_player.png)

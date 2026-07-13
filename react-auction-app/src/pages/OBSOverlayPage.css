@@ -591,3 +591,337 @@
   max-width: 480px;
   text-align: center;
 }
+
+/* ════════════════════════════════════════════════════════════════════════════
+   BROADCAST STYLE — TV lower-third (image · info · big bid · CricHeroes stats)
+   Anchored bottom-left; 1920×1080 target. Accent via --obsb-accent (blue).
+   ════════════════════════════════════════════════════════════════════════════ */
+.obsb {
+  --obsb-accent: #1d4ed8;
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 58px; /* leaves room for the marquee */
+  padding: 0 40px;
+  z-index: 40;
+  pointer-events: none;
+}
+
+.obsb__lower {
+  display: grid;
+  grid-template-columns: auto minmax(320px, 360px) 1fr auto;
+  align-items: end;
+  gap: 0;
+}
+
+/* ── Left: player image with blue gradient (fades near ears/top) ── */
+.obsb__img {
+  position: relative;
+  width: 240px;
+  height: 300px;
+  align-self: end;
+  border-radius: 18px 18px 0 0;
+  overflow: hidden;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--obsb-accent) 55%, #0a1230) 0%, var(--obsb-accent) 100%);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.55);
+}
+.obsb__img-el {
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: top center;
+}
+.obsb__img-fallback {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 6rem;
+  font-weight: 900;
+  color: rgba(255, 255, 255, 0.9);
+}
+/* Blue gradient that fades the image out toward the top (around the ears) */
+.obsb__img-grad {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--obsb-accent) 92%, #000) 0%, color-mix(in srgb, var(--obsb-accent) 30%, transparent) 34%, transparent 60%),
+    linear-gradient(0deg, rgba(3, 8, 24, 0.55) 0%, transparent 40%);
+  pointer-events: none;
+}
+.obsb__img-role {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  color: #fff;
+  background: rgba(3, 8, 24, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 999px;
+  padding: 4px 12px;
+  white-space: nowrap;
+  z-index: 3;
+}
+
+/* ── Middle: round + base boxes, name, meta ── */
+.obsb__mid {
+  display: flex;
+  flex-direction: column;
+  align-self: end;
+  background: linear-gradient(180deg, rgba(10, 16, 38, 0.94), rgba(6, 10, 26, 0.96));
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-left: none;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-radius: 0 14px 14px 0;
+  overflow: hidden;
+}
+.obsb__topboxes {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+}
+.obsb__box {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 12px 16px;
+}
+.obsb__box--round {
+  background: rgba(255, 255, 255, 0.04);
+  border-right: 1px solid rgba(255, 255, 255, 0.1);
+}
+.obsb__box--base {
+  background: linear-gradient(135deg, color-mix(in srgb, var(--obsb-accent) 30%, transparent), transparent);
+}
+.obsb__box-lbl {
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  color: rgba(255, 255, 255, 0.55);
+}
+.obsb__box-val {
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: #fff;
+}
+.obsb__box--base .obsb__box-val { color: #fbbf24; }
+
+/* Player name — spans both boxes */
+.obsb__name {
+  padding: 10px 16px;
+  font-size: 1.7rem;
+  font-weight: 900;
+  letter-spacing: 0.01em;
+  line-height: 1.05;
+  color: #fff;
+  background: linear-gradient(90deg, var(--obsb-accent), color-mix(in srgb, var(--obsb-accent) 55%, #0a1230));
+  text-transform: uppercase;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Meta row: batting · bowling · role · age */
+.obsb__meta {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+}
+.obsb__meta-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 8px 10px;
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
+}
+.obsb__meta-cell:last-child { border-right: none; }
+.obsb__meta-lbl {
+  font-size: 0.56rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: rgba(255, 255, 255, 0.5);
+}
+.obsb__meta-val {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #e8eefc;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── Center: BIG current bid ── */
+.obsb__bidwrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  align-self: end;
+  padding: 0 24px 8px;
+  gap: 4px;
+}
+.obsb__bid-label {
+  font-size: 0.82rem;
+  font-weight: 800;
+  letter-spacing: 0.28em;
+  color: rgba(255, 255, 255, 0.7);
+  text-transform: uppercase;
+}
+.obsb__bid-value {
+  font-size: 5.2rem;
+  font-weight: 900;
+  line-height: 0.95;
+  color: #fff;
+  text-shadow: 0 6px 30px rgba(0, 0, 0, 0.6), 0 0 40px color-mix(in srgb, var(--obsb-accent) 40%, transparent);
+  font-variant-numeric: tabular-nums;
+}
+.obsb__bid-team {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 2px;
+  padding: 5px 16px;
+  background: color-mix(in srgb, var(--obsb-accent) 85%, #000);
+  border-radius: 999px;
+  font-size: 1rem;
+  font-weight: 800;
+  color: #fff;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+.obsb__bid-team-logo {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: #fff;
+}
+
+/* ── Right: CricHeroes stats ── */
+.obsb__stats {
+  align-self: end;
+  min-width: 300px;
+  background: linear-gradient(180deg, rgba(10, 16, 38, 0.94), rgba(6, 10, 26, 0.96));
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 14px;
+  overflow: hidden;
+  box-shadow: 0 16px 44px rgba(0, 0, 0, 0.5);
+}
+.obsb__stats-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  color: #fff;
+  background: linear-gradient(90deg, #e11d1d, #b91010);
+}
+.obsb__stats-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #fff;
+  animation: obs-pulse 2s ease-in-out infinite;
+}
+.obsb__stats-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+}
+.obsb__stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 10px 8px;
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+.obsb__stat-val {
+  font-size: 1.35rem;
+  font-weight: 900;
+  color: #fbbf24;
+  line-height: 1;
+}
+.obsb__stat-lbl {
+  font-size: 0.56rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+/* ── Bottom broadcast marquee ── */
+.obsb-marquee {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 46px;
+  display: flex;
+  align-items: center;
+  background: linear-gradient(90deg, rgba(3, 8, 24, 0.92), rgba(8, 14, 36, 0.92));
+  border-top: 2px solid var(--obsb-accent, #1d4ed8);
+  z-index: 41;
+  overflow: hidden;
+}
+.obsb-marquee__tag {
+  flex-shrink: 0;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  padding: 0 18px;
+  font-size: 0.78rem;
+  font-weight: 900;
+  letter-spacing: 0.18em;
+  color: #fff;
+  background: #e11d1d;
+}
+.obsb-marquee__viewport {
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+  height: 100%;
+}
+.obsb-marquee__track {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  white-space: nowrap;
+  animation: obsb-marquee-scroll 32s linear infinite;
+}
+.obsb-marquee__item {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.92rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  color: #e8eefc;
+  padding: 0 6px;
+}
+.obsb-marquee__sep {
+  margin: 0 22px;
+  color: var(--obsb-accent, #60a5fa);
+  font-size: 0.8rem;
+}
+@keyframes obsb-marquee-scroll {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
+}
+
+/* Scale down gracefully below 1600px so it fits 720p sources too */
+@media (max-width: 1600px) {
+  .obsb__img { width: 200px; height: 250px; }
+  .obsb__bid-value { font-size: 4.2rem; }
+  .obsb__lower { grid-template-columns: auto minmax(280px, 320px) 1fr auto; }
+  .obsb__stats { min-width: 260px; }
+}
