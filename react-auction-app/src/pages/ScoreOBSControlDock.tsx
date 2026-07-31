@@ -13,7 +13,7 @@ import { obsService } from '../services/obsService';
 import { obsReplaySourceService } from '../services/scoring/obsReplaySourceService';
 import type {
   MatchSetup, LiveScore, OverlayControlState, OverlayType,
-  OBSReplayButton, OBSReplayConfig, ScoringOverlayConfig,
+  OBSReplayButton, OBSReplayConfig,
 } from '../types/scoring';
 import './ScoreOBSControlDock.css';
 
@@ -57,16 +57,12 @@ export default function ScoreOBSControlDock() {
   const [activeOverlay, setActiveOverlay] = useState<OverlayType>('none');
   const [feedback, setFeedback] = useState('');
   const initialized = useRef(false);
-  // Track the previous match so we know when it actually changes
-  const prevMatchIdRef = useRef('');
 
   const handleMatchChange = (matchId: string) => {
     if (matchId === selectedMatchId) return;
-    // Reset per-match state before switching
     setLiveScore(null);
     setActiveOverlay('none');
     setSelectedMatchId(matchId);
-    // Persist choice in URL so the dock can be bookmarked per-match
     try {
       const url = new URL(globalThis.location.href);
       if (matchId) { url.searchParams.set('matchId', matchId); }
@@ -84,8 +80,7 @@ export default function ScoreOBSControlDock() {
   const [replayConfig, setReplayConfig] = useState<OBSReplayConfig>({ buttons: [] });
   const [replayScene, setReplayScene] = useState('');
   const [drsScene, setDrsScene] = useState('');
-  const [obsScenes, setObsScenes] = useState<string[]>([]);
-  const [execBusy, setExecBusy] = useState<string | null>(null); // button id currently executing
+  const [execBusy, setExecBusy] = useState<string | null>(null);
 
   // Initialize scoring service + load matches
   useEffect(() => {
@@ -113,6 +108,20 @@ export default function ScoreOBSControlDock() {
           const live = all.find(m => m.status === 'live');
           setSelectedMatchId(live?.id || all[0].id);
         }
+
+        // Load OBS config here, after scoringService is initialized
+        const cfg = await scoringService.getOverlayConfig().catch(() => null);
+        if (cfg?.obsWebSocketConfig) {
+          const { host, port, password } = cfg.obsWebSocketConfig;
+          if (!localStorage.getItem('obs_dock_host')) setObsHost(host || 'localhost');
+          if (!localStorage.getItem('obs_dock_port')) setObsPort(String(port || 4455));
+          if (password) setObsPassword(password);
+        }
+        if (cfg?.obsReplayConfig) {
+          setReplayConfig(cfg.obsReplayConfig);
+          setReplayScene(cfg.obsReplayConfig.replaySceneName || '');
+          setDrsScene(cfg.obsReplayConfig.drsSceneName || '');
+        }
       } catch (err) { console.error('[ScoreOBSControlDock] Init error:', err); }
     };
     init();
@@ -136,48 +145,22 @@ export default function ScoreOBSControlDock() {
     return unsub;
   }, [selectedMatchId]);
 
-  // Load OBS replay config once on mount (config is global, not per-match)
-  useEffect(() => {
-    scoringService.getOverlayConfig().then((cfg: ScoringOverlayConfig | null) => {
-      if (!cfg) return;
-      if (cfg.obsWebSocketConfig) {
-        const { host, port, password } = cfg.obsWebSocketConfig;
-        // Only pre-fill if the user hasn't stored their own values
-        if (!localStorage.getItem('obs_dock_host')) setObsHost(host || 'localhost');
-        if (!localStorage.getItem('obs_dock_port')) setObsPort(String(port || 4455));
-        if (password && !obsPassword) setObsPassword(password);
-      }
-      if (cfg.obsReplayConfig) {
-        setReplayConfig(cfg.obsReplayConfig);
-        setReplayScene(cfg.obsReplayConfig.replaySceneName || '');
-        setDrsScene(cfg.obsReplayConfig.drsSceneName || '');
-      }
-    }).catch(() => {});
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // intentionally only on mount
-
-  // Restart relay watcher whenever the selected match changes while OBS is connected
+  // Restart relay watcher whenever the selected match or OBS connection changes
   useEffect(() => {
     if (!selectedMatchId || obsStatus !== 'connected' || replayConfig.buttons.length === 0) return;
-    if (prevMatchIdRef.current === selectedMatchId) return;
-    prevMatchIdRef.current = selectedMatchId;
     obsReplaySourceService.watchRelayCommands(selectedMatchId, replayConfig);
-  });
+    // watchRelayCommands calls stopRelayWatch() internally before subscribing
+  }, [selectedMatchId, obsStatus, replayConfig]);
 
   // Track OBS connection status
   useEffect(() => {
     const unsub = obsService.onConnectionChange((state) => {
       setObsStatus(state);
-      if (state === 'connected') {
-        setObsScenes(obsService.getScenes());
-        if (selectedMatchId && replayConfig.buttons.length > 0) {
-          prevMatchIdRef.current = selectedMatchId;
-          obsReplaySourceService.watchRelayCommands(selectedMatchId, replayConfig);
-        }
-      }
     });
     return unsub;
-  }, [selectedMatchId, replayConfig]);
+  // obsService is a singleton, no deps needed
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleObsConnect = useCallback(async () => {
     const port = parseInt(obsPort, 10);
@@ -416,8 +399,8 @@ export default function ScoreOBSControlDock() {
           {obsIsConnected && <span className="score-dock__replay-live-badge">LIVE</span>}
         </div>
 
-        {/* Scene switchers */}
-        {(replayScene || drsScene || obsScenes.length > 0) && (
+        {/* Scene switchers — only shown when scenes are actually configured */}
+        {(replayScene || drsScene) && (
           <div className="score-dock__replay-scenes">
             {replayScene && (
               <button
