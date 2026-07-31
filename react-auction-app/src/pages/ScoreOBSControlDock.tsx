@@ -199,6 +199,11 @@ export default function ScoreOBSControlDock() {
     obsReplaySourceService.stopRelayWatch();
   }, []);
 
+  const showFeedback = useCallback((msg: string) => {
+    setFeedback(msg);
+    setTimeout(() => setFeedback(''), 2500);
+  }, []);
+
   const execReplayButton = useCallback(async (button: OBSReplayButton) => {
     if (execBusy || !button.enabled) return;
     setExecBusy(button.id);
@@ -225,11 +230,6 @@ export default function ScoreOBSControlDock() {
     const ok = await obsService.setScene(scene);
     showFeedback(ok ? `Scene: ${scene}` : 'OBS not connected');
   }, [showFeedback]);
-
-  const showFeedback = useCallback((msg: string) => {
-    setFeedback(msg);
-    setTimeout(() => setFeedback(''), 2500);
-  }, []);
 
   const triggerOverlay = useCallback(async (overlay: OverlayType) => {
     if (!selectedMatchId) return;
@@ -287,9 +287,6 @@ export default function ScoreOBSControlDock() {
   const selectedMatch = matches.find(m => m.id === selectedMatchId);
   const obsIsConnected = obsStatus === 'connected';
   const enabledButtons = replayConfig.buttons.filter(b => b.enabled).sort((a, b) => a.order - b.order);
-
-  // Show placeholder when no match is selected
-  const noMatchSelected = !selectedMatchId;
 
   return (
     <div className="score-dock">

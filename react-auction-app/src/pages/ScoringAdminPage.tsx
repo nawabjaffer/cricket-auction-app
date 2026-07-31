@@ -2459,7 +2459,6 @@ function OBSWebSocketTab({ config, setConfig, onFeedback, baseUrl }: {
     }
   };
 
-  const editingButton = editingButtonIdx !== null ? replayConfig.buttons[editingButtonIdx] : null;
   const dockUrl = `${baseUrl}/cricket/scorer/obs-dock`;
 
   const copyDockUrl = () => {
