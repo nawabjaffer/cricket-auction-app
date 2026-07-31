@@ -23,8 +23,9 @@ class OBSService {
   private eventListeners: Set<OBSEventCallback> = new Set();
   private connectionListeners: Set<ConnectionCallback> = new Set();
   private reconnectAttempts = 0;
-  private maxReconnectAttempts = 5;
   private reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
+  // Keepalive heartbeat — OBS closes idle WS connections after ~60 s
+  private heartbeatInterval: ReturnType<typeof setInterval> | null = null;
 
   /**
    * Subscribe to connection state changes
@@ -123,12 +124,12 @@ class OBSService {
 
         this.ws.onclose = (event) => {
           clearTimeout(timeoutId);
+          this.stopHeartbeat();
           console.log('[OBS] WebSocket closed', event.code, event.reason);
-          // Settle as failed if not yet resolved (e.g. auth rejected → close code 4009)
           settle(false);
           this.notifyConnectionState('disconnected');
           this.ws = null;
-          // Only auto-reconnect if this was an established connection (not a failed first attempt)
+          // Auto-reconnect whenever enabled (manual disconnect sets enabled=false to stop)
           if (this.config.enabled) {
             this.attemptReconnect();
           }
@@ -160,6 +161,7 @@ class OBSService {
         this.reconnectAttempts = 0;
         this.config.enabled = true;
         await this.loadScenes();
+        this.startHeartbeat();
         connectResolve?.(true);
         break;
 
@@ -305,24 +307,29 @@ class OBSService {
     }
   }
 
-  /**
-   * Attempt reconnection
-   */
+  /** Keep-alive: ping OBS every 20 s so the WS is never idle long enough to drop */
+  private startHeartbeat(): void {
+    this.stopHeartbeat();
+    this.heartbeatInterval = setInterval(() => {
+      if (this.ws?.readyState === WebSocket.OPEN) {
+        this.sendMessage(6, { requestType: 'GetStats', requestId: 'hb', requestData: {} });
+      }
+    }, 20_000);
+  }
+
+  private stopHeartbeat(): void {
+    if (this.heartbeatInterval) {
+      clearInterval(this.heartbeatInterval);
+      this.heartbeatInterval = null;
+    }
+  }
+
+  /** Auto-reconnect with exponential backoff, no maximum attempt cap */
   private attemptReconnect(): void {
-    if (this.reconnectAttempts >= this.maxReconnectAttempts) {
-      console.log('[OBS] Max reconnect attempts reached');
-      return;
-    }
-
-    if (this.reconnectTimeout) {
-      clearTimeout(this.reconnectTimeout);
-    }
-
+    if (this.reconnectTimeout) clearTimeout(this.reconnectTimeout);
     this.reconnectAttempts++;
-    const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts), 30000);
-    
-    console.log(`[OBS] Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts})`);
-    
+    const delay = Math.min(2000 * Math.pow(1.6, this.reconnectAttempts - 1), 30_000);
+    console.log(`[OBS] Reconnecting in ${Math.round(delay / 1000)}s (attempt ${this.reconnectAttempts})`);
     this.reconnectTimeout = setTimeout(() => {
       this.connect(this.config.host, this.config.port, this.config.password);
     }, delay);
@@ -332,19 +339,60 @@ class OBSService {
    * Disconnect from OBS
    */
   disconnect(): void {
+    this.stopHeartbeat();
     if (this.reconnectTimeout) {
       clearTimeout(this.reconnectTimeout);
       this.reconnectTimeout = null;
     }
-
     if (this.ws) {
+      this.ws.onclose = null; // prevent auto-reconnect
       this.ws.close();
       this.ws = null;
     }
-
     this.config.enabled = false;
+    this.reconnectAttempts = 0;
     this.notifyConnectionState('disconnected');
     console.log('[OBS] Disconnected');
+  }
+
+  // ── Hotkey API (OBS WebSocket 5.x) ──
+
+  /** Returns all hotkey names registered in OBS (includes plugin hotkeys like Replay Source) */
+  async getHotkeyList(): Promise<string[]> {
+    try {
+      const res = await this.request<{ hotkeys: string[] }>('GetHotkeyList');
+      return res.hotkeys ?? [];
+    } catch {
+      return [];
+    }
+  }
+
+  /** Triggers an OBS hotkey by its registered name (e.g. from Replay Source plugin) */
+  async triggerHotkeyByName(hotkeyName: string): Promise<boolean> {
+    try {
+      await this.request('TriggerHotkeyByName', { hotkeyName });
+      return true;
+    } catch (err) {
+      console.error('[OBS] triggerHotkeyByName failed:', err);
+      return false;
+    }
+  }
+
+  /** Triggers an OBS hotkey by simulating a key-sequence press */
+  async triggerHotkeyByKeySequence(
+    keyId: string,
+    shift = false, ctrl = false, alt = false, command = false,
+  ): Promise<boolean> {
+    try {
+      await this.request('TriggerHotkeyByKeySequence', {
+        keyId,
+        keyModifiers: { shift, control: ctrl, alt, command },
+      });
+      return true;
+    } catch (err) {
+      console.error('[OBS] triggerHotkeyByKeySequence failed:', err);
+      return false;
+    }
   }
 
   /**

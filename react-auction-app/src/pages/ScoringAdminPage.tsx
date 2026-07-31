@@ -18,7 +18,7 @@ import { realtimeSync } from '../services/realtimeSync';
 import { scoringService } from '../services/scoring';
 import { uploadFileToStorage } from '../services';
 import { DEFAULT_MVP_WEIGHTS } from '../types/scoring';
-import type { MatchSetup, ScoringAd, ScoringOverlayConfig, LiveQuestion, MatchScoringConfig, PreMatchState, PreMatchPhase, ImpactPlayer, TossConfig, MatchLineup, TickerConfig, OBSWebSocketConfig, MVPWeights, AnimationConfig } from '../types/scoring';
+import type { MatchSetup, ScoringAd, ScoringOverlayConfig, LiveQuestion, MatchScoringConfig, PreMatchState, PreMatchPhase, ImpactPlayer, TossConfig, MatchLineup, TickerConfig, OBSWebSocketConfig, MVPWeights, AnimationConfig, OBSReplayButton, OBSReplayConfig } from '../types/scoring';
 import type { SoldPlayer } from '../types';
 import './ScoringAdminPage.css';
 
@@ -238,6 +238,7 @@ export default function ScoringAdminPage() {
             config={overlayConfig}
             setConfig={setOverlayConfig}
             onFeedback={showFeedback}
+            baseUrl={baseUrl}
           />
         )}
       </div>
@@ -573,11 +574,22 @@ function MatchesTab({ matches, teams, soldPlayers, onFeedback, saving, setSaving
               <button className="scoring-admin__link-btn" onClick={() => window.open(`${baseUrl}/cricket/scorer/camera?matchId=${match.id}`, '_blank')} title="Mobile Camera Recorder">
                 <IoVideocam size={13} /> Camera
               </button>
-              <button className="scoring-admin__link-btn" onClick={() => { navigator.clipboard.writeText(`${baseUrl}/cricket/scorer/obs-overlay?matchId=${match.id}`); onFeedback('OBS URL copied'); }} title="Copy OBS URL">
+              <button className="scoring-admin__link-btn" onClick={() => { navigator.clipboard.writeText(`${baseUrl}/cricket/scorer/obs-overlay?matchId=${match.id}`); onFeedback('OBS URL copied'); }} title="Copy OBS Overlay URL">
                 <IoLink size={13} /> Copy URL
               </button>
-              <button className="scoring-admin__link-btn" onClick={() => window.open(`${baseUrl}/cricket/scorer/obs-dock?matchId=${match.id}`, '_blank')} title="OBS Control Dock">
+              <button
+                className="scoring-admin__link-btn"
+                onClick={() => window.open(`${baseUrl}/cricket/scorer/obs-dock?matchId=${match.id}`, '_blank')}
+                title="Open OBS Control Dock (locked to this match)"
+              >
                 <IoGameController size={13} /> Control Dock
+              </button>
+              <button
+                className="scoring-admin__link-btn scoring-admin__link-btn--copy"
+                onClick={() => { navigator.clipboard.writeText(`${baseUrl}/cricket/scorer/obs-dock?matchId=${match.id}`); onFeedback('Dock URL copied — paste in OBS Custom Browser Docks'); }}
+                title="Copy dock URL to add to OBS"
+              >
+                <IoLink size={13} /> Copy Dock URL
               </button>
             </div>
             <div className="scoring-admin__match-actions">
@@ -2336,15 +2348,22 @@ function formatWeightLabel(key: string): string {
 // OBS WEBSOCKET TAB
 // ═══════════════════════════════════════════════════════════════════════════════
 
-function OBSWebSocketTab({ config, setConfig, onFeedback }: {
+const DEFAULT_BUTTON_ICONS = ['▶', '⏸', '⏩', '⏪', '⏭', '⏮', '⏯', '📹', '🔍', '💾', '🎬', '⚡'];
+const DEFAULT_BUTTON_COLORS = ['#22c55e', '#f59e0b', '#3b82f6', '#8b5cf6', '#06b6d4', '#ec4899', '#ef4444', '#f97316', '#64748b'];
+
+function OBSWebSocketTab({ config, setConfig, onFeedback, baseUrl }: {
   config: ScoringOverlayConfig;
   setConfig: (c: ScoringOverlayConfig) => void;
   onFeedback: (msg: string) => void;
+  baseUrl: string;
 }) {
   const [saving, setSaving] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<'disconnected' | 'connected' | 'connecting' | 'error'>('disconnected');
+  const [availableHotkeys, setAvailableHotkeys] = useState<string[]>([]);
+  const [discoveringHotkeys, setDiscoveringHotkeys] = useState(false);
+  const [editingButtonIdx, setEditingButtonIdx] = useState<number | null>(null);
 
-  const obsConfig = config.obsWebSocketConfig || {
+  const obsConfig = config.obsWebSocketConfig ?? {
     host: 'localhost',
     port: 4455,
     autoReplay: true,
@@ -2352,16 +2371,56 @@ function OBSWebSocketTab({ config, setConfig, onFeedback }: {
     replayDurationSeconds: 30,
   };
 
+  const replayConfig: OBSReplayConfig = config.obsReplayConfig ?? { buttons: [] };
+
   const updateOBS = (updates: Partial<OBSWebSocketConfig>) => {
-    const updated = { ...obsConfig, ...updates };
-    setConfig({ ...config, obsWebSocketConfig: updated });
+    setConfig({ ...config, obsWebSocketConfig: { ...obsConfig, ...updates } });
+  };
+
+  const updateReplayConfig = (updates: Partial<OBSReplayConfig>) => {
+    setConfig({ ...config, obsReplayConfig: { ...replayConfig, ...updates } });
+  };
+
+  const updateButton = (idx: number, updates: Partial<OBSReplayButton>) => {
+    const buttons = [...replayConfig.buttons];
+    buttons[idx] = { ...buttons[idx], ...updates };
+    updateReplayConfig({ buttons });
+  };
+
+  const addButton = () => {
+    const newBtn: OBSReplayButton = {
+      id: `btn_${Date.now()}`,
+      label: 'New Button',
+      icon: '▶',
+      color: '#3b82f6',
+      action: 'hotkey_name',
+      hotkeyName: '',
+      order: replayConfig.buttons.length,
+      enabled: true,
+    };
+    updateReplayConfig({ buttons: [...replayConfig.buttons, newBtn] });
+    setEditingButtonIdx(replayConfig.buttons.length);
+  };
+
+  const removeButton = (idx: number) => {
+    const buttons = replayConfig.buttons.filter((_, i) => i !== idx);
+    updateReplayConfig({ buttons });
+    if (editingButtonIdx === idx) setEditingButtonIdx(null);
+  };
+
+  const moveButton = (idx: number, dir: -1 | 1) => {
+    const buttons = [...replayConfig.buttons];
+    const target = idx + dir;
+    if (target < 0 || target >= buttons.length) return;
+    [buttons[idx], buttons[target]] = [buttons[target], buttons[idx]];
+    updateReplayConfig({ buttons: buttons.map((b, i) => ({ ...b, order: i })) });
   };
 
   const handleSave = async () => {
     setSaving(true);
     try {
       await scoringService.saveOverlayConfig(config);
-      onFeedback('OBS WebSocket config saved');
+      onFeedback('OBS config saved');
     } catch (err) {
       onFeedback(`Save failed: ${String(err)}`);
     } finally {
@@ -2369,47 +2428,95 @@ function OBSWebSocketTab({ config, setConfig, onFeedback }: {
     }
   };
 
-  const handleTestConnection = async () => {
+  const handleConnect = async () => {
     setConnectionStatus('connecting');
     try {
-      // Import and use obsReplayService
-      const { obsReplayService } = await import('../services/scoring/obsReplayService');
-      await obsReplayService.connect(obsConfig);
-      setConnectionStatus('connected');
-      onFeedback('Connected to OBS WebSocket');
-      // Disconnect after test
-      setTimeout(() => {
-        obsReplayService.disconnect();
-        setConnectionStatus('disconnected');
-      }, 3000);
+      const { obsService } = await import('../services/obsService');
+      const ok = await obsService.connect(obsConfig.host, obsConfig.port, obsConfig.password);
+      setConnectionStatus(ok ? 'connected' : 'error');
+      onFeedback(ok ? 'Connected to OBS' : 'Failed to connect to OBS');
     } catch {
       setConnectionStatus('error');
-      onFeedback('Failed to connect to OBS WebSocket');
+      onFeedback('Failed to connect to OBS');
     }
+  };
+
+  const handleDiscoverHotkeys = async () => {
+    if (connectionStatus !== 'connected') {
+      onFeedback('Connect to OBS first');
+      return;
+    }
+    setDiscoveringHotkeys(true);
+    try {
+      const { obsService } = await import('../services/obsService');
+      const hotkeys = await obsService.getHotkeyList();
+      setAvailableHotkeys(hotkeys);
+      onFeedback(`Found ${hotkeys.length} hotkeys`);
+    } catch {
+      onFeedback('Failed to fetch hotkeys');
+    } finally {
+      setDiscoveringHotkeys(false);
+    }
+  };
+
+  const editingButton = editingButtonIdx !== null ? replayConfig.buttons[editingButtonIdx] : null;
+  const dockUrl = `${baseUrl}/cricket/scorer/obs-dock`;
+
+  const copyDockUrl = () => {
+    navigator.clipboard.writeText(dockUrl)
+      .then(() => onFeedback('Dock URL copied!'))
+      .catch(() => onFeedback('Copy failed — select the URL manually'));
   };
 
   return (
     <div className="scoring-admin__section">
-      <h2 className="scoring-admin__section-title"><IoLink size={20} /> OBS WebSocket</h2>
-      <p className="scoring-admin__section-desc">Connect to OBS Studio for replay buffer control</p>
+      <h2 className="scoring-admin__section-title"><IoLink size={20} /> OBS WebSocket & Replay Control</h2>
+      <p className="scoring-admin__section-desc">
+        Connect to OBS Studio (WebSocket 5.x) for replay buffer control and Replay Source plugin integration.
+        Works over WiFi — enter the OBS computer's LAN IP from any device on the same network.
+      </p>
 
+      {/* ── Add to OBS Dock ── */}
+      <div className="obs-dock-url-card">
+        <div className="obs-dock-url-card__header">
+          <span className="obs-dock-url-card__badge">📺 OBS Custom Browser Dock URL</span>
+          <span className="obs-dock-url-card__hint">Universal — pick any match from inside the dock</span>
+        </div>
+        <div className="obs-dock-url-card__row">
+          <code className="obs-dock-url-card__url" title="Select all and copy">{dockUrl}</code>
+          <button className="obs-dock-url-card__copy" onClick={copyDockUrl}>
+            📋 Copy
+          </button>
+          <button className="obs-dock-url-card__open" onClick={() => globalThis.open(dockUrl, '_blank')}>
+            ↗
+          </button>
+        </div>
+        <ol className="obs-dock-url-card__steps">
+          <li>OBS → <strong>Docks</strong> menu → <strong>Custom Browser Docks…</strong></li>
+          <li>Click <strong>+</strong>, name it e.g. <em>Cricket Control</em>, paste the URL above → <strong>Apply</strong></li>
+          <li>Inside the dock: select your match, then enter the OBS host below and click <strong>Connect</strong></li>
+        </ol>
+      </div>
+
+      {/* Connection */}
+      <h3 className="scoring-admin__subsection-title">Connection</h3>
       <div className="scoring-admin__connection-status">
         <span className={`scoring-admin__status-dot scoring-admin__status-dot--${connectionStatus}`} />
-        <span>{connectionStatus === 'connected' ? 'Connected' : connectionStatus === 'connecting' ? 'Connecting...' : connectionStatus === 'error' ? 'Connection Error' : 'Disconnected'}</span>
+        <span>{connectionStatus === 'connected' ? 'Connected to OBS' : connectionStatus === 'connecting' ? 'Connecting…' : connectionStatus === 'error' ? 'Connection Error' : 'Disconnected'}</span>
       </div>
 
       <div className="scoring-admin__form-grid">
         <div className="scoring-admin__field">
-          <label>Host</label>
+          <label>OBS Host (LAN IP or localhost)</label>
           <input
             type="text"
             className="scoring-admin__input"
             value={obsConfig.host}
             onChange={e => updateOBS({ host: e.target.value })}
-            placeholder="localhost"
+            placeholder="192.168.1.x or localhost"
           />
+          <small className="scoring-admin__hint">Enter OBS computer's local IP for WiFi control from mobile</small>
         </div>
-
         <div className="scoring-admin__field">
           <label>Port</label>
           <input
@@ -2419,7 +2526,6 @@ function OBSWebSocketTab({ config, setConfig, onFeedback }: {
             onChange={e => updateOBS({ port: Number(e.target.value) })}
           />
         </div>
-
         <div className="scoring-admin__field">
           <label>Password (optional)</label>
           <input
@@ -2432,7 +2538,45 @@ function OBSWebSocketTab({ config, setConfig, onFeedback }: {
         </div>
       </div>
 
-      <h3 className="scoring-admin__subsection-title">Replay Settings</h3>
+      <div className="scoring-admin__actions" style={{ marginBottom: '1.5rem' }}>
+        <button className="scoring-admin__btn scoring-admin__btn--secondary" onClick={handleConnect} disabled={connectionStatus === 'connecting'}>
+          <IoLink size={16} /> {connectionStatus === 'connecting' ? 'Connecting…' : connectionStatus === 'connected' ? 'Reconnect' : 'Connect & Test'}
+        </button>
+        <button className="scoring-admin__btn scoring-admin__btn--secondary" onClick={handleDiscoverHotkeys} disabled={discoveringHotkeys || connectionStatus !== 'connected'}>
+          {discoveringHotkeys ? 'Discovering…' : `🔍 Discover Hotkeys (${availableHotkeys.length})`}
+        </button>
+      </div>
+
+      {/* Replay Source Scene Config */}
+      <h3 className="scoring-admin__subsection-title">Replay Source Scene Mapping</h3>
+      <p className="scoring-admin__hint" style={{ marginBottom: '0.75rem' }}>
+        Scenes to switch to when showing replays or DRS review. Leave blank to skip scene switch.
+      </p>
+      <div className="scoring-admin__form-grid">
+        <div className="scoring-admin__field">
+          <label>Replay Scene Name</label>
+          <input
+            type="text"
+            className="scoring-admin__input"
+            value={replayConfig.replaySceneName || ''}
+            onChange={e => updateReplayConfig({ replaySceneName: e.target.value || undefined })}
+            placeholder="e.g. Replay"
+          />
+        </div>
+        <div className="scoring-admin__field">
+          <label>DRS Review Scene Name</label>
+          <input
+            type="text"
+            className="scoring-admin__input"
+            value={replayConfig.drsSceneName || ''}
+            onChange={e => updateReplayConfig({ drsSceneName: e.target.value || undefined })}
+            placeholder="e.g. DRS Review"
+          />
+        </div>
+      </div>
+
+      {/* Auto-replay settings */}
+      <h3 className="scoring-admin__subsection-title">Auto-Replay on Boundaries / Wickets</h3>
       <div className="scoring-admin__form-grid">
         <div className="scoring-admin__field scoring-admin__field--checkbox">
           <label>
@@ -2441,10 +2585,9 @@ function OBSWebSocketTab({ config, setConfig, onFeedback }: {
               checked={obsConfig.autoReplay}
               onChange={e => updateOBS({ autoReplay: e.target.checked })}
             />
-            Auto-trigger replay on boundaries & wickets
+            Auto-trigger OBS replay buffer save on boundaries &amp; wickets
           </label>
         </div>
-
         <div className="scoring-admin__field">
           <label>Replay Delay (seconds)</label>
           <input
@@ -2456,7 +2599,6 @@ function OBSWebSocketTab({ config, setConfig, onFeedback }: {
             max={30}
           />
         </div>
-
         <div className="scoring-admin__field">
           <label>Replay Buffer Duration (seconds)</label>
           <input
@@ -2470,16 +2612,199 @@ function OBSWebSocketTab({ config, setConfig, onFeedback }: {
         </div>
       </div>
 
-      <div className="scoring-admin__actions">
+      {/* Replay Source Button Configurator */}
+      <h3 className="scoring-admin__subsection-title" style={{ marginTop: '1.5rem' }}>
+        Replay Source Control Buttons
+        <span className="scoring-admin__hint" style={{ marginLeft: 8, fontWeight: 400 }}>
+          — shown in OBS Control Dock for one-tap control from mobile
+        </span>
+      </h3>
+      <p className="scoring-admin__hint" style={{ marginBottom: '1rem' }}>
+        Each button triggers an OBS hotkey. Hotkey names are discovered from your OBS instance
+        (includes Replay Source plugin hotkeys like play, pause, slow forward, etc.).
+        Click <strong>Discover Hotkeys</strong> above while connected to populate the dropdown.
+      </p>
+
+      {/* Button list */}
+      <div className="obs-btn-config-list">
+        {replayConfig.buttons.map((btn, idx) => (
+          <div key={btn.id} className={`obs-btn-config-row ${editingButtonIdx === idx ? 'obs-btn-config-row--editing' : ''}`}>
+            <div className="obs-btn-config-preview" style={{ '--rbtn-color': btn.color } as React.CSSProperties}>
+              <span className="obs-btn-config-icon">{btn.icon}</span>
+              <span className="obs-btn-config-name">{btn.label}</span>
+              {btn.hotkeyName && <span className="obs-btn-config-hotkey">{btn.hotkeyName}</span>}
+            </div>
+            <div className="obs-btn-config-actions">
+              <button className="scoring-admin__btn-icon" onClick={() => moveButton(idx, -1)} disabled={idx === 0} title="Move up">↑</button>
+              <button className="scoring-admin__btn-icon" onClick={() => moveButton(idx, 1)} disabled={idx === replayConfig.buttons.length - 1} title="Move down">↓</button>
+              <button
+                className={`scoring-admin__btn-icon ${btn.enabled ? 'active' : ''}`}
+                onClick={() => updateButton(idx, { enabled: !btn.enabled })}
+                title={btn.enabled ? 'Disable' : 'Enable'}
+              >
+                {btn.enabled ? '✓' : '○'}
+              </button>
+              <button className="scoring-admin__btn-icon" onClick={() => setEditingButtonIdx(editingButtonIdx === idx ? null : idx)} title="Edit">✏️</button>
+              <button className="scoring-admin__btn-icon scoring-admin__btn-icon--danger" onClick={() => removeButton(idx)} title="Delete">✕</button>
+            </div>
+
+            {editingButtonIdx === idx && (
+              <div className="obs-btn-config-editor">
+                <div className="scoring-admin__form-grid">
+                  <div className="scoring-admin__field">
+                    <label>Label</label>
+                    <input
+                      className="scoring-admin__input"
+                      value={btn.label}
+                      onChange={e => updateButton(idx, { label: e.target.value })}
+                    />
+                  </div>
+                  <div className="scoring-admin__field">
+                    <label>Icon (emoji)</label>
+                    <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: 6 }}>
+                      {DEFAULT_BUTTON_ICONS.map(ic => (
+                        <button
+                          key={ic}
+                          className={`obs-icon-chip ${btn.icon === ic ? 'active' : ''}`}
+                          onClick={() => updateButton(idx, { icon: ic })}
+                        >
+                          {ic}
+                        </button>
+                      ))}
+                    </div>
+                    <input
+                      className="scoring-admin__input"
+                      value={btn.icon}
+                      onChange={e => updateButton(idx, { icon: e.target.value })}
+                      placeholder="Paste any emoji"
+                      style={{ maxWidth: 80 }}
+                    />
+                  </div>
+                  <div className="scoring-admin__field">
+                    <label>Color</label>
+                    <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: 6 }}>
+                      {DEFAULT_BUTTON_COLORS.map(c => (
+                        <button
+                          key={c}
+                          className="obs-color-chip"
+                          style={{ background: c, outline: btn.color === c ? `2px solid #fff` : 'none' }}
+                          onClick={() => updateButton(idx, { color: c })}
+                        />
+                      ))}
+                    </div>
+                    <input
+                      type="color"
+                      value={btn.color}
+                      onChange={e => updateButton(idx, { color: e.target.value })}
+                    />
+                  </div>
+                  <div className="scoring-admin__field">
+                    <label>Action Type</label>
+                    <select
+                      className="scoring-admin__input"
+                      value={btn.action}
+                      onChange={e => updateButton(idx, { action: e.target.value as OBSReplayButton['action'] })}
+                    >
+                      <option value="hotkey_name">Trigger OBS Hotkey by Name (Replay Source)</option>
+                      <option value="hotkey_sequence">Trigger by Key Sequence (simulate keypress)</option>
+                      <option value="scene_switch">Switch Scene</option>
+                      <option value="replay_buffer_save">Save Replay Buffer</option>
+                      <option value="replay_buffer_start">Start Replay Buffer</option>
+                      <option value="replay_buffer_stop">Stop Replay Buffer</option>
+                    </select>
+                  </div>
+
+                  {btn.action === 'hotkey_name' && (
+                    <div className="scoring-admin__field" style={{ gridColumn: '1 / -1' }}>
+                      <label>OBS Hotkey Name</label>
+                      {availableHotkeys.length > 0 ? (
+                        <select
+                          className="scoring-admin__input"
+                          value={btn.hotkeyName || ''}
+                          onChange={e => updateButton(idx, { hotkeyName: e.target.value })}
+                        >
+                          <option value="">— Select hotkey —</option>
+                          {availableHotkeys.map(hk => (
+                            <option key={hk} value={hk}>{hk}</option>
+                          ))}
+                        </select>
+                      ) : (
+                        <input
+                          className="scoring-admin__input"
+                          value={btn.hotkeyName || ''}
+                          onChange={e => updateButton(idx, { hotkeyName: e.target.value })}
+                          placeholder="e.g. ReplaySource.replay — click Discover Hotkeys to populate"
+                        />
+                      )}
+                      <small className="scoring-admin__hint">
+                        Hotkey name from OBS (connect + Discover Hotkeys to see all options including Replay Source plugin hotkeys)
+                      </small>
+                    </div>
+                  )}
+
+                  {btn.action === 'hotkey_sequence' && (
+                    <div className="scoring-admin__field" style={{ gridColumn: '1 / -1' }}>
+                      <label>Key ID (OBS format)</label>
+                      <input
+                        className="scoring-admin__input"
+                        value={btn.keySequence?.keyId || ''}
+                        onChange={e => updateButton(idx, {
+                          keySequence: { ...btn.keySequence, keyId: e.target.value },
+                        })}
+                        placeholder="e.g. OBS_KEY_F1"
+                      />
+                      <div style={{ display: 'flex', gap: 12, marginTop: 6 }}>
+                        {(['shift', 'ctrl', 'alt'] as const).map(mod => (
+                          <label key={mod} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: '0.82rem' }}>
+                            <input
+                              type="checkbox"
+                              checked={!!(btn.keySequence as Record<string, boolean> | undefined)?.[mod]}
+                              onChange={e => updateButton(idx, {
+                                keySequence: { keyId: '', ...btn.keySequence, [mod]: e.target.checked },
+                              })}
+                            />
+                            {mod.charAt(0).toUpperCase() + mod.slice(1)}
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {btn.action === 'scene_switch' && (
+                    <div className="scoring-admin__field">
+                      <label>Scene Name</label>
+                      <input
+                        className="scoring-admin__input"
+                        value={btn.sceneName || ''}
+                        onChange={e => updateButton(idx, { sceneName: e.target.value })}
+                        placeholder="e.g. Replay"
+                      />
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        ))}
+
+        {replayConfig.buttons.length === 0 && (
+          <div className="scoring-admin__hint" style={{ padding: '1rem 0', textAlign: 'center' }}>
+            No buttons configured. Click <strong>+ Add Button</strong> to create your first replay control button.
+          </div>
+        )}
+      </div>
+
+      <button
+        className="scoring-admin__btn scoring-admin__btn--secondary"
+        onClick={addButton}
+        style={{ marginTop: '0.75rem' }}
+      >
+        + Add Button
+      </button>
+
+      <div className="scoring-admin__actions" style={{ marginTop: '1.5rem' }}>
         <button className="scoring-admin__btn scoring-admin__btn--primary" onClick={handleSave} disabled={saving}>
-          <IoSave size={16} /> {saving ? 'Saving...' : 'Save'}
-        </button>
-        <button
-          className="scoring-admin__btn scoring-admin__btn--secondary"
-          onClick={handleTestConnection}
-          disabled={connectionStatus === 'connecting'}
-        >
-          <IoLink size={16} /> Test Connection
+          <IoSave size={16} /> {saving ? 'Saving…' : 'Save All OBS Settings'}
         </button>
       </div>
     </div>

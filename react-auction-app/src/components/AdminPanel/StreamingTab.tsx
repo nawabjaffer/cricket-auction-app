@@ -517,8 +517,12 @@ export default function StreamingTab({ onClose }: StreamingTabProps) {
                 <code style={{ color: '#a78bfa' }}>/obs-overlay</code>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: 'rgba(0,0,0,0.5)' }}>OBS dock panel:</span>
+                <span style={{ color: 'rgba(0,0,0,0.5)' }}>Auction OBS dock:</span>
                 <code style={{ color: '#a78bfa' }}>/obs-dock</code>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ color: 'rgba(0,0,0,0.5)' }}>Cricket scoring dock:</span>
+                <code style={{ color: '#34d399' }}>/cricket/scorer/obs-dock</code>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <span style={{ color: 'rgba(0,0,0,0.5)' }}>Admin controls:</span>

@@ -417,6 +417,8 @@ export interface ScoringOverlayConfig {
   tickerConfig?: TickerConfig;
   // OBS WebSocket config
   obsWebSocketConfig?: OBSWebSocketConfig;
+  // OBS Replay Source button configuration
+  obsReplayConfig?: OBSReplayConfig;
   // MVP point weights (customizable)
   mvpWeights?: MVPWeights;
   // Minimum balls for strike rate eligibility
@@ -699,15 +701,52 @@ export interface TickerConfig {
 // ── OBS WebSocket Config ──
 
 export interface OBSWebSocketConfig {
-  host: string;                // default 'localhost'
-  port: number;                // default 4455
+  host: string;
+  port: number;
   password?: string;
-  autoReplay: boolean;         // auto-trigger replay on 4/6/W
-  replayDelaySeconds: number;  // seconds to wait before triggering replay
-  replayDurationSeconds: number; // how long to save replay buffer
+  autoReplay: boolean;
+  replayDelaySeconds: number;
+  replayDurationSeconds: number;
 }
 
-// ── Replay Trigger (written to RTDB for overlay/dock to consume) ──
+// ── OBS Replay Source Button configuration ──
+
+/** How a configured button interacts with OBS */
+export type OBSButtonAction =
+  | 'hotkey_name'       // TriggerHotkeyByName — best for Replay Source plugin
+  | 'hotkey_sequence'   // TriggerHotkeyByKeySequence — simulates a keypress
+  | 'scene_switch'      // SetCurrentProgramScene
+  | 'replay_buffer_save'  // SaveReplayBuffer (built-in replay buffer)
+  | 'replay_buffer_start' // StartReplayBuffer
+  | 'replay_buffer_stop'; // StopReplayBuffer
+
+export interface OBSButtonKeySequence {
+  keyId: string;    // OBS key ID string, e.g. "OBS_KEY_F1"
+  shift?: boolean;
+  ctrl?: boolean;
+  alt?: boolean;
+}
+
+export interface OBSReplayButton {
+  id: string;
+  label: string;
+  icon: string;           // emoji or text symbol
+  color: string;          // CSS color for accent
+  action: OBSButtonAction;
+  hotkeyName?: string;    // for action = 'hotkey_name'
+  keySequence?: OBSButtonKeySequence; // for action = 'hotkey_sequence'
+  sceneName?: string;     // for action = 'scene_switch'
+  order: number;
+  enabled: boolean;
+}
+
+export interface OBSReplayConfig {
+  replaySceneName?: string;  // scene to switch to when showing replay
+  drsSceneName?: string;     // scene to switch to for DRS review
+  buttons: OBSReplayButton[];
+}
+
+// Replay Trigger (written to RTDB for overlay/dock to consume)
 
 export interface ReplayTrigger {
   id: string;
