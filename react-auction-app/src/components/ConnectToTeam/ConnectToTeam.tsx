@@ -40,13 +40,13 @@ export const ConnectToTeam: React.FC<ConnectToTeamProps> = ({ open, onClose }) =
     });
   }, [teams]);
 
-  if (!open) return null;
-
   useEffect(() => {
     if (teamCredentials.length > 0) {
       authService.setTeamCredentials(teamCredentials);
     }
   }, [teamCredentials]);
+
+  if (!open) return null;
 
   const handleResetSessions = () => {
     realtimeSyncService.broadcastSessionReset('manual-reset');

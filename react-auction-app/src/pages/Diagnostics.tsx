@@ -107,7 +107,7 @@ export default function FirebaseDiagnostics() {
         localStorage.setItem('firebase_test', 'true');
         localStorage.removeItem('firebase_test');
         addLog('✅ LocalStorage Available');
-      } catch (e) {
+      } catch (_e) {
         addLog('❌ LocalStorage Not Available');
       }
 

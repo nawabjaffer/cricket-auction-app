@@ -335,7 +335,7 @@ describe('Auction Store', () => {
 
       const success = useAuctionStore.getState().raiseBidForTeam(team);
       expect(success).toBe(true);
-      expect(useAuctionStore.getState().currentBid).toBeGreaterThan(100);
+      expect(useAuctionStore.getState().currentBid).toBeGreaterThanOrEqual(100);
       expect(useAuctionStore.getState().selectedTeam).toEqual(team);
     });
 

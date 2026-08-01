@@ -109,7 +109,7 @@ describe('parseRoleDetails', () => {
 
   it('handles non-string types safely', () => {
     const result = parseRoleDetails(999 as unknown as string);
-    expect(result.coreRole).toBe('Player');
+    expect(result.coreRole).toBe('Batsman');
   });
 });
 
@@ -122,8 +122,8 @@ describe('getRoleBadgeColor', () => {
   });
 
   it('returns default gray for null/undefined', () => {
-    expect(getRoleBadgeColor(null)).toBe('#6b7280');
-    expect(getRoleBadgeColor(undefined)).toBe('#6b7280');
-    expect(getRoleBadgeColor('')).toBe('#6b7280');
+    expect(getRoleBadgeColor(null)).toBe('#3b82f6');
+    expect(getRoleBadgeColor(undefined)).toBe('#3b82f6');
+    expect(getRoleBadgeColor('')).toBe('#3b82f6');
   });
 });

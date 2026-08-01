@@ -81,6 +81,9 @@ export default function ScoreOBSControlDock() {
   const [replayScene, setReplayScene] = useState('');
   const [drsScene, setDrsScene] = useState('');
   const [execBusy, setExecBusy] = useState<string | null>(null);
+  const [obsErrorDetail, setObsErrorDetail] = useState('');
+  const isNativeObsHost = Boolean((globalThis as unknown as { obsstudio?: unknown }).obsstudio)
+    || /obs/i.test(globalThis.navigator?.userAgent || '');
 
   // Initialize scoring service + load matches
   useEffect(() => {
@@ -113,7 +116,9 @@ export default function ScoreOBSControlDock() {
         const cfg = await scoringService.getOverlayConfig().catch(() => null);
         if (cfg?.obsWebSocketConfig) {
           const { host, port, password } = cfg.obsWebSocketConfig;
-          if (!localStorage.getItem('obs_dock_host')) setObsHost(host || 'localhost');
+          if (!localStorage.getItem('obs_dock_host')) {
+            setObsHost(isNativeObsHost ? '127.0.0.1' : (host || 'localhost'));
+          }
           if (!localStorage.getItem('obs_dock_port')) setObsPort(String(port || 4455));
           if (password) setObsPassword(password);
         }
@@ -156,10 +161,16 @@ export default function ScoreOBSControlDock() {
   useEffect(() => {
     const unsub = obsService.onConnectionChange((state) => {
       setObsStatus(state);
+      if (state !== 'error') setObsErrorDetail('');
     });
     return unsub;
   // obsService is a singleton, no deps needed
   // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const showFeedback = useCallback((msg: string) => {
+    setFeedback(msg);
+    setTimeout(() => setFeedback(''), 2500);
   }, []);
 
   const handleObsConnect = useCallback(async () => {
@@ -169,22 +180,41 @@ export default function ScoreOBSControlDock() {
     localStorage.setItem('obs_dock_port', obsPort);
     setObsConnecting(true);
     try {
-      await obsService.connect(obsHost.trim(), port, obsPassword || undefined);
+      const ok = await obsService.connect(obsHost.trim(), port, obsPassword || undefined);
+      if (!ok) {
+        const detail = obsService.getLastErrorDetail();
+        setObsErrorDetail(detail || 'Connection failed');
+        showFeedback('OBS connection failed');
+      } else {
+        setObsErrorDetail('');
+        showFeedback('OBS connected');
+      }
     } catch {
-      // status is set via onConnectionChange
+      setObsErrorDetail(obsService.getLastErrorDetail() || 'Connection failed');
     } finally {
       setObsConnecting(false);
     }
-  }, [obsHost, obsPort, obsPassword]);
+  }, [obsHost, obsPort, obsPassword, showFeedback]);
+
+  const connectNativeObs = useCallback(async () => {
+    setObsHost('127.0.0.1');
+    if (!obsPort) setObsPort('4455');
+    localStorage.setItem('obs_dock_host', '127.0.0.1');
+    localStorage.setItem('obs_dock_port', obsPort || '4455');
+    const ok = await obsService.connect('127.0.0.1', parseInt(obsPort || '4455', 10), obsPassword || undefined);
+    if (!ok) {
+      const detail = obsService.getLastErrorDetail();
+      setObsErrorDetail(detail || 'Native connection failed');
+      showFeedback('Native OBS connect failed');
+      return;
+    }
+    setObsErrorDetail('');
+    showFeedback('Native OBS connected');
+  }, [obsPassword, obsPort, showFeedback]);
 
   const handleObsDisconnect = useCallback(() => {
     obsService.disconnect();
     obsReplaySourceService.stopRelayWatch();
-  }, []);
-
-  const showFeedback = useCallback((msg: string) => {
-    setFeedback(msg);
-    setTimeout(() => setFeedback(''), 2500);
   }, []);
 
   const execReplayButton = useCallback(async (button: OBSReplayButton) => {
@@ -277,6 +307,7 @@ export default function ScoreOBSControlDock() {
       <div className="score-dock__header">
         <span className="score-dock__title">Score × OBS</span>
         <div className="score-dock__header-right">
+          {isNativeObsHost && <span className="score-dock__obs-native">Native</span>}
           <span className={`score-dock__obs-badge score-dock__obs-badge--${obsStatus}`}>
             <span className="score-dock__obs-badge-dot" />
             {obsStatus === 'connected' ? 'OBS' : obsStatus === 'connecting' ? '...' : obsStatus === 'error' ? 'ERR' : 'OBS'}
@@ -328,15 +359,25 @@ export default function ScoreOBSControlDock() {
             </button>
           )}
         </div>
+        {!obsIsConnected && (
+          <div className="score-dock__obs-connect-row">
+            <button className="score-dock__obs-btn score-dock__obs-btn--native" onClick={connectNativeObs}>
+              Native Connect (127.0.0.1)
+            </button>
+          </div>
+        )}
         {obsIsConnected && (
           <p className="score-dock__obs-hint">
             ✓ OBS connected — hotkeys will execute instantly
           </p>
         )}
         {obsStatus === 'error' && (
-          <p className="score-dock__obs-hint score-dock__obs-hint--error">
-            ✕ Cannot reach OBS. Check host/port and OBS WebSocket settings
-          </p>
+          <>
+            <p className="score-dock__obs-hint score-dock__obs-hint--error">
+              ✕ Cannot reach OBS. Check host/port, OBS WebSocket, and password.
+            </p>
+            {obsErrorDetail && <p className="score-dock__obs-hint score-dock__obs-hint--error">{obsErrorDetail}</p>}
+          </>
         )}
         {!obsIsConnected && obsStatus !== 'error' && (
           <p className="score-dock__obs-hint">

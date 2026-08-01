@@ -7,10 +7,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useAuction } from '../../hooks';
 import { useCurrencySuffix } from '../../store';
 
-interface BidDisplayProps {
-}
-
-export function BidDisplay({}: BidDisplayProps) {
+export function BidDisplay() {
   const { 
     currentBid, 
     previousBid, 

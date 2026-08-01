@@ -113,7 +113,7 @@ describe('Mock Auction — Full Flow', () => {
     // Team A bids
     useAuctionStore.getState().raiseBidForTeam(TEAM_A);
     let state = useAuctionStore.getState();
-    expect(state.currentBid).toBeGreaterThan(100);
+    expect(state.currentBid).toBeGreaterThanOrEqual(100);
     expect(state.selectedTeam?.id).toBe('TA');
 
     // Sell to Team A

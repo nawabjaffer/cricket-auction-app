@@ -396,6 +396,18 @@
   gap: 6px;
 }
 
+.score-dock__obs-native {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  color: #022c22;
+  background: linear-gradient(135deg, #86efac, #34d399);
+}
+
 .score-dock__obs-connect-panel {
   padding: 10px 14px 8px;
   background: rgba(59, 130, 246, 0.04);
@@ -456,6 +468,17 @@
   color: #f87171;
 }
 .score-dock__obs-btn--disconnect:hover { background: rgba(239, 68, 68, 0.2); }
+
+.score-dock__obs-btn--native {
+  width: 100%;
+  background: rgba(16, 185, 129, 0.15);
+  border: 1px solid rgba(16, 185, 129, 0.35);
+  color: #6ee7b7;
+}
+
+.score-dock__obs-btn--native:hover {
+  background: rgba(16, 185, 129, 0.25);
+}
 
 .score-dock__obs-spinner {
   display: inline-block;

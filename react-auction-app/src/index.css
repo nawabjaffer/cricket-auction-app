@@ -27,6 +27,12 @@
   --theme-gradient-end: #1a202c;
   --theme-bg-image: none;
   --asset-gold-filter: grayscale(1) sepia(1) saturate(230%) hue-rotate(356deg) brightness(1.01) contrast(0.93);
+  --app-bg: #121722;
+  --app-surface: #1e293b;
+  --app-surface-alt: #0f172a;
+  --app-text-primary: #f8fafc;
+  --app-text-secondary: #cbd5e1;
+  --app-border: rgba(148, 163, 184, 0.28);
 
   /* Typography */
   font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -36,6 +42,15 @@
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+[data-theme="light"] {
+  --app-bg: #f8fafc;
+  --app-surface: #ffffff;
+  --app-surface-alt: #f1f5f9;
+  --app-text-primary: #0f172a;
+  --app-text-secondary: #334155;
+  --app-border: rgba(100, 116, 139, 0.28);
 }
 
 /* ============================================================================
@@ -53,8 +68,9 @@ html {
 body {
   margin: 0;
   min-height: 100vh;
-  background-color: var(--theme-background);
-  color: var(--theme-primary);
+  background-color: var(--app-bg, var(--theme-background));
+  color: var(--app-text-primary, var(--theme-text-primary));
+  color-scheme: dark light;
 }
 
 .app-shell {

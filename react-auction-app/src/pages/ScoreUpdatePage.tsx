@@ -12,7 +12,10 @@ import { useAdminAuth } from '../hooks/useAdminAuth';
 import { useTenantNavigate as useNavigate } from '../hooks/useTenantNavigate';
 import { useScoringState } from '../hooks/useScoringState';
 import { scoringService } from '../services/scoring';
-import type { BallOutcome, DismissalType, WicketDetail, MatchSquadPlayer } from '../types/scoring';
+import { obsReplaySourceService } from '../services/scoring/obsReplaySourceService';
+import { realtimeSync } from '../services/realtimeSync';
+import { tenantPath } from '../services/tenantPath';
+import type { BallOutcome, DismissalType, WicketDetail, MatchSquadPlayer, OBSReplayButton, TickerStatWidget } from '../types/scoring';
 import FieldPlacementEditor from '../components/FieldPlacementEditor/FieldPlacementEditor';
 import './ScoreUpdatePage.css';
 
@@ -71,6 +74,12 @@ const DISMISSAL_TYPES: { value: DismissalType; label: string }[] = [
   { value: 'retired_out', label: 'Retired Out' },
 ];
 
+const TICKER_WIDGET_OPTIONS: Array<{ key: TickerStatWidget; label: string }> = [
+  { key: 'run_rate', label: 'Run Rate' },
+  { key: 'projection', label: 'Projection' },
+  { key: 'chase', label: 'Chase Eqn' },
+];
+
 export default function ScoreUpdatePage() {
   const [searchParams] = useSearchParams();
   const matchId = searchParams.get('matchId') || undefined;
@@ -87,6 +96,7 @@ export default function ScoreUpdatePage() {
 
   const [showWicketModal, setShowWicketModal] = useState(false);
   const [showInitModal, setShowInitModal] = useState(false);
+  const [showTossModal, setShowTossModal] = useState(false);
   const [initModalDefaults, setInitModalDefaults] = useState<{ inningsNumber?: 1 | 2; battingTeamId?: string; target?: number } | null>(null);
   const [showBatsmanPicker, setShowBatsmanPicker] = useState<'striker' | 'non-striker' | null>(null);
   const [showBowlerPicker, setShowBowlerPicker] = useState(false);
@@ -97,6 +107,9 @@ export default function ScoreUpdatePage() {
   const [showFieldEditor, setShowFieldEditor] = useState(false);
   const [showAddPlayerModal, setShowAddPlayerModal] = useState(false);
   const [showPlayerStatsModal, setShowPlayerStatsModal] = useState(false);
+  const [obsRelayButtons, setObsRelayButtons] = useState<OBSReplayButton[]>([]);
+  const [obsRelayFeedback, setObsRelayFeedback] = useState('');
+  const [tickerWidgetModes, setTickerWidgetModes] = useState<TickerStatWidget[]>(['run_rate']);
 
   // Auto-show bowler picker at end of over
   useEffect(() => {
@@ -120,6 +133,82 @@ export default function ScoreUpdatePage() {
     window.addEventListener('click', handleActivity);
     return () => window.removeEventListener('click', handleActivity);
   }, [isAuthenticated, navigate, extendSession]);
+
+  useEffect(() => {
+    const loadObsButtons = async () => {
+      try {
+        await realtimeSync.ensureInitialized();
+        const db = realtimeSync.getDatabase();
+        if (db) {
+          obsReplaySourceService.initialize(db, tenantPath('scoring'));
+        }
+        const cfg = await scoringService.getOverlayConfig();
+        const buttons = (cfg?.obsReplayConfig?.buttons || [])
+          .filter(b => b.enabled)
+          .sort((a, b) => a.order - b.order);
+        setObsRelayButtons(buttons);
+        const configuredModes = cfg?.tickerConfig?.widgetModes;
+        if (configuredModes && configuredModes.length > 0) {
+          setTickerWidgetModes(configuredModes);
+        }
+      } catch {
+        setObsRelayButtons([]);
+      }
+    };
+    loadObsButtons();
+  }, []);
+
+  const saveTickerWidgetModes = useCallback(async (nextModes: TickerStatWidget[]) => {
+    const normalized: TickerStatWidget[] = nextModes.length > 0 ? nextModes : ['run_rate'];
+    setTickerWidgetModes(normalized);
+    try {
+      const cfg = await scoringService.getOverlayConfig();
+      const updated = {
+        ...(cfg || {
+          showLiveBadge: true,
+          enableBoundaryAnimation: true,
+          enableWicketAnimation: true,
+          enableDuckOutAnimation: true,
+          enableHatTrickAnimation: true,
+          enableSixerAnimation: true,
+          enableKeyboardShortcuts: true,
+          autoOverlayEnabled: true,
+          autoOverlayIntervalSeconds: 30,
+          liveQuestions: [],
+        }),
+        tickerConfig: {
+          ...(cfg?.tickerConfig || {
+            mode: 'html' as const,
+            position: 'bottom' as const,
+            height: 120,
+            showBowlerOnRight: true,
+            animationSpeed: 500,
+          }),
+          widgetModes: normalized,
+        },
+      };
+      await scoringService.saveOverlayConfig(updated);
+    } catch {
+      // keep local mode even if network save fails
+    }
+  }, []);
+
+  const toggleTickerWidget = useCallback((mode: TickerStatWidget) => {
+    const nextSet = new Set(tickerWidgetModes);
+    if (nextSet.has(mode)) nextSet.delete(mode);
+    else nextSet.add(mode);
+    saveTickerWidgetModes(Array.from(nextSet) as TickerStatWidget[]);
+  }, [saveTickerWidgetModes, tickerWidgetModes]);
+
+  const moveTickerWidget = useCallback((mode: TickerStatWidget, delta: -1 | 1) => {
+    const current = [...tickerWidgetModes];
+    const idx = current.indexOf(mode);
+    if (idx < 0) return;
+    const nextIdx = idx + delta;
+    if (nextIdx < 0 || nextIdx >= current.length) return;
+    [current[idx], current[nextIdx]] = [current[nextIdx], current[idx]];
+    saveTickerWidgetModes(current);
+  }, [saveTickerWidgetModes, tickerWidgetModes]);
 
   // Keyboard shortcuts for quick scoring
   useEffect(() => {
@@ -178,11 +267,31 @@ export default function ScoreUpdatePage() {
           <p>{match.teamA.name} vs {match.teamB.name}</p>
           <button
             className="score-update__btn score-update__btn--primary score-update__btn--lg"
-            onClick={() => setShowInitModal(true)}
+            onClick={() => {
+              if (!match.tossWonBy || !match.tossElected) {
+                setShowTossModal(true);
+                return;
+              }
+              setShowInitModal(true);
+            }}
           >
             <IoPlay size={20} /> Start Innings
           </button>
+          <p className="score-update__hint" style={{ marginTop: '0.6rem' }}>
+            Toss details are captured here before the first innings starts.
+          </p>
         </div>
+        {showTossModal && (
+          <TossSetupModal
+            match={match}
+            onConfirm={async (wonBy, elected) => {
+              await scoringService.updateMatch(match.id, { tossWonBy: wonBy, tossElected: elected });
+              setShowTossModal(false);
+              setShowInitModal(true);
+            }}
+            onClose={() => setShowTossModal(false)}
+          />
+        )}
         {showInitModal && (
           <InitInningsModal
             match={match}
@@ -540,6 +649,70 @@ export default function ScoreUpdatePage() {
         </button>
       </div>
 
+      {/* ── OBS Custom Buttons (relay to OBS dock) ───────────────────── */}
+      {obsRelayButtons.length > 0 && matchId && (
+        <div className="score-update__overlay-triggers" style={{ marginTop: '0.8rem' }}>
+          <span className="score-update__overlay-label">OBS Quick Buttons:</span>
+          {obsRelayButtons.map(btn => (
+            <button
+              key={btn.id}
+              className="score-update__overlay-btn"
+              style={{ borderColor: `${btn.color}66`, color: '#e2e8f0', background: `${btn.color}26` }}
+              onClick={async () => {
+                await obsReplaySourceService.sendRelayCommand(matchId, btn.id);
+                setObsRelayFeedback(`Sent: ${btn.label}`);
+                setTimeout(() => setObsRelayFeedback(''), 1800);
+              }}
+              title={btn.hotkeyName ? `Mapped: ${btn.hotkeyName}` : btn.label}
+            >
+              <span>{btn.icon}</span>
+              <span>{btn.label}</span>
+            </button>
+          ))}
+          {obsRelayFeedback && (
+            <span className="score-update__overlay-label" style={{ marginLeft: '0.4rem', color: '#38bdf8' }}>
+              {obsRelayFeedback}
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* ── Ticker Widget Quick Controls (live scorer) ───────────────── */}
+      <div className="score-update__overlay-triggers" style={{ marginTop: '0.6rem' }}>
+        <span className="score-update__overlay-label">Ticker Widgets:</span>
+        {TICKER_WIDGET_OPTIONS.map((widget) => {
+          const enabled = tickerWidgetModes.includes(widget.key);
+          const pos = tickerWidgetModes.indexOf(widget.key);
+          return (
+            <div key={widget.key} className="score-update__ticker-widget-chip">
+              <button
+                className={`score-update__overlay-btn ${enabled ? 'score-update__overlay-btn--active' : ''}`}
+                onClick={() => toggleTickerWidget(widget.key)}
+                title={`Toggle ${widget.label}`}
+              >
+                {widget.label}
+              </button>
+              <button
+                className="score-update__ticker-order-btn"
+                onClick={() => moveTickerWidget(widget.key, -1)}
+                disabled={!enabled || pos <= 0}
+                title="Move left"
+              >
+                ←
+              </button>
+              <button
+                className="score-update__ticker-order-btn"
+                onClick={() => moveTickerWidget(widget.key, 1)}
+                disabled={!enabled || pos < 0 || pos >= tickerWidgetModes.length - 1}
+                title="Move right"
+              >
+                →
+              </button>
+            </div>
+          );
+        })}
+      </div>
+
       {/* ── Field Placement Editor Panel ──────────────────────────────── */}
       <AnimatePresence>
         {showFieldEditor && matchId && (
@@ -611,6 +784,19 @@ export default function ScoreUpdatePage() {
             return true;
           })}
           onSelect={(p) => { changeBatsman(p, showBatsmanPicker!); setShowBatsmanPicker(null); }}
+          onQuickAdd={async (name) => {
+            const newPlayer: MatchSquadPlayer = {
+              playerId: `quick_bat_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+              playerName: name,
+              role: 'Batsman',
+              battingOrder: 99,
+              isImpactSub: true,
+            };
+            await addPlayerToLineup(liveScore.battingTeamId, newPlayer);
+            changeBatsman(newPlayer, showBatsmanPicker);
+            setShowBatsmanPicker(null);
+          }}
+          quickAddLabel="Add missing batsman"
           onClose={() => setShowBatsmanPicker(null)}
         />
       )}
@@ -622,6 +808,19 @@ export default function ScoreUpdatePage() {
           disabledPlayerId={liveScore.previousBowlerId}
           disabledReason="Bowled last over"
           onSelect={(p) => { changeBowler(p); setShowBowlerPicker(false); }}
+          onQuickAdd={async (name) => {
+            const newPlayer: MatchSquadPlayer = {
+              playerId: `quick_bowl_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+              playerName: name,
+              role: 'Bowler',
+              battingOrder: 99,
+              isImpactSub: true,
+            };
+            await addPlayerToLineup(liveScore.bowlingTeamId, newPlayer);
+            changeBowler(newPlayer);
+            setShowBowlerPicker(false);
+          }}
+          quickAddLabel="Add missing bowler"
           onClose={() => { if (!needsBowlerChange) setShowBowlerPicker(false); }}
         />
       )}
@@ -915,6 +1114,49 @@ function WicketModal({ battingLineup, bowlingLineup, currentBatsmen, currentBowl
   );
 }
 
+// ── Toss Setup Modal ────────────────────────────────────────────────────────
+
+function TossSetupModal({ match, onConfirm, onClose }: {
+  match: { teamA: { id: string; name: string }; teamB: { id: string; name: string } };
+  onConfirm: (wonBy: string, elected: 'bat' | 'bowl') => void | Promise<void>;
+  onClose: () => void;
+}) {
+  const [wonBy, setWonBy] = useState(match.teamA.id);
+  const [elected, setElected] = useState<'bat' | 'bowl'>('bat');
+
+  return (
+    <div className="score-update__modal-overlay" onClick={onClose}>
+      <div className="score-update__modal" onClick={e => e.stopPropagation()}>
+        <h3>Enter Toss Details</h3>
+        <p className="score-update__hint" style={{ marginBottom: '0.8rem' }}>Required once before first innings starts.</p>
+
+        <div className="score-update__modal-field">
+          <label>Toss Won By</label>
+          <select value={wonBy} onChange={e => setWonBy(e.target.value)} className="score-update__select">
+            <option value={match.teamA.id}>{match.teamA.name}</option>
+            <option value={match.teamB.id}>{match.teamB.name}</option>
+          </select>
+        </div>
+
+        <div className="score-update__modal-field">
+          <label>Elected to</label>
+          <select value={elected} onChange={e => setElected(e.target.value as 'bat' | 'bowl')} className="score-update__select">
+            <option value="bat">Bat</option>
+            <option value="bowl">Bowl</option>
+          </select>
+        </div>
+
+        <div className="score-update__modal-actions">
+          <button className="score-update__btn score-update__btn--primary" onClick={() => onConfirm(wonBy, elected)}>
+            Save Toss & Continue
+          </button>
+          <button className="score-update__btn" onClick={onClose}>Cancel</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Init Innings Modal ───────────────────────────────────────────────────────
 
 function InitInningsModal({ match, lineups, defaults, onStart, onClose }: {
@@ -1039,12 +1281,14 @@ function InitInningsModal({ match, lineups, defaults, onStart, onClose }: {
 
 // ── Player Picker Modal ──────────────────────────────────────────────────────
 
-function PlayerPickerModal({ title, players, disabledPlayerId, disabledReason, onSelect, onClose }: {
+function PlayerPickerModal({ title, players, disabledPlayerId, disabledReason, onSelect, onQuickAdd, quickAddLabel, onClose }: {
   title: string;
   players: MatchSquadPlayer[];
   disabledPlayerId?: string;
   disabledReason?: string;
   onSelect: (p: MatchSquadPlayer) => void;
+  onQuickAdd?: (name: string) => void | Promise<void>;
+  quickAddLabel?: string;
   onClose: () => void;
 }) {
   // Sort players by role: for batting selectors show Batsman → All-rounder → Bowler
@@ -1061,6 +1305,7 @@ function PlayerPickerModal({ title, players, disabledPlayerId, disabledReason, o
   };
 
   const sortedPlayers = [...players].sort((a, b) => getRoleWeight(a.role) - getRoleWeight(b.role));
+  const [quickName, setQuickName] = useState('');
 
   return (
     <div className="score-update__modal-overlay" onClick={onClose}>
@@ -1085,6 +1330,33 @@ function PlayerPickerModal({ title, players, disabledPlayerId, disabledReason, o
             );
           })}
         </div>
+        {onQuickAdd && (
+          <div className="score-update__modal-field" style={{ marginTop: '0.7rem' }}>
+            <label>{quickAddLabel || 'Add missing player'}</label>
+            <div style={{ display: 'flex', gap: '0.45rem' }}>
+              <input
+                type="text"
+                value={quickName}
+                onChange={e => setQuickName(e.target.value)}
+                placeholder="Player name"
+                className="score-update__input"
+              />
+              <button
+                className="score-update__btn score-update__btn--secondary"
+                onClick={async () => {
+                  const name = quickName.trim();
+                  if (!name) return;
+                  await onQuickAdd(name);
+                  setQuickName('');
+                }}
+                disabled={!quickName.trim()}
+              >
+                + Add
+              </button>
+            </div>
+            <small className="score-update__hint">Name-only add for live continuity. Edit full details later in admin.</small>
+          </div>
+        )}
         <div className="score-update__modal-actions">
           <button className="score-update__btn" onClick={onClose}>Cancel</button>
         </div>

@@ -33,7 +33,7 @@ export default function CameraPage() {
       if (!selectedDeviceId && cameras[0]) {
         setSelectedDeviceId(cameras[0].deviceId);
       }
-    } catch (err) {
+    } catch (_err) {
       setError('Failed to load camera devices.');
     }
   };
@@ -52,7 +52,7 @@ export default function CameraPage() {
       }
       setIsRunning(true);
       await loadDevices();
-    } catch (err) {
+    } catch (_err) {
       setError('Unable to access the camera. Please allow permissions.');
       setIsRunning(false);
     }

@@ -116,7 +116,7 @@ export default function AdminImageBulkUpload({ players, page, pageSize, isOpen, 
         const storageUrl = await uploadFileToStorage(file, storagePath);
         uploadedMap[p.id] = storageUrl;
         setProgress((prev) => ({ ...prev, [p.id]: 'done' }));
-      } catch (err) {
+      } catch (_err) {
         setProgress((prev) => ({ ...prev, [p.id]: 'error' }));
       }
     }
@@ -125,7 +125,7 @@ export default function AdminImageBulkUpload({ players, page, pageSize, isOpen, 
       const updatedPlayers = players.map((pl) => ({ ...(pl as Player), imageUrl: uploadedMap[pl.id] ?? pl.imageUrl }));
       try {
         await onBulkSave(updatedPlayers);
-      } catch (e) {
+      } catch (_e) {
         // bubble up error; but keep UI responsive
       }
     }

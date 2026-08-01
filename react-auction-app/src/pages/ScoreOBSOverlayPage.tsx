@@ -18,6 +18,7 @@ import type {
   ScoringOverlayConfig, ScoringAd, MatchSetup, LiveQuestion,
   PreMatchState, MatchLineup, MatchStatsSnapshot, TournamentStats,
   ReplayTrigger, Innings, MatchScore, AnimationConfig, FieldPlacement,
+  TickerStatWidget,
   ImpactPlayer,
 } from '../types/scoring';
 import PreMatchOverlay from './PreMatchOverlay';
@@ -53,8 +54,7 @@ export default function ScoreOBSOverlayPage() {
   const [matchId, setMatchId] = useState<string | null>(null);
   const [match, setMatch] = useState<MatchSetup | null>(null);
   const [live, setLive] = useState<LiveScore | null>(null);
-  // @ts-expect-error - overlay state kept for future use
-  const [overlay, setOverlay] = useState<OverlayControlState | null>(null);
+  const [_overlay, setOverlay] = useState<OverlayControlState | null>(null);
   const [config, setConfig] = useState<ScoringOverlayConfig>(DEFAULT_OVERLAY_CONFIG);
   const [ads, setAds] = useState<ScoringAd[]>([]);
   const [preMatch, setPreMatch] = useState<PreMatchState | null>(null);
@@ -71,7 +71,6 @@ export default function ScoreOBSOverlayPage() {
   const autoDismissRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const celebrationActiveRef = useRef(false);
   const queuedOverlayRef = useRef<{ type: OverlayType; durationMs: number } | null>(null);
-  const overEndOverlayRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const configRef = useRef(config);
   configRef.current = config;
   const [matchStats, setMatchStats] = useState<MatchStatsSnapshot | null>(null);
@@ -430,63 +429,13 @@ export default function ScoreOBSOverlayPage() {
     triggerOverlay(queued.type, queued.durationMs);
   }, [localOverlay, triggerOverlay]);
 
-  // Auto-show stats ONLY on contextual events: over end, new bowler, new batsman
+  // Keep contextual auto stat popups disabled by default for stable broadcast.
+  // This avoids over-by-over striker/bowler switching overlays and keeps intro-only behavior.
   const prevLiveRef = useRef<LiveScore | null>(null);
   useEffect(() => {
     if (!live) { prevLiveRef.current = null; return; }
-    const prev = prevLiveRef.current;
     prevLiveRef.current = live;
-    if (!prev) return;
-
-    if (overEndOverlayRef.current) {
-      clearTimeout(overEndOverlayRef.current);
-      overEndOverlayRef.current = null;
-    }
-
-    // Don't interrupt celebration animations or manually triggered overlays
-    const celebrationTypes: OverlayType[] = ['boundary_four', 'boundary_six', 'wicket', 'duck_out', 'hat_trick'];
-    const manualOverlays: OverlayType[] = ['field_placement', 'full_scorecard', 'match_intro', 'points_table', 'match_summary', 'live_question'];
-    if (celebrationTypes.includes(localOverlay) || manualOverlays.includes(localOverlay)) return;
-
-    // Over just completed → show bowler stats briefly
-    if (live.overs > prev.overs && (live.currentOverBalls?.length || 0) === 0) {
-      const lastCompleted = live.lastCompletedOverBalls || [];
-      const lastBall = lastCompleted[lastCompleted.length - 1];
-      const parsedRuns = lastBall ? Number.parseInt(lastBall, 10) : NaN;
-      const cfg = configRef.current;
-      const boundaryDelay = parsedRuns === 6
-        ? (cfg.sixAnimation?.durationMs || 4000)
-        : parsedRuns === 4
-          ? (cfg.fourAnimation?.durationMs || 3000)
-          : 0;
-
-      const showBowlerOverlay = () => {
-        if (manualOverlays.includes(localOverlayRef.current)) return;
-        triggerOverlay('bowler', 5000);
-      };
-
-      if (boundaryDelay > 0) {
-        overEndOverlayRef.current = setTimeout(showBowlerOverlay, boundaryDelay);
-      } else {
-        showBowlerOverlay();
-      }
-      return;
-    }
-
-    // New bowler assigned → show new bowler stats
-    if (live.currentBowler?.playerId && prev.currentBowler?.playerId &&
-        live.currentBowler.playerId !== prev.currentBowler.playerId) {
-      triggerOverlay('bowler', 5000);
-      return;
-    }
-
-    // New batsman on strike → show striker stats
-    if (live.currentBatsmen?.[0]?.playerId && prev.currentBatsmen?.[0]?.playerId &&
-        live.currentBatsmen[0].playerId !== prev.currentBatsmen[0].playerId &&
-        (live.currentOverBalls?.length || 0) > 0) {
-      triggerOverlay('batsman_striker', 5000);
-    }
-  }, [live, localOverlay, triggerOverlay]);
+  }, [live]);
 
   // L-banner ad rotation
   useEffect(() => {
@@ -2176,6 +2125,46 @@ function ScorecardTicker({ live, match, battingTeam, bowlingTeam, config, lineup
   const requiredRateText = live.requiredRate !== undefined && Number.isFinite(live.requiredRate)
     ? live.requiredRate.toFixed(2)
     : undefined;
+  const projectionRpos = (ticker?.projectionRpos && ticker.projectionRpos.length > 0
+    ? ticker.projectionRpos
+    : [9, 12, 14]).filter(v => Number.isFinite(v) && v > 0).slice(0, 6);
+
+  const configuredWidgetModes = (ticker?.widgetModes && ticker.widgetModes.length > 0)
+    ? ticker.widgetModes
+    : (resolvedInfoMode === 'target'
+      ? ['chase'] as TickerStatWidget[]
+      : resolvedInfoMode === 'projection'
+        ? ['projection'] as TickerStatWidget[]
+        : ['run_rate'] as TickerStatWidget[]);
+
+  const widgetPills = configuredWidgetModes
+    .map((mode) => {
+      if (mode === 'run_rate') {
+        const parts = [`CRR ${runRateText}`];
+        if (requiredRateText) parts.push(`RRR ${requiredRateText}`);
+        return { key: mode, label: 'RUN RATE', value: parts.join(' | ') };
+      }
+      if (mode === 'projection') {
+        const currentOverProjection = Math.round(live.runRate * live.overs);
+        const altRates = projectionRpos
+          .map(rate => `${rate}RPO ${Math.round(rate * live.overs)}`)
+          .join(' | ');
+        return {
+          key: mode,
+          label: 'PROJECTION',
+          value: `NOW ${currentOverProjection}${altRates ? ` | ${altRates}` : ''}`,
+        };
+      }
+      if (mode === 'chase' && live.currentInnings === 2 && live.target !== undefined) {
+        return {
+          key: mode,
+          label: 'CHASE',
+          value: `${runsNeeded} RUNS | ${ballsRemaining} BALLS`,
+        };
+      }
+      return null;
+    })
+    .filter((pill): pill is { key: TickerStatWidget; label: string; value: string } => Boolean(pill));
 
   const battingLogo = live.battingTeamId === match.teamA.id ? match.teamA.logoUrl : match.teamB.logoUrl;
   const bowlingLogo = live.bowlingTeamId === match.teamA.id ? match.teamA.logoUrl : match.teamB.logoUrl;
@@ -2268,6 +2257,16 @@ function ScorecardTicker({ live, match, battingTeam, bowlingTeam, config, lineup
             <span className="score-ticker__prem-score">{live.runs}-{live.wickets}</span>
             <span className="score-ticker__prem-overs">({live.overs} ov)</span>
           </div>
+          {widgetPills.length > 0 && (
+            <div className="score-ticker__prem-stats-row">
+              {widgetPills.map(widget => (
+                <div key={widget.key} className="score-ticker__prem-widget-pill">
+                  <span className="score-ticker__prem-widget-label">{widget.label}</span>
+                  <span className="score-ticker__prem-widget-value">{widget.value}</span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Middle: Batsmen with full-height transparent PNG portraits */}

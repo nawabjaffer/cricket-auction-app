@@ -26,6 +26,7 @@ class OBSService {
   private reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
   // Keepalive heartbeat — OBS closes idle WS connections after ~60 s
   private heartbeatInterval: ReturnType<typeof setInterval> | null = null;
+  private lastErrorDetail = '';
 
   /**
    * Subscribe to connection state changes
@@ -53,6 +54,90 @@ class OBSService {
     this.eventListeners.forEach(cb => cb(event, data));
   }
 
+  private buildCandidateUrls(host: string, port: number): string[] {
+    const normalizedHost = host.trim();
+    if (!normalizedHost) return [];
+
+    if (/^wss?:\/\//i.test(normalizedHost)) {
+      return [normalizedHost.includes(':') && /:\d+$/i.test(normalizedHost) ? normalizedHost : `${normalizedHost}:${port}`];
+    }
+
+    const prefersSecure = globalThis.location?.protocol === 'https:';
+    const secureFirst = prefersSecure ? ['wss', 'ws'] : ['ws', 'wss'];
+    return secureFirst.map((scheme) => `${scheme}://${normalizedHost}:${port}`);
+  }
+
+  private async tryConnectUrl(wsUrl: string, password?: string): Promise<boolean> {
+    return new Promise((resolve) => {
+      let settled = false;
+      const settle = (success: boolean) => {
+        if (settled) return;
+        settled = true;
+        resolve(success);
+      };
+
+      const timeoutId = setTimeout(() => {
+        this.lastErrorDetail = `Connection timeout for ${wsUrl}`;
+        this.notifyConnectionState('error');
+        this.ws?.close();
+        settle(false);
+      }, 10_000);
+
+      try {
+        this.notifyConnectionState('connecting');
+        this.ws = new WebSocket(wsUrl);
+
+        this.ws.onopen = () => {
+          console.log('[OBS] WebSocket connected:', wsUrl);
+        };
+
+        this.ws.onmessage = async (event) => {
+          try {
+            const message: OBSMessage = JSON.parse(event.data);
+            await this.handleMessage(message, (success) => {
+              clearTimeout(timeoutId);
+              if (success) {
+                this.lastErrorDetail = '';
+                this.config.password = password;
+              }
+              settle(success);
+            });
+          } catch (error) {
+            this.lastErrorDetail = `Invalid OBS message from ${wsUrl}: ${String(error)}`;
+            this.notifyConnectionState('error');
+          }
+        };
+
+        this.ws.onerror = () => {
+          clearTimeout(timeoutId);
+          this.lastErrorDetail = `WebSocket error for ${wsUrl}`;
+          this.notifyConnectionState('error');
+          settle(false);
+        };
+
+        this.ws.onclose = (event) => {
+          clearTimeout(timeoutId);
+          this.stopHeartbeat();
+          console.log('[OBS] WebSocket closed', event.code, event.reason, wsUrl);
+          this.lastErrorDetail = event.reason
+            ? `OBS closed (${event.code}): ${event.reason}`
+            : `OBS closed (${event.code})`;
+          settle(false);
+          this.notifyConnectionState('disconnected');
+          this.ws = null;
+          if (this.config.enabled) {
+            this.attemptReconnect();
+          }
+        };
+      } catch (error) {
+        clearTimeout(timeoutId);
+        this.lastErrorDetail = `Failed creating WebSocket ${wsUrl}: ${String(error)}`;
+        this.notifyConnectionState('error');
+        settle(false);
+      }
+    });
+  }
+
   /**
    * Connect to OBS WebSocket
    */
@@ -74,73 +159,22 @@ class OBSService {
     // Reset reconnect counter for a fresh manual connect
     this.reconnectAttempts = 0;
 
-    return new Promise((resolve) => {
-      let settled = false;
-      const settle = (success: boolean) => {
-        if (settled) return;
-        settled = true;
-        resolve(success);
-      };
+    const urls = this.buildCandidateUrls(host, port);
+    if (urls.length === 0) {
+      this.lastErrorDetail = 'Invalid OBS host';
+      this.notifyConnectionState('error');
+      return false;
+    }
 
-      // 10-second connection timeout
-      const timeoutId = setTimeout(() => {
-        console.warn('[OBS] Connection timed out');
-        this.notifyConnectionState('error');
-        this.ws?.close();
-        settle(false);
-      }, 10_000);
+    for (const url of urls) {
+      console.log('[OBS] Connecting to:', url);
+      // eslint-disable-next-line no-await-in-loop
+      const ok = await this.tryConnectUrl(url, password);
+      if (ok) return true;
+    }
 
-      try {
-        this.notifyConnectionState('connecting');
-        const wsUrl = `ws://${host}:${port}`;
-        console.log('[OBS] Connecting to:', wsUrl);
-
-        this.ws = new WebSocket(wsUrl);
-
-        this.ws.onopen = () => {
-          console.log('[OBS] WebSocket connected');
-          // OBS WebSocket 5.x identification will be handled in onmessage
-        };
-
-        this.ws.onmessage = async (event) => {
-          try {
-            const message: OBSMessage = JSON.parse(event.data);
-            // On successful identification, clear timeout and settle
-            await this.handleMessage(message, (success) => {
-              clearTimeout(timeoutId);
-              settle(success);
-            });
-          } catch (error) {
-            console.error('[OBS] Failed to parse message:', error);
-          }
-        };
-
-        this.ws.onerror = (error) => {
-          console.error('[OBS] WebSocket error:', error);
-          clearTimeout(timeoutId);
-          this.notifyConnectionState('error');
-          settle(false);
-        };
-
-        this.ws.onclose = (event) => {
-          clearTimeout(timeoutId);
-          this.stopHeartbeat();
-          console.log('[OBS] WebSocket closed', event.code, event.reason);
-          settle(false);
-          this.notifyConnectionState('disconnected');
-          this.ws = null;
-          // Auto-reconnect whenever enabled (manual disconnect sets enabled=false to stop)
-          if (this.config.enabled) {
-            this.attemptReconnect();
-          }
-        };
-      } catch (error) {
-        clearTimeout(timeoutId);
-        console.error('[OBS] Connection failed:', error);
-        this.notifyConnectionState('error');
-        settle(false);
-      }
-    });
+    this.notifyConnectionState('error');
+    return false;
   }
 
   /**
@@ -506,6 +540,10 @@ class OBSService {
    */
   getConfig(): OBSConfig {
     return { ...this.config };
+  }
+
+  getLastErrorDetail(): string {
+    return this.lastErrorDetail;
   }
 }
 

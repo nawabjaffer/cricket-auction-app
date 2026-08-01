@@ -122,6 +122,31 @@ export class ScoringService {
     await remove(ref(db, `${this.basePath}/matches/${matchId}`));
   }
 
+  // ── Venue Directory ───────────────────────────────────────────────────────
+
+  async saveVenue(venue: string): Promise<void> {
+    const db = this.ensureDb();
+    const normalized = venue.trim();
+    if (!normalized) return;
+    const key = normalized.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+    if (!key) return;
+    await set(ref(db, `${this.basePath}/meta/venues/${key}`), {
+      name: normalized,
+      updatedAt: Date.now(),
+    });
+  }
+
+  async getSavedVenues(): Promise<string[]> {
+    const db = this.ensureDb();
+    const snapshot = await get(ref(db, `${this.basePath}/meta/venues`));
+    if (!snapshot.exists()) return [];
+    const data = snapshot.val() as Record<string, { name?: string }>;
+    return Object.values(data)
+      .map(v => (v?.name || '').trim())
+      .filter(Boolean)
+      .sort((a, b) => a.localeCompare(b));
+  }
+
   subscribeMatches(callback: (matches: MatchSetup[]) => void): () => void {
     const db = this.ensureDb();
     return onValue(ref(db, `${this.basePath}/matches`), (snapshot) => {

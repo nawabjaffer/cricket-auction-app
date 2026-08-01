@@ -3,7 +3,7 @@
 // Match setup, provider config, ads, overlay branding, animation triggers
 // ============================================================================
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { IoAdd, IoTrash, IoSave, IoClose, IoPlay, IoStop, IoTrophy, IoSettings, IoImage, IoFlash, IoVideocam, IoLink, IoDesktop, IoPencil, IoPeople, IoGameController, IoFootball } from 'react-icons/io5';
 import { GiCricketBat } from 'react-icons/gi';
@@ -18,7 +18,7 @@ import { realtimeSync } from '../services/realtimeSync';
 import { scoringService } from '../services/scoring';
 import { uploadFileToStorage } from '../services';
 import { DEFAULT_MVP_WEIGHTS } from '../types/scoring';
-import type { MatchSetup, ScoringAd, ScoringOverlayConfig, LiveQuestion, MatchScoringConfig, PreMatchState, PreMatchPhase, ImpactPlayer, TossConfig, MatchLineup, TickerConfig, OBSWebSocketConfig, MVPWeights, AnimationConfig, OBSReplayButton, OBSReplayConfig } from '../types/scoring';
+import type { MatchSetup, ScoringAd, ScoringOverlayConfig, LiveQuestion, MatchScoringConfig, PreMatchState, PreMatchPhase, ImpactPlayer, TossConfig, MatchLineup, TickerConfig, OBSWebSocketConfig, MVPWeights, AnimationConfig, OBSReplayButton, OBSReplayConfig, TickerStatWidget } from '../types/scoring';
 import type { SoldPlayer } from '../types';
 import './ScoringAdminPage.css';
 
@@ -277,15 +277,34 @@ function MatchesTab({ matches, teams, soldPlayers, onFeedback, saving, setSaving
   const [showForm, setShowForm] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [squadMatchId, setSquadMatchId] = useState<string | null>(null);
+  const [savedVenues, setSavedVenues] = useState<string[]>([]);
   const [form, setForm] = useState({
-    teamAId: '', teamBId: '', venue: '', date: '', maxOvers: 20, powerplayOvers: 6, tossWonBy: '', tossElected: '' as '' | 'bat' | 'bowl',
+    teamAId: '', teamBId: '', venue: '', date: '', maxOvers: 20, powerplayOvers: 6,
   });
 
   const resetForm = () => {
-    setForm({ teamAId: '', teamBId: '', venue: '', date: '', maxOvers: 20, powerplayOvers: 6, tossWonBy: '', tossElected: '' });
+    setForm({ teamAId: '', teamBId: '', venue: '', date: '', maxOvers: 20, powerplayOvers: 6 });
     setEditId(null);
     setShowForm(false);
   };
+
+  useEffect(() => {
+    const loadVenues = async () => {
+      try {
+        const venues = await scoringService.getSavedVenues();
+        setSavedVenues(venues);
+      } catch {
+        setSavedVenues([]);
+      }
+    };
+    loadVenues();
+  }, []);
+
+  useEffect(() => {
+    const fromMatches = matches.map(m => m.venue?.trim()).filter(Boolean) as string[];
+    if (fromMatches.length === 0) return;
+    setSavedVenues(prev => Array.from(new Set([...prev, ...fromMatches])).sort((a, b) => a.localeCompare(b)));
+  }, [matches]);
 
   const handleSave = async () => {
     if (!form.teamAId || !form.teamBId || !form.venue || !form.date) {
@@ -307,13 +326,14 @@ function MatchesTab({ matches, teams, soldPlayers, onFeedback, saving, setSaving
         date: form.date,
         maxOvers: form.maxOvers,
         powerplayOvers: form.powerplayOvers,
-        tossWonBy: form.tossWonBy || undefined,
-        tossElected: form.tossElected || undefined,
         status: 'scheduled',
         createdAt: editId ? (matches.find(m => m.id === editId)?.createdAt ?? Date.now()) : Date.now(),
         updatedAt: Date.now(),
       };
       await scoringService.createMatch(match);
+      await scoringService.saveVenue(form.venue);
+      const mergedVenues = Array.from(new Set([...savedVenues, form.venue.trim()].filter(Boolean))).sort((a, b) => a.localeCompare(b));
+      setSavedVenues(mergedVenues);
       onFeedback(editId ? 'Match updated' : 'Match created');
       resetForm();
     } catch (err) {
@@ -331,8 +351,6 @@ function MatchesTab({ matches, teams, soldPlayers, onFeedback, saving, setSaving
       date: match.date,
       maxOvers: match.maxOvers,
       powerplayOvers: match.powerplayOvers || (match.maxOvers <= 20 ? 6 : 10),
-      tossWonBy: match.tossWonBy || '',
-      tossElected: (match.tossElected || '') as '' | 'bat' | 'bowl',
     });
     setEditId(match.id);
     setShowForm(true);
@@ -492,7 +510,18 @@ function MatchesTab({ matches, teams, soldPlayers, onFeedback, saving, setSaving
             </div>
             <div className="scoring-admin__field">
               <label>Venue *</label>
-              <input type="text" value={form.venue} onChange={e => setForm(f => ({ ...f, venue: e.target.value }))} placeholder="Stadium name" className="scoring-admin__input" />
+              <input
+                type="text"
+                list="scoring-admin-venues"
+                value={form.venue}
+                onChange={e => setForm(f => ({ ...f, venue: e.target.value }))}
+                placeholder="Stadium name"
+                className="scoring-admin__input"
+              />
+              <datalist id="scoring-admin-venues">
+                {savedVenues.map(venue => <option key={venue} value={venue} />)}
+              </datalist>
+              <small className="scoring-admin__hint">Choose an existing location or type a new one. New venues are saved automatically.</small>
             </div>
             <div className="scoring-admin__field">
               <label>Date *</label>
@@ -514,21 +543,8 @@ function MatchesTab({ matches, teams, soldPlayers, onFeedback, saving, setSaving
               <label>Powerplay Overs</label>
               <input type="number" min={1} max={form.maxOvers} value={form.powerplayOvers} onChange={e => setForm(f => ({ ...f, powerplayOvers: Number(e.target.value) }))} className="scoring-admin__input" />
             </div>
-            <div className="scoring-admin__field">
-              <label>Toss Won By</label>
-              <select value={form.tossWonBy} onChange={e => setForm(f => ({ ...f, tossWonBy: e.target.value }))} className="scoring-admin__select">
-                <option value="">Not decided</option>
-                {form.teamAId && <option value={form.teamAId}>{teams.find(t => t.id === form.teamAId)?.name}</option>}
-                {form.teamBId && <option value={form.teamBId}>{teams.find(t => t.id === form.teamBId)?.name}</option>}
-              </select>
-            </div>
-            <div className="scoring-admin__field">
-              <label>Elected to</label>
-              <select value={form.tossElected} onChange={e => setForm(f => ({ ...f, tossElected: e.target.value as '' | 'bat' | 'bowl' }))} className="scoring-admin__select">
-                <option value="">—</option>
-                <option value="bat">Bat</option>
-                <option value="bowl">Bowl</option>
-              </select>
+            <div className="scoring-admin__field" style={{ gridColumn: '1 / -1' }}>
+              <small className="scoring-admin__hint">Toss is captured when scorer opens Edit Scorecard and starts the first innings.</small>
             </div>
           </div>
           <div className="scoring-admin__form-actions">
@@ -566,7 +582,7 @@ function MatchesTab({ matches, teams, soldPlayers, onFeedback, saving, setSaving
             </div>
             <div className="scoring-admin__match-links">
               <button className="scoring-admin__link-btn" onClick={() => navigate(`/cricket/scorer/update?matchId=${match.id}`)} title="Update Scorecard">
-                <IoPencil size={13} /> Scorecard
+                <IoPencil size={13} /> Edit Scorecard
               </button>
               <button className="scoring-admin__link-btn" onClick={() => window.open(`${baseUrl}/cricket/scorer/obs-overlay?matchId=${match.id}`, '_blank')} title="Open OBS Overlay">
                 <IoDesktop size={13} /> OBS Overlay
@@ -2104,7 +2120,17 @@ function TickerTab({ config, setConfig, onFeedback }: {
     height: 120,
     showBowlerOnRight: true,
     animationSpeed: 500,
+    widgetModes: ['run_rate'] as TickerStatWidget[],
+    projectionRpos: [9, 12, 14],
   };
+
+  const activeWidgetModes = ticker.widgetModes && ticker.widgetModes.length > 0
+    ? ticker.widgetModes
+    : (ticker.infoMode === 'target' ? ['chase'] : ticker.infoMode === 'projection' ? ['projection'] : ['run_rate']);
+
+  const projectionRatesText = (ticker.projectionRpos && ticker.projectionRpos.length > 0
+    ? ticker.projectionRpos
+    : [9, 12, 14]).join(', ');
 
   const updateTicker = (updates: Partial<TickerConfig>) => {
     const updated = { ...ticker, ...updates };
@@ -2213,6 +2239,52 @@ function TickerTab({ config, setConfig, onFeedback }: {
             <option value="🔴">🔴 (red circle)</option>
           </select>
           <p className="scoring-admin__help">Symbol shown for dot balls in the over tracker</p>
+        </div>
+
+        <div className="scoring-admin__field" style={{ gridColumn: '1 / -1' }}>
+          <label>Score Row Widgets (can enable one or multiple)</label>
+          <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', marginTop: '0.4rem' }}>
+            {([
+              { key: 'run_rate', label: 'Run Rate (CRR / RRR)' },
+              { key: 'projection', label: 'Projected Scores' },
+              { key: 'chase', label: 'Runs/Balls to Win (2nd inns)' },
+            ] as Array<{ key: TickerStatWidget; label: string }>).map(widget => (
+              <label key={widget.key} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                <input
+                  type="checkbox"
+                  checked={activeWidgetModes.includes(widget.key)}
+                  onChange={e => {
+                    const nextSet = new Set(activeWidgetModes);
+                    if (e.target.checked) nextSet.add(widget.key);
+                    else nextSet.delete(widget.key);
+                    const next = Array.from(nextSet) as TickerStatWidget[];
+                    updateTicker({ widgetModes: next.length > 0 ? next : ['run_rate'] });
+                  }}
+                />
+                {widget.label}
+              </label>
+            ))}
+          </div>
+          <p className="scoring-admin__help">Enabled widgets are rendered dynamically with adaptive spacing in premium ticker mode.</p>
+        </div>
+
+        <div className="scoring-admin__field" style={{ gridColumn: '1 / -1' }}>
+          <label>Projection RPO Options (comma-separated)</label>
+          <input
+            type="text"
+            className="scoring-admin__input"
+            value={projectionRatesText}
+            onChange={e => {
+              const parsed = e.target.value
+                .split(',')
+                .map(v => Number(v.trim()))
+                .filter(v => Number.isFinite(v) && v > 0)
+                .slice(0, 6);
+              updateTicker({ projectionRpos: parsed.length > 0 ? parsed : [9, 12, 14] });
+            }}
+            placeholder="9, 12, 14"
+          />
+          <p className="scoring-admin__help">Used for alternate projection lines (for example 9/12/14 RPO).</p>
         </div>
       </div>
 
@@ -2351,6 +2423,43 @@ function formatWeightLabel(key: string): string {
 const DEFAULT_BUTTON_ICONS = ['▶', '⏸', '⏩', '⏪', '⏭', '⏮', '⏯', '📹', '🔍', '💾', '🎬', '⚡'];
 const DEFAULT_BUTTON_COLORS = ['#22c55e', '#f59e0b', '#3b82f6', '#8b5cf6', '#06b6d4', '#ec4899', '#ef4444', '#f97316', '#64748b'];
 
+interface HotkeyDescriptor {
+  raw: string;
+  group: string;
+  title: string;
+  context: string;
+}
+
+function describeHotkey(rawHotkey: string): HotkeyDescriptor {
+  const [namespace = 'general', ...rest] = rawHotkey.split('.');
+  const tail = rest.length > 0 ? rest.join('.') : rawHotkey;
+  const words = tail
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .replace(/[_-]+/g, ' ')
+    .trim();
+
+  let group = 'General';
+  if (namespace.toLowerCase().includes('replaysource')) group = 'Replay Source Plugin';
+  else if (namespace.toLowerCase().includes('obsbasic')) group = 'OBS Core';
+  else if (namespace.toLowerCase().includes('libobs')) group = 'OBS Sources/Audio';
+
+  const contextParts: string[] = [];
+  contextParts.push(`Namespace: ${namespace}`);
+
+  const lowered = rawHotkey.toLowerCase();
+  if (lowered.includes('scene')) contextParts.push('Context: Scene control');
+  else if (lowered.includes('source')) contextParts.push('Context: Source control');
+  else if (lowered.includes('audio') || lowered.includes('mute')) contextParts.push('Context: Audio control');
+  else if (lowered.includes('stream') || lowered.includes('record')) contextParts.push('Context: Stream/record control');
+
+  return {
+    raw: rawHotkey,
+    group,
+    title: words || rawHotkey,
+    context: contextParts.join(' · '),
+  };
+}
+
 function OBSWebSocketTab({ config, setConfig, onFeedback, baseUrl }: {
   config: ScoringOverlayConfig;
   setConfig: (c: ScoringOverlayConfig) => void;
@@ -2362,6 +2471,22 @@ function OBSWebSocketTab({ config, setConfig, onFeedback, baseUrl }: {
   const [availableHotkeys, setAvailableHotkeys] = useState<string[]>([]);
   const [discoveringHotkeys, setDiscoveringHotkeys] = useState(false);
   const [editingButtonIdx, setEditingButtonIdx] = useState<number | null>(null);
+
+  const groupedHotkeys = useMemo(() => {
+    const grouped = new Map<string, HotkeyDescriptor[]>();
+    for (const hotkey of availableHotkeys) {
+      const descriptor = describeHotkey(hotkey);
+      const list = grouped.get(descriptor.group) || [];
+      list.push(descriptor);
+      grouped.set(descriptor.group, list);
+    }
+    return Array.from(grouped.entries())
+      .map(([group, items]) => ({
+        group,
+        items: items.sort((a, b) => a.title.localeCompare(b.title)),
+      }))
+      .sort((a, b) => a.group.localeCompare(b.group));
+  }, [availableHotkeys]);
 
   const obsConfig = config.obsWebSocketConfig ?? {
     host: 'localhost',
@@ -2546,6 +2671,27 @@ function OBSWebSocketTab({ config, setConfig, onFeedback, baseUrl }: {
         </button>
       </div>
 
+      {groupedHotkeys.length > 0 && (
+        <div className="scoring-admin__form-card" style={{ marginBottom: '1.25rem' }}>
+          <h3 className="scoring-admin__subsection-title">Discovered Hotkeys (Grouped Context)</h3>
+          <p className="scoring-admin__hint">Use this list to identify scene/source/general mappings before assigning replay buttons.</p>
+          <div style={{ display: 'grid', gap: '0.75rem', maxHeight: 260, overflow: 'auto', paddingRight: 4 }}>
+            {groupedHotkeys.map(group => (
+              <div key={group.group} style={{ border: '1px solid rgba(148, 163, 184, 0.2)', borderRadius: 8, padding: '0.6rem 0.75rem' }}>
+                <div style={{ fontWeight: 700, marginBottom: '0.4rem' }}>{group.group}</div>
+                {group.items.map(item => (
+                  <div key={item.raw} style={{ marginBottom: '0.35rem' }}>
+                    <div style={{ fontSize: '0.86rem', fontWeight: 600 }}>{item.title}</div>
+                    <div className="scoring-admin__hint" style={{ fontSize: '0.74rem' }}>{item.context}</div>
+                    <code style={{ fontSize: '0.72rem', opacity: 0.8 }}>{item.raw}</code>
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Replay Source Scene Config */}
       <h3 className="scoring-admin__subsection-title">Replay Source Scene Mapping</h3>
       <p className="scoring-admin__hint" style={{ marginBottom: '0.75rem' }}>
@@ -2723,8 +2869,12 @@ function OBSWebSocketTab({ config, setConfig, onFeedback, baseUrl }: {
                           onChange={e => updateButton(idx, { hotkeyName: e.target.value })}
                         >
                           <option value="">— Select hotkey —</option>
-                          {availableHotkeys.map(hk => (
-                            <option key={hk} value={hk}>{hk}</option>
+                          {groupedHotkeys.map(group => (
+                            <optgroup key={group.group} label={group.group}>
+                              {group.items.map(item => (
+                                <option key={item.raw} value={item.raw}>{item.title} — {item.raw}</option>
+                              ))}
+                            </optgroup>
                           ))}
                         </select>
                       ) : (

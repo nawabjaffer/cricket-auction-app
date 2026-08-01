@@ -680,6 +680,7 @@ export interface TournamentAward {
 export type TickerMode = 'html' | 'png';
 export type TickerDesign = 'glass' | 'premium';
 export type TickerInfoMode = 'batsmen' | 'target' | 'projection';
+export type TickerStatWidget = 'run_rate' | 'projection' | 'chase';
 
 export interface TickerConfig {
   mode: TickerMode;
@@ -690,6 +691,8 @@ export interface TickerConfig {
   animationSpeed?: number;
   dotBallSymbol?: string;      // custom emoji/symbol for dot balls (default '0')
   infoMode?: TickerInfoMode;   // batsmen | target | projection
+  widgetModes?: TickerStatWidget[]; // scorer-controlled dynamic widgets for score row
+  projectionRpos?: number[];   // custom run-rate options, e.g. [9, 12, 14]
   // HTML/CSS mode
   customHTML?: string;
   customCSS?: string;

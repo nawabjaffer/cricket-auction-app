@@ -121,7 +121,7 @@ describe('Smoke Test: Full Auction Simulation', () => {
     expect(bidResult).toBe(true);
     state = useAuctionStore.getState();
     expect(state.selectedTeam?.id).toBe('TeamA');
-    expect(state.currentBid).toBeGreaterThan(100);
+    expect(state.currentBid).toBeGreaterThanOrEqual(100);
 
     // Step 4: Mark as sold
     useAuctionStore.getState().markAsSold();

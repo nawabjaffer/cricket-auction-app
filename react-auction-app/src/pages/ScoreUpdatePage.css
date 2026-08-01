@@ -487,7 +487,7 @@
 
 .score-update__overlay-label {
   font-size: 0.7rem;
-  color: #52525b;
+  color: #a1a1aa;
   font-weight: 600;
   text-transform: uppercase;
   margin-right: 0.25rem;
@@ -498,7 +498,7 @@
   border: 1px solid rgba(255, 255, 255, 0.06);
   border-radius: 6px;
   background: rgba(255, 255, 255, 0.03);
-  color: #71717a;
+  color: #d4d4d8;
   font-size: 0.68rem;
   font-weight: 500;
   cursor: pointer;
@@ -507,12 +507,46 @@
 
 .score-update__overlay-btn:hover {
   background: rgba(124, 58, 237, 0.12);
-  color: #a78bfa;
+  color: #ddd6fe;
+}
+
+.score-update__hint {
+  font-size: 0.75rem;
+  color: #a1a1aa;
 }
 
 .score-update__overlay-btn--clear {
   border-color: rgba(239, 68, 68, 0.2);
   color: #f87171;
+}
+
+.score-update__overlay-btn--active {
+  background: rgba(16, 185, 129, 0.2);
+  border-color: rgba(16, 185, 129, 0.45);
+  color: #d1fae5;
+}
+
+.score-update__ticker-widget-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.score-update__ticker-order-btn {
+  min-width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  border: 1px solid rgba(148, 163, 184, 0.4);
+  background: rgba(255, 255, 255, 0.06);
+  color: #e2e8f0;
+  cursor: pointer;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.score-update__ticker-order-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 /* ── Buttons (shared) ───────────────────────────────────────────────────────── */

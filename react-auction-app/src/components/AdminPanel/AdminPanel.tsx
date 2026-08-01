@@ -1541,7 +1541,7 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
   };
 
   // @ts-expect-error - Function defined for future use
-  const handleImportPlayersFromSheets = async () => {
+  const _handleImportPlayersFromSheets = async () => {
     setIsSaving(true);
     try {
       googleSheetsService.clearCache('players');
