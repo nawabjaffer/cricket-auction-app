@@ -160,6 +160,36 @@ export class ScoringService {
     });
   }
 
+  // ── Active Match Pointer (Single Overlay Mode) ─────────────────────────────
+  // Tenant-wide "currently active" match id consumed by the universal overlay/
+  // dock/scorer link so a single link can follow whichever match is started.
+
+  async setActiveMatch(matchId: string | null): Promise<void> {
+    const db = this.ensureDb();
+    await set(ref(db, `${this.basePath}/activeMatch`), { matchId, updatedAt: Date.now() });
+  }
+
+  async getActiveMatch(): Promise<string | null> {
+    const db = this.ensureDb();
+    const snapshot = await get(ref(db, `${this.basePath}/activeMatch/matchId`));
+    return snapshot.exists() ? snapshot.val() : null;
+  }
+
+  subscribeActiveMatch(callback: (matchId: string | null) => void): () => void {
+    const db = this.ensureDb();
+    return onValue(ref(db, `${this.basePath}/activeMatch/matchId`), (snapshot) => {
+      callback(snapshot.exists() ? snapshot.val() : null);
+    });
+  }
+
+  /** Lightweight "continue" start used by the Dock/Scorer Single Overlay Mode
+   * quick actions — marks the match live and pins it as active. The Matches
+   * admin tab's Start button additionally runs full squad/ceremony automation. */
+  async startMatchQuick(matchId: string): Promise<void> {
+    await this.updateMatch(matchId, { status: 'live' });
+    await this.setActiveMatch(matchId);
+  }
+
   // ── Match Config (scoring provider per match) ──────────────────────────────
 
   async configureMatchScoring(matchId: string, config: MatchScoringConfig): Promise<void> {

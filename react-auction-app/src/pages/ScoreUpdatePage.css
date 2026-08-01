@@ -515,6 +515,21 @@
   color: #a1a1aa;
 }
 
+.score-update__session-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.5rem 0.8rem;
+  margin: 0.4rem 0;
+  border-radius: 8px;
+  background: rgba(100, 116, 139, 0.18);
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  color: #e2e8f0;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
 .score-update__overlay-btn--clear {
   border-color: rgba(239, 68, 68, 0.2);
   color: #f87171;

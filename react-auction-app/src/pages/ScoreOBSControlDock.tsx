@@ -85,6 +85,15 @@ export default function ScoreOBSControlDock() {
   const isNativeObsHost = Boolean((globalThis as unknown as { obsstudio?: unknown }).obsstudio)
     || /obs/i.test(globalThis.navigator?.userAgent || '');
 
+  const [singleOverlayMode, setSingleOverlayMode] = useState(false);
+  const [activeMatchPointer, setActiveMatchPointer] = useState<string | null>(null);
+  const singleOverlayModeRef = useRef(false);
+  const dockCleanupRef = useRef<Array<() => void>>([]);
+
+  useEffect(() => {
+    singleOverlayModeRef.current = singleOverlayMode;
+  }, [singleOverlayMode]);
+
   // Initialize scoring service + load matches
   useEffect(() => {
     const init = async () => {
@@ -103,17 +112,30 @@ export default function ScoreOBSControlDock() {
         }
         const all = await scoringService.getAllMatches();
         setMatches(all);
+
+        // Load OBS config here, after scoringService is initialized
+        const cfg = await scoringService.getOverlayConfig().catch(() => null);
+        const singleMode = !!cfg?.singleOverlayMode;
+        setSingleOverlayMode(singleMode);
+
         const params = new URLSearchParams(globalThis.location.search);
         const qMatch = params.get('matchId');
         if (qMatch && all.some(m => m.id === qMatch)) {
           setSelectedMatchId(qMatch);
+        } else if (singleMode) {
+          const activeId = await scoringService.getActiveMatch().catch(() => null);
+          setActiveMatchPointer(activeId);
+          if (activeId && all.some(m => m.id === activeId)) {
+            setSelectedMatchId(activeId);
+          } else if (all.length > 0) {
+            const live = all.find(m => m.status === 'live');
+            setSelectedMatchId(live?.id || all[0].id);
+          }
         } else if (all.length > 0) {
           const live = all.find(m => m.status === 'live');
           setSelectedMatchId(live?.id || all[0].id);
         }
 
-        // Load OBS config here, after scoringService is initialized
-        const cfg = await scoringService.getOverlayConfig().catch(() => null);
         if (cfg?.obsWebSocketConfig) {
           const { host, port, password } = cfg.obsWebSocketConfig;
           if (!localStorage.getItem('obs_dock_host')) {
@@ -127,9 +149,25 @@ export default function ScoreOBSControlDock() {
           setReplayScene(cfg.obsReplayConfig.replaySceneName || '');
           setDrsScene(cfg.obsReplayConfig.drsSceneName || '');
         }
+
+        // Keep following Single Overlay Mode + the active match reactively after load
+        dockCleanupRef.current.push(scoringService.subscribeOverlayConfig((liveCfg) => {
+          setSingleOverlayMode(!!liveCfg.singleOverlayMode);
+        }));
+        dockCleanupRef.current.push(scoringService.subscribeActiveMatch((id) => {
+          setActiveMatchPointer(id);
+          if (!singleOverlayModeRef.current) return;
+          const liveParams = new URLSearchParams(globalThis.location.search);
+          if (liveParams.get('matchId')) return;
+          if (id) setSelectedMatchId(id);
+        }));
       } catch (err) { console.error('[ScoreOBSControlDock] Init error:', err); }
     };
     init();
+    return () => {
+      dockCleanupRef.current.forEach(fn => fn());
+      dockCleanupRef.current = [];
+    };
   }, []);
 
   // Subscribe to live score
@@ -269,6 +307,28 @@ export default function ScoreOBSControlDock() {
     }
   }, [selectedMatchId, showFeedback]);
 
+  const handleStartNextMatch = useCallback(async () => {
+    const next = [...matches]
+      .filter(m => m.status === 'scheduled')
+      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())[0];
+    if (!next) { showFeedback('No upcoming scheduled match'); return; }
+    try {
+      await scoringService.startMatchQuick(next.id);
+      showFeedback(`Started: ${next.teamA.name} vs ${next.teamB.name}`);
+    } catch {
+      showFeedback('Failed to start next match');
+    }
+  }, [matches, showFeedback]);
+
+  const handleEndSession = useCallback(async () => {
+    try {
+      await scoringService.setActiveMatch(null);
+      showFeedback('Session ended');
+    } catch {
+      showFeedback('Failed to end session');
+    }
+  }, [showFeedback]);
+
   // Keyboard shortcuts
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -405,6 +465,22 @@ export default function ScoreOBSControlDock() {
           <p className="score-dock__match-hint">Select a match to enable overlay controls</p>
         )}
       </div>
+
+      {singleOverlayMode && (
+        <div className="score-dock__match-selector">
+          {selectedMatch?.status === 'completed' && selectedMatchId === activeMatchPointer ? (
+            <>
+              <p className="score-dock__match-hint">🏁 Match ended — start the next one to keep the universal link live</p>
+              <div className="score-dock__session-actions">
+                <button className="score-dock__obs-btn score-dock__obs-btn--native" onClick={handleStartNextMatch}>▶ Start Next Match</button>
+                <button className="score-dock__obs-btn" onClick={handleEndSession}>End Session</button>
+              </div>
+            </>
+          ) : (
+            <p className="score-dock__match-hint">🔗 Following active match (Single Overlay Mode)</p>
+          )}
+        </div>
+      )}
 
       {/* Live Score Preview */}
       {liveScore && selectedMatch && (

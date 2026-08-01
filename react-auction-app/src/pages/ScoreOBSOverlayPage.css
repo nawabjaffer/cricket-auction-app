@@ -63,6 +63,16 @@
   animation: obs-pulse 2s ease-in-out infinite;
 }
 
+.score-obs__ended-badge {
+  padding: 4px 14px;
+  background: rgba(71, 85, 105, 0.92);
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: #f1f5f9;
+}
+
 @keyframes obs-pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.6; }

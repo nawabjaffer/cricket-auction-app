@@ -11,11 +11,15 @@ import { GiCricketBat } from 'react-icons/gi';
 import { useLocation } from 'react-router-dom';
 import { useLiveStreamingStore } from '../../store/liveStreamingStore';
 import { obsService } from '../../services/obsService';
+import { scoringService } from '../../services/scoring';
+import { realtimeSync } from '../../services/realtimeSync';
+import { tenantPath } from '../../services/tenantPath';
 import { premiumService } from '../../services/premiumService';
 import { featureFlagsService } from '../../services/featureFlagsService';
 import { useFeatureFlags } from '../../hooks/useFeatureFlags';
 import type { PremiumTier } from '../../types/premium';
 import type { OBSConnectionState, SuccessAnimationType } from '../../types/streaming';
+import type { ScoringOverlayConfig } from '../../types/scoring';
 
 interface StreamingTabProps {
   onClose?: () => void;
@@ -64,6 +68,55 @@ export default function StreamingTab({ onClose }: StreamingTabProps) {
   const [rtmpKey, setRtmpKey] = useState(broadcast.rtmp.streamKey);
   const [currentTier, setCurrentTier] = useState<PremiumTier>('free');
   const [isConnecting, setIsConnecting] = useState(false);
+  const [singleOverlayMode, setSingleOverlayMode] = useState(false);
+  const [savingSingleOverlay, setSavingSingleOverlay] = useState(false);
+
+  // Load + follow the cricket scoring "Single Overlay Mode" flag (tenant-scoped)
+  useEffect(() => {
+    let unsub: (() => void) | undefined;
+    const init = async () => {
+      try {
+        await realtimeSync.ensureInitialized();
+        const db = realtimeSync.getDatabase();
+        if (!db) return;
+        try { scoringService.initialize(db, tenantPath('scoring')); } catch { /* already initialized */ }
+        const cfg = await scoringService.getOverlayConfig().catch(() => null);
+        setSingleOverlayMode(!!cfg?.singleOverlayMode);
+        unsub = scoringService.subscribeOverlayConfig((liveCfg) => setSingleOverlayMode(!!liveCfg.singleOverlayMode));
+      } catch { /* non-critical */ }
+    };
+    init();
+    return () => unsub?.();
+  }, []);
+
+  const handleToggleSingleOverlay = async (enabled: boolean) => {
+    setSingleOverlayMode(enabled);
+    setSavingSingleOverlay(true);
+    try {
+      const cfg = await scoringService.getOverlayConfig().catch(() => null);
+      const updated: ScoringOverlayConfig = {
+        ...(cfg || {
+          showLiveBadge: true,
+          enableBoundaryAnimation: true,
+          enableWicketAnimation: true,
+          enableDuckOutAnimation: true,
+          enableHatTrickAnimation: true,
+          enableSixerAnimation: true,
+          enableKeyboardShortcuts: true,
+          autoOverlayEnabled: true,
+          autoOverlayIntervalSeconds: 30,
+          liveQuestions: [],
+        }),
+        singleOverlayMode: enabled,
+      };
+      await scoringService.saveOverlayConfig(updated);
+      showSaveFeedback(enabled ? 'Single Overlay Mode enabled' : 'Single Overlay Mode disabled');
+    } catch {
+      showSaveFeedback('Failed to save Single Overlay Mode');
+    } finally {
+      setSavingSingleOverlay(false);
+    }
+  };
 
   // Load premium status
   useEffect(() => {
@@ -709,6 +762,29 @@ export default function StreamingTab({ onClose }: StreamingTabProps) {
         <p style={{ fontSize: '0.8rem', color: 'rgba(0,0,0,0.55)', margin: '0 0 0.75rem' }}>
           Manage live match scoring, OBS overlays, and scorecard updates.
         </p>
+
+        {/* Single Overlay Mode toggle */}
+        <div style={{
+          padding: '0.75rem',
+          marginBottom: '0.75rem',
+          background: singleOverlayMode ? 'rgba(34, 197, 94, 0.08)' : 'rgba(255, 255, 255, 0.03)',
+          border: `1px solid ${singleOverlayMode ? 'rgba(34, 197, 94, 0.3)' : 'rgba(255, 255, 255, 0.08)'}`,
+          borderRadius: '0.5rem',
+        }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontWeight: 600, fontSize: '0.85rem', color: '#000' }}>
+            <input
+              type="checkbox"
+              checked={singleOverlayMode}
+              disabled={savingSingleOverlay}
+              onChange={(e) => handleToggleSingleOverlay(e.target.checked)}
+            />
+            Single Overlay Mode (All Matches)
+          </label>
+          <p style={{ margin: '0.4rem 0 0', fontSize: '0.78rem', color: 'rgba(0,0,0,0.6)', lineHeight: 1.5 }}>
+            One universal Overlay / Dock / Scorer link follows whichever match is started — no per-match links to swap in OBS.
+            Use the <strong>Quick Actions</strong> bar in Scoring Admin for those universal links; start/end matches from the <strong>Matches</strong> tab there.
+          </p>
+        </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
           {/* Scoring Admin */}

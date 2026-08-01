@@ -182,6 +182,7 @@ export default function ScoringAdminPage() {
             setSaving={setSaving}
             navigate={navigate}
             baseUrl={baseUrl}
+            config={overlayConfig}
           />
         )}
         {activeTab === 'provider' && (
@@ -264,7 +265,7 @@ export default function ScoringAdminPage() {
 // MATCHES TAB
 // ═══════════════════════════════════════════════════════════════════════════════
 
-function MatchesTab({ matches, teams, soldPlayers, onFeedback, saving, setSaving, navigate, baseUrl }: {
+function MatchesTab({ matches, teams, soldPlayers, onFeedback, saving, setSaving, navigate, baseUrl, config }: {
   matches: MatchSetup[];
   teams: { id: string; name: string; logoUrl?: string; primaryColor?: string }[];
   soldPlayers: SoldPlayer[];
@@ -273,6 +274,7 @@ function MatchesTab({ matches, teams, soldPlayers, onFeedback, saving, setSaving
   setSaving: (v: boolean) => void;
   navigate: (to: string) => void;
   baseUrl: string;
+  config: ScoringOverlayConfig;
 }) {
   const [showForm, setShowForm] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
@@ -281,6 +283,13 @@ function MatchesTab({ matches, teams, soldPlayers, onFeedback, saving, setSaving
   const [form, setForm] = useState({
     teamAId: '', teamBId: '', venue: '', date: '', maxOvers: 20, powerplayOvers: 6,
   });
+  const [activeMatchId, setActiveMatchId] = useState<string | null>(null);
+  const singleOverlayMode = !!config.singleOverlayMode;
+
+  useEffect(() => {
+    const unsub = scoringService.subscribeActiveMatch(setActiveMatchId);
+    return unsub;
+  }, []);
 
   const resetForm = () => {
     setForm({ teamAId: '', teamBId: '', venue: '', date: '', maxOvers: 20, powerplayOvers: 6 });
@@ -482,6 +491,34 @@ function MatchesTab({ matches, teams, soldPlayers, onFeedback, saving, setSaving
     }
   };
 
+  const handleStart = async (matchId: string) => {
+    await handleStatusChange(matchId, 'live');
+    if (singleOverlayMode) {
+      try {
+        await scoringService.setActiveMatch(matchId);
+      } catch {
+        onFeedback('Started match, but failed to set it as the active overlay match');
+      }
+    }
+  };
+
+  const handleStartNext = async () => {
+    const next = [...matches]
+      .filter(m => m.status === 'scheduled')
+      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())[0];
+    if (!next) { onFeedback('No upcoming scheduled match to start'); return; }
+    await handleStart(next.id);
+  };
+
+  const handleEndSession = async () => {
+    try {
+      await scoringService.setActiveMatch(null);
+      onFeedback('Session ended — universal link now shows no active match');
+    } catch {
+      onFeedback('Failed to end session');
+    }
+  };
+
   return (
     <div className="scoring-admin__section">
       <div className="scoring-admin__section-header">
@@ -490,6 +527,25 @@ function MatchesTab({ matches, teams, soldPlayers, onFeedback, saving, setSaving
           <IoAdd size={16} /> {showForm ? 'Cancel' : 'New Match'}
         </button>
       </div>
+
+      {singleOverlayMode && (
+        <div className="scoring-admin__form-card" style={{ marginBottom: '1rem' }}>
+          <strong>🔗 Single Overlay Mode is ON</strong> — use the <strong>Quick Actions</strong> bar above for the universal Overlay/Scorer/Dock links. Toggle this mode from Admin → Streaming tab.
+          {activeMatchId ? (
+            <>
+              <p className="scoring-admin__hint">
+                Active match: <strong>{matches.find(m => m.id === activeMatchId)?.teamA.name} vs {matches.find(m => m.id === activeMatchId)?.teamB.name}</strong>
+                {' '}({matches.find(m => m.id === activeMatchId)?.status})
+              </p>
+              <button className="scoring-admin__btn scoring-admin__btn--sm scoring-admin__btn--warning" onClick={handleEndSession}>
+                End Session (Clear Active Match)
+              </button>
+            </>
+          ) : (
+            <p className="scoring-admin__hint">No match is currently active — click Start on a match below.</p>
+          )}
+        </div>
+      )}
 
       {showForm && (
         <motion.div className="scoring-admin__form-card" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0 }}>
@@ -573,6 +629,9 @@ function MatchesTab({ matches, teams, soldPlayers, onFeedback, saving, setSaving
               <span>{new Date(match.date).toLocaleDateString()}</span>
               <span>{match.maxOvers} overs</span>
               <span className={`scoring-admin__status scoring-admin__status--${match.status}`}>{match.status}</span>
+              {singleOverlayMode && match.id === activeMatchId && (
+                <span className="scoring-admin__status scoring-admin__status--live">🔗 ACTIVE OVERLAY</span>
+              )}
             </div>
             {/* Match ID & Quick Links */}
             <div className="scoring-admin__match-id-row">
@@ -580,46 +639,60 @@ function MatchesTab({ matches, teams, soldPlayers, onFeedback, saving, setSaving
                 ID: {match.id}
               </span>
             </div>
-            <div className="scoring-admin__match-links">
-              <button className="scoring-admin__link-btn" onClick={() => navigate(`/cricket/scorer/update?matchId=${match.id}`)} title="Update Scorecard">
-                <IoPencil size={13} /> Edit Scorecard
-              </button>
-              <button className="scoring-admin__link-btn" onClick={() => window.open(`${baseUrl}/cricket/scorer/obs-overlay?matchId=${match.id}`, '_blank')} title="Open OBS Overlay">
-                <IoDesktop size={13} /> OBS Overlay
-              </button>
-              <button className="scoring-admin__link-btn" onClick={() => window.open(`${baseUrl}/cricket/scorer/camera?matchId=${match.id}`, '_blank')} title="Mobile Camera Recorder">
-                <IoVideocam size={13} /> Camera
-              </button>
-              <button className="scoring-admin__link-btn" onClick={() => { navigator.clipboard.writeText(`${baseUrl}/cricket/scorer/obs-overlay?matchId=${match.id}`); onFeedback('OBS URL copied'); }} title="Copy OBS Overlay URL">
-                <IoLink size={13} /> Copy URL
-              </button>
-              <button
-                className="scoring-admin__link-btn"
-                onClick={() => window.open(`${baseUrl}/cricket/scorer/obs-dock?matchId=${match.id}`, '_blank')}
-                title="Open OBS Control Dock (locked to this match)"
-              >
-                <IoGameController size={13} /> Control Dock
-              </button>
-              <button
-                className="scoring-admin__link-btn scoring-admin__link-btn--copy"
-                onClick={() => { navigator.clipboard.writeText(`${baseUrl}/cricket/scorer/obs-dock?matchId=${match.id}`); onFeedback('Dock URL copied — paste in OBS Custom Browser Docks'); }}
-                title="Copy dock URL to add to OBS"
-              >
-                <IoLink size={13} /> Copy Dock URL
-              </button>
-            </div>
+            {singleOverlayMode ? (
+              <div className="scoring-admin__match-links">
+                <span className="scoring-admin__hint">🔗 Overlay / Dock / Scorer use the universal link (OBS WS tab) — no per-match link needed</span>
+                <button className="scoring-admin__link-btn" onClick={() => window.open(`${baseUrl}/cricket/scorer/camera?matchId=${match.id}`, '_blank')} title="Mobile Camera Recorder">
+                  <IoVideocam size={13} /> Camera
+                </button>
+              </div>
+            ) : (
+              <div className="scoring-admin__match-links">
+                <button className="scoring-admin__link-btn" onClick={() => navigate(`/cricket/scorer/update?matchId=${match.id}`)} title="Update Scorecard">
+                  <IoPencil size={13} /> Edit Scorecard
+                </button>
+                <button className="scoring-admin__link-btn" onClick={() => window.open(`${baseUrl}/cricket/scorer/obs-overlay?matchId=${match.id}`, '_blank')} title="Open OBS Overlay">
+                  <IoDesktop size={13} /> OBS Overlay
+                </button>
+                <button className="scoring-admin__link-btn" onClick={() => window.open(`${baseUrl}/cricket/scorer/camera?matchId=${match.id}`, '_blank')} title="Mobile Camera Recorder">
+                  <IoVideocam size={13} /> Camera
+                </button>
+                <button className="scoring-admin__link-btn" onClick={() => { navigator.clipboard.writeText(`${baseUrl}/cricket/scorer/obs-overlay?matchId=${match.id}`); onFeedback('OBS URL copied'); }} title="Copy OBS Overlay URL">
+                  <IoLink size={13} /> Copy URL
+                </button>
+                <button
+                  className="scoring-admin__link-btn"
+                  onClick={() => window.open(`${baseUrl}/cricket/scorer/obs-dock?matchId=${match.id}`, '_blank')}
+                  title="Open OBS Control Dock (locked to this match)"
+                >
+                  <IoGameController size={13} /> Control Dock
+                </button>
+                <button
+                  className="scoring-admin__link-btn scoring-admin__link-btn--copy"
+                  onClick={() => { navigator.clipboard.writeText(`${baseUrl}/cricket/scorer/obs-dock?matchId=${match.id}`); onFeedback('Dock URL copied — paste in OBS Custom Browser Docks'); }}
+                  title="Copy dock URL to add to OBS"
+                >
+                  <IoLink size={13} /> Copy Dock URL
+                </button>
+              </div>
+            )}
             <div className="scoring-admin__match-actions">
               <button className="scoring-admin__btn scoring-admin__btn--sm scoring-admin__btn--primary" onClick={() => setSquadMatchId(match.id)}>
                 <IoPeople size={14} /> Squad
               </button>
               {match.status === 'scheduled' && (
-                <button className="scoring-admin__btn scoring-admin__btn--sm scoring-admin__btn--success" onClick={() => handleStatusChange(match.id, 'live')}>
+                <button className="scoring-admin__btn scoring-admin__btn--sm scoring-admin__btn--success" onClick={() => handleStart(match.id)}>
                   <IoPlay size={14} /> Start
                 </button>
               )}
               {match.status === 'live' && (
                 <button className="scoring-admin__btn scoring-admin__btn--sm scoring-admin__btn--warning" onClick={() => handleStatusChange(match.id, 'completed')}>
                   <IoStop size={14} /> End
+                </button>
+              )}
+              {singleOverlayMode && match.status === 'completed' && match.id === activeMatchId && (
+                <button className="scoring-admin__btn scoring-admin__btn--sm scoring-admin__btn--success" onClick={handleStartNext}>
+                  <IoPlay size={14} /> Start Next Match
                 </button>
               )}
               <button className="scoring-admin__btn scoring-admin__btn--sm" onClick={() => handleEdit(match)}>Edit</button>

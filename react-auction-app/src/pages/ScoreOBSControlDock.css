@@ -71,6 +71,16 @@
   color: rgba(251, 191, 36, 0.7);
 }
 
+.score-dock__session-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.score-dock__session-actions .score-dock__obs-btn {
+  flex: 1;
+}
+
 /* Sections */
 .score-dock__section {
   padding: 10px 14px;

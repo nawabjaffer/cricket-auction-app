@@ -52,6 +52,8 @@ const obsDb = getDatabase(obsApp);
 
 export default function ScoreOBSOverlayPage() {
   const [matchId, setMatchId] = useState<string | null>(null);
+  const [urlMatchId, setUrlMatchId] = useState<string | null>(null);
+  const [activeMatchId, setActiveMatchId] = useState<string | null>(null);
   const [match, setMatch] = useState<MatchSetup | null>(null);
   const [live, setLive] = useState<LiveScore | null>(null);
   const [_overlay, setOverlay] = useState<OverlayControlState | null>(null);
@@ -117,12 +119,35 @@ export default function ScoreOBSOverlayPage() {
     }
   }, []);
 
-  // Get matchId from URL params
+  // Get matchId from URL params (explicit match always wins over the active-match pointer)
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const id = params.get('matchId');
-    if (id) setMatchId(id);
+    if (id) setUrlMatchId(id);
   }, []);
+
+  // Overlay config (branding) — loaded independently of matchId so Single Overlay
+  // Mode can resolve which match to show before any matchId is known.
+  useEffect(() => {
+    const basePath = tenantPath('scoring');
+    return onValue(ref(obsDb, `${basePath}/overlayConfig`), snap => {
+      setConfig(snap.exists() ? { ...DEFAULT_OVERLAY_CONFIG, ...snap.val() } : DEFAULT_OVERLAY_CONFIG);
+    });
+  }, []);
+
+  // Active match pointer (Single Overlay Mode) — used only when no explicit matchId in URL
+  useEffect(() => {
+    const basePath = tenantPath('scoring');
+    return onValue(ref(obsDb, `${basePath}/activeMatch/matchId`), snap => {
+      setActiveMatchId(snap.exists() ? (snap.val() as string) : null);
+    });
+  }, []);
+
+  // Resolve the effective match: explicit URL match always wins; otherwise follow
+  // the tenant's active match only when Single Overlay Mode is enabled.
+  useEffect(() => {
+    setMatchId(urlMatchId || (config.singleOverlayMode ? activeMatchId : null));
+  }, [urlMatchId, activeMatchId, config.singleOverlayMode]);
 
   // Subscribe to Firebase data
   useEffect(() => {
@@ -177,15 +202,6 @@ export default function ScoreOBSOverlayPage() {
           celebrationActiveRef.current = false;
           setLocalOverlay('none');
         }
-      }
-    }));
-
-    // Overlay config (branding)
-    unsubs.push(onValue(ref(obsDb, `${basePath}/overlayConfig`), snap => {
-      if (snap.exists()) {
-        setConfig({ ...DEFAULT_OVERLAY_CONFIG, ...snap.val() });
-      } else {
-        setConfig(DEFAULT_OVERLAY_CONFIG);
       }
     }));
 
@@ -595,8 +611,11 @@ export default function ScoreOBSOverlayPage() {
           )}
         </div>
         <div className="score-obs__top-right">
-          {config.showLiveBadge && (
+          {config.showLiveBadge && match?.status !== 'completed' && (
             <span className="score-obs__live-badge">● LIVE</span>
+          )}
+          {match?.status === 'completed' && (
+            <span className="score-obs__ended-badge">🏁 MATCH ENDED</span>
           )}
           {config.broadcastPartnerLogo && (
             <img src={config.broadcastPartnerLogo} alt="" className="score-obs__partner-logo" />

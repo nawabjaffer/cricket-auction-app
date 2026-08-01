@@ -82,9 +82,34 @@ const TICKER_WIDGET_OPTIONS: Array<{ key: TickerStatWidget; label: string }> = [
 
 export default function ScoreUpdatePage() {
   const [searchParams] = useSearchParams();
-  const matchId = searchParams.get('matchId') || undefined;
+  const urlMatchId = searchParams.get('matchId') || undefined;
   const navigate = useNavigate();
   const { isAuthenticated, extendSession } = useAdminAuth();
+
+  const [singleOverlayMode, setSingleOverlayMode] = useState(false);
+  const [activeMatchId, setActiveMatchId] = useState<string | null>(null);
+  const [matchActionFeedback, setMatchActionFeedback] = useState('');
+  const matchId = urlMatchId || (singleOverlayMode && activeMatchId ? activeMatchId : undefined);
+
+  // Single Overlay Mode: resolve + follow the tenant's active match when no explicit matchId in URL
+  useEffect(() => {
+    let unsubConfig: (() => void) | undefined;
+    let unsubActive: (() => void) | undefined;
+    const init = async () => {
+      try {
+        await realtimeSync.ensureInitialized();
+        const db = realtimeSync.getDatabase();
+        if (!db) return;
+        try { scoringService.initialize(db, tenantPath('scoring')); } catch { /* already initialized */ }
+        const cfg = await scoringService.getOverlayConfig().catch(() => null);
+        setSingleOverlayMode(!!cfg?.singleOverlayMode);
+        unsubConfig = scoringService.subscribeOverlayConfig((liveCfg) => setSingleOverlayMode(!!liveCfg.singleOverlayMode));
+        unsubActive = scoringService.subscribeActiveMatch(setActiveMatchId);
+      } catch { /* non-critical — falls back to explicit matchId only */ }
+    };
+    init();
+    return () => { unsubConfig?.(); unsubActive?.(); };
+  }, []);
 
   const {
     match, liveScore, lineups, loading, error, recording,
@@ -110,6 +135,36 @@ export default function ScoreUpdatePage() {
   const [obsRelayButtons, setObsRelayButtons] = useState<OBSReplayButton[]>([]);
   const [obsRelayFeedback, setObsRelayFeedback] = useState('');
   const [tickerWidgetModes, setTickerWidgetModes] = useState<TickerStatWidget[]>(['run_rate']);
+
+  const handleStartNextMatch = useCallback(async () => {
+    try {
+      const all = await scoringService.getAllMatches();
+      const next = all
+        .filter(m => m.status === 'scheduled')
+        .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())[0];
+      if (!next) {
+        setMatchActionFeedback('No upcoming scheduled match to start');
+        setTimeout(() => setMatchActionFeedback(''), 2500);
+        return;
+      }
+      await scoringService.startMatchQuick(next.id);
+      setShowMatchCompleteModal(false);
+    } catch {
+      setMatchActionFeedback('Failed to start next match');
+      setTimeout(() => setMatchActionFeedback(''), 2500);
+    }
+  }, []);
+
+  const handleEndScorerSession = useCallback(async () => {
+    try {
+      await scoringService.setActiveMatch(null);
+      setShowMatchCompleteModal(false);
+      navigate('/cricket/scorer/admin');
+    } catch {
+      setMatchActionFeedback('Failed to end session');
+      setTimeout(() => setMatchActionFeedback(''), 2500);
+    }
+  }, [navigate]);
 
   // Auto-show bowler picker at end of over
   useEffect(() => {
@@ -321,6 +376,15 @@ export default function ScoreUpdatePage() {
   return (
     <div className="score-update">
       <ScoreHeader match={match} />
+
+      {singleOverlayMode && match.status === 'completed' && (
+        <div className="score-update__session-banner">
+          <span>🏁 This match has ended</span>
+          <button className="score-update__overlay-btn" onClick={handleStartNextMatch}>▶ Start Next Match</button>
+          <button className="score-update__overlay-btn score-update__overlay-btn--clear" onClick={handleEndScorerSession}>End Session</button>
+          {matchActionFeedback && <span className="score-update__hint">{matchActionFeedback}</span>}
+        </div>
+      )}
 
       {/* ── Powerplay & Free Hit Indicators ─────────────────────────── */}
       <div className="score-update__indicators">
@@ -930,6 +994,17 @@ export default function ScoreUpdatePage() {
                 Back to Admin
               </button>
             </div>
+            {singleOverlayMode && (
+              <div className="score-update__modal-actions" style={{ marginTop: '0.6rem', borderTop: '1px solid rgba(255,255,255,0.12)', paddingTop: '0.6rem' }}>
+                <button className="score-update__btn score-update__btn--primary" onClick={handleStartNextMatch}>
+                  <IoPlay size={16} /> Start Next Match
+                </button>
+                <button className="score-update__btn" onClick={handleEndScorerSession}>
+                  End This Scorer Session
+                </button>
+              </div>
+            )}
+            {matchActionFeedback && <p className="score-update__hint">{matchActionFeedback}</p>}
           </motion.div>
         </div>
       )}

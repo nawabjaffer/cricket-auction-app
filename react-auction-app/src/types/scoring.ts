@@ -419,6 +419,10 @@ export interface ScoringOverlayConfig {
   obsWebSocketConfig?: OBSWebSocketConfig;
   // OBS Replay Source button configuration
   obsReplayConfig?: OBSReplayConfig;
+  // Single Overlay Mode: one tenant-wide overlay/dock/scorer link that auto-follows
+  // whichever match is marked active (see ScoringService.setActiveMatch). When false
+  // (default), each match keeps its own per-match links — existing behavior is unchanged.
+  singleOverlayMode?: boolean;
   // MVP point weights (customizable)
   mvpWeights?: MVPWeights;
   // Minimum balls for strike rate eligibility
