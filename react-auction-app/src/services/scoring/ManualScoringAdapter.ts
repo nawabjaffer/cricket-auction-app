@@ -246,7 +246,7 @@ export class ManualScoringAdapter implements IScoringAdapter {
       noBalls: (currentInnings.extras?.noBalls || 0) + (parsed.extraType === 'noball' ? 1 : 0),
       byes: (currentInnings.extras?.byes || 0) + (parsed.extraType === 'bye' ? extras : 0),
       legByes: (currentInnings.extras?.legByes || 0) + (parsed.extraType === 'legbye' ? extras : 0),
-      penalty: currentInnings.extras?.penalty || 0,
+      penalty: (currentInnings.extras?.penalty || 0) + (parsed.extraType === 'penalty' ? extras : 0),
     };
 
     // Update fall of wickets
@@ -650,7 +650,7 @@ export class ManualScoringAdapter implements IScoringAdapter {
 
   private parseOutcome(outcome: BallOutcome, batsmanRunsOverride?: number): {
     totalRuns: number; batsmanRuns: number; extras: number;
-    isLegal: boolean; extraType?: 'wide' | 'noball' | 'bye' | 'legbye';
+    isLegal: boolean; extraType?: 'wide' | 'noball' | 'bye' | 'legbye' | 'penalty';
   } {
     const str = String(outcome);
 
@@ -683,6 +683,12 @@ export class ManualScoringAdapter implements IScoringAdapter {
     if (str.startsWith('LB+')) {
       const n = parseInt(str.slice(3)) || 0;
       return { totalRuns: n, batsmanRuns: 0, extras: n, isLegal: true, extraType: 'legbye' };
+    }
+
+    // Penalty runs: "PEN+N" (awarded outside legal delivery count)
+    if (str.startsWith('PEN+')) {
+      const n = parseInt(str.slice(4)) || 0;
+      return { totalRuns: n, batsmanRuns: 0, extras: n, isLegal: false, extraType: 'penalty' };
     }
 
     // Simple runs: "0", "1", "2", "3", "4", "6"
@@ -718,6 +724,7 @@ export class ManualScoringAdapter implements IScoringAdapter {
     if (outcome === 'NB' || outcome === 'NB+0' || String(outcome).startsWith('NB+')) return isWicket ? 'NB·W' : 'NB';
     if (outcome === 'B' || String(outcome).startsWith('B+')) return isWicket ? 'B·W' : 'B';
     if (outcome === 'LB' || String(outcome).startsWith('LB+')) return isWicket ? 'LB·W' : 'LB';
+    if (String(outcome).startsWith('PEN+')) return `P${runs}`;
     // Regular runs — show wicket indicator if run-out happened
     if (isWicket) return runs > 0 ? `${runs}·W` : 'W';
     return String(runs);
@@ -761,7 +768,7 @@ export class ManualScoringAdapter implements IScoringAdapter {
     extraType?: string,
   ): LiveBowler {
     const newOvers = isLegal ? this.incrementOvers(bowler.overs) : bowler.overs;
-    const runsAgainst = extraType === 'bye' || extraType === 'legbye' ? 0 : totalRuns;
+    const runsAgainst = extraType === 'bye' || extraType === 'legbye' || extraType === 'penalty' ? 0 : totalRuns;
     const newRuns = bowler.runs + runsAgainst;
     const ballsBowled = this.oversToBalls(newOvers);
     return {

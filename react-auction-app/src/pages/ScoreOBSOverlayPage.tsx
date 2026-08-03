@@ -53,6 +53,7 @@ const obsDb = getDatabase(obsApp);
 export default function ScoreOBSOverlayPage() {
   const [matchId, setMatchId] = useState<string | null>(null);
   const [urlMatchId, setUrlMatchId] = useState<string | null>(null);
+  const [urlPinned, setUrlPinned] = useState(false);
   const [activeMatchId, setActiveMatchId] = useState<string | null>(null);
   const [match, setMatch] = useState<MatchSetup | null>(null);
   const [live, setLive] = useState<LiveScore | null>(null);
@@ -123,6 +124,8 @@ export default function ScoreOBSOverlayPage() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const id = params.get('matchId');
+    const pinned = params.get('pin') === '1';
+    setUrlPinned(pinned);
     if (id) setUrlMatchId(id);
   }, []);
 
@@ -145,9 +148,27 @@ export default function ScoreOBSOverlayPage() {
 
   // Resolve the effective match: explicit URL match always wins; otherwise follow
   // the tenant's active match only when Single Overlay Mode is enabled.
+  // In single-overlay mode, URL matchId is treated as advisory unless pin=1.
   useEffect(() => {
-    setMatchId(urlMatchId || (config.singleOverlayMode ? activeMatchId : null));
-  }, [urlMatchId, activeMatchId, config.singleOverlayMode]);
+    if (config.singleOverlayMode) {
+      setMatchId(urlPinned ? (urlMatchId || activeMatchId || null) : (activeMatchId || urlMatchId || null));
+      return;
+    }
+    setMatchId(urlMatchId || null);
+  }, [urlMatchId, urlPinned, activeMatchId, config.singleOverlayMode]);
+
+  useEffect(() => {
+    // Prevent stale scorecard data when active match pointer changes in single-overlay mode.
+    setMatch(null);
+    setLive(null);
+    setInnings({});
+    setMatchStats(null);
+    setPreMatch(null);
+    setRawLineups({});
+    setLineups({ teamA: null, teamB: null });
+    inningsIntroShownRef.current = false;
+    setInningsIntroPhase('done');
+  }, [matchId]);
 
   // Subscribe to Firebase data
   useEffect(() => {

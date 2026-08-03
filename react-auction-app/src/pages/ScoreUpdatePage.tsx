@@ -15,7 +15,10 @@ import { scoringService } from '../services/scoring';
 import { obsReplaySourceService } from '../services/scoring/obsReplaySourceService';
 import { realtimeSync } from '../services/realtimeSync';
 import { tenantPath } from '../services/tenantPath';
-import type { BallOutcome, DismissalType, WicketDetail, MatchSquadPlayer, OBSReplayButton, TickerStatWidget } from '../types/scoring';
+import type {
+  BallOutcome, DismissalType, WicketDetail, MatchSquadPlayer, OBSReplayButton,
+  TickerStatWidget, Innings, BatsmanInnings, BowlerInnings, LiveScore,
+} from '../types/scoring';
 import FieldPlacementEditor from '../components/FieldPlacementEditor/FieldPlacementEditor';
 import './ScoreUpdatePage.css';
 
@@ -61,6 +64,14 @@ const LB_SUB_OPTIONS: { outcome: BallOutcome; label: string }[] = [
   { outcome: 'LB+4', label: 'LB+4' },
 ];
 
+const PEN_SUB_OPTIONS: { outcome: BallOutcome; label: string }[] = [
+  { outcome: 'PEN+1', label: 'PEN+1' },
+  { outcome: 'PEN+2', label: 'PEN+2' },
+  { outcome: 'PEN+3', label: 'PEN+3' },
+  { outcome: 'PEN+4', label: 'PEN+4' },
+  { outcome: 'PEN+5', label: 'PEN+5' },
+];
+
 const DISMISSAL_TYPES: { value: DismissalType; label: string }[] = [
   { value: 'bowled', label: 'Bowled' },
   { value: 'caught', label: 'Caught' },
@@ -83,13 +94,16 @@ const TICKER_WIDGET_OPTIONS: Array<{ key: TickerStatWidget; label: string }> = [
 export default function ScoreUpdatePage() {
   const [searchParams] = useSearchParams();
   const urlMatchId = searchParams.get('matchId') || undefined;
+  const urlPinned = searchParams.get('pin') === '1';
   const navigate = useNavigate();
   const { isAuthenticated, extendSession } = useAdminAuth();
 
   const [singleOverlayMode, setSingleOverlayMode] = useState(false);
   const [activeMatchId, setActiveMatchId] = useState<string | null>(null);
   const [matchActionFeedback, setMatchActionFeedback] = useState('');
-  const matchId = urlMatchId || (singleOverlayMode && activeMatchId ? activeMatchId : undefined);
+  const matchId = singleOverlayMode
+    ? (urlPinned ? (urlMatchId || activeMatchId || undefined) : (activeMatchId || urlMatchId || undefined))
+    : urlMatchId;
 
   // Single Overlay Mode: resolve + follow the tenant's active match when no explicit matchId in URL
   useEffect(() => {
@@ -127,7 +141,7 @@ export default function ScoreUpdatePage() {
   const [showBowlerPicker, setShowBowlerPicker] = useState(false);
   const [showEndOfInningsModal, setShowEndOfInningsModal] = useState(false);
   const [showMatchCompleteModal, setShowMatchCompleteModal] = useState(false);
-  const [expandedExtra, setExpandedExtra] = useState<'NB' | 'WD' | 'B' | 'LB' | null>(null);
+  const [expandedExtra, setExpandedExtra] = useState<'NB' | 'WD' | 'B' | 'LB' | 'PEN' | null>(null);
   const [pendingExtraOutcome, setPendingExtraOutcome] = useState<BallOutcome | null>(null); // for wicket-on-extra flow
   const [showFieldEditor, setShowFieldEditor] = useState(false);
   const [showAddPlayerModal, setShowAddPlayerModal] = useState(false);
@@ -135,6 +149,8 @@ export default function ScoreUpdatePage() {
   const [obsRelayButtons, setObsRelayButtons] = useState<OBSReplayButton[]>([]);
   const [obsRelayFeedback, setObsRelayFeedback] = useState('');
   const [tickerWidgetModes, setTickerWidgetModes] = useState<TickerStatWidget[]>(['run_rate']);
+  const [showCompletedEditModal, setShowCompletedEditModal] = useState(false);
+  const [completedEditFeedback, setCompletedEditFeedback] = useState('');
 
   const handleStartNextMatch = useCallback(async () => {
     try {
@@ -382,7 +398,17 @@ export default function ScoreUpdatePage() {
           <span>🏁 This match has ended</span>
           <button className="score-update__overlay-btn" onClick={handleStartNextMatch}>▶ Start Next Match</button>
           <button className="score-update__overlay-btn score-update__overlay-btn--clear" onClick={handleEndScorerSession}>End Session</button>
+          <button className="score-update__overlay-btn" onClick={() => setShowCompletedEditModal(true)}>Edit Completed Scorecard</button>
           {matchActionFeedback && <span className="score-update__hint">{matchActionFeedback}</span>}
+          {completedEditFeedback && <span className="score-update__hint">{completedEditFeedback}</span>}
+        </div>
+      )}
+
+      {!singleOverlayMode && match.status === 'completed' && (
+        <div className="score-update__session-banner">
+          <span>🏁 Match completed</span>
+          <button className="score-update__overlay-btn" onClick={() => setShowCompletedEditModal(true)}>Edit Completed Scorecard</button>
+          {completedEditFeedback && <span className="score-update__hint">{completedEditFeedback}</span>}
         </div>
       )}
 
@@ -522,6 +548,14 @@ export default function ScoreUpdatePage() {
         >
           LB
         </button>
+        <button
+          className={`score-update__btn score-update__btn--extra ${expandedExtra === 'PEN' ? 'score-update__btn--active' : ''}`}
+          onClick={() => setExpandedExtra(expandedExtra === 'PEN' ? null : 'PEN')}
+          disabled={recording}
+          title="Penalty runs"
+        >
+          PEN
+        </button>
       </div>
 
       {/* ── Extra Sub-options Panels ──────────────────────────────────── */}
@@ -636,6 +670,27 @@ export default function ScoreUpdatePage() {
             >
               LB + Run Out
             </button>
+          </motion.div>
+        )}
+        {expandedExtra === 'PEN' && (
+          <motion.div
+            className="score-update__sub-options"
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.2 }}
+          >
+            <span className="score-update__sub-label">Penalty Runs:</span>
+            {PEN_SUB_OPTIONS.map(btn => (
+              <button
+                key={btn.outcome}
+                className="score-update__btn score-update__btn--sub"
+                onClick={() => { handleRunClick(btn.outcome); setExpandedExtra(null); }}
+                disabled={recording}
+              >
+                {btn.label}
+              </button>
+            ))}
           </motion.div>
         )}
       </AnimatePresence>
@@ -1030,6 +1085,21 @@ export default function ScoreUpdatePage() {
           onClose={() => setShowPlayerStatsModal(false)}
         />
       )}
+
+      {showCompletedEditModal && matchId && liveScore && (
+        <CompletedScorecardEditModal
+          matchId={matchId}
+          liveScore={liveScore}
+          maxOvers={match.maxOvers}
+          onClose={() => setShowCompletedEditModal(false)}
+          onSaved={async (message) => {
+            setShowCompletedEditModal(false);
+            setCompletedEditFeedback(message);
+            setTimeout(() => setCompletedEditFeedback(''), 3500);
+            await completeMatch();
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -1060,7 +1130,7 @@ function getBallChipClass(ball: string): string {
   if (ball === '4') return 'four';
   if (ball === '6') return 'six';
   if (ball === '0') return 'dot';
-  if (ball.includes('WD') || ball.includes('NB') || ball === 'B' || ball === 'LB') return 'extra';
+  if (ball.includes('WD') || ball.includes('NB') || ball === 'B' || ball === 'LB' || ball.startsWith('P')) return 'extra';
   return 'run';
 }
 
@@ -1630,6 +1700,294 @@ function PlayerStatsNotesModal({ matchId, lineups, onClose }: {
 
         <div className="score-update__modal-actions">
           <button className="score-update__btn" onClick={onClose}>Close</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function isValidOverValue(value: number, maxOvers: number): boolean {
+  if (!Number.isFinite(value) || value < 0 || value > maxOvers) return false;
+  const whole = Math.floor(value);
+  const balls = Math.round((value - whole) * 10);
+  return balls >= 0 && balls <= 5;
+}
+
+function asNum(value: unknown): number {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function validateInningsCorrection(innings: Innings): string[] {
+  const issues: string[] = [];
+  const extras = innings.extras;
+  const extrasSum = asNum(extras.wides) + asNum(extras.noBalls) + asNum(extras.byes) + asNum(extras.legByes) + asNum(extras.penalty);
+  if (extrasSum !== asNum(extras.total)) {
+    issues.push(`Innings ${innings.number}: extras total (${extras.total}) must equal breakdown (${extrasSum}).`);
+  }
+
+  if (!isValidOverValue(asNum(innings.totalOvers), asNum(innings.maxOvers))) {
+    issues.push(`Innings ${innings.number}: overs must be in cricket format (x.0 to x.5) and within max overs.`);
+  }
+
+  if (innings.totalWickets < 0 || innings.totalWickets > 10) {
+    issues.push(`Innings ${innings.number}: wickets must be between 0 and 10.`);
+  }
+
+  const batsmanRuns = innings.batsmen.reduce((sum, b) => sum + asNum(b.runs), 0);
+  if (batsmanRuns + asNum(extras.total) !== asNum(innings.totalRuns)) {
+    issues.push(`Innings ${innings.number}: total runs (${innings.totalRuns}) must equal batsman runs + extras (${batsmanRuns + asNum(extras.total)}).`);
+  }
+
+  const outCount = innings.batsmen.filter(b => b.isOut).length;
+  if (asNum(innings.totalWickets) > outCount) {
+    issues.push(`Innings ${innings.number}: wickets (${innings.totalWickets}) cannot exceed dismissed batsmen (${outCount}).`);
+  }
+
+  const batKeys = new Set<string>();
+  for (const b of innings.batsmen) {
+    const key = (b.playerId || b.playerName).trim().toLowerCase();
+    if (!key) {
+      issues.push(`Innings ${innings.number}: batsman row has empty player id/name.`);
+      continue;
+    }
+    if (batKeys.has(key)) issues.push(`Innings ${innings.number}: duplicate batsman detected (${b.playerName}).`);
+    batKeys.add(key);
+  }
+
+  const bowlKeys = new Set<string>();
+  for (const b of innings.bowlers) {
+    const key = (b.playerId || b.playerName).trim().toLowerCase();
+    if (!key) {
+      issues.push(`Innings ${innings.number}: bowler row has empty player id/name.`);
+      continue;
+    }
+    if (bowlKeys.has(key)) issues.push(`Innings ${innings.number}: duplicate bowler detected (${b.playerName}).`);
+    bowlKeys.add(key);
+    if (!isValidOverValue(asNum(b.overs), asNum(innings.maxOvers))) {
+      issues.push(`Innings ${innings.number}: bowler overs invalid for ${b.playerName}.`);
+    }
+  }
+
+  return issues;
+}
+
+function CompletedScorecardEditModal({
+  matchId,
+  liveScore,
+  maxOvers,
+  onClose,
+  onSaved,
+}: {
+  matchId: string;
+  liveScore: LiveScore;
+  maxOvers: number;
+  onClose: () => void;
+  onSaved: (message: string) => void | Promise<void>;
+}) {
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [selectedInnings, setSelectedInnings] = useState<1 | 2>(liveScore.currentInnings);
+  const [inningsMap, setInningsMap] = useState<Record<1 | 2, Innings | null>>({ 1: null, 2: null });
+  const [errors, setErrors] = useState<string[]>([]);
+
+  useEffect(() => {
+    const load = async () => {
+      setLoading(true);
+      const [inn1, inn2] = await Promise.all([
+        scoringService.getInnings(matchId, 1),
+        scoringService.getInnings(matchId, 2),
+      ]);
+      setInningsMap({ 1: inn1, 2: inn2 });
+      if (!inn1 && inn2) setSelectedInnings(2);
+      setLoading(false);
+    };
+    void load();
+  }, [matchId]);
+
+  const current = inningsMap[selectedInnings];
+
+  const patchCurrent = (next: Innings) => {
+    setInningsMap(prev => ({ ...prev, [selectedInnings]: next }));
+  };
+
+  const saveCorrections = async () => {
+    const inn1 = inningsMap[1];
+    const inn2 = inningsMap[2];
+    const all = [inn1, inn2].filter((x): x is Innings => !!x);
+    const issues = all.flatMap(validateInningsCorrection);
+    setErrors(issues);
+    if (issues.length > 0) return;
+
+    setSaving(true);
+    try {
+      if (inn1) await scoringService.saveInnings(matchId, 1, inn1);
+      if (inn2) await scoringService.saveInnings(matchId, 2, inn2);
+
+      const updatedCurrent = inningsMap[liveScore.currentInnings];
+      if (updatedCurrent) {
+        const notOut = updatedCurrent.batsmen.filter(b => !b.isOut);
+        const striker = notOut[0] || updatedCurrent.batsmen[0];
+        const nonStriker = notOut[1] || updatedCurrent.batsmen[1] || striker;
+        const primaryBowler = [...updatedCurrent.bowlers].sort((a, b) => asNum(b.overs) - asNum(a.overs))[0] || liveScore.currentBowler;
+        const balls = Math.floor(asNum(updatedCurrent.totalOvers)) * 6 + Math.round((asNum(updatedCurrent.totalOvers) % 1) * 10);
+        const rr = balls > 0 ? Math.round((asNum(updatedCurrent.totalRuns) / balls) * 6 * 100) / 100 : 0;
+
+        const nextLive: LiveScore = {
+          ...liveScore,
+          runs: asNum(updatedCurrent.totalRuns),
+          wickets: asNum(updatedCurrent.totalWickets),
+          overs: asNum(updatedCurrent.totalOvers),
+          runRate: rr,
+          currentBatsmen: [
+            {
+              playerId: striker.playerId,
+              playerName: striker.playerName,
+              runs: asNum(striker.runs),
+              balls: asNum(striker.balls),
+              fours: asNum(striker.fours),
+              sixes: asNum(striker.sixes),
+              strikeRate: asNum(striker.strikeRate),
+              isOnStrike: true,
+            },
+            {
+              playerId: nonStriker.playerId,
+              playerName: nonStriker.playerName,
+              runs: asNum(nonStriker.runs),
+              balls: asNum(nonStriker.balls),
+              fours: asNum(nonStriker.fours),
+              sixes: asNum(nonStriker.sixes),
+              strikeRate: asNum(nonStriker.strikeRate),
+              isOnStrike: false,
+            },
+          ],
+          currentBowler: {
+            playerId: primaryBowler.playerId,
+            playerName: primaryBowler.playerName,
+            overs: asNum(primaryBowler.overs),
+            maidens: asNum(primaryBowler.maidens),
+            runs: asNum(primaryBowler.runs),
+            wickets: asNum(primaryBowler.wickets),
+            economy: asNum(primaryBowler.economy),
+            dots: asNum(primaryBowler.dots),
+          },
+          allBatsmen: updatedCurrent.batsmen,
+          allBowlers: updatedCurrent.bowlers,
+          lastUpdated: Date.now(),
+        };
+        await scoringService.saveLiveScore(matchId, nextLive);
+      }
+
+      await onSaved('Completed scorecard corrected and validated');
+    } catch (err) {
+      setErrors([`Failed to save corrections: ${String(err)}`]);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="score-update__modal-overlay" onClick={onClose}>
+      <div className="score-update__modal score-update__modal--wide" style={{ width: 'min(1100px, 96vw)' }} onClick={e => e.stopPropagation()}>
+        <h3>Completed Match Scorecard Corrections</h3>
+        <p className="score-update__hint">Edit innings safely. Validation blocks duplicate batsmen/bowlers and inconsistent cricket totals.</p>
+
+        <div className="score-update__modal-actions" style={{ justifyContent: 'flex-start', marginBottom: '0.5rem' }}>
+          <button className={`score-update__btn ${selectedInnings === 1 ? 'score-update__btn--primary' : ''}`} onClick={() => setSelectedInnings(1)}>Innings 1</button>
+          <button className={`score-update__btn ${selectedInnings === 2 ? 'score-update__btn--primary' : ''}`} onClick={() => setSelectedInnings(2)}>Innings 2</button>
+        </div>
+
+        {loading && <p>Loading scorecard...</p>}
+        {!loading && !current && <p className="score-update__hint">No innings data available for this side yet.</p>}
+        {!loading && current && (
+          <>
+            <div className="score-update__modal-grid" style={{ gridTemplateColumns: 'repeat(4, minmax(0, 1fr))' }}>
+              <div className="score-update__modal-field"><label>Total</label><input className="score-update__input" type="number" value={current.totalRuns} onChange={e => patchCurrent({ ...current, totalRuns: asNum(e.target.value) })} /></div>
+              <div className="score-update__modal-field"><label>Wickets</label><input className="score-update__input" type="number" min={0} max={10} value={current.totalWickets} onChange={e => patchCurrent({ ...current, totalWickets: asNum(e.target.value) })} /></div>
+              <div className="score-update__modal-field"><label>Overs</label><input className="score-update__input" type="number" step="0.1" value={current.totalOvers} onChange={e => patchCurrent({ ...current, totalOvers: asNum(e.target.value) })} /></div>
+              <div className="score-update__modal-field"><label>Max Overs</label><input className="score-update__input" type="number" value={current.maxOvers || maxOvers} onChange={e => patchCurrent({ ...current, maxOvers: asNum(e.target.value) })} /></div>
+            </div>
+
+            <div className="score-update__modal-grid" style={{ gridTemplateColumns: 'repeat(6, minmax(0, 1fr))' }}>
+              <div className="score-update__modal-field"><label>Extras Total</label><input className="score-update__input" type="number" value={current.extras.total} onChange={e => patchCurrent({ ...current, extras: { ...current.extras, total: asNum(e.target.value) } })} /></div>
+              <div className="score-update__modal-field"><label>Wides</label><input className="score-update__input" type="number" value={current.extras.wides} onChange={e => patchCurrent({ ...current, extras: { ...current.extras, wides: asNum(e.target.value) } })} /></div>
+              <div className="score-update__modal-field"><label>No Balls</label><input className="score-update__input" type="number" value={current.extras.noBalls} onChange={e => patchCurrent({ ...current, extras: { ...current.extras, noBalls: asNum(e.target.value) } })} /></div>
+              <div className="score-update__modal-field"><label>Byes</label><input className="score-update__input" type="number" value={current.extras.byes} onChange={e => patchCurrent({ ...current, extras: { ...current.extras, byes: asNum(e.target.value) } })} /></div>
+              <div className="score-update__modal-field"><label>Leg Byes</label><input className="score-update__input" type="number" value={current.extras.legByes} onChange={e => patchCurrent({ ...current, extras: { ...current.extras, legByes: asNum(e.target.value) } })} /></div>
+              <div className="score-update__modal-field"><label>Penalty</label><input className="score-update__input" type="number" value={current.extras.penalty} onChange={e => patchCurrent({ ...current, extras: { ...current.extras, penalty: asNum(e.target.value) } })} /></div>
+            </div>
+
+            <div style={{ marginTop: '0.8rem' }}>
+              <h4 style={{ margin: 0 }}>Batsmen</h4>
+              {current.batsmen.map((b, i) => (
+                <div key={`${b.playerId}-${i}`} className="score-update__modal-grid" style={{ gridTemplateColumns: '2fr 0.8fr 0.8fr 0.8fr 0.8fr 1fr 1.4fr 0.8fr auto', marginBottom: '0.35rem' }}>
+                  <input className="score-update__input" value={b.playerName} onChange={e => {
+                    const next = [...current.batsmen];
+                    next[i] = { ...next[i], playerName: e.target.value, playerId: next[i].playerId || e.target.value.toLowerCase().replace(/\s+/g, '_') };
+                    patchCurrent({ ...current, batsmen: next });
+                  }} />
+                  <input className="score-update__input" type="number" value={b.runs} onChange={e => {
+                    const next = [...current.batsmen]; next[i] = { ...next[i], runs: asNum(e.target.value) }; patchCurrent({ ...current, batsmen: next });
+                  }} />
+                  <input className="score-update__input" type="number" value={b.balls} onChange={e => {
+                    const next = [...current.batsmen]; next[i] = { ...next[i], balls: asNum(e.target.value) }; patchCurrent({ ...current, batsmen: next });
+                  }} />
+                  <input className="score-update__input" type="number" value={b.fours} onChange={e => {
+                    const next = [...current.batsmen]; next[i] = { ...next[i], fours: asNum(e.target.value) }; patchCurrent({ ...current, batsmen: next });
+                  }} />
+                  <input className="score-update__input" type="number" value={b.sixes} onChange={e => {
+                    const next = [...current.batsmen]; next[i] = { ...next[i], sixes: asNum(e.target.value) }; patchCurrent({ ...current, batsmen: next });
+                  }} />
+                  <input className="score-update__input" type="number" step="0.01" value={b.strikeRate} onChange={e => {
+                    const next = [...current.batsmen]; next[i] = { ...next[i], strikeRate: asNum(e.target.value) }; patchCurrent({ ...current, batsmen: next });
+                  }} />
+                  <input className="score-update__input" value={b.dismissal || ''} onChange={e => {
+                    const next = [...current.batsmen]; next[i] = { ...next[i], dismissal: e.target.value }; patchCurrent({ ...current, batsmen: next });
+                  }} />
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', fontSize: '11px', color: '#cbd5e1' }}>
+                    <input type="checkbox" checked={!!b.isOut} onChange={e => {
+                      const next = [...current.batsmen]; next[i] = { ...next[i], isOut: e.target.checked }; patchCurrent({ ...current, batsmen: next });
+                    }} />
+                    Out
+                  </label>
+                  <button className="score-update__btn score-update__btn--clear" onClick={() => patchCurrent({ ...current, batsmen: current.batsmen.filter((_, idx) => idx !== i) })}>✕</button>
+                </div>
+              ))}
+              <button className="score-update__btn score-update__btn--secondary" onClick={() => patchCurrent({ ...current, batsmen: [...current.batsmen, { playerId: `bat_${Date.now()}`, playerName: 'New Batsman', runs: 0, balls: 0, fours: 0, sixes: 0, strikeRate: 0, dismissal: 'not out', isOut: false, order: current.batsmen.length + 1 } as BatsmanInnings] })}>+ Add Batsman</button>
+            </div>
+
+            <div style={{ marginTop: '0.8rem' }}>
+              <h4 style={{ margin: 0 }}>Bowlers</h4>
+              {current.bowlers.map((b, i) => (
+                <div key={`${b.playerId}-${i}`} className="score-update__modal-grid" style={{ gridTemplateColumns: '2fr repeat(6, 0.85fr) auto', marginBottom: '0.35rem' }}>
+                  <input className="score-update__input" value={b.playerName} onChange={e => {
+                    const next = [...current.bowlers];
+                    next[i] = { ...next[i], playerName: e.target.value, playerId: next[i].playerId || e.target.value.toLowerCase().replace(/\s+/g, '_') };
+                    patchCurrent({ ...current, bowlers: next });
+                  }} />
+                  <input className="score-update__input" type="number" step="0.1" value={b.overs} onChange={e => { const next = [...current.bowlers]; next[i] = { ...next[i], overs: asNum(e.target.value) }; patchCurrent({ ...current, bowlers: next }); }} />
+                  <input className="score-update__input" type="number" value={b.maidens} onChange={e => { const next = [...current.bowlers]; next[i] = { ...next[i], maidens: asNum(e.target.value) }; patchCurrent({ ...current, bowlers: next }); }} />
+                  <input className="score-update__input" type="number" value={b.runs} onChange={e => { const next = [...current.bowlers]; next[i] = { ...next[i], runs: asNum(e.target.value) }; patchCurrent({ ...current, bowlers: next }); }} />
+                  <input className="score-update__input" type="number" value={b.wickets} onChange={e => { const next = [...current.bowlers]; next[i] = { ...next[i], wickets: asNum(e.target.value) }; patchCurrent({ ...current, bowlers: next }); }} />
+                  <input className="score-update__input" type="number" step="0.01" value={b.economy} onChange={e => { const next = [...current.bowlers]; next[i] = { ...next[i], economy: asNum(e.target.value) }; patchCurrent({ ...current, bowlers: next }); }} />
+                  <input className="score-update__input" type="number" value={b.dots} onChange={e => { const next = [...current.bowlers]; next[i] = { ...next[i], dots: asNum(e.target.value) }; patchCurrent({ ...current, bowlers: next }); }} />
+                  <button className="score-update__btn score-update__btn--clear" onClick={() => patchCurrent({ ...current, bowlers: current.bowlers.filter((_, idx) => idx !== i) })}>✕</button>
+                </div>
+              ))}
+              <button className="score-update__btn score-update__btn--secondary" onClick={() => patchCurrent({ ...current, bowlers: [...current.bowlers, { playerId: `bowl_${Date.now()}`, playerName: 'New Bowler', overs: 0, maidens: 0, runs: 0, wickets: 0, economy: 0, wides: 0, noBalls: 0, dots: 0 } as BowlerInnings] })}>+ Add Bowler</button>
+            </div>
+          </>
+        )}
+
+        {errors.length > 0 && (
+          <div style={{ marginTop: '0.7rem', padding: '0.6rem', borderRadius: '8px', background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.35)' }}>
+            {errors.map((e, i) => <p key={i} style={{ margin: '0.2rem 0', color: '#fecaca', fontSize: '12px' }}>{e}</p>)}
+          </div>
+        )}
+
+        <div className="score-update__modal-actions">
+          <button className="score-update__btn score-update__btn--primary" onClick={saveCorrections} disabled={saving || loading}>Save Corrections</button>
+          <button className="score-update__btn" onClick={onClose} disabled={saving}>Close</button>
         </div>
       </div>
     </div>

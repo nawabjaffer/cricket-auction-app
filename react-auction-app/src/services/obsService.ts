@@ -12,6 +12,14 @@ interface OBSMessage {
   d: Record<string, unknown>;
 }
 
+interface OBSConnectionDiagnostics {
+  attemptedUrls: string[];
+  lastSuccessfulUrl: string;
+  failures: string[];
+  lastErrorDetail: string;
+  mixedContentLikely: boolean;
+}
+
 type OBSEventCallback = (event: string, data: unknown) => void;
 type ConnectionCallback = (state: OBSConnectionState) => void;
 
@@ -27,6 +35,9 @@ class OBSService {
   // Keepalive heartbeat — OBS closes idle WS connections after ~60 s
   private heartbeatInterval: ReturnType<typeof setInterval> | null = null;
   private lastErrorDetail = '';
+  private attemptedUrls: string[] = [];
+  private attemptFailures: string[] = [];
+  private lastSuccessfulUrl = '';
 
   /**
    * Subscribe to connection state changes
@@ -54,22 +65,79 @@ class OBSService {
     this.eventListeners.forEach(cb => cb(event, data));
   }
 
-  private buildCandidateUrls(host: string, port: number): string[] {
+  private sendMessageOnSocket(socket: WebSocket, op: number, data: Record<string, unknown>): void {
+    if (socket.readyState !== WebSocket.OPEN) {
+      console.warn('[OBS] Cannot send message - socket not open');
+      return;
+    }
+
+    const message: OBSMessage = { op, d: data };
+    socket.send(JSON.stringify(message));
+  }
+
+  private normalizeTarget(hostInput: string, fallbackPort: number): {
+    host: string;
+    port: number;
+    explicitScheme?: 'ws' | 'wss';
+  } {
+    const trimmed = hostInput.trim();
+    if (!trimmed) return { host: '', port: fallbackPort };
+
+    const hasScheme = /^(wss?|https?):\/\//i.test(trimmed);
+    const parseTarget = hasScheme ? trimmed : `ws://${trimmed}`;
+
+    try {
+      const parsed = new URL(parseTarget);
+      const host = parsed.hostname.trim();
+      const port = parsed.port ? Number(parsed.port) : fallbackPort;
+      const rawScheme = parsed.protocol.replace(':', '').toLowerCase();
+      let explicitScheme: 'ws' | 'wss' | undefined;
+      if (hasScheme) {
+        if (rawScheme === 'ws' || rawScheme === 'wss') {
+          explicitScheme = rawScheme;
+        } else if (rawScheme === 'http' || rawScheme === 'https') {
+          explicitScheme = rawScheme === 'https' ? 'wss' : 'ws';
+        }
+      }
+
+      return {
+        host,
+        port: Number.isFinite(port) && port > 0 ? port : fallbackPort,
+        explicitScheme,
+      };
+    } catch {
+      return { host: trimmed, port: fallbackPort };
+    }
+  }
+
+  private buildCandidateUrls(host: string, port: number, explicitScheme?: 'ws' | 'wss'): string[] {
     const normalizedHost = host.trim();
     if (!normalizedHost) return [];
 
-    if (/^wss?:\/\//i.test(normalizedHost)) {
-      return [normalizedHost.includes(':') && /:\d+$/i.test(normalizedHost) ? normalizedHost : `${normalizedHost}:${port}`];
+    if (explicitScheme) {
+      return [`${explicitScheme}://${normalizedHost}:${port}`];
     }
 
     const prefersSecure = globalThis.location?.protocol === 'https:';
-    const secureFirst = prefersSecure ? ['wss', 'ws'] : ['ws', 'wss'];
-    return secureFirst.map((scheme) => `${scheme}://${normalizedHost}:${port}`);
+    const schemeOrder = prefersSecure ? ['wss', 'ws'] : ['ws', 'wss'];
+    return schemeOrder.map((scheme) => `${scheme}://${normalizedHost}:${port}`);
+  }
+
+  private isLikelyLanHost(host: string): boolean {
+    const value = host.trim().toLowerCase();
+    if (!value) return false;
+    if (value === 'localhost' || value === '127.0.0.1' || value === '::1') return true;
+    if (/^192\.168\./.test(value)) return true;
+    if (/^10\./.test(value)) return true;
+    if (/^172\.(1[6-9]|2\d|3[01])\./.test(value)) return true;
+    if (/^[\w-]+\.local$/.test(value)) return true;
+    return false;
   }
 
   private async tryConnectUrl(wsUrl: string, password?: string): Promise<boolean> {
     return new Promise((resolve) => {
       let settled = false;
+      const socket = new WebSocket(wsUrl);
       const settle = (success: boolean) => {
         if (settled) return;
         settled = true;
@@ -79,19 +147,18 @@ class OBSService {
       const timeoutId = setTimeout(() => {
         this.lastErrorDetail = `Connection timeout for ${wsUrl}`;
         this.notifyConnectionState('error');
-        this.ws?.close();
+        socket.close();
         settle(false);
       }, 10_000);
 
       try {
         this.notifyConnectionState('connecting');
-        this.ws = new WebSocket(wsUrl);
 
-        this.ws.onopen = () => {
+        socket.onopen = () => {
           console.log('[OBS] WebSocket connected:', wsUrl);
         };
 
-        this.ws.onmessage = async (event) => {
+        socket.onmessage = async (event) => {
           try {
             const message: OBSMessage = JSON.parse(event.data);
             await this.handleMessage(message, (success) => {
@@ -99,39 +166,48 @@ class OBSService {
               if (success) {
                 this.lastErrorDetail = '';
                 this.config.password = password;
+                this.ws = socket;
               }
               settle(success);
-            });
+            }, socket);
           } catch (error) {
             this.lastErrorDetail = `Invalid OBS message from ${wsUrl}: ${String(error)}`;
             this.notifyConnectionState('error');
+            clearTimeout(timeoutId);
+            settle(false);
           }
         };
 
-        this.ws.onerror = () => {
+        socket.onerror = () => {
           clearTimeout(timeoutId);
           this.lastErrorDetail = `WebSocket error for ${wsUrl}`;
           this.notifyConnectionState('error');
           settle(false);
         };
 
-        this.ws.onclose = (event) => {
+        socket.onclose = (event) => {
           clearTimeout(timeoutId);
-          this.stopHeartbeat();
           console.log('[OBS] WebSocket closed', event.code, event.reason, wsUrl);
           this.lastErrorDetail = event.reason
-            ? `OBS closed (${event.code}): ${event.reason}`
-            : `OBS closed (${event.code})`;
+            ? `OBS closed (${event.code}) for ${wsUrl}: ${event.reason}`
+            : `OBS closed (${event.code}) for ${wsUrl}`;
           settle(false);
-          this.notifyConnectionState('disconnected');
-          this.ws = null;
-          if (this.config.enabled) {
-            this.attemptReconnect();
+          if (this.ws === socket) {
+            this.stopHeartbeat();
+            this.notifyConnectionState('disconnected');
+            this.ws = null;
+            if (this.config.enabled) {
+              this.attemptReconnect();
+            }
           }
         };
       } catch (error) {
         clearTimeout(timeoutId);
-        this.lastErrorDetail = `Failed creating WebSocket ${wsUrl}: ${String(error)}`;
+        const detail = String(error);
+        this.lastErrorDetail = `Failed creating WebSocket ${wsUrl}: ${detail}`;
+        if (detail.toLowerCase().includes('securityerror') || detail.toLowerCase().includes('mixed content')) {
+          this.lastErrorDetail += ' (Browser blocked insecure ws:// from a secure https page)';
+        }
         this.notifyConnectionState('error');
         settle(false);
       }
@@ -153,13 +229,24 @@ class OBSService {
       this.reconnectTimeout = null;
     }
 
-    this.config.host = host;
-    this.config.port = port;
+    const normalized = this.normalizeTarget(host, port);
+    if (!normalized.host) {
+      this.lastErrorDetail = 'Invalid OBS host';
+      this.notifyConnectionState('error');
+      return false;
+    }
+
+    this.config.host = normalized.host;
+    this.config.port = normalized.port;
     this.config.password = password;
+    this.attemptedUrls = [];
+    this.attemptFailures = [];
+    this.lastSuccessfulUrl = '';
+    this.lastErrorDetail = '';
     // Reset reconnect counter for a fresh manual connect
     this.reconnectAttempts = 0;
 
-    const urls = this.buildCandidateUrls(host, port);
+    const urls = this.buildCandidateUrls(normalized.host, normalized.port, normalized.explicitScheme);
     if (urls.length === 0) {
       this.lastErrorDetail = 'Invalid OBS host';
       this.notifyConnectionState('error');
@@ -167,10 +254,21 @@ class OBSService {
     }
 
     for (const url of urls) {
+      this.attemptedUrls.push(url);
       console.log('[OBS] Connecting to:', url);
       // eslint-disable-next-line no-await-in-loop
       const ok = await this.tryConnectUrl(url, password);
-      if (ok) return true;
+      if (ok) {
+        this.lastSuccessfulUrl = url;
+        return true;
+      }
+      if (this.lastErrorDetail) {
+        this.attemptFailures.push(this.lastErrorDetail);
+      }
+    }
+
+    if (globalThis.location?.protocol === 'https:' && this.isLikelyLanHost(normalized.host) && urls.some((url) => url.startsWith('ws://'))) {
+      this.lastErrorDetail = `${this.lastErrorDetail || 'Direct OBS socket failed'}. HTTPS page may block ws:// LAN connections on iPhone/Safari. Use OBS relay mode or host the dock over http:// on local network.`;
     }
 
     this.notifyConnectionState('error');
@@ -180,23 +278,27 @@ class OBSService {
   /**
    * Handle incoming OBS WebSocket messages
    */
-  private async handleMessage(message: OBSMessage, connectResolve?: (success: boolean) => void): Promise<void> {
+  private async handleMessage(message: OBSMessage, connectResolve?: (success: boolean) => void, socket?: WebSocket): Promise<void> {
     const { op, d } = message;
 
     switch (op) {
       case 0: // Hello
         console.log('[OBS] Received Hello, sending Identify');
-        await this.identify(d as { authentication?: { challenge: string; salt: string } });
+        await this.identify(d as { authentication?: { challenge: string; salt: string } }, socket);
         break;
 
       case 2: // Identified
         console.log('[OBS] Successfully identified');
+        if (socket) {
+          this.ws = socket;
+        }
         this.notifyConnectionState('connected');
         this.reconnectAttempts = 0;
         this.config.enabled = true;
-        await this.loadScenes();
-        this.startHeartbeat();
+        // Connection is valid as soon as OBS acknowledges Identify.
         connectResolve?.(true);
+        this.startHeartbeat();
+        void this.loadScenes();
         break;
 
       case 5: // Event
@@ -215,7 +317,7 @@ class OBSService {
   /**
    * Send identification to OBS
    */
-  private async identify(hello: { authentication?: { challenge: string; salt: string } }): Promise<void> {
+  private async identify(hello: { authentication?: { challenge: string; salt: string } }, socket?: WebSocket): Promise<void> {
     const identifyData: Record<string, unknown> = {
       rpcVersion: 1,
     };
@@ -225,6 +327,11 @@ class OBSService {
       const { challenge, salt } = hello.authentication;
       const authResponse = await this.generateAuthResponse(this.config.password, salt, challenge);
       identifyData.authentication = authResponse;
+    }
+
+    if (socket) {
+      this.sendMessageOnSocket(socket, 1, identifyData);
+      return;
     }
 
     this.sendMessage(1, identifyData); // op 1 = Identify
@@ -544,6 +651,19 @@ class OBSService {
 
   getLastErrorDetail(): string {
     return this.lastErrorDetail;
+  }
+
+  getConnectionDiagnostics(): OBSConnectionDiagnostics {
+    const mixedContentLikely = globalThis.location?.protocol === 'https:'
+      && this.attemptedUrls.some((url) => url.startsWith('ws://'));
+
+    return {
+      attemptedUrls: [...this.attemptedUrls],
+      lastSuccessfulUrl: this.lastSuccessfulUrl,
+      failures: [...this.attemptFailures],
+      lastErrorDetail: this.lastErrorDetail,
+      mixedContentLikely,
+    };
   }
 }
 

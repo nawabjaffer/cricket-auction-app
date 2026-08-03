@@ -61,6 +61,8 @@ export function useScoringState(matchId: string | undefined) {
   const adapterRef = useRef<ManualScoringAdapter | null>(null);
   const recordingRef = useRef(false); // Debounce guard
   const dbRef = useRef<Database | null>(null); // Store db reference for callbacks
+  const liveScoreRef = useRef<LiveScore | null>(null);
+  const inningsRef = useRef<Innings | null>(null);
 
   // Initialize
   useEffect(() => {
@@ -145,7 +147,9 @@ export function useScoringState(matchId: string | undefined) {
 
     // Subscribe live
     const unsubLive = scoringService.subscribeLiveScore(matchId, (live) => {
-      setState(s => ({ ...s, liveScore: normalizeLive(live) }));
+      const normalized = normalizeLive(live);
+      liveScoreRef.current = normalized;
+      setState(s => ({ ...s, liveScore: normalized }));
     });
 
     const unsubOverlay = scoringService.subscribeOverlayControl(matchId, (ctrl) => {
@@ -160,6 +164,7 @@ export function useScoringState(matchId: string | undefined) {
         const keys = Object.keys(data).sort();
         const latestKey = keys[keys.length - 1];
         if (latestKey) {
+          inningsRef.current = data[latestKey];
           setState(s => ({ ...s, currentInnings: data[latestKey] }));
         }
       }
@@ -170,10 +175,12 @@ export function useScoringState(matchId: string | undefined) {
 
   // Record ball — with debounce protection
   const recordBall = useCallback(async (outcome: BallOutcome, wicket?: WicketDetail) => {
-    if (!matchId || !state.liveScore || !adapterRef.current || recording || recordingRef.current) return;
+    const liveSnapshot = liveScoreRef.current;
+    const inningsSnapshot = inningsRef.current;
+    if (!matchId || !liveSnapshot || !adapterRef.current || recording || recordingRef.current) return;
     
     // Validate: can't take wicket when 10 are already down
-    if (wicket && state.liveScore.wickets >= 10) {
+    if (wicket && liveSnapshot.wickets >= 10) {
       setState(s => ({ ...s, error: 'All wickets already fallen' }));
       return;
     }
@@ -182,28 +189,31 @@ export function useScoringState(matchId: string | undefined) {
     recordingRef.current = true;
     try {
       // Save current state for undo
-      const prevLive = JSON.parse(JSON.stringify(state.liveScore)) as LiveScore;
-      const prevInnings = state.currentInnings ? JSON.parse(JSON.stringify(state.currentInnings)) as Innings : null;
+      const prevLive = JSON.parse(JSON.stringify(liveSnapshot)) as LiveScore;
+      const prevInnings = inningsSnapshot ? JSON.parse(JSON.stringify(inningsSnapshot)) as Innings : null;
       
-      const innings: Innings = state.currentInnings || {
-        number: state.liveScore.currentInnings,
-        battingTeamId: state.liveScore.battingTeamId,
-        bowlingTeamId: state.liveScore.bowlingTeamId,
-        totalRuns: state.liveScore.runs,
-        totalWickets: state.liveScore.wickets,
-        totalOvers: state.liveScore.overs,
+      const innings: Innings = inningsSnapshot || {
+        number: liveSnapshot.currentInnings,
+        battingTeamId: liveSnapshot.battingTeamId,
+        bowlingTeamId: liveSnapshot.bowlingTeamId,
+        totalRuns: liveSnapshot.runs,
+        totalWickets: liveSnapshot.wickets,
+        totalOvers: liveSnapshot.overs,
         maxOvers: state.match?.maxOvers || 20,
         extras: { total: 0, wides: 0, noBalls: 0, byes: 0, legByes: 0, penalty: 0 },
-        batsmen: state.liveScore.allBatsmen || [],
-        bowlers: state.liveScore.allBowlers || [],
+        batsmen: liveSnapshot.allBatsmen || [],
+        bowlers: liveSnapshot.allBowlers || [],
         fallOfWickets: [],
         overs: [],
         isCompleted: false,
       };
 
       const { ballEvent, updatedLive, updatedInnings, isInningsComplete } = await adapterRef.current.recordBall(
-        matchId, state.liveScore, innings, { outcome, wicket },
+        matchId, liveSnapshot, innings, { outcome, wicket },
       );
+
+      liveScoreRef.current = updatedLive;
+      inningsRef.current = updatedInnings;
 
       setUndoStack(prev => [...prev.slice(-19), { live: prevLive, innings: prevInnings, ballId: ballEvent.id }]);
 
@@ -269,7 +279,7 @@ export function useScoringState(matchId: string | undefined) {
       setRecording(false);
       recordingRef.current = false;
     }
-  }, [matchId, state.liveScore, state.currentInnings, state.match, recording]);
+  }, [matchId, state.match, state.lineups, recording]);
 
   // Undo
   const undoLastBall = useCallback(async () => {
@@ -281,8 +291,17 @@ export function useScoringState(matchId: string | undefined) {
       if (last.innings && dbRef.current) {
         await dbSet(ref(dbRef.current, `${tenantPath('scoring')}/matches/${matchId}/innings/${last.live.currentInnings}`), last.innings);
       }
+      liveScoreRef.current = normalizeLive(last.live);
+      inningsRef.current = last.innings;
       setUndoStack(prev => prev.slice(0, -1));
-      setState(s => ({ ...s, isInningsComplete: false, needsBowlerChange: false, isMatchComplete: false }));
+      setState(s => ({
+        ...s,
+        liveScore: normalizeLive(last.live),
+        currentInnings: last.innings,
+        isInningsComplete: false,
+        needsBowlerChange: false,
+        isMatchComplete: false,
+      }));
     } catch (err) {
       setState(s => ({ ...s, error: `Undo failed: ${err}` }));
     }

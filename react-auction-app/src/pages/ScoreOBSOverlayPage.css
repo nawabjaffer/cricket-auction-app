@@ -1387,7 +1387,7 @@
   left: 40px;
   right: 40px;
   width: auto;
-  height: 88px;
+  height: 112px;
   display: flex;
   align-items: stretch;
   border-radius: 44px;
@@ -1482,7 +1482,7 @@
 .score-ticker__bat-name {
   font-family: 'Inter', 'SF Pro Display', system-ui, sans-serif;
   font-weight: 700;
-  font-size: 15px;
+  font-size: 20px;
   letter-spacing: 0.03em;
   color: #1e293b;
   min-width: 80px;
@@ -1502,7 +1502,7 @@
 .score-ticker__bat-runs {
   font-family: 'Inter', system-ui, sans-serif;
   font-weight: 900;
-  font-size: 22px;
+  font-size: 30px;
   color: #0f172a;
   line-height: 1;
 }
@@ -1512,20 +1512,20 @@
 }
 
 .score-ticker__bat-balls {
-  font-size: 12px;
+  font-size: 16px;
   font-weight: 500;
   color: #64748b;
 }
 
 /* Center score pill */
 .score-ticker__center-pill {
-  width: 380px;
+  width: 460px;
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 6px 24px;
+  padding: 8px 26px;
   background: linear-gradient(180deg, #1e1b4b 0%, #0f0a2e 60%, #06031a 100%);
   border-radius: 40px;
   margin: -2px -4px;
@@ -1546,19 +1546,19 @@
 
 .score-ticker__matchup-bowling {
   font-weight: 700;
-  font-size: 12px;
+  font-size: 16px;
   letter-spacing: 0.12em;
   color: rgba(203, 213, 225, 0.7);
 }
 
 .score-ticker__matchup-vs {
-  font-size: 11px;
+  font-size: 14px;
   color: rgba(148, 163, 184, 0.5);
 }
 
 .score-ticker__matchup-batting {
   font-weight: 800;
-  font-size: 14px;
+  font-size: 18px;
   letter-spacing: 0.08em;
   color: #fff;
 }
@@ -1579,7 +1579,7 @@
 .score-ticker__score-value {
   font-family: 'Inter', system-ui, sans-serif;
   font-weight: 900;
-  font-size: 28px;
+  font-size: 38px;
   color: #fff;
   letter-spacing: -0.02em;
   line-height: 1.1;
@@ -1587,7 +1587,7 @@
 
 .score-ticker__innings-badge {
   font-weight: 700;
-  font-size: 12px;
+  font-size: 14px;
   color: #818cf8;
   border: 1px solid rgba(129, 140, 248, 0.4);
   padding: 2px 8px;
@@ -1596,13 +1596,13 @@
 
 .score-ticker__overs-value {
   font-weight: 800;
-  font-size: 18px;
+  font-size: 24px;
   color: #fff;
   letter-spacing: -0.01em;
 }
 
 .score-ticker__rate-line {
-  font-size: 10px;
+  font-size: 13px;
   font-weight: 600;
   letter-spacing: 0.15em;
   color: rgba(203, 213, 225, 0.6);
@@ -1631,7 +1631,7 @@
 
 .score-ticker__bowler-name {
   font-weight: 700;
-  font-size: 15px;
+  font-size: 20px;
   letter-spacing: 0.03em;
   color: #1e293b;
 }
@@ -1644,13 +1644,13 @@
 
 .score-ticker__bowler-wkts {
   font-weight: 900;
-  font-size: 22px;
+  font-size: 30px;
   color: #0f172a;
   line-height: 1;
 }
 
 .score-ticker__bowler-overs {
-  font-size: 12px;
+  font-size: 16px;
   font-weight: 500;
   color: #64748b;
 }
@@ -1663,13 +1663,13 @@
 }
 
 .score-ticker__ball {
-  width: 26px;
-  height: 26px;
+  width: 31px;
+  height: 31px;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 800;
   transition: transform 0.2s, background 0.2s;
 }
@@ -1742,7 +1742,7 @@
 }
 
 .score-ticker__info-title {
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 800;
   letter-spacing: 0.2em;
   text-transform: uppercase;
@@ -1757,7 +1757,7 @@
 }
 
 .score-ticker__info-label {
-  font-size: 12px;
+  font-size: 15px;
   font-weight: 700;
   letter-spacing: 0.08em;
   color: #64748b;
@@ -1765,7 +1765,7 @@
 
 .score-ticker__info-value {
   font-weight: 900;
-  font-size: 22px;
+  font-size: 30px;
   color: #0f172a;
   letter-spacing: 0.03em;
 }
@@ -1775,7 +1775,7 @@
 }
 
 .score-ticker__info-sub {
-  font-size: 11px;
+  font-size: 14px;
   font-weight: 700;
   letter-spacing: 0.12em;
   color: #64748b;
@@ -1783,7 +1783,7 @@
 
 .score-ticker__target-info {
   font-weight: 900;
-  font-size: 20px;
+  font-size: 26px;
   letter-spacing: 0.04em;
   color: #0f172a;
   white-space: nowrap;
@@ -3030,7 +3030,7 @@
   top: 14%;
   left: 24%;
   transform: translate(-50%, -50%);
-  width: 920px;
+  width: 1120px;
   max-height: 800px;
   overflow-y: auto;
   padding: 0;
@@ -3058,7 +3058,7 @@
   padding: 6px 20px;
   background: rgba(255, 255, 255, 0.06);
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  font-size: 13px;
+  font-size: 16px;
 }
 
 .score-obs__sc-inn1-team {
@@ -3079,7 +3079,7 @@
 
 .score-obs__sc-team-name {
   font-family: 'Inter', system-ui, sans-serif;
-  font-size: 18px;
+  font-size: 24px;
   font-weight: 800;
   color: #fff;
   letter-spacing: 0.05em;
@@ -3090,7 +3090,7 @@
   padding: 6px 18px;
   border-radius: 20px;
   font-family: 'Inter', system-ui, sans-serif;
-  font-size: 18px;
+  font-size: 24px;
   font-weight: 900;
   color: #fff;
   letter-spacing: 0.02em;
@@ -3108,7 +3108,7 @@
   display: flex;
   align-items: center;
   padding: 6px 12px;
-  font-size: 11px;
+  font-size: 14px;
   font-weight: 700;
   color: rgba(255, 255, 255, 0.4);
   text-transform: uppercase;
@@ -3120,7 +3120,7 @@
 .score-obs__sc-bat-row {
   display: flex;
   align-items: center;
-  padding: 8px 12px;
+  padding: 10px 14px;
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.03);
   border: 1px solid rgba(255, 255, 255, 0.04);
@@ -3143,7 +3143,7 @@
 .score-obs__sc-bat-row .score-obs__sc-col-name {
   flex: 2;
   font-weight: 700;
-  font-size: 13px;
+  font-size: 18px;
   color: #fff;
   display: flex;
   align-items: center;
@@ -3153,7 +3153,7 @@
 .score-obs__sc-bat-header .score-obs__sc-col-how,
 .score-obs__sc-bat-row .score-obs__sc-col-how {
   flex: 2;
-  font-size: 12px;
+  font-size: 15px;
   color: rgba(255, 255, 255, 0.5);
 }
 
@@ -3167,9 +3167,9 @@
 .score-obs__sc-bat-row .score-obs__sc-col-6,
 .score-obs__sc-bat-header .score-obs__sc-col-sr,
 .score-obs__sc-bat-row .score-obs__sc-col-sr {
-  width: 42px;
+  width: 58px;
   text-align: center;
-  font-size: 13px;
+  font-size: 17px;
   font-weight: 600;
   color: rgba(255, 255, 255, 0.7);
   flex-shrink: 0;
@@ -3183,13 +3183,13 @@
 .score-obs__sc-runs-active {
   background: linear-gradient(135deg, #ef4444, #dc2626);
   color: #fff !important;
-  width: 36px;
-  height: 36px;
+  width: 44px;
+  height: 44px;
   display: flex !important;
   align-items: center;
   justify-content: center;
   border-radius: 6px;
-  font-size: 16px !important;
+  font-size: 20px !important;
   font-weight: 900 !important;
 }
 
@@ -3217,7 +3217,7 @@
   padding: 8px 12px;
   background: linear-gradient(135deg, rgba(99, 102, 241, 0.2), rgba(168, 85, 247, 0.1));
   border-radius: 8px;
-  font-size: 12px;
+  font-size: 15px;
   font-weight: 700;
   letter-spacing: 0.08em;
   color: #a78bfa;
@@ -3228,7 +3228,7 @@
   display: flex;
   align-items: center;
   padding: 6px 12px;
-  font-size: 11px;
+  font-size: 14px;
   font-weight: 700;
   color: rgba(255, 255, 255, 0.4);
   text-transform: uppercase;
@@ -3239,7 +3239,7 @@
 .score-obs__sc-bowl-row {
   display: flex;
   align-items: center;
-  padding: 8px 12px;
+  padding: 10px 14px;
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.03);
   border: 1px solid rgba(255, 255, 255, 0.04);
@@ -3255,7 +3255,7 @@
 .score-obs__sc-bowl-row .score-obs__sc-col-name {
   flex: 2;
   font-weight: 700;
-  font-size: 13px;
+  font-size: 18px;
   color: #fff;
 }
 
@@ -3269,9 +3269,9 @@
 .score-obs__sc-bowl-row .score-obs__sc-col-w,
 .score-obs__sc-bowl-header .score-obs__sc-col-eco,
 .score-obs__sc-bowl-row .score-obs__sc-col-eco {
-  width: 50px;
+  width: 62px;
   text-align: center;
-  font-size: 13px;
+  font-size: 17px;
   font-weight: 600;
   color: rgba(255, 255, 255, 0.7);
   flex-shrink: 0;
@@ -3280,13 +3280,13 @@
 .score-obs__sc-wkts-active {
   background: linear-gradient(135deg, #a855f7, #7c3aed);
   color: #fff !important;
-  width: 32px;
-  height: 32px;
+  width: 42px;
+  height: 42px;
   display: flex !important;
   align-items: center;
   justify-content: center;
   border-radius: 6px;
-  font-size: 15px !important;
+  font-size: 20px !important;
   font-weight: 900 !important;
   margin: 0 auto;
 }
@@ -3302,7 +3302,7 @@
 }
 
 .score-obs__sc-footer-item {
-  font-size: 12px;
+  font-size: 15px;
   font-weight: 700;
   letter-spacing: 0.08em;
   color: rgba(255, 255, 255, 0.5);
@@ -3315,7 +3315,7 @@
   padding: 6px 16px;
   border-radius: 16px;
   font-family: 'Inter', system-ui, sans-serif;
-  font-size: 16px;
+  font-size: 22px;
   font-weight: 900;
   color: #fff;
   letter-spacing: 0.05em;

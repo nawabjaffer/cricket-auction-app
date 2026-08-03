@@ -418,6 +418,18 @@
   background: linear-gradient(135deg, #86efac, #34d399);
 }
 
+.score-dock__obs-relay {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  color: #422006;
+  background: linear-gradient(135deg, #fcd34d, #f59e0b);
+}
+
 .score-dock__obs-connect-panel {
   padding: 10px 14px 8px;
   background: rgba(59, 130, 246, 0.04);
@@ -510,6 +522,10 @@
 
 .score-dock__obs-hint--error { color: #f87171; }
 
+.score-dock__obs-hint--warn {
+  color: #fbbf24;
+}
+
 /* ═══════════════════════════════════════════════════════════════════════════
    REPLAY SOURCE CONTROL PANEL
    ═══════════════════════════════════════════════════════════════════════════ */
@@ -542,6 +558,17 @@
   color: #22c55e;
   background: rgba(34, 197, 94, 0.15);
   border: 1px solid rgba(34, 197, 94, 0.3);
+  padding: 1px 6px;
+  border-radius: 10px;
+}
+
+.score-dock__replay-relay-badge {
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: 0.8px;
+  color: #f59e0b;
+  background: rgba(245, 158, 11, 0.14);
+  border: 1px solid rgba(245, 158, 11, 0.35);
   padding: 1px 6px;
   border-radius: 10px;
 }

@@ -258,6 +258,16 @@ export class ScoringService {
     return snapshot.exists() ? snapshot.val() : null;
   }
 
+  async saveInnings(matchId: string, inningsNumber: 1 | 2, innings: Innings): Promise<void> {
+    const db = this.ensureDb();
+    await set(ref(db, `${this.basePath}/matches/${matchId}/innings/${inningsNumber}`), this.stripUndefinedDeep(innings));
+  }
+
+  async saveLiveScore(matchId: string, live: LiveScore): Promise<void> {
+    const db = this.ensureDb();
+    await set(ref(db, `${this.basePath}/matches/${matchId}/live`), this.stripUndefinedDeep(live));
+  }
+
   // ── Live Score Subscription ────────────────────────────────────────────────
 
   subscribeLiveScore(matchId: string, callback: (score: LiveScore) => void): () => void {

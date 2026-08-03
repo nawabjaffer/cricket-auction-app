@@ -55,22 +55,32 @@ export default function ScoringAdminPage() {
 
   // Initialize scoring service
   useEffect(() => {
+    let cancelled = false;
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
+
     const initScoring = async () => {
       try {
         await realtimeSync.ensureInitialized();
         const db = realtimeSync.getDatabase();
-        if (db) {
-          scoringService.initialize(db, tenantPath('scoring'));
-        } else {
-          console.error('[ScoringAdmin] Database not available after init');
-        }
+        if (!db) throw new Error('Database not available after init');
+        scoringService.initialize(db, tenantPath('scoring'));
+        if (!cancelled) setScoringReady(true);
       } catch (err) {
-        console.warn('[ScoringAdmin] Init warning (may already be initialized):', err);
+        console.warn('[ScoringAdmin] Init failed, retrying:', err);
+        if (!cancelled) {
+          setScoringReady(false);
+          retryTimer = setTimeout(() => {
+            void initScoring();
+          }, 800);
+        }
       }
-      // Always set ready — if scoringService was already initialized before, it's fine
-      setScoringReady(true);
     };
-    initScoring();
+    void initScoring();
+
+    return () => {
+      cancelled = true;
+      if (retryTimer) clearTimeout(retryTimer);
+    };
   }, []);
 
   // Auth check
@@ -106,6 +116,18 @@ export default function ScoringAdminPage() {
   }, []);
 
   if (!isAuthenticated) return null;
+
+  if (!scoringReady) {
+    return (
+      <div className="scoring-admin">
+        <div className="scoring-admin__bg" />
+        <div className="score-update score-update--loading" style={{ minHeight: '100vh' }}>
+          <div className="score-update__spinner" />
+          <p>Initializing scoring workspace...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="scoring-admin">
@@ -276,23 +298,68 @@ function MatchesTab({ matches, teams, soldPlayers, onFeedback, saving, setSaving
   baseUrl: string;
   config: ScoringOverlayConfig;
 }) {
+  type MatchListMode = 'time-default' | 'upcoming' | 'not-done' | 'live' | 'completed';
+  const formatDateTimeInput = (value: string) => {
+    if (!value) return '';
+    if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(value)) return value;
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) return value;
+    const year = parsed.getFullYear();
+    const month = String(parsed.getMonth() + 1).padStart(2, '0');
+    const day = String(parsed.getDate()).padStart(2, '0');
+    const hours = String(parsed.getHours()).padStart(2, '0');
+    const minutes = String(parsed.getMinutes()).padStart(2, '0');
+    return `${year}-${month}-${day}T${hours}:${minutes}`;
+  };
+  const localNowInputValue = () => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    const hours = String(now.getHours()).padStart(2, '0');
+    const minutes = String(now.getMinutes()).padStart(2, '0');
+    return `${year}-${month}-${day}T${hours}:${minutes}`;
+  };
+  const formatMatchDateTime = (value: string) => {
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) return value;
+    return parsed.toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' });
+  };
+  const getMatchTimeDistance = (value: string) => {
+    const parsed = new Date(value).getTime();
+    return Number.isNaN(parsed) ? Number.MAX_SAFE_INTEGER : Math.abs(parsed - Date.now());
+  };
+  const isTimeDefaultMatch = (match: MatchSetup) => {
+    if (match.status === 'live') return true;
+    if (match.status !== 'scheduled') return false;
+    const scheduledAt = new Date(match.date).getTime();
+    if (Number.isNaN(scheduledAt)) return false;
+    const now = Date.now();
+    return scheduledAt >= now - (30 * 60 * 1000) && scheduledAt <= now + (60 * 60 * 1000);
+  };
+
   const [showForm, setShowForm] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [squadMatchId, setSquadMatchId] = useState<string | null>(null);
   const [savedVenues, setSavedVenues] = useState<string[]>([]);
+  const [matchListMode, setMatchListMode] = useState<MatchListMode>('time-default');
   const [form, setForm] = useState({
-    teamAId: '', teamBId: '', venue: '', date: '', maxOvers: 20, powerplayOvers: 6,
+    teamAId: '', teamBId: '', venue: '', date: localNowInputValue(), maxOvers: 20, powerplayOvers: 6,
   });
   const [activeMatchId, setActiveMatchId] = useState<string | null>(null);
   const singleOverlayMode = !!config.singleOverlayMode;
 
   useEffect(() => {
-    const unsub = scoringService.subscribeActiveMatch(setActiveMatchId);
-    return unsub;
+    try {
+      const unsub = scoringService.subscribeActiveMatch(setActiveMatchId);
+      return unsub;
+    } catch {
+      return () => {};
+    }
   }, []);
 
   const resetForm = () => {
-    setForm({ teamAId: '', teamBId: '', venue: '', date: '', maxOvers: 20, powerplayOvers: 6 });
+    setForm({ teamAId: '', teamBId: '', venue: '', date: localNowInputValue(), maxOvers: 20, powerplayOvers: 6 });
     setEditId(null);
     setShowForm(false);
   };
@@ -332,7 +399,7 @@ function MatchesTab({ matches, teams, soldPlayers, onFeedback, saving, setSaving
         teamA: { id: teamA.id, name: teamA.name, logoUrl: teamA.logoUrl, primaryColor: teamA.primaryColor },
         teamB: { id: teamB.id, name: teamB.name, logoUrl: teamB.logoUrl, primaryColor: teamB.primaryColor },
         venue: form.venue,
-        date: form.date,
+        date: new Date(form.date).toISOString(),
         maxOvers: form.maxOvers,
         powerplayOvers: form.powerplayOvers,
         status: 'scheduled',
@@ -357,7 +424,7 @@ function MatchesTab({ matches, teams, soldPlayers, onFeedback, saving, setSaving
       teamAId: match.teamA.id,
       teamBId: match.teamB.id,
       venue: match.venue,
-      date: match.date,
+      date: formatDateTimeInput(match.date),
       maxOvers: match.maxOvers,
       powerplayOvers: match.powerplayOvers || (match.maxOvers <= 20 ? 6 : 10),
     });
@@ -519,13 +586,65 @@ function MatchesTab({ matches, teams, soldPlayers, onFeedback, saving, setSaving
     }
   };
 
+  const visibleMatches = useMemo(() => {
+    if (matchListMode === 'live') {
+      return [...matches]
+        .filter(match => match.status === 'live')
+        .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    }
+
+    if (matchListMode === 'completed') {
+      return [...matches]
+        .filter(match => match.status === 'completed')
+        .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    }
+
+    if (matchListMode === 'upcoming') {
+      return [...matches]
+        .filter(match => match.status === 'scheduled')
+        .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    }
+
+    if (matchListMode === 'not-done') {
+      return [...matches]
+        .filter(match => match.status !== 'completed')
+        .sort((a, b) => {
+          if (a.status === 'live' && b.status !== 'live') return -1;
+          if (b.status === 'live' && a.status !== 'live') return 1;
+          return new Date(a.date).getTime() - new Date(b.date).getTime();
+        });
+    }
+
+    return [...matches]
+      .filter(match => isTimeDefaultMatch(match))
+      .sort((a, b) => {
+        if (a.status === 'live' && b.status !== 'live') return -1;
+        if (b.status === 'live' && a.status !== 'live') return 1;
+        return getMatchTimeDistance(a.date) - getMatchTimeDistance(b.date);
+      });
+  }, [matchListMode, matches]);
+
   return (
     <div className="scoring-admin__section">
       <div className="scoring-admin__section-header">
         <h2>Matches</h2>
-        <button className="scoring-admin__btn scoring-admin__btn--primary" onClick={() => setShowForm(!showForm)}>
-          <IoAdd size={16} /> {showForm ? 'Cancel' : 'New Match'}
-        </button>
+        <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', marginLeft: 'auto' }}>
+          <select
+            className="scoring-admin__select"
+            value={matchListMode}
+            onChange={e => setMatchListMode(e.target.value as MatchListMode)}
+            style={{ minWidth: 170 }}
+          >
+            <option value="time-default">Time Default</option>
+            <option value="upcoming">Upcoming</option>
+            <option value="not-done">Not Done</option>
+            <option value="live">Live</option>
+            <option value="completed">Completed</option>
+          </select>
+          <button className="scoring-admin__btn scoring-admin__btn--primary" onClick={() => setShowForm(!showForm)}>
+            <IoAdd size={16} /> {showForm ? 'Cancel' : 'New Match'}
+          </button>
+        </div>
       </div>
 
       {singleOverlayMode && (
@@ -580,10 +699,10 @@ function MatchesTab({ matches, teams, soldPlayers, onFeedback, saving, setSaving
               <small className="scoring-admin__hint">Choose an existing location or type a new one. New venues are saved automatically.</small>
             </div>
             <div className="scoring-admin__field">
-              <label>Date *</label>
+              <label>Date & Time *</label>
               <div className="scoring-admin__date-row">
-                <input type="date" value={form.date} onChange={e => setForm(f => ({ ...f, date: e.target.value }))} className="scoring-admin__input" />
-                <button type="button" className="scoring-admin__btn scoring-admin__btn--sm" onClick={() => setForm(f => ({ ...f, date: new Date().toISOString().split('T')[0] }))}>Today</button>
+                <input type="datetime-local" value={form.date} onChange={e => setForm(f => ({ ...f, date: e.target.value }))} className="scoring-admin__input" />
+                <button type="button" className="scoring-admin__btn scoring-admin__btn--sm" onClick={() => setForm(f => ({ ...f, date: localNowInputValue() }))}>Now</button>
               </div>
             </div>
             <div className="scoring-admin__field">
@@ -614,10 +733,14 @@ function MatchesTab({ matches, teams, soldPlayers, onFeedback, saving, setSaving
 
       {/* Match list */}
       <div className="scoring-admin__match-list">
-        {matches.length === 0 && (
-          <div className="scoring-admin__empty">No matches created yet. Click "New Match" to get started.</div>
+        {visibleMatches.length === 0 && (
+          <div className="scoring-admin__empty">
+            {matchListMode === 'time-default'
+              ? 'No live or near-time matches right now. Switch to Upcoming, Live, or Completed from the dropdown.'
+              : 'No matches found in this category.'}
+          </div>
         )}
-        {matches.map(match => (
+        {visibleMatches.map(match => (
           <div key={match.id} className="scoring-admin__match-card">
             <div className="scoring-admin__match-teams">
               <span className="scoring-admin__team-name">{match.teamA.name}</span>
@@ -626,7 +749,7 @@ function MatchesTab({ matches, teams, soldPlayers, onFeedback, saving, setSaving
             </div>
             <div className="scoring-admin__match-meta">
               <span>{match.venue}</span>
-              <span>{new Date(match.date).toLocaleDateString()}</span>
+              <span>{formatMatchDateTime(match.date)}</span>
               <span>{match.maxOvers} overs</span>
               <span className={`scoring-admin__status scoring-admin__status--${match.status}`}>{match.status}</span>
               {singleOverlayMode && match.id === activeMatchId && (
@@ -641,7 +764,7 @@ function MatchesTab({ matches, teams, soldPlayers, onFeedback, saving, setSaving
             </div>
             {singleOverlayMode ? (
               <div className="scoring-admin__match-links">
-                <span className="scoring-admin__hint">🔗 Overlay / Dock / Scorer use the universal link (OBS WS tab) — no per-match link needed</span>
+                <span className="scoring-admin__hint">🔗 Overlay / Dock / Scorer use the universal quick actions above — no per-match link needed</span>
                 <button className="scoring-admin__link-btn" onClick={() => window.open(`${baseUrl}/cricket/scorer/camera?matchId=${match.id}`, '_blank')} title="Mobile Camera Recorder">
                   <IoVideocam size={13} /> Camera
                 </button>

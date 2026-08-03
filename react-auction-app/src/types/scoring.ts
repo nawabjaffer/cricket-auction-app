@@ -14,7 +14,7 @@ export interface MatchSetup {
   teamA: { id: string; name: string; logoUrl?: string; primaryColor?: string };
   teamB: { id: string; name: string; logoUrl?: string; primaryColor?: string };
   venue: string;
-  date: string;           // ISO date
+  date: string;           // ISO date-time
   maxOvers: number;       // e.g. 20 for T20
   powerplayOvers?: number; // e.g. 6 for T20 (default: maxOvers <= 20 ? 6 : 10)
   tossWonBy?: string;     // team ID
@@ -44,7 +44,8 @@ export type BallOutcome =
   | 'WD+1' | 'WD+2' | 'WD+3' | 'WD+4'  // wide + extra runs
   | 'NB+0' | 'NB+1' | 'NB+2' | 'NB+3' | 'NB+4' | 'NB+6' // no-ball + runs
   | 'B+1' | 'B+2' | 'B+3' | 'B+4'       // bye + runs
-  | 'LB+1' | 'LB+2' | 'LB+3' | 'LB+4'; // leg bye + runs
+  | 'LB+1' | 'LB+2' | 'LB+3' | 'LB+4'   // leg bye + runs
+  | 'PEN+1' | 'PEN+2' | 'PEN+3' | 'PEN+4' | 'PEN+5'; // penalty runs (non-legal ball)
 
 export type DismissalType =
   | 'bowled' | 'caught' | 'caught_and_bowled' | 'lbw' | 'run_out'
@@ -70,7 +71,7 @@ export interface BallEvent {
   runs: number;            // total runs from this ball
   batsmanRuns: number;     // runs credited to batsman
   extras: number;          // extra runs
-  extraType?: 'wide' | 'noball' | 'bye' | 'legbye';
+  extraType?: 'wide' | 'noball' | 'bye' | 'legbye' | 'penalty';
   isLegal: boolean;        // false for wides/no-balls
   isBoundary: boolean;
   isSix: boolean;
