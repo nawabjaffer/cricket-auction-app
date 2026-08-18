@@ -372,6 +372,39 @@
   color: #a1a1aa;
 }
 
+/* Match stage badge (league / qualifier / eliminator / final) */
+.scoring-admin__stage {
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  background: rgba(148, 163, 184, 0.16);
+  color: #cbd5e1;
+}
+
+.scoring-admin__stage--qualifier_1,
+.scoring-admin__stage--qualifier_2 {
+  background: rgba(56, 189, 248, 0.16);
+  color: #7dd3fc;
+}
+
+.scoring-admin__stage--eliminator {
+  background: rgba(249, 115, 22, 0.16);
+  color: #fdba74;
+}
+
+.scoring-admin__stage--semi_final {
+  background: rgba(168, 85, 247, 0.18);
+  color: #d8b4fe;
+}
+
+.scoring-admin__stage--final {
+  background: linear-gradient(135deg, rgba(251, 191, 36, 0.25), rgba(245, 158, 11, 0.25));
+  color: #fcd34d;
+}
+
 .scoring-admin__match-actions {
   display: flex;
   gap: 0.4rem;
@@ -1225,6 +1258,76 @@
 
 .obs-color-chip:hover {
   transform: scale(1.2);
+}
+
+/* CricHeroes innings picker */
+.scoring-admin__ch-innings {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.65rem;
+  margin-top: 0.4rem;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 0.82rem;
+  color: #e2e8f0;
+  cursor: pointer;
+}
+
+.scoring-admin__ch-innings:hover {
+  border-color: rgba(59, 130, 246, 0.4);
+}
+
+/* ═══════════════════════════════════════════════════════
+   OBS SERIES BUTTON STEPS
+   ═══════════════════════════════════════════════════════ */
+
+.obs-series-step {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+  padding: 0.5rem;
+  margin-top: 0.5rem;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.obs-series-step__index {
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: rgba(59, 130, 246, 0.25);
+  color: #93c5fd;
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.obs-series-step__delay {
+  width: 96px;
+  flex: 0 0 auto;
+}
+
+.obs-series-step__action {
+  width: 190px;
+  flex: 0 0 auto;
+}
+
+.obs-series-step__value {
+  flex: 1 1 180px;
+  min-width: 140px;
+}
+
+.obs-series-step__actions {
+  display: flex;
+  gap: 0.25rem;
+  margin-left: auto;
 }
 
 /* ═══════════════════════════════════════════════════════

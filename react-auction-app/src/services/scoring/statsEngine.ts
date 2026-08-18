@@ -8,6 +8,7 @@ import type {
   MatchStatsSnapshot, TournamentStats, PlayerMVPPoints, PlayerMatchStats,
   MVPWeights, Innings, BatsmanInnings, BowlerInnings,
   MatchSetup, PlayerCareerStats,
+  TournamentTeamScoreRecord, TournamentIndividualRecord,
 } from '../../types/scoring';
 import { DEFAULT_MVP_WEIGHTS, createEmptyCareerStats } from '../../types/scoring';
 
@@ -302,7 +303,10 @@ export class StatsEngine {
       matches: number; imageUrl?: string;
     }> = {};
 
-    for (const [, matchData] of Object.entries(matchesData)) {
+    let highestTeamScore: TournamentTeamScoreRecord | null = null;
+    let highestIndividualScore: TournamentIndividualRecord | null = null;
+
+    for (const [matchKey, matchData] of Object.entries(matchesData)) {
       const setup = matchData.setup;
       if (!setup || (setup.status !== 'completed' && setup.status !== 'live')) continue;
 
@@ -311,7 +315,31 @@ export class StatsEngine {
         const teamId = inn.battingTeamId;
         const teamName = teamId === setup.teamA.id ? setup.teamA.name : setup.teamB.name;
 
+        // Only completed innings can set a team-total record
+        if (inn.isCompleted && inn.totalRuns > (highestTeamScore?.runs ?? -1)) {
+          highestTeamScore = {
+            matchId: setup.id || matchKey,
+            teamId,
+            teamName,
+            runs: inn.totalRuns,
+            wickets: inn.totalWickets,
+            overs: inn.totalOvers,
+            opponentName: teamId === setup.teamA.id ? setup.teamB.name : setup.teamA.name,
+          };
+        }
+
         for (const bat of (inn.batsmen || [])) {
+          if (bat.runs > (highestIndividualScore?.runs ?? -1)) {
+            highestIndividualScore = {
+              matchId: setup.id || matchKey,
+              playerId: bat.playerId,
+              playerName: bat.playerName,
+              teamId,
+              runs: bat.runs,
+              balls: bat.balls,
+            };
+          }
+
           if (!playerAgg[bat.playerId]) {
             playerAgg[bat.playerId] = {
               playerName: bat.playerName, teamId, teamName,
@@ -433,6 +461,8 @@ export class StatsEngine {
         playerId: id, playerName: p.playerName, teamId: p.teamId, teamName: p.teamName, fours: p.fours,
       })),
       topStrikeRates: srArr.slice(0, 10),
+      highestTeamScore,
+      highestIndividualScore,
       lastUpdated: Date.now(),
     };
 
@@ -606,6 +636,8 @@ export class StatsEngine {
       topSixHitters: [],
       topFourHitters: [],
       topStrikeRates: [],
+      highestTeamScore: null,
+      highestIndividualScore: null,
       lastUpdated: Date.now(),
     };
   }

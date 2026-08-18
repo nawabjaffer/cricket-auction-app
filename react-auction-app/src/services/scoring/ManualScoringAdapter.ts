@@ -232,7 +232,7 @@ export class ManualScoringAdapter implements IScoringAdapter {
     const allBatsmen = this.updateAllBatsmen(
       currentLive.allBatsmen || [],
       currentLive.currentBatsmen,
-      batsmanRuns, isLegal, wicket,
+      wicket,
     );
     const allBowlers = this.updateAllBowlers(
       currentLive.allBowlers || [],
@@ -298,6 +298,26 @@ export class ManualScoringAdapter implements IScoringAdapter {
     };
 
     // Build updated innings
+    const updatedOvers = [...(currentInnings.overs || [])];
+    const currentOverNumber = ballEvent.overNumber;
+    let over = updatedOvers.find(item => item.number === currentOverNumber);
+    if (!over) {
+      over = {
+        number: currentOverNumber,
+        bowlerId: currentLive.currentBowler.playerId,
+        bowlerName: currentLive.currentBowler.playerName,
+        balls: [],
+        runs: 0,
+        wickets: 0,
+        extras: 0,
+      };
+      updatedOvers.push(over);
+    }
+    over.balls = [...over.balls, ballEvent];
+    over.runs += totalRuns;
+    over.wickets += wicket ? 1 : 0;
+    over.extras += extras;
+
     const updatedInnings: Innings = {
       ...currentInnings,
       totalRuns: newRuns,
@@ -307,6 +327,7 @@ export class ManualScoringAdapter implements IScoringAdapter {
       batsmen: allBatsmen,
       bowlers: allBowlers,
       fallOfWickets,
+      overs: updatedOvers,
       isCompleted: false,
     };
 
@@ -369,8 +390,6 @@ export class ManualScoringAdapter implements IScoringAdapter {
   private updateAllBatsmen(
     existing: BatsmanInnings[],
     currentPair: [LiveBatsman, LiveBatsman],
-    batsmanRuns: number,
-    isLegal: boolean,
     wicket?: WicketDetail,
   ): BatsmanInnings[] {
     const result = [...existing];
@@ -402,23 +421,6 @@ export class ManualScoringAdapter implements IScoringAdapter {
           strikeRate: bat.strikeRate,
         };
       }
-    }
-
-    // Update striker with this ball's runs
-    const strikerLive = currentPair[0]; // striker is always index 0
-    const strikerIdx = result.findIndex(b => b.playerId === strikerLive.playerId);
-    if (strikerIdx !== -1) {
-      const s = result[strikerIdx];
-      result[strikerIdx] = {
-        ...s,
-        runs: s.runs + batsmanRuns,
-        balls: s.balls + (isLegal ? 1 : 0),
-        fours: s.fours + (batsmanRuns === 4 ? 1 : 0),
-        sixes: s.sixes + (batsmanRuns === 6 ? 1 : 0),
-        strikeRate: (s.balls + (isLegal ? 1 : 0)) > 0
-          ? Math.round(((s.runs + batsmanRuns) / (s.balls + (isLegal ? 1 : 0))) * 100 * 100) / 100
-          : 0,
-      };
     }
 
     // Mark dismissal

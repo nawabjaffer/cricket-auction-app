@@ -22,6 +22,7 @@ import type {
   ImpactPlayer,
 } from '../types/scoring';
 import PreMatchOverlay from './PreMatchOverlay';
+import { MATCH_STAGE_LABELS } from '../types/scoring';
 import './ScoreOBSOverlayPage.css';
 
 const DEFAULT_OVERLAY_CONFIG: ScoringOverlayConfig = {
@@ -49,6 +50,36 @@ const FB_CONFIG = {
 const SCORE_OBS_APP = 'score-obs';
 const obsApp = getApps().find(a => a.name === SCORE_OBS_APP) ?? initializeApp(FB_CONFIG, SCORE_OBS_APP);
 const obsDb = getDatabase(obsApp);
+
+/**
+ * Shorten a player name so it fits the fixed-width ticker slots.
+ * Falls back progressively: full name → first name + initial → first name.
+ */
+function tickerName(rawName: string, maxChars = 14): string {
+  const name = (rawName || '').trim().replace(/\s+/g, ' ');
+  if (!name) return '—';
+  if (name.length <= maxChars) return name.toUpperCase();
+
+  const parts = name.split(' ').filter(Boolean);
+  if (parts.length === 1) return parts[0].toUpperCase();
+
+  const first = parts[0];
+  const lastInitial = parts[parts.length - 1].charAt(0);
+  const withInitial = `${first} ${lastInitial}`;
+  if (withInitial.length <= maxChars) return withInitial.toUpperCase();
+
+  return first.toUpperCase();
+}
+
+/** Prefer the surname for compact slots, shortening it when it is very long. */
+function tickerSurname(rawName: string, maxChars = 12): string {
+  const name = (rawName || '').trim().replace(/\s+/g, ' ');
+  if (!name) return '—';
+  const parts = name.split(' ').filter(Boolean);
+  const surname = parts.length > 1 ? parts[parts.length - 1] : parts[0];
+  if (surname.length <= maxChars) return surname.toUpperCase();
+  return tickerName(name, maxChars);
+}
 
 export default function ScoreOBSOverlayPage() {
   const [matchId, setMatchId] = useState<string | null>(null);
@@ -632,6 +663,9 @@ export default function ScoreOBSOverlayPage() {
           )}
         </div>
         <div className="score-obs__top-right">
+          {match?.stage && match.stage !== 'league' && (
+            <span className="score-obs__stage-badge">{MATCH_STAGE_LABELS[match.stage]}</span>
+          )}
           {config.showLiveBadge && match?.status !== 'completed' && (
             <span className="score-obs__live-badge">● LIVE</span>
           )}
@@ -1079,8 +1113,12 @@ function FullScorecardOverlay({ live, battingTeam, bowlingTeam, innings, match }
   innings?: Record<string, Innings>;
   match?: MatchSetup | null;
 }) {
-  const allBatsmen = live.allBatsmen || [];
-  const allBowlers = live.allBowlers || [];
+  const activeInnings = innings?.[String(live.currentInnings)];
+  const allBatsmen = activeInnings?.batsmen || live.allBatsmen || [];
+  const allBowlers = activeInnings?.bowlers || live.allBowlers || [];
+  const scoreRuns = activeInnings?.totalRuns ?? live.runs;
+  const scoreWickets = activeInnings?.totalWickets ?? live.wickets;
+  const scoreOvers = activeInnings?.totalOvers ?? live.overs;
   // Show 1st innings summary when in 2nd innings
   const inn1 = innings?.['1'];
   const showInn1Summary = live.currentInnings === 2 && inn1;
@@ -1102,7 +1140,7 @@ function FullScorecardOverlay({ live, battingTeam, bowlingTeam, innings, match }
           <span className="score-obs__sc-team-name">{battingTeam.toUpperCase()}</span>
         </div>
         <div className="score-obs__sc-score-badge">
-          {live.runs}/{live.wickets} ({live.overs} ov)
+          {scoreRuns}/{scoreWickets} ({scoreOvers} ov)
         </div>
       </div>
 
@@ -1229,11 +1267,11 @@ function FullScorecardOverlay({ live, battingTeam, bowlingTeam, innings, match }
 
       {/* Summary Footer */}
       <div className="score-obs__sc-footer">
-        <span className="score-obs__sc-footer-item">OVERS {live.overs}</span>
+        <span className="score-obs__sc-footer-item">OVERS {scoreOvers}</span>
         <span className="score-obs__sc-footer-item">CRR {live.runRate}</span>
         {live.requiredRate !== undefined && <span className="score-obs__sc-footer-item">RRR {live.requiredRate}</span>}
         <span className="score-obs__sc-footer-item">P'SHIP {(live.partnership || { runs: 0, balls: 0 }).runs}({(live.partnership || { runs: 0, balls: 0 }).balls})</span>
-        <span className="score-obs__sc-footer-total">TOTAL {live.runs}-{live.wickets}</span>
+        <span className="score-obs__sc-footer-total">TOTAL {scoreRuns}-{scoreWickets}</span>
       </div>
     </motion.div>
   );
@@ -2326,7 +2364,7 @@ function ScorecardTicker({ live, match, battingTeam, bowlingTeam, config, lineup
                     }
                   </div>
                   <div className="score-ticker__prem-bat-info">
-                    <span className="score-ticker__prem-bat-name">{b.playerName.split(' ').slice(0, 2).join(' ').toUpperCase()}</span>
+                    <span className="score-ticker__prem-bat-name" title={b.playerName}>{tickerName(b.playerName, 16)}</span>
                     <div className="score-ticker__prem-bat-stats">
                       <span className="score-ticker__prem-bat-runs">{b.runs}</span>
                       <span className="score-ticker__prem-bat-balls">{b.balls}</span>
@@ -2353,8 +2391,8 @@ function ScorecardTicker({ live, match, battingTeam, bowlingTeam, config, lineup
             }
           </div>
           <div className="score-ticker__gold-bowler">
-            <div className="score-ticker__gold-bowler-name">
-              {live.currentBowler.playerName.toUpperCase()}
+            <div className="score-ticker__gold-bowler-name" title={live.currentBowler.playerName}>
+              {tickerName(live.currentBowler.playerName, 16)}
             </div>
             <div className="score-ticker__gold-bowler-figures">
               {live.currentBowler.wickets}-{live.currentBowler.runs} ({live.currentBowler.overs})
@@ -2430,7 +2468,7 @@ function ScorecardTicker({ live, match, battingTeam, bowlingTeam, config, lineup
               <div className="score-ticker__bat-indicator">
                 {b.isOnStrike && <span className="score-ticker__strike-icon" />}
               </div>
-              <span className="score-ticker__bat-name">{b.playerName.split(' ').pop()?.toUpperCase()}</span>
+              <span className="score-ticker__bat-name" title={b.playerName}>{tickerSurname(b.playerName)}</span>
               <div className="score-ticker__bat-figures">
                 <span className="score-ticker__bat-runs">{b.runs}</span>
                 <span className="score-ticker__bat-balls">{b.balls}</span>
@@ -2467,7 +2505,7 @@ function ScorecardTicker({ live, match, battingTeam, bowlingTeam, config, lineup
       {/* Bowler stats + this over */}
       <div className="score-ticker__bowler-section">
         <div className="score-ticker__bowler-info">
-          <span className="score-ticker__bowler-name">{live.currentBowler.playerName.split(' ').pop()?.toUpperCase()}</span>
+          <span className="score-ticker__bowler-name" title={live.currentBowler.playerName}>{tickerSurname(live.currentBowler.playerName)}</span>
           <div className="score-ticker__bowler-figures">
             <span className="score-ticker__bowler-wkts">{live.currentBowler.wickets}-{live.currentBowler.runs}</span>
             <span className="score-ticker__bowler-overs">({live.currentBowler.overs})</span>

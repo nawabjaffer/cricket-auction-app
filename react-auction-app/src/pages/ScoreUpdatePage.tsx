@@ -12,12 +12,14 @@ import { useAdminAuth } from '../hooks/useAdminAuth';
 import { useTenantNavigate as useNavigate } from '../hooks/useTenantNavigate';
 import { useScoringState } from '../hooks/useScoringState';
 import { scoringService } from '../services/scoring';
+import { statsEngine } from '../services/scoring/statsEngine';
 import { obsReplaySourceService } from '../services/scoring/obsReplaySourceService';
 import { realtimeSync } from '../services/realtimeSync';
 import { tenantPath } from '../services/tenantPath';
 import type {
   BallOutcome, DismissalType, WicketDetail, MatchSquadPlayer, OBSReplayButton,
   TickerStatWidget, Innings, BatsmanInnings, BowlerInnings, LiveScore,
+  TournamentStats,
 } from '../types/scoring';
 import FieldPlacementEditor from '../components/FieldPlacementEditor/FieldPlacementEditor';
 import './ScoreUpdatePage.css';
@@ -151,6 +153,8 @@ export default function ScoreUpdatePage() {
   const [tickerWidgetModes, setTickerWidgetModes] = useState<TickerStatWidget[]>(['run_rate']);
   const [showCompletedEditModal, setShowCompletedEditModal] = useState(false);
   const [completedEditFeedback, setCompletedEditFeedback] = useState('');
+  const [tournamentStats, setTournamentStats] = useState<TournamentStats | null>(null);
+  const [recordAlertDismissed, setRecordAlertDismissed] = useState(false);
 
   const handleStartNextMatch = useCallback(async () => {
     try {
@@ -205,6 +209,22 @@ export default function ScoreUpdatePage() {
     return () => window.removeEventListener('click', handleActivity);
   }, [isAuthenticated, navigate, extendSession]);
 
+  // Tournament records — powers the "closing in on the highest score" alert
+  useEffect(() => {
+    let unsub: (() => void) | undefined;
+    const load = async () => {
+      try {
+        await realtimeSync.ensureInitialized();
+        const db = realtimeSync.getDatabase();
+        if (!db) return;
+        try { statsEngine.initialize(db, tenantPath('scoring')); } catch { /* already initialized */ }
+        unsub = statsEngine.subscribeTournamentStats(setTournamentStats);
+      } catch { /* non-critical */ }
+    };
+    load();
+    return () => unsub?.();
+  }, []);
+
   useEffect(() => {
     const loadObsButtons = async () => {
       try {
@@ -229,8 +249,7 @@ export default function ScoreUpdatePage() {
     loadObsButtons();
   }, []);
 
-  const saveTickerWidgetModes = useCallback(async (nextModes: TickerStatWidget[]) => {
-    const normalized: TickerStatWidget[] = nextModes.length > 0 ? nextModes : ['run_rate'];
+  const saveTickerWidgetModes = useCallback(async (nextModes: TickerStatWidget[]) => {    const normalized: TickerStatWidget[] = nextModes.length > 0 ? nextModes : ['run_rate'];
     setTickerWidgetModes(normalized);
     try {
       const cfg = await scoringService.getOverlayConfig();
@@ -389,6 +408,16 @@ export default function ScoreUpdatePage() {
   const battingLineup = lineups.teamA?.teamId === liveScore.battingTeamId ? lineups.teamA : lineups.teamB;
   const bowlingLineup = lineups.teamA?.teamId === liveScore.bowlingTeamId ? lineups.teamA : lineups.teamB;
 
+  // Record chase: alert the scorer when the total closes in on the tournament best
+  const teamRecord = tournamentStats?.highestTeamScore || null;
+  const runsToRecord = teamRecord ? teamRecord.runs - liveScore.runs : null;
+  const isRecordBroken = runsToRecord !== null && runsToRecord < 0;
+  const isNearRecord = runsToRecord !== null && runsToRecord >= 0 && runsToRecord <= 20;
+  const showRecordAlert = !recordAlertDismissed
+    && !!teamRecord
+    && teamRecord.matchId !== match.id
+    && (isNearRecord || isRecordBroken);
+
   return (
     <div className="score-update">
       <ScoreHeader match={match} />
@@ -425,6 +454,53 @@ export default function ScoreUpdatePage() {
           </span>
         )}
       </div>
+
+      {/* ── Tournament Record Chase Alert ───────────────────────────── */}
+      {showRecordAlert && teamRecord && (
+        <div className={`score-update__record-alert ${isRecordBroken ? 'score-update__record-alert--broken' : ''}`}>
+          <div className="score-update__record-alert-text">
+            {isRecordBroken ? (
+              <>
+                <strong>🏆 New tournament record!</strong>
+                <span>
+                  Beat {teamRecord.teamName}&rsquo;s {teamRecord.runs}/{teamRecord.wickets}
+                  {' '}by {Math.abs(runsToRecord ?? 0)} run{Math.abs(runsToRecord ?? 0) === 1 ? '' : 's'}
+                </span>
+              </>
+            ) : (
+              <>
+                <strong>🔥 {runsToRecord} run{runsToRecord === 1 ? '' : 's'} to the tournament record</strong>
+                <span>
+                  Highest so far: {teamRecord.teamName} {teamRecord.runs}/{teamRecord.wickets} ({teamRecord.overs} ov)
+                  {teamRecord.opponentName ? ` vs ${teamRecord.opponentName}` : ''}
+                </span>
+              </>
+            )}
+          </div>
+          <div className="score-update__record-alert-actions">
+            <button
+              className="score-update__overlay-btn"
+              onClick={() => setOverlay('award_orange_cap')}
+              title="Show the tournament's highest run scorer on the broadcast"
+            >
+              🧢 Show Top Scorer
+            </button>
+            <button
+              className="score-update__overlay-btn"
+              onClick={() => setOverlay('match_summary')}
+              title="Show the match summary overlay"
+            >
+              📋 Summary
+            </button>
+            <button
+              className="score-update__overlay-btn score-update__overlay-btn--clear"
+              onClick={() => setRecordAlertDismissed(true)}
+            >
+              Dismiss
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* ── Live Score Strip ───────────────────────────────────────────── */}
       <div className="score-update__score-strip">
@@ -782,10 +858,13 @@ export default function ScoreUpdatePage() {
                 setObsRelayFeedback(`Sent: ${btn.label}`);
                 setTimeout(() => setObsRelayFeedback(''), 1800);
               }}
-              title={btn.hotkeyName ? `Mapped: ${btn.hotkeyName}` : btn.label}
+              title={btn.action === 'series'
+                ? `Series: ${(btn.series || []).length} steps`
+                : (btn.hotkeyName ? `Mapped: ${btn.hotkeyName}` : btn.label)}
             >
               <span>{btn.icon}</span>
               <span>{btn.label}</span>
+              {btn.action === 'series' && <span style={{ opacity: 0.75 }}>({(btn.series || []).length})</span>}
             </button>
           ))}
           {obsRelayFeedback && (

@@ -15,7 +15,7 @@
 
 import { ref, onValue, set, push, type Database } from 'firebase/database';
 import { obsService } from '../obsService';
-import type { OBSReplayButton, OBSReplayConfig } from '../../types/scoring';
+import type { OBSReplayButton, OBSReplayConfig, OBSButtonSeriesStep } from '../../types/scoring';
 
 // Default preset buttons — each maps to the typical Replay Source hotkey names.
 // The user can override these after running "Discover Hotkeys".
@@ -133,23 +133,49 @@ class OBSReplaySourceService {
   // ── Direct action execution (when the dock is on the OBS machine) ──────────
 
   async executeButton(button: OBSReplayButton): Promise<boolean> {
-    switch (button.action) {
+    if (button.action === 'series') {
+      return this.executeSeries(button);
+    }
+    return this.executeAction(button);
+  }
+
+  /** Run each configured step in order, waiting the step delay before firing it. */
+  private async executeSeries(button: OBSReplayButton): Promise<boolean> {
+    const steps = [...(button.series || [])];
+    if (steps.length === 0) return false;
+
+    let allOk = true;
+    for (const step of steps) {
+      const wait = Math.max(0, Number(step.delayMs) || 0);
+      if (wait > 0) {
+        // eslint-disable-next-line no-await-in-loop
+        await new Promise(resolve => setTimeout(resolve, wait));
+      }
+      // eslint-disable-next-line no-await-in-loop
+      const ok = await this.executeAction(step);
+      if (!ok) allOk = false;
+    }
+    return allOk;
+  }
+
+  private async executeAction(step: OBSReplayButton | OBSButtonSeriesStep): Promise<boolean> {
+    switch (step.action) {
       case 'hotkey_name':
-        if (!button.hotkeyName) return false;
-        return obsService.triggerHotkeyByName(button.hotkeyName);
+        if (!step.hotkeyName) return false;
+        return obsService.triggerHotkeyByName(step.hotkeyName);
 
       case 'hotkey_sequence':
-        if (!button.keySequence?.keyId) return false;
+        if (!step.keySequence?.keyId) return false;
         return obsService.triggerHotkeyByKeySequence(
-          button.keySequence.keyId,
-          button.keySequence.shift,
-          button.keySequence.ctrl,
-          button.keySequence.alt,
+          step.keySequence.keyId,
+          step.keySequence.shift,
+          step.keySequence.ctrl,
+          step.keySequence.alt,
         );
 
       case 'scene_switch':
-        if (!button.sceneName) return false;
-        return obsService.setScene(button.sceneName);
+        if (!step.sceneName) return false;
+        return obsService.setScene(step.sceneName);
 
       case 'replay_buffer_save':
         await obsService.request('SaveReplayBuffer');

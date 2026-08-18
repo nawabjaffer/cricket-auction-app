@@ -16,9 +16,11 @@ import { useTeams, useSoldPlayers } from '../store';
 import { tenantPath } from '../services/tenantPath';
 import { realtimeSync } from '../services/realtimeSync';
 import { scoringService } from '../services/scoring';
+import { cricHeroesReader, isValidCricHeroesUrl } from '../services/scoring/cricHeroesReader';
+import type { CricHeroesSnapshot } from '../services/scoring/cricHeroesReader';
 import { uploadFileToStorage } from '../services';
-import { DEFAULT_MVP_WEIGHTS } from '../types/scoring';
-import type { MatchSetup, ScoringAd, ScoringOverlayConfig, LiveQuestion, MatchScoringConfig, PreMatchState, PreMatchPhase, ImpactPlayer, TossConfig, MatchLineup, TickerConfig, OBSWebSocketConfig, MVPWeights, AnimationConfig, OBSReplayButton, OBSReplayConfig, TickerStatWidget } from '../types/scoring';
+import { DEFAULT_MVP_WEIGHTS, MATCH_STAGE_LABELS } from '../types/scoring';
+import type { MatchSetup, MatchStage, ScoringAd, ScoringOverlayConfig, LiveQuestion, MatchScoringConfig, PreMatchState, PreMatchPhase, ImpactPlayer, TossConfig, MatchLineup, TickerConfig, OBSWebSocketConfig, MVPWeights, AnimationConfig, OBSReplayButton, OBSButtonSeriesStep, OBSReplayConfig, TickerStatWidget } from '../types/scoring';
 import type { SoldPlayer } from '../types';
 import './ScoringAdminPage.css';
 
@@ -345,6 +347,7 @@ function MatchesTab({ matches, teams, soldPlayers, onFeedback, saving, setSaving
   const [matchListMode, setMatchListMode] = useState<MatchListMode>('time-default');
   const [form, setForm] = useState({
     teamAId: '', teamBId: '', venue: '', date: localNowInputValue(), maxOvers: 20, powerplayOvers: 6,
+    stage: 'league' as MatchStage,
   });
   const [activeMatchId, setActiveMatchId] = useState<string | null>(null);
   const singleOverlayMode = !!config.singleOverlayMode;
@@ -359,7 +362,7 @@ function MatchesTab({ matches, teams, soldPlayers, onFeedback, saving, setSaving
   }, []);
 
   const resetForm = () => {
-    setForm({ teamAId: '', teamBId: '', venue: '', date: localNowInputValue(), maxOvers: 20, powerplayOvers: 6 });
+    setForm({ teamAId: '', teamBId: '', venue: '', date: localNowInputValue(), maxOvers: 20, powerplayOvers: 6, stage: 'league' });
     setEditId(null);
     setShowForm(false);
   };
@@ -402,6 +405,7 @@ function MatchesTab({ matches, teams, soldPlayers, onFeedback, saving, setSaving
         date: new Date(form.date).toISOString(),
         maxOvers: form.maxOvers,
         powerplayOvers: form.powerplayOvers,
+        stage: form.stage,
         status: 'scheduled',
         createdAt: editId ? (matches.find(m => m.id === editId)?.createdAt ?? Date.now()) : Date.now(),
         updatedAt: Date.now(),
@@ -427,6 +431,7 @@ function MatchesTab({ matches, teams, soldPlayers, onFeedback, saving, setSaving
       date: formatDateTimeInput(match.date),
       maxOvers: match.maxOvers,
       powerplayOvers: match.powerplayOvers || (match.maxOvers <= 20 ? 6 : 10),
+      stage: match.stage || 'league',
     });
     setEditId(match.id);
     setShowForm(true);
@@ -718,6 +723,19 @@ function MatchesTab({ matches, teams, soldPlayers, onFeedback, saving, setSaving
               <label>Powerplay Overs</label>
               <input type="number" min={1} max={form.maxOvers} value={form.powerplayOvers} onChange={e => setForm(f => ({ ...f, powerplayOvers: Number(e.target.value) }))} className="scoring-admin__input" />
             </div>
+            <div className="scoring-admin__field">
+              <label>Match Type</label>
+              <select
+                value={form.stage}
+                onChange={e => setForm(f => ({ ...f, stage: e.target.value as MatchStage }))}
+                className="scoring-admin__select"
+              >
+                {(Object.keys(MATCH_STAGE_LABELS) as MatchStage[]).map(stage => (
+                  <option key={stage} value={stage}>{MATCH_STAGE_LABELS[stage]}</option>
+                ))}
+              </select>
+              <small className="scoring-admin__hint">Shown on the broadcast overlay and match list.</small>
+            </div>
             <div className="scoring-admin__field" style={{ gridColumn: '1 / -1' }}>
               <small className="scoring-admin__hint">Toss is captured when scorer opens Edit Scorecard and starts the first innings.</small>
             </div>
@@ -751,6 +769,9 @@ function MatchesTab({ matches, teams, soldPlayers, onFeedback, saving, setSaving
               <span>{match.venue}</span>
               <span>{formatMatchDateTime(match.date)}</span>
               <span>{match.maxOvers} overs</span>
+              <span className={`scoring-admin__stage scoring-admin__stage--${match.stage || 'league'}`}>
+                {MATCH_STAGE_LABELS[match.stage || 'league']}
+              </span>
               <span className={`scoring-admin__status scoring-admin__status--${match.status}`}>{match.status}</span>
               {singleOverlayMode && match.id === activeMatchId && (
                 <span className="scoring-admin__status scoring-admin__status--live">🔗 ACTIVE OVERLAY</span>
@@ -968,6 +989,8 @@ function ProviderTab({ matches, onFeedback }: {
         </div>
       ))}
 
+      <CricHeroesReaderPanel matches={matches} configs={configs} setConfigs={setConfigs} onFeedback={onFeedback} />
+
       <div className="scoring-admin__form-card" style={{ marginTop: '1.5rem' }}>
         <h3 className="scoring-admin__subsection-title">🔌 Future Adapters</h3>
         <p className="scoring-admin__hint">
@@ -975,6 +998,184 @@ function ProviderTab({ matches, onFeedback }: {
           Contact the development team to add a new adapter.
         </p>
       </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// CRICHEROES READER PANEL — read an external scorecard URL into our scorer
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function CricHeroesReaderPanel({ matches, configs, setConfigs, onFeedback }: Readonly<{
+  matches: MatchSetup[];
+  configs: Record<string, MatchScoringConfig>;
+  setConfigs: React.Dispatch<React.SetStateAction<Record<string, MatchScoringConfig>>>;
+  onFeedback: (msg: string) => void;
+}>) {
+  const [targetMatchId, setTargetMatchId] = useState('');
+  const [sourceUrl, setSourceUrl] = useState('');
+  const [proxyUrl, setProxyUrl] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [snapshot, setSnapshot] = useState<CricHeroesSnapshot | null>(null);
+  const [error, setError] = useState('');
+  const [inningsIndex, setInningsIndex] = useState(0);
+
+  const targetMatch = matches.find(m => m.id === targetMatchId);
+
+  useEffect(() => {
+    if (!targetMatchId) return;
+    const cfg = configs[targetMatchId];
+    if (cfg?.externalMatchUrl) setSourceUrl(cfg.externalMatchUrl);
+    if (cfg?.proxyBaseUrl) setProxyUrl(cfg.proxyBaseUrl);
+  }, [targetMatchId, configs]);
+
+  const handleRead = async () => {
+    setError('');
+    setSnapshot(null);
+    if (!isValidCricHeroesUrl(sourceUrl)) {
+      setError('Enter a full CricHeroes scorecard URL, e.g. https://cricheroes.com/scorecard/26660839/...');
+      return;
+    }
+    setBusy(true);
+    try {
+      cricHeroesReader.setPreferredProxy(proxyUrl);
+      const result = await cricHeroesReader.readScorecard(sourceUrl.trim());
+      setSnapshot(result);
+      setInningsIndex(0);
+      onFeedback(`Read ${result.innings.length} innings from CricHeroes`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleApply = async () => {
+    if (!snapshot || !targetMatch) return;
+    setBusy(true);
+    try {
+      const live = cricHeroesReader.toLiveScore(snapshot, {
+        matchId: targetMatch.id,
+        teamAId: targetMatch.teamA.id,
+        teamAName: targetMatch.teamA.name,
+        teamBId: targetMatch.teamB.id,
+        teamBName: targetMatch.teamB.name,
+        maxOvers: targetMatch.maxOvers,
+      }, inningsIndex);
+
+      if (!live) {
+        setError('Selected innings could not be mapped.');
+        return;
+      }
+
+      await scoringService.saveLiveScore(targetMatch.id, live);
+
+      const config: MatchScoringConfig = {
+        ...(configs[targetMatch.id] || { provider: 'cricheroes' }),
+        provider: 'cricheroes',
+        externalMatchId: snapshot.sourceMatchId,
+        externalMatchUrl: snapshot.sourceUrl,
+        proxyBaseUrl: proxyUrl || undefined,
+      };
+      await scoringService.configureMatchScoring(targetMatch.id, config);
+      setConfigs(prev => ({ ...prev, [targetMatch.id]: config }));
+
+      onFeedback('CricHeroes score applied to the live scorecard');
+    } catch (err) {
+      setError(`Failed to apply: ${String(err)}`);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="scoring-admin__form-card" style={{ marginTop: '1.5rem' }}>
+      <h3 className="scoring-admin__subsection-title">📥 CricHeroes Score Reader</h3>
+      <p className="scoring-admin__hint">
+        Paste a public CricHeroes scorecard URL, read the live score, then apply it onto one of your matches.
+        The page is fetched through a CORS proxy — set your own proxy below if the public ones are rate-limited.
+      </p>
+
+      <div className="scoring-admin__form-grid">
+        <div className="scoring-admin__field" style={{ gridColumn: '1 / -1' }}>
+          <label htmlFor="ch-url">CricHeroes Scorecard URL</label>
+          <input
+            id="ch-url"
+            className="scoring-admin__input"
+            value={sourceUrl}
+            onChange={e => setSourceUrl(e.target.value)}
+            placeholder="https://cricheroes.com/scorecard/26660839/.../summary"
+          />
+        </div>
+
+        <div className="scoring-admin__field">
+          <label htmlFor="ch-target">Apply To Match</label>
+          <select
+            id="ch-target"
+            className="scoring-admin__select"
+            value={targetMatchId}
+            onChange={e => setTargetMatchId(e.target.value)}
+          >
+            <option value="">— Select match —</option>
+            {matches.map(m => (
+              <option key={m.id} value={m.id}>{m.teamA.name} vs {m.teamB.name} ({m.status})</option>
+            ))}
+          </select>
+        </div>
+
+        <div className="scoring-admin__field">
+          <label htmlFor="ch-proxy">Custom CORS Proxy (optional)</label>
+          <input
+            id="ch-proxy"
+            className="scoring-admin__input"
+            value={proxyUrl}
+            onChange={e => setProxyUrl(e.target.value)}
+            placeholder="https://your-proxy/?url={url}"
+          />
+        </div>
+      </div>
+
+      <div className="scoring-admin__form-actions">
+        <button className="scoring-admin__btn scoring-admin__btn--secondary" onClick={handleRead} disabled={busy}>
+          {busy ? 'Reading…' : 'Read Scorecard'}
+        </button>
+        <button
+          className="scoring-admin__btn scoring-admin__btn--primary"
+          onClick={handleApply}
+          disabled={busy || !snapshot || !targetMatch}
+        >
+          <IoSave size={16} /> Apply To Scorer
+        </button>
+      </div>
+
+      {error && <p className="scoring-admin__hint" style={{ color: '#f87171' }}>{error}</p>}
+
+      {snapshot && (
+        <div style={{ marginTop: '0.9rem' }}>
+          <p className="scoring-admin__hint">
+            <strong>{snapshot.title}</strong> — parsed via {snapshot.parseMode}
+            {snapshot.venue ? ` · ${snapshot.venue}` : ''}
+          </p>
+          {snapshot.warnings.map(w => (
+            <p key={w} className="scoring-admin__hint" style={{ color: '#fbbf24' }}>⚠ {w}</p>
+          ))}
+
+          {snapshot.innings.map((inn, i) => (
+            <label key={`${inn.teamName}-${i}`} className="scoring-admin__ch-innings">
+              <input
+                type="radio"
+                name="ch-innings"
+                checked={inningsIndex === i}
+                onChange={() => setInningsIndex(i)}
+              />
+              <span>
+                <strong>{inn.teamName}</strong> {inn.runs}/{inn.wickets} ({inn.overs} ov)
+                {' · '}{inn.batsmen.length} batters, {inn.bowlers.length} bowlers
+              </span>
+            </label>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -2737,6 +2938,36 @@ function OBSWebSocketTab({ config, setConfig, onFeedback, baseUrl }: {
     updateReplayConfig({ buttons: buttons.map((b, i) => ({ ...b, order: i })) });
   };
 
+  const updateSeriesStep = (btnIdx: number, stepIdx: number, updates: Partial<OBSButtonSeriesStep>) => {
+    const steps = [...(replayConfig.buttons[btnIdx].series || [])];
+    steps[stepIdx] = { ...steps[stepIdx], ...updates };
+    updateButton(btnIdx, { series: steps });
+  };
+
+  const addSeriesStep = (btnIdx: number) => {
+    const steps = [...(replayConfig.buttons[btnIdx].series || [])];
+    steps.push({
+      id: `step_${Date.now()}_${steps.length}`,
+      delayMs: steps.length === 0 ? 0 : 1000,
+      action: 'hotkey_name',
+      hotkeyName: '',
+    });
+    updateButton(btnIdx, { series: steps });
+  };
+
+  const removeSeriesStep = (btnIdx: number, stepIdx: number) => {
+    const steps = (replayConfig.buttons[btnIdx].series || []).filter((_, i) => i !== stepIdx);
+    updateButton(btnIdx, { series: steps });
+  };
+
+  const moveSeriesStep = (btnIdx: number, stepIdx: number, dir: -1 | 1) => {
+    const steps = [...(replayConfig.buttons[btnIdx].series || [])];
+    const target = stepIdx + dir;
+    if (target < 0 || target >= steps.length) return;
+    [steps[stepIdx], steps[target]] = [steps[target], steps[stepIdx]];
+    updateButton(btnIdx, { series: steps });
+  };
+
   const handleSave = async () => {
     setSaving(true);
     try {
@@ -3052,6 +3283,7 @@ function OBSWebSocketTab({ config, setConfig, onFeedback, baseUrl }: {
                       <option value="replay_buffer_save">Save Replay Buffer</option>
                       <option value="replay_buffer_start">Start Replay Buffer</option>
                       <option value="replay_buffer_stop">Stop Replay Buffer</option>
+                      <option value="series">Series (run multiple steps with delays)</option>
                     </select>
                   </div>
 
@@ -3124,6 +3356,112 @@ function OBSWebSocketTab({ config, setConfig, onFeedback, baseUrl }: {
                         onChange={e => updateButton(idx, { sceneName: e.target.value })}
                         placeholder="e.g. Replay"
                       />
+                    </div>
+                  )}
+
+                  {btn.action === 'series' && (
+                    <div className="scoring-admin__field" style={{ gridColumn: '1 / -1' }}>
+                      <label>Series Steps</label>
+                      <small className="scoring-admin__hint">
+                        Steps run top to bottom. Each step waits its delay first, so a replay can be
+                        &ldquo;switch scene → wait 500ms → play replay → wait 8s → back to live&rdquo;.
+                      </small>
+
+                      {(btn.series || []).map((step, stepIdx) => (
+                        <div key={step.id} className="obs-series-step">
+                          <span className="obs-series-step__index">{stepIdx + 1}</span>
+
+                          <input
+                            className="scoring-admin__input obs-series-step__delay"
+                            type="number"
+                            min={0}
+                            step={100}
+                            value={step.delayMs}
+                            onChange={e => updateSeriesStep(idx, stepIdx, { delayMs: Number(e.target.value) })}
+                            placeholder="Delay ms"
+                            title="Delay in milliseconds before this step"
+                          />
+
+                          <select
+                            className="scoring-admin__input obs-series-step__action"
+                            value={step.action}
+                            onChange={e => updateSeriesStep(idx, stepIdx, {
+                              action: e.target.value as OBSButtonSeriesStep['action'],
+                            })}
+                          >
+                            <option value="hotkey_name">Hotkey by Name</option>
+                            <option value="hotkey_sequence">Key Sequence</option>
+                            <option value="scene_switch">Switch Scene</option>
+                            <option value="replay_buffer_save">Save Replay Buffer</option>
+                            <option value="replay_buffer_start">Start Replay Buffer</option>
+                            <option value="replay_buffer_stop">Stop Replay Buffer</option>
+                          </select>
+
+                          {step.action === 'hotkey_name' && (
+                            availableHotkeys.length > 0 ? (
+                              <select
+                                className="scoring-admin__input obs-series-step__value"
+                                value={step.hotkeyName || ''}
+                                onChange={e => updateSeriesStep(idx, stepIdx, { hotkeyName: e.target.value })}
+                              >
+                                <option value="">— Select hotkey —</option>
+                                {groupedHotkeys.map(group => (
+                                  <optgroup key={group.group} label={group.group}>
+                                    {group.items.map(item => (
+                                      <option key={item.raw} value={item.raw}>{item.title}</option>
+                                    ))}
+                                  </optgroup>
+                                ))}
+                              </select>
+                            ) : (
+                              <input
+                                className="scoring-admin__input obs-series-step__value"
+                                value={step.hotkeyName || ''}
+                                onChange={e => updateSeriesStep(idx, stepIdx, { hotkeyName: e.target.value })}
+                                placeholder="Hotkey name"
+                              />
+                            )
+                          )}
+
+                          {step.action === 'scene_switch' && (
+                            <input
+                              className="scoring-admin__input obs-series-step__value"
+                              value={step.sceneName || ''}
+                              onChange={e => updateSeriesStep(idx, stepIdx, { sceneName: e.target.value })}
+                              placeholder="Scene name"
+                            />
+                          )}
+
+                          {step.action === 'hotkey_sequence' && (
+                            <input
+                              className="scoring-admin__input obs-series-step__value"
+                              value={step.keySequence?.keyId || ''}
+                              onChange={e => updateSeriesStep(idx, stepIdx, {
+                                keySequence: { ...step.keySequence, keyId: e.target.value },
+                              })}
+                              placeholder="e.g. OBS_KEY_F1"
+                            />
+                          )}
+
+                          <div className="obs-series-step__actions">
+                            <button className="scoring-admin__btn scoring-admin__btn--sm" onClick={() => moveSeriesStep(idx, stepIdx, -1)} disabled={stepIdx === 0}>↑</button>
+                            <button className="scoring-admin__btn scoring-admin__btn--sm" onClick={() => moveSeriesStep(idx, stepIdx, 1)} disabled={stepIdx === (btn.series?.length || 0) - 1}>↓</button>
+                            <button className="scoring-admin__btn scoring-admin__btn--sm scoring-admin__btn--danger" onClick={() => removeSeriesStep(idx, stepIdx)}>✕</button>
+                          </div>
+                        </div>
+                      ))}
+
+                      <button
+                        className="scoring-admin__btn scoring-admin__btn--secondary scoring-admin__btn--sm"
+                        onClick={() => addSeriesStep(idx)}
+                        style={{ marginTop: '0.5rem' }}
+                      >
+                        + Add Step
+                      </button>
+
+                      {(btn.series?.length || 0) === 0 && (
+                        <small className="scoring-admin__hint">No steps yet — add at least one step for this series to run.</small>
+                      )}
                     </div>
                   )}
                 </div>

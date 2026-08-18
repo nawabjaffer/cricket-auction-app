@@ -9,6 +9,26 @@ export type ScoringProvider = 'cricheroes' | 'cricbuzz' | 'manual' | 'custom';
 
 // ── Match Setup & Config ──
 
+/** Tournament stage of a fixture — drives overlay/admin labelling */
+export type MatchStage =
+  | 'league'
+  | 'qualifier_1'
+  | 'qualifier_2'
+  | 'eliminator'
+  | 'semi_final'
+  | 'final'
+  | 'friendly';
+
+export const MATCH_STAGE_LABELS: Record<MatchStage, string> = {
+  league: 'League',
+  qualifier_1: 'Qualifier 1',
+  qualifier_2: 'Qualifier 2',
+  eliminator: 'Eliminator',
+  semi_final: 'Semi Final',
+  final: 'Final',
+  friendly: 'Friendly',
+};
+
 export interface MatchSetup {
   id: string;
   teamA: { id: string; name: string; logoUrl?: string; primaryColor?: string };
@@ -17,6 +37,7 @@ export interface MatchSetup {
   date: string;           // ISO date-time
   maxOvers: number;       // e.g. 20 for T20
   powerplayOvers?: number; // e.g. 6 for T20 (default: maxOvers <= 20 ? 6 : 10)
+  stage?: MatchStage;     // league / qualifier / eliminator / final
   tossWonBy?: string;     // team ID
   tossElected?: 'bat' | 'bowl';
   status: 'scheduled' | 'live' | 'completed' | 'abandoned';
@@ -27,6 +48,9 @@ export interface MatchSetup {
 export interface MatchScoringConfig {
   provider: ScoringProvider;
   externalMatchId?: string;  // CricHeroes match ID, etc.
+  externalMatchUrl?: string; // full CricHeroes scorecard URL
+  proxyBaseUrl?: string;     // CORS proxy used to read the external scorecard
+  autoSync?: boolean;        // keep polling and mirroring into our live score
   apiKey?: string;
   webhookUrl?: string;
   pollIntervalMs?: number;   // default 30000
@@ -650,7 +674,30 @@ export interface TournamentStats {
   topSixHitters: { playerId: string; playerName: string; teamId: string; teamName: string; sixes: number; imageUrl?: string }[];
   topFourHitters: { playerId: string; playerName: string; teamId: string; teamName: string; fours: number; imageUrl?: string }[];
   topStrikeRates: { playerId: string; playerName: string; teamId: string; teamName: string; strikeRate: number; runs: number; balls: number; imageUrl?: string }[];
+  /** Highest completed team total in the tournament — powers the record-chase alert */
+  highestTeamScore?: TournamentTeamScoreRecord | null;
+  /** Highest individual innings in the tournament */
+  highestIndividualScore?: TournamentIndividualRecord | null;
   lastUpdated: number;
+}
+
+export interface TournamentTeamScoreRecord {
+  matchId: string;
+  teamId: string;
+  teamName: string;
+  runs: number;
+  wickets: number;
+  overs: number;
+  opponentName?: string;
+}
+
+export interface TournamentIndividualRecord {
+  matchId: string;
+  playerId: string;
+  playerName: string;
+  teamId: string;
+  runs: number;
+  balls: number;
 }
 
 // ── Tournament Awards ──
@@ -726,13 +773,26 @@ export type OBSButtonAction =
   | 'scene_switch'      // SetCurrentProgramScene
   | 'replay_buffer_save'  // SaveReplayBuffer (built-in replay buffer)
   | 'replay_buffer_start' // StartReplayBuffer
-  | 'replay_buffer_stop'; // StopReplayBuffer
+  | 'replay_buffer_stop'  // StopReplayBuffer
+  | 'series';             // run several steps in order with delays
 
 export interface OBSButtonKeySequence {
   keyId: string;    // OBS key ID string, e.g. "OBS_KEY_F1"
   shift?: boolean;
   ctrl?: boolean;
   alt?: boolean;
+}
+
+/** One step inside a 'series' button — executed in order with a pre-delay */
+export interface OBSButtonSeriesStep {
+  id: string;
+  /** Wait this many milliseconds before running the step */
+  delayMs: number;
+  action: Exclude<OBSButtonAction, 'series'>;
+  hotkeyName?: string;
+  keySequence?: OBSButtonKeySequence;
+  sceneName?: string;
+  label?: string;
 }
 
 export interface OBSReplayButton {
@@ -744,6 +804,7 @@ export interface OBSReplayButton {
   hotkeyName?: string;    // for action = 'hotkey_name'
   keySequence?: OBSButtonKeySequence; // for action = 'hotkey_sequence'
   sceneName?: string;     // for action = 'scene_switch'
+  series?: OBSButtonSeriesStep[];     // for action = 'series'
   order: number;
   enabled: boolean;
 }

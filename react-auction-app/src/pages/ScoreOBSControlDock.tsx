@@ -50,6 +50,14 @@ const STATS_OVERLAY_BUTTONS: { key: OverlayType; label: string; icon: string; co
   { key: 'field_placement', label: 'Field', icon: '🟢', color: '#10b981' },
 ];
 
+type DockConnectionMode = 'ip' | 'local' | 'relay';
+
+const DOCK_MODE_OPTIONS: { key: DockConnectionMode; label: string; hint: string }[] = [
+  { key: 'ip', label: 'IP Address', hint: 'Connect straight to the OBS machine using its LAN IP.' },
+  { key: 'local', label: 'Local', hint: 'Dock is running on the same computer as OBS (127.0.0.1).' },
+  { key: 'relay', label: 'Same Wi-Fi', hint: 'Phone sends commands over Firebase to the dock open on the OBS machine.' },
+];
+
 export default function ScoreOBSControlDock() {
   const [matches, setMatches] = useState<MatchSetup[]>([]);
   const [selectedMatchId, setSelectedMatchId] = useState('');
@@ -88,12 +96,19 @@ export default function ScoreOBSControlDock() {
   const [relayOnlyMode, setRelayOnlyMode] = useState(false);
   const isNativeObsHost = Boolean((globalThis as unknown as { obsstudio?: unknown }).obsstudio)
     || /obs/i.test(globalThis.navigator?.userAgent || '');
+  const isMobileClient = /iphone|ipad|ipod|android/i.test(globalThis.navigator?.userAgent || '');
+
+  const [connectionMode, setConnectionMode] = useState<DockConnectionMode>(() => {
+    const stored = localStorage.getItem('obs_dock_mode') as DockConnectionMode | null;
+    if (stored === 'ip' || stored === 'local' || stored === 'relay') return stored;
+    if (isNativeObsHost) return 'local';
+    return isMobileClient ? 'relay' : 'ip';
+  });
 
   const [singleOverlayMode, setSingleOverlayMode] = useState(false);
   const [activeMatchPointer, setActiveMatchPointer] = useState<string | null>(null);
   const singleOverlayModeRef = useRef(false);
   const dockCleanupRef = useRef<Array<() => void>>([]);
-  const isMobileClient = /iphone|ipad|ipod|android/i.test(globalThis.navigator?.userAgent || '');
 
   const isLoopbackHost = (value: string): boolean => {
     const host = value.trim().toLowerCase();
@@ -227,10 +242,21 @@ export default function ScoreOBSControlDock() {
   }, []);
 
   const handleObsConnect = useCallback(async () => {
-    const port = parseInt(obsPort, 10);
-    if (!obsHost.trim() || isNaN(port)) return;
+    if (connectionMode === 'relay') {
+      setRelayOnlyMode(true);
+      setObsErrorDetail('');
+      setObsAttemptedUrls([]);
+      setObsFailureSummary([]);
+      setObsMixedContentHint(false);
+      showFeedback('Relay mode active — commands go via Firebase');
+      return;
+    }
 
-    if (isMobileClient && isLoopbackHost(obsHost)) {
+    const effectiveHost = connectionMode === 'local' ? '127.0.0.1' : obsHost.trim();
+    const port = parseInt(obsPort, 10);
+    if (!effectiveHost || isNaN(port)) return;
+
+    if (connectionMode === 'ip' && isMobileClient && isLoopbackHost(effectiveHost)) {
       setObsErrorDetail('On iPhone/mobile, localhost or 127.0.0.1 points to your phone, not OBS laptop. Enter OBS laptop LAN IP (example: 192.168.x.x).');
       setObsFailureSummary([]);
       setObsAttemptedUrls([]);
@@ -241,27 +267,29 @@ export default function ScoreOBSControlDock() {
     }
 
     const securePage = globalThis.location?.protocol === 'https:';
-    if (isMobileClient && securePage && !hasExplicitSecureEndpoint(obsHost)) {
-      // Safari blocks ws:// from https pages, so use Firebase relay mode.
+    if (connectionMode === 'ip' && isMobileClient && securePage && !hasExplicitSecureEndpoint(effectiveHost)) {
+      // Safari blocks ws:// from https pages, so fall back to Firebase relay.
+      setConnectionMode('relay');
+      localStorage.setItem('obs_dock_mode', 'relay');
       setRelayOnlyMode(true);
-      setObsErrorDetail('Direct OBS socket is blocked on iPhone over HTTPS. Relay mode is enabled: keep OBS dock connected on laptop and control from phone.');
+      setObsErrorDetail('Direct OBS socket is blocked on iPhone over HTTPS. Switched to Same Wi-Fi relay mode: keep the dock connected on the OBS laptop.');
       setObsFailureSummary([]);
       setObsAttemptedUrls([]);
       setObsMixedContentHint(true);
-      showFeedback('Relay mode enabled for mobile');
+      showFeedback('Switched to Same Wi-Fi relay');
       return;
     }
 
     setRelayOnlyMode(false);
 
-    localStorage.setItem('obs_dock_host', obsHost.trim());
+    localStorage.setItem('obs_dock_host', effectiveHost);
     localStorage.setItem('obs_dock_port', obsPort);
     setObsConnecting(true);
     setObsAttemptedUrls([]);
     setObsFailureSummary([]);
     setObsMixedContentHint(false);
     try {
-      const ok = await obsService.connect(obsHost.trim(), port, obsPassword || undefined);
+      const ok = await obsService.connect(effectiveHost, port, obsPassword || undefined);
       if (!ok) {
         const detail = obsService.getLastErrorDetail();
         const diag = obsService.getConnectionDiagnostics();
@@ -286,31 +314,29 @@ export default function ScoreOBSControlDock() {
     } finally {
       setObsConnecting(false);
     }
-  }, [obsHost, obsPort, obsPassword, isMobileClient, showFeedback]);
+  }, [connectionMode, obsHost, obsPort, obsPassword, isMobileClient, showFeedback]);
 
-  const connectNativeObs = useCallback(async () => {
-    setRelayOnlyMode(false);
-    setObsHost('127.0.0.1');
-    if (!obsPort) setObsPort('4455');
-    localStorage.setItem('obs_dock_host', '127.0.0.1');
-    localStorage.setItem('obs_dock_port', obsPort || '4455');
-    const ok = await obsService.connect('127.0.0.1', parseInt(obsPort || '4455', 10), obsPassword || undefined);
-    if (!ok) {
-      const detail = obsService.getLastErrorDetail();
-      const diag = obsService.getConnectionDiagnostics();
-      setObsAttemptedUrls(diag.attemptedUrls);
-      setObsFailureSummary(diag.failures.slice(-2));
-      setObsMixedContentHint(diag.mixedContentLikely);
-      setObsErrorDetail(detail || 'Native connection failed');
-      showFeedback('Native OBS connect failed');
-      return;
-    }
+  const handleModeChange = useCallback((mode: DockConnectionMode) => {
+    setConnectionMode(mode);
+    localStorage.setItem('obs_dock_mode', mode);
+    setObsErrorDetail('');
     setObsAttemptedUrls([]);
     setObsFailureSummary([]);
     setObsMixedContentHint(false);
-    setObsErrorDetail('');
-    showFeedback('Native OBS connected');
-  }, [obsPassword, obsPort, showFeedback]);
+
+    if (mode === 'relay') {
+      setRelayOnlyMode(true);
+      obsService.disconnect();
+      showFeedback('Same Wi-Fi relay mode selected');
+      return;
+    }
+
+    setRelayOnlyMode(false);
+    if (mode === 'local') {
+      setObsHost('127.0.0.1');
+      localStorage.setItem('obs_dock_host', '127.0.0.1');
+    }
+  }, [showFeedback]);
 
   const handleObsDisconnect = useCallback(() => {
     obsService.disconnect();
@@ -421,7 +447,7 @@ export default function ScoreOBSControlDock() {
 
   const selectedMatch = matches.find(m => m.id === selectedMatchId);
   const obsIsConnected = obsStatus === 'connected';
-  const relayReady = relayOnlyMode || (!obsIsConnected && obsStatus !== 'connecting');
+  const relayReady = connectionMode === 'relay' || relayOnlyMode || (!obsIsConnected && obsStatus !== 'connecting');
   const enabledButtons = replayConfig.buttons.filter(b => b.enabled).sort((a, b) => a.order - b.order);
 
   return (
@@ -431,7 +457,7 @@ export default function ScoreOBSControlDock() {
         <span className="score-dock__title">Score × OBS</span>
         <div className="score-dock__header-right">
           {isNativeObsHost && <span className="score-dock__obs-native">Native</span>}
-          {relayOnlyMode && <span className="score-dock__obs-relay">Relay</span>}
+          {(connectionMode === 'relay' || relayOnlyMode) && <span className="score-dock__obs-relay">Relay</span>}
           <span className={`score-dock__obs-badge score-dock__obs-badge--${obsStatus}`}>
             <span className="score-dock__obs-badge-dot" />
             {obsStatus === 'connected' ? 'OBS' : obsStatus === 'connecting' ? '...' : obsStatus === 'error' ? 'ERR' : 'OBS'}
@@ -442,57 +468,74 @@ export default function ScoreOBSControlDock() {
 
       {/* OBS Connection Panel */}
       <div className="score-dock__obs-connect-panel">
-        <div className="score-dock__obs-connect-row">
-          <input
-            className="score-dock__obs-input score-dock__obs-input--host"
-            placeholder="192.168.x.x or localhost"
-            value={obsHost}
-            onChange={e => setObsHost(e.target.value)}
-            onKeyDown={e => { if (e.key === 'Enter') handleObsConnect(); }}
-          />
-          <input
-            className="score-dock__obs-input score-dock__obs-input--port"
-            placeholder="4455"
-            value={obsPort}
-            onChange={e => setObsPort(e.target.value)}
-            onKeyDown={e => { if (e.key === 'Enter') handleObsConnect(); }}
-          />
-        </div>
-        <div className="score-dock__obs-connect-row">
-          <input
-            className="score-dock__obs-input"
-            type="password"
-            placeholder="OBS password (optional)"
-            value={obsPassword}
-            onChange={e => setObsPassword(e.target.value)}
-            onKeyDown={e => { if (e.key === 'Enter') handleObsConnect(); }}
-          />
-          {obsIsConnected ? (
-            <button className="score-dock__obs-btn score-dock__obs-btn--disconnect" onClick={handleObsDisconnect}>
-              Disconnect
-            </button>
-          ) : (
+        <div className="score-dock__mode-switch" role="tablist" aria-label="OBS connection mode">
+          {DOCK_MODE_OPTIONS.map(option => (
             <button
-              className="score-dock__obs-btn score-dock__obs-btn--connect"
-              onClick={handleObsConnect}
-              disabled={obsConnecting || obsStatus === 'connecting'}
+              key={option.key}
+              role="tab"
+              aria-selected={connectionMode === option.key}
+              className={`score-dock__mode-btn ${connectionMode === option.key ? 'score-dock__mode-btn--active' : ''}`}
+              onClick={() => handleModeChange(option.key)}
+              title={option.hint}
             >
-              {obsConnecting || obsStatus === 'connecting' ? (
-                <span className="score-dock__obs-spinner" />
-              ) : relayOnlyMode ? 'Use Relay' : 'Connect'}
+              {option.label}
             </button>
-          )}
+          ))}
         </div>
-        {!obsIsConnected && (
-          <div className="score-dock__obs-connect-row">
-            <button className="score-dock__obs-btn score-dock__obs-btn--native" onClick={connectNativeObs}>
-              Native Connect (127.0.0.1)
-            </button>
-          </div>
+        <p className="score-dock__obs-hint">
+          {DOCK_MODE_OPTIONS.find(o => o.key === connectionMode)?.hint}
+        </p>
+
+        {connectionMode !== 'relay' && (
+          <>
+            <div className="score-dock__obs-connect-row">
+              <input
+                className="score-dock__obs-input score-dock__obs-input--host"
+                placeholder="192.168.x.x or localhost"
+                value={connectionMode === 'local' ? '127.0.0.1' : obsHost}
+                onChange={e => setObsHost(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') handleObsConnect(); }}
+                disabled={connectionMode === 'local'}
+              />
+              <input
+                className="score-dock__obs-input score-dock__obs-input--port"
+                placeholder="4455"
+                value={obsPort}
+                onChange={e => setObsPort(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') handleObsConnect(); }}
+              />
+            </div>
+            <div className="score-dock__obs-connect-row">
+              <input
+                className="score-dock__obs-input"
+                type="password"
+                placeholder="OBS password (optional)"
+                value={obsPassword}
+                onChange={e => setObsPassword(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') handleObsConnect(); }}
+              />
+              {obsIsConnected ? (
+                <button className="score-dock__obs-btn score-dock__obs-btn--disconnect" onClick={handleObsDisconnect}>
+                  Disconnect
+                </button>
+              ) : (
+                <button
+                  className="score-dock__obs-btn score-dock__obs-btn--connect"
+                  onClick={handleObsConnect}
+                  disabled={obsConnecting || obsStatus === 'connecting'}
+                >
+                  {obsConnecting || obsStatus === 'connecting' ? (
+                    <span className="score-dock__obs-spinner" />
+                  ) : 'Connect'}
+                </button>
+              )}
+            </div>
+          </>
         )}
-        {isMobileClient && (
+
+        {connectionMode === 'relay' && (
           <p className="score-dock__obs-hint score-dock__obs-hint--warn">
-            Mobile tip: do not use localhost/127.0.0.1. Use your OBS laptop LAN IP like 192.168.x.x.
+            Relay mode active: your phone sends commands via Firebase. Keep this dock open and connected to OBS on the laptop/desktop.
           </p>
         )}
         {obsIsConnected && (
@@ -500,7 +543,7 @@ export default function ScoreOBSControlDock() {
             ✓ OBS connected — hotkeys will execute instantly
           </p>
         )}
-        {obsStatus === 'error' && !relayOnlyMode && (
+        {obsStatus === 'error' && connectionMode !== 'relay' && (
           <>
             <p className="score-dock__obs-hint score-dock__obs-hint--error">
               ✕ Cannot reach OBS. Check host/port, OBS WebSocket, and password.
@@ -516,20 +559,10 @@ export default function ScoreOBSControlDock() {
             ))}
             {obsMixedContentHint && (
               <p className="score-dock__obs-hint score-dock__obs-hint--warn">
-                iPhone/Safari note: this page is HTTPS, so direct ws:// LAN socket may be blocked. Use relay mode or open this dock from an HTTP local URL.
+                iPhone/Safari note: this page is HTTPS, so direct ws:// LAN socket may be blocked. Switch to Same Wi-Fi mode.
               </p>
             )}
           </>
-        )}
-        {relayOnlyMode && (
-          <p className="score-dock__obs-hint score-dock__obs-hint--warn">
-            Relay mode active: your phone will send commands via Firebase. Keep this dock open and connected to OBS on the laptop/desktop.
-          </p>
-        )}
-        {!obsIsConnected && obsStatus !== 'error' && !relayOnlyMode && (
-          <p className="score-dock__obs-hint">
-            📡 Not connected — commands will relay via Firebase to dock on OBS machine
-          </p>
         )}
       </div>
 
@@ -636,10 +669,15 @@ export default function ScoreOBSControlDock() {
                 style={{ '--rbtn-color': btn.color } as React.CSSProperties}
                 onClick={() => execReplayButton(btn)}
                 disabled={execBusy === btn.id}
-                title={btn.hotkeyName ? `Hotkey: ${btn.hotkeyName}` : btn.label}
+                title={btn.action === 'series'
+                  ? `Series: ${(btn.series || []).length} steps`
+                  : (btn.hotkeyName ? `Hotkey: ${btn.hotkeyName}` : btn.label)}
               >
                 <span className="score-dock__rpbtn-icon">{btn.icon}</span>
                 <span className="score-dock__rpbtn-label">{btn.label}</span>
+                {btn.action === 'series' && (
+                  <span className="score-dock__rpbtn-series">{(btn.series || []).length}×</span>
+                )}
                 {execBusy === btn.id && <span className="score-dock__rpbtn-spinner" />}
               </button>
             ))}

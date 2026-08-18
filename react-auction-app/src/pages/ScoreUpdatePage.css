@@ -535,6 +535,58 @@
   color: #f87171;
 }
 
+/* Tournament record chase alert */
+.score-update__record-alert {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  padding: 0.6rem 0.85rem;
+  margin: 0.4rem 0;
+  border-radius: 10px;
+  background: linear-gradient(135deg, rgba(249, 115, 22, 0.18), rgba(251, 191, 36, 0.12));
+  border: 1px solid rgba(251, 191, 36, 0.45);
+  animation: record-alert-pulse 2.4s ease-in-out infinite;
+}
+
+.score-update__record-alert--broken {
+  background: linear-gradient(135deg, rgba(34, 197, 94, 0.2), rgba(16, 185, 129, 0.12));
+  border-color: rgba(34, 197, 94, 0.5);
+}
+
+.score-update__record-alert-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.score-update__record-alert-text strong {
+  font-size: 0.92rem;
+  color: #fde68a;
+}
+
+.score-update__record-alert--broken .score-update__record-alert-text strong {
+  color: #86efac;
+}
+
+.score-update__record-alert-text span {
+  font-size: 0.76rem;
+  color: #cbd5e1;
+}
+
+.score-update__record-alert-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+@keyframes record-alert-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(251, 191, 36, 0); }
+  50% { box-shadow: 0 0 14px 0 rgba(251, 191, 36, 0.25); }
+}
+
 .score-update__overlay-btn--active {
   background: rgba(16, 185, 129, 0.2);
   border-color: rgba(16, 185, 129, 0.45);

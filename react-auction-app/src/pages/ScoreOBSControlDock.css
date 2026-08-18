@@ -526,6 +526,48 @@
   color: #fbbf24;
 }
 
+/* Connection mode switch */
+.score-dock__mode-switch {
+  display: flex;
+  gap: 4px;
+  padding: 3px;
+  margin-bottom: 8px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.score-dock__mode-btn {
+  flex: 1;
+  padding: 6px 4px;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+
+.score-dock__mode-btn:hover {
+  color: rgba(255, 255, 255, 0.8);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.score-dock__mode-btn--active {
+  background: linear-gradient(135deg, #3b82f6, #2563eb);
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.35);
+}
+
+.score-dock__obs-input:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
 /* ═══════════════════════════════════════════════════════════════════════════
    REPLAY SOURCE CONTROL PANEL
    ═══════════════════════════════════════════════════════════════════════════ */
@@ -690,6 +732,20 @@
   justify-content: center;
   background: rgba(0, 0, 0, 0.3);
   border-radius: 10px;
+}
+
+.score-dock__rpbtn-series {
+  position: absolute;
+  top: 3px;
+  right: 5px;
+  z-index: 2;
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  color: #fcd34d;
+  background: rgba(0, 0, 0, 0.45);
+  border-radius: 999px;
+  padding: 1px 5px;
 }
 .score-dock__rpbtn-spinner::after {
   content: '';
