@@ -716,8 +716,8 @@ function drawGlassTicker(
   const padX = 20, gap = 18, tile = 74;
 
   const bats = live.currentBatsmen || [];
-  ctx.font = f(600, 19);
-  const batNameW = Math.max(80, ...bats.map(b => ctx.measureText(tickerSurname(b.playerName)).width));
+  ctx.font = f(600, 20);
+  const batNameW = Math.max(120, ...bats.map(b => ctx.measureText(tickerName(b.playerName, 20)).width));
   const batsW = infoMode === 'batsmen' ? batNameW + 86 : 240;
 
   const scoreTxt = `${live.runs}-${live.wickets}`;
@@ -761,9 +761,9 @@ function drawGlassTicker(
         ctx.fillStyle = '#fbbf24';
         ctx.fill();
       }
-      ctx.font = f(b.isOnStrike ? 700 : 600, 19);
+      ctx.font = f(b.isOnStrike ? 700 : 600, 20);
       ctx.fillStyle = b.isOnStrike ? '#fbbf24' : 'rgba(255,255,255,0.78)';
-      ctx.fillText(tickerSurname(b.playerName), x + 20, rowY);
+      ctx.fillText(tickerName(b.playerName, 20), x + 20, rowY);
       ctx.font = f(800, 20);
       ctx.fillStyle = '#ffffff';
       const rTxt = String(b.runs);
@@ -835,9 +835,9 @@ function drawGlassTicker(
   {
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
-    ctx.font = f(600, 17);
+    ctx.font = f(600, 19);
     ctx.fillStyle = 'rgba(255,255,255,0.72)';
-    ctx.fillText(tickerSurname(live.currentBowler?.playerName || ''), x, y0 + 30);
+    ctx.fillText(tickerName(live.currentBowler?.playerName || '', 20), x, y0 + 30);
     ctx.font = f(800, 20);
     ctx.fillStyle = '#ffffff';
     ctx.fillText(figuresTxt, x, y0 + 58);
