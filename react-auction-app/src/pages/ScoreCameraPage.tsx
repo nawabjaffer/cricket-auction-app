@@ -19,44 +19,29 @@
 // ============================================================================
 
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { initializeApp, getApps } from 'firebase/app';
-import { getDatabase, ref, onValue } from 'firebase/database';
+import { ref, onValue } from 'firebase/database';
 import {
   IoVideocam, IoStop, IoPause, IoPlay, IoCameraReverse,
   IoArrowBack, IoDownloadOutline, IoShareSocialOutline, IoRefresh,
-  IoMic, IoMicOff, IoTabletLandscape,
+  IoMic, IoMicOff, IoTabletLandscape, IoWifi,
 } from 'react-icons/io5';
 import { tenantPath } from '../services/tenantPath';
 import { useTenantNavigate as useNavigate } from '../hooks/useTenantNavigate';
-import type { LiveScore, MatchSetup, LiveBatsman, ScoringOverlayConfig, OverlayControlState, AnimationConfig } from '../types/scoring';
+import { broadcastDb } from '../services/camera/broadcastDb';
+import { multiCamService } from '../services/camera/multiCamService';
+import type { LiveScore, MatchSetup, ScoringOverlayConfig, OverlayControlState, MatchLineup, TickerDesign } from '../types/scoring';
+import {
+  drawScoreTicker, drawCelebration, resolveCeleb, getImg,
+  type CelebType, type TickerPosition,
+} from '../utils/broadcastCanvas';
 import './ScoreCameraPage.css';
 
-// ── Firebase: dedicated named app (reuse OBS app for zero-delay reads) ───────
-const FB_CONFIG = {
-  apiKey: 'AIzaSyBazxXTsWddS3r_i-0VhUaC2QqknheEzpQ',
-  authDomain: 'e-auction-store.firebaseapp.com',
-  databaseURL: 'https://e-auction-store-default-rtdb.asia-southeast1.firebasedatabase.app/',
-  projectId: 'e-auction-store',
-  storageBucket: 'e-auction-store.firebasestorage.app',
-  appId: '1:830797180032:web:a0f0a92678ecc36fedca65',
-};
-const APP_NAME = 'score-obs';
-const camApp = getApps().find(a => a.name === APP_NAME) ?? initializeApp(FB_CONFIG, APP_NAME);
-const camDb = getDatabase(camApp);
+// ── Firebase: shared broadcast app (zero-delay reads, same source as OBS) ────
+const camDb = broadcastDb;
 
 type CanvasWithCapture = HTMLCanvasElement & { captureStream?: (fps?: number) => MediaStream };
-type TickerPosition = 'top' | 'bottom';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
-
-function shortName(name?: string): string {
-  if (!name) return '';
-  const cleaned = name.trim();
-  if (!cleaned) return '';
-  const words = cleaned.split(/\s+/);
-  if (words.length > 1) return words.map(w => w[0]).join('').slice(0, 4).toUpperCase();
-  return cleaned.slice(0, 3).toUpperCase();
-}
 
 function pickMimeType(): string {
   if (typeof MediaRecorder === 'undefined') return '';
@@ -80,153 +65,6 @@ function fmtClock(ms: number): string {
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
-function roundRectPath(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
-  const rr = Math.max(0, Math.min(r, w / 2, h / 2));
-  ctx.beginPath();
-  ctx.moveTo(x + rr, y);
-  ctx.arcTo(x + w, y, x + w, y + h, rr);
-  ctx.arcTo(x + w, y + h, x, y + h, rr);
-  ctx.arcTo(x, y + h, x, y, rr);
-  ctx.arcTo(x, y, x + w, y, rr);
-  ctx.closePath();
-}
-
-// ── Image cache (crossOrigin so logos/animations can be drawn into the recording) ──
-const _imgCache = new Map<string, HTMLImageElement>();
-const _imgFailed = new Set<string>();
-function getImg(url?: string): HTMLImageElement | null {
-  if (!url || _imgFailed.has(url)) return null;
-  const hit = _imgCache.get(url);
-  if (hit) return hit.complete && hit.naturalWidth > 0 ? hit : null;
-  const img = new Image();
-  img.crossOrigin = 'anonymous';
-  img.referrerPolicy = 'no-referrer';
-  img.onerror = () => { _imgFailed.add(url); _imgCache.delete(url); };
-  img.src = url;
-  _imgCache.set(url, img);
-  return null;
-}
-
-function drawImageContain(ctx: CanvasRenderingContext2D, img: HTMLImageElement, x: number, y: number, boxW: number, boxH: number) {
-  const ar = (img.naturalWidth || 1) / (img.naturalHeight || 1);
-  let w = boxW, h = boxW / ar;
-  if (h > boxH) { h = boxH; w = boxH * ar; }
-  ctx.drawImage(img, x + (boxW - w) / 2, y + (boxH - h) / 2, w, h);
-}
-
-/** Canvas font shorthand matching the OBS overlay (Inter). */
-function f(weight: number, size: number): string {
-  return `${weight} ${size}px 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif`;
-}
-
-// Over-ball chip colors — matched to ScoreOBSOverlayPage.css
-const BALL_BASE = { bg: 'rgba(255,255,255,0.08)', fg: 'rgba(255,255,255,0.6)' };
-function obsBallStyle(raw: string, dotSymbol: string): { bg: string; fg: string } {
-  const b = (raw || '').toString().toUpperCase().trim();
-  if (b.includes('WD') || b.includes('NB') || b.startsWith('B') || b.startsWith('LB') || b.includes('+')) {
-    return { bg: 'rgba(245,158,11,0.25)', fg: '#fbbf24' };
-  }
-  if (b === 'W') return { bg: 'rgba(239,68,68,0.35)', fg: '#f87171' };
-  if (b === '4') return { bg: 'rgba(59,130,246,0.3)', fg: '#60a5fa' };
-  if (b === '6') return { bg: 'rgba(168,85,247,0.3)', fg: '#c084fc' };
-  if (b === '0' || b === dotSymbol || b === '·' || b === '•') return { bg: 'rgba(113,113,122,0.3)', fg: '#71717a' };
-  return BALL_BASE;
-}
-
-// ── Celebration animations (driven by the same Firebase overlay state) ───────
-export type CelebType = 'boundary_four' | 'boundary_six' | 'wicket' | 'duck_out' | 'hat_trick';
-const CELEB_META: Record<CelebType, { big: string; text: string; color: string }> = {
-  boundary_four: { big: '4', text: 'FOUR!', color: '#22c55e' },
-  boundary_six: { big: '6', text: 'MAXIMUM!', color: '#8b5cf6' },
-  wicket: { big: 'W', text: 'WICKET!', color: '#ef4444' },
-  duck_out: { big: '0', text: 'DUCK!', color: '#f59e0b' },
-  hat_trick: { big: '\u2605', text: 'HAT-TRICK!', color: '#a855f7' },
-};
-
-function resolveCeleb(config: ScoringOverlayConfig | null, type: CelebType): {
-  imageUrl?: string; text: string; color: string; big: string; durationMs: number;
-} {
-  const meta = CELEB_META[type];
-  const acMap: Record<CelebType, AnimationConfig | undefined> = {
-    boundary_four: config?.fourAnimation,
-    boundary_six: config?.sixAnimation,
-    wicket: config?.wicketAnimation,
-    duck_out: config?.duckOutAnimation,
-    hat_trick: config?.hatTrickAnimation,
-  };
-  const legacyMap: Partial<Record<CelebType, string | undefined>> = {
-    wicket: config?.wicketImageUrl,
-    duck_out: config?.duckOutImageUrl,
-    hat_trick: config?.hatTrickImageUrl,
-  };
-  const defaultDur: Record<CelebType, number> = {
-    boundary_four: 3000, boundary_six: 4000, wicket: 4000, duck_out: 5000, hat_trick: 8000,
-  };
-  const ac = acMap[type];
-  const url = ac?.mediaUrl || legacyMap[type];
-  const isImg = !!url && /\.(png|gif|jpe?g|webp|svg)(\?|$)/i.test(url);
-  return {
-    imageUrl: isImg ? url : undefined,
-    text: ac?.text || meta.text,
-    color: ac?.color || meta.color,
-    big: meta.big,
-    durationMs: ac?.durationMs || defaultDur[type],
-  };
-}
-
-/** Full-screen celebration drawn on the recording canvas (image asset or styled text). */
-function drawCelebration(ctx: CanvasRenderingContext2D, W: number, H: number, type: CelebType, config: ScoringOverlayConfig | null, progress: number) {
-  const { imageUrl, text, color, big } = resolveCeleb(config, type);
-  const inT = 0.16, outT = 0.8;
-  let alpha = 1, scale = 1;
-  if (progress < inT) { const k = progress / inT; alpha = k; scale = 0.7 + 0.3 * (1 - Math.pow(1 - k, 3)); }
-  else if (progress > outT) { const k = (progress - outT) / (1 - outT); alpha = 1 - k; scale = 1 + 0.06 * k; }
-  alpha = Math.max(0, Math.min(1, alpha));
-
-  ctx.save();
-  ctx.globalAlpha = alpha * 0.25;
-  ctx.fillStyle = '#000';
-  ctx.fillRect(0, 0, W, H);
-  ctx.restore();
-
-  ctx.save();
-  ctx.globalAlpha = alpha;
-  ctx.translate(W / 2, H / 2);
-  ctx.scale(scale, scale);
-  const img = getImg(imageUrl);
-  if (imageUrl && img) {
-    const boxW = W * 0.6, boxH = H * 0.66;
-    drawImageContain(ctx, img, -boxW / 2, -boxH / 2, boxW, boxH);
-  } else {
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.shadowColor = color;
-    ctx.shadowBlur = 60;
-    ctx.fillStyle = color;
-    ctx.font = f(900, 320);
-    ctx.fillText(big, 0, -40);
-    ctx.shadowBlur = 0;
-    ctx.fillStyle = '#ffffff';
-    ctx.font = f(800, 120);
-    ctx.fillText(text, 0, 170);
-  }
-  ctx.restore();
-}
-
-/** Rounded glass panel matching .score-obs__score-strip. */
-function drawPanel(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) {
-  const g = ctx.createLinearGradient(x, y, x + w, y + h);
-  g.addColorStop(0, 'rgba(15,15,30,0.92)');
-  g.addColorStop(1, 'rgba(30,30,60,0.92)');
-  ctx.fillStyle = g;
-  roundRectPath(ctx, x, y, w, h, 16);
-  ctx.fill();
-  ctx.strokeStyle = 'rgba(255,255,255,0.1)';
-  ctx.lineWidth = 1;
-  roundRectPath(ctx, x, y, w, h, 16);
-  ctx.stroke();
-}
-
 // ── Fullscreen + landscape orientation (best-effort; iOS Safari may ignore) ──
 async function enterImmersive() {
   const el = document.documentElement as HTMLElement & { webkitRequestFullscreen?: () => Promise<void> };
@@ -236,227 +74,6 @@ async function enterImmersive() {
 function exitImmersive() {
   try { (screen.orientation as ScreenOrientation & { unlock?: () => void })?.unlock?.(); } catch { /* ignore */ }
   try { if (document.fullscreenElement) void document.exitFullscreen?.(); } catch { /* ignore */ }
-}
-
-/** Top-bar branding (tournament logo + name, LIVE badge, broadcast-partner logo) — matches ScoreOBSOverlayPage. */
-function drawTopBar(ctx: CanvasRenderingContext2D, W: number, config: ScoringOverlayConfig | null) {
-  // Tournament / franchise logo + name (top-left)
-  let lx = 20;
-  const tl = getImg(config?.tournamentLogo);
-  if (tl) { drawImageContain(ctx, tl, lx, 20, 130, 130); lx += 130 + 14; }
-  if (config?.tournamentName) {
-    ctx.font = f(700, 28);
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'middle';
-    ctx.shadowColor = 'rgba(0,0,0,0.6)';
-    ctx.shadowBlur = 8;
-    ctx.fillStyle = '#fbbf24';
-    ctx.fillText(config.tournamentName, lx, tl ? 85 : 42);
-    ctx.shadowBlur = 0;
-  }
-
-  // LIVE badge + partner logo (top-right)
-  let topRightY = 20;
-  if (config?.showLiveBadge !== false) {
-    ctx.font = f(800, 22);
-    ctx.textBaseline = 'middle';
-    const txt = '\u25cf LIVE';
-    const bw = ctx.measureText(txt).width + 28;
-    const bx = W - 20 - bw, by = 20, bh = 36;
-    ctx.fillStyle = 'rgba(239,68,68,0.9)';
-    roundRectPath(ctx, bx, by, bw, bh, 7);
-    ctx.fill();
-    ctx.fillStyle = '#ffffff';
-    ctx.textAlign = 'left';
-    ctx.fillText(txt, bx + 14, by + bh / 2 + 1);
-    topRightY = by + bh + 8;
-  }
-  const pl = getImg(config?.broadcastPartnerLogo);
-  if (pl) {
-    const px = W - 20 - 130;
-    ctx.fillStyle = 'rgba(255,255,255,0.85)';
-    roundRectPath(ctx, px, topRightY, 130, 130, 8);
-    ctx.fill();
-    drawImageContain(ctx, pl, px + 8, topRightY + 8, 114, 114);
-  }
-}
-
-/** Draws the broadcast score ticker (OBS-overlay parity) onto the 1920×1080 recording canvas. */
-function drawScoreTicker(
-  ctx: CanvasRenderingContext2D,
-  W: number, H: number,
-  live: LiveScore | null,
-  match: MatchSetup | null,
-  config: ScoringOverlayConfig | null,
-  pos: TickerPosition,
-) {
-  drawTopBar(ctx, W, config);
-
-  const dotSymbol = config?.tickerConfig?.dotBallSymbol || '0';
-  const stripH = 76;
-  const padX = 24, gap = 16, dividerPad = 16;
-
-  if (!live || !match) {
-    const hint = 'Waiting for live score…';
-    ctx.font = f(600, 26);
-    const w = Math.max(480, ctx.measureText(hint).width + 64);
-    const x0 = (W - w) / 2;
-    const y0 = pos === 'bottom' ? H - 30 - 64 : 110;
-    drawPanel(ctx, x0, y0, w, 64);
-    ctx.fillStyle = '#e2e8f0';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(hint, W / 2, y0 + 32);
-    return;
-  }
-
-  const isA = live.battingTeamId === match.teamA?.id;
-  const battingName = isA ? match.teamA?.name : match.teamB?.name;
-  const battingLogoUrl = isA ? match.teamA?.logoUrl : match.teamB?.logoUrl;
-  const teamColor = (isA ? match.teamA?.primaryColor : match.teamB?.primaryColor) || '#2563eb';
-  const short = shortName(battingName) || 'BAT';
-  const scoreTxt = `${live.runs}/${live.wickets}`;
-  const oversTxt = `(${live.overs})`;
-  const crrTxt = `CRR ${(live.runRate ?? 0).toFixed(2)}`;
-  const rrrTxt = live.currentInnings === 2 && live.requiredRate != null ? `RRR ${live.requiredRate.toFixed(2)}` : '';
-  const bats = live.currentBatsmen ?? [];
-  const batTxt = (b?: LiveBatsman) => (b ? `${b.isOnStrike ? '\u25cf ' : ''}${b.playerName || 'Batter'} ${b.runs}(${b.balls})` : '');
-  const bat1 = batTxt(bats[0]);
-  const bat2 = batTxt(bats[1]);
-  const balls = (live.currentOverBalls && live.currentOverBalls.length ? live.currentOverBalls : live.lastCompletedOverBalls) ?? [];
-
-  // ── Measure segment widths ──
-  const logoBox = battingLogoUrl ? 32 : 0;
-  ctx.font = f(700, 16); const shortW = ctx.measureText(short).width;
-  const teamW = (logoBox ? logoBox + 8 : 0) + shortW;
-  ctx.font = f(900, 36); const runsW = ctx.measureText(scoreTxt).width;
-  ctx.font = f(500, 16); const oversW = ctx.measureText(oversTxt).width;
-  const scoreW = runsW + 6 + oversW;
-  ctx.font = f(600, 12);
-  const metaW = Math.max(ctx.measureText(crrTxt).width, rrrTxt ? ctx.measureText(rrrTxt).width : 0);
-  ctx.font = f(600, 13);
-  const batW = Math.max(bat1 ? ctx.measureText(bat1).width : 0, bat2 ? ctx.measureText(bat2).width : 0);
-  const ballsW = balls.length ? balls.length * 26 + (balls.length - 1) * 6 : 0;
-
-  const segs = [teamW, scoreW, metaW, batW, ballsW].filter(w => w > 0);
-  const content = segs.reduce((a, b) => a + b, 0) + gap * (segs.length - 1) + padX * 2;
-  const stripW = Math.max(700, content);
-  const x0 = (W - stripW) / 2;
-  const y0 = pos === 'bottom' ? H - 30 - stripH : 110;
-  const cy = y0 + stripH / 2;
-
-  drawPanel(ctx, x0, y0, stripW, stripH);
-
-  let x = x0 + padX;
-  let first = true;
-  const dividerAt = (xx: number) => {
-    ctx.strokeStyle = 'rgba(255,255,255,0.1)';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(xx, y0 + dividerPad);
-    ctx.lineTo(xx, y0 + stripH - dividerPad);
-    ctx.stroke();
-  };
-  const place = (w: number, draw: () => void) => {
-    if (w <= 0) return;
-    if (!first) { dividerAt(x + gap / 2); x += gap; }
-    draw();
-    x += w;
-    first = false;
-  };
-
-  // Team logo + short name
-  place(teamW, () => {
-    let tx = x;
-    if (logoBox) {
-      const li = getImg(battingLogoUrl);
-      if (li) {
-        ctx.save();
-        roundRectPath(ctx, tx, cy - 16, 32, 32, 6);
-        ctx.clip();
-        drawImageContain(ctx, li, tx, cy - 16, 32, 32);
-        ctx.restore();
-      } else {
-        ctx.fillStyle = teamColor;
-        roundRectPath(ctx, tx, cy - 16, 32, 32, 6);
-        ctx.fill();
-      }
-      tx += 32 + 8;
-    }
-    ctx.font = f(700, 16);
-    ctx.fillStyle = '#e4e4e7';
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(short, tx, cy);
-  });
-
-  // Score + overs
-  place(scoreW, () => {
-    ctx.textBaseline = 'alphabetic';
-    ctx.textAlign = 'left';
-    const baseline = cy + 13;
-    ctx.font = f(900, 36);
-    ctx.fillStyle = '#fafafa';
-    ctx.fillText(scoreTxt, x, baseline);
-    ctx.font = f(500, 16);
-    ctx.fillStyle = 'rgba(255,255,255,0.5)';
-    ctx.fillText(oversTxt, x + runsW + 6, baseline);
-    ctx.textBaseline = 'middle';
-  });
-
-  // CRR / RRR
-  place(metaW, () => {
-    ctx.font = f(600, 12);
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'middle';
-    if (rrrTxt) {
-      ctx.fillStyle = 'rgba(255,255,255,0.6)';
-      ctx.fillText(crrTxt, x, cy - 9);
-      ctx.fillStyle = '#fdba74';
-      ctx.fillText(rrrTxt, x, cy + 9);
-    } else {
-      ctx.fillStyle = 'rgba(255,255,255,0.6)';
-      ctx.fillText(crrTxt, x, cy);
-    }
-  });
-
-  // Batsmen mini-rows
-  place(batW, () => {
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'middle';
-    if (bat1) {
-      const s = !!bats[0]?.isOnStrike;
-      ctx.font = f(s ? 600 : 500, 13);
-      ctx.fillStyle = s ? '#fbbf24' : 'rgba(255,255,255,0.7)';
-      ctx.fillText(bat1, x, bat2 ? cy - 9 : cy);
-    }
-    if (bat2) {
-      const s = !!bats[1]?.isOnStrike;
-      ctx.font = f(s ? 600 : 500, 13);
-      ctx.fillStyle = s ? '#fbbf24' : 'rgba(255,255,255,0.7)';
-      ctx.fillText(bat2, x, cy + 9);
-    }
-  });
-
-  // This-over ball chips
-  place(ballsW, () => {
-    let bx = x + 13;
-    for (const ball of balls) {
-      const label = String(ball);
-      const { bg, fg } = obsBallStyle(label, dotSymbol);
-      ctx.beginPath();
-      ctx.arc(bx, cy, 13, 0, Math.PI * 2);
-      ctx.fillStyle = bg;
-      ctx.fill();
-      ctx.fillStyle = fg;
-      ctx.font = f(700, 12);
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(label, bx, cy + 1);
-      bx += 26 + 6;
-    }
-    ctx.textAlign = 'left';
-  });
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -485,6 +102,8 @@ export default function ScoreCameraPage() {
   const pausedRef = useRef(false);
   const includeAudioRef = useRef(true);
   const overlayConfigRef = useRef<ScoringOverlayConfig | null>(null);
+  const playerImagesRef = useRef<Record<string, string>>({});
+  const tickerDesignRef = useRef<TickerDesign | undefined>(undefined);
   const animRef = useRef<{ type: CelebType; start: number; durationMs: number } | null>(null);
   const lastAnimTsRef = useRef<number>(0);
 
@@ -507,11 +126,18 @@ export default function ScoreCameraPage() {
   const [recordedUrl, setRecordedUrl] = useState<string | null>(null);
   const [recordedBlob, setRecordedBlob] = useState<Blob | null>(null);
   const [tickerPos, setTickerPos] = useState<TickerPosition>('bottom');
+  const [tickerDesign, setTickerDesign] = useState<TickerDesign | undefined>(undefined);
   const [showTicker, setShowTicker] = useState(true);
   const [includeAudio, setIncludeAudio] = useState(true);
   const [mimeType] = useState(pickMimeType);
   const [shareSupported] = useState(() => typeof navigator !== 'undefined' && typeof (navigator as Navigator & { share?: unknown }).share === 'function');
   const [startingStep, setStartingStep] = useState('');
+  // Multi-camera sharing — publishes this phone's feed to the host device
+  const [sharing, setSharing] = useState(false);
+  const [shareState, setShareState] = useState<RTCPeerConnectionState | 'idle'>('idle');
+  const [camName, setCamName] = useState(() => localStorage.getItem('scoreCam.name') || `Cam ${Math.floor(Math.random() * 90 + 10)}`);
+  const shareHandleRef = useRef<{ replaceVideoTrack: (t: MediaStreamTrack) => Promise<void>; stop: () => Promise<void> } | null>(null);
+  const sourceIdRef = useRef<string>(localStorage.getItem('scoreCam.sourceId') || `cam_${Math.random().toString(36).slice(2, 9)}`);
   // PWA install prompt (Android Chrome fires `beforeinstallprompt`)
   const installPromptRef = useRef<(Event & { prompt?: () => void }) | null>(null);
   const [showInstallBanner, setShowInstallBanner] = useState(false);
@@ -541,15 +167,21 @@ export default function ScoreCameraPage() {
   useEffect(() => { facingRef.current = facing; }, [facing]);
   useEffect(() => { showTickerRef.current = showTicker; }, [showTicker]);
   useEffect(() => { tickerPosRef.current = tickerPos; }, [tickerPos]);
+  useEffect(() => { tickerDesignRef.current = tickerDesign; }, [tickerDesign]);
   useEffect(() => { recordingRef.current = recording; }, [recording]);
   useEffect(() => { pausedRef.current = paused; }, [paused]);
   useEffect(() => { includeAudioRef.current = includeAudio; }, [includeAudio]);
 
   // Read matchId from URL
   useEffect(() => {
-    const id = new URLSearchParams(window.location.search).get('matchId');
+    const params = new URLSearchParams(window.location.search);
+    const id = params.get('matchId');
     if (id) setMatchId(id);
+    if (params.get('share') === '1') setSharing(true);
   }, []);
+
+  useEffect(() => { localStorage.setItem('scoreCam.sourceId', sourceIdRef.current); }, []);
+  useEffect(() => { localStorage.setItem('scoreCam.name', camName); }, [camName]);
 
   // Subscribe to Firebase live score + match setup
   useEffect(() => {
@@ -565,6 +197,27 @@ export default function ScoreCameraPage() {
     // Branding (tournament/partner logos, badge, animation assets) — same source as OBS
     unsubs.push(onValue(ref(camDb, `${base}/overlayConfig`), snap => {
       overlayConfigRef.current = snap.exists() ? (snap.val() as ScoringOverlayConfig) : null;
+    }));
+    // Player portraits for the premium ticker — lineups first, auction roster as fallback
+    unsubs.push(onValue(ref(camDb, `${base}/matches/${matchId}/lineups`), snap => {
+      if (!snap.exists()) return;
+      const data = snap.val() as Record<string, MatchLineup>;
+      const map = { ...playerImagesRef.current };
+      for (const lineup of Object.values(data)) {
+        for (const p of lineup?.players || []) {
+          if (p.imageUrl) map[p.playerId] = p.imageUrl;
+        }
+      }
+      playerImagesRef.current = map;
+    }));
+    unsubs.push(onValue(ref(camDb, tenantPath('auction/adminPlayers')), snap => {
+      if (!snap.exists()) return;
+      const data = snap.val() as Record<string, { id: string; imageUrl?: string }>;
+      const map = { ...playerImagesRef.current };
+      for (const p of Object.values(data)) {
+        if (p.imageUrl && !map[p.id]) map[p.id] = p.imageUrl;
+      }
+      playerImagesRef.current = map;
     }));
     // Celebration triggers — fired by the scorer's overlay control (boundary/six/wicket/...)
     unsubs.push(onValue(ref(camDb, `${base}/matches/${matchId}/overlay`), snap => {
@@ -605,7 +258,14 @@ export default function ScoreCameraPage() {
           ctx.fillRect(0, 0, W, H);
         }
         if (showTickerRef.current) {
-          drawScoreTicker(ctx, W, H, liveRef.current, matchRef.current, overlayConfigRef.current, tickerPosRef.current);
+          drawScoreTicker(ctx, W, H, {
+            live: liveRef.current,
+            match: matchRef.current,
+            config: overlayConfigRef.current,
+            position: tickerPosRef.current,
+            playerImages: playerImagesRef.current,
+            designOverride: tickerDesignRef.current,
+          });
         }
         const anim = animRef.current;
         if (anim) {
@@ -729,6 +389,46 @@ export default function ScoreCameraPage() {
     startCamera(facing === 'environment' ? 'user' : 'environment');
   }, [cameraReady, facing, startCamera]);
 
+  // ── Share this angle to the multi-camera host ───────────────────────────
+  const stopSharing = useCallback(async () => {
+    const handle = shareHandleRef.current;
+    shareHandleRef.current = null;
+    setShareState('idle');
+    if (handle) { try { await handle.stop(); } catch { /* ignore */ } }
+  }, []);
+
+  useEffect(() => {
+    if (!sharing || !matchId || !cameraReady) return;
+    let cancelled = false;
+    const stream = mediaStreamRef.current;
+    if (!stream) return;
+
+    multiCamService.initialize(camDb, tenantPath('scoring'));
+    setShareState('connecting');
+    multiCamService
+      .publish(matchId, { id: sourceIdRef.current, name: camName, facing }, stream, s => setShareState(s))
+      .then(handle => {
+        if (cancelled) { void handle.stop(); return; }
+        shareHandleRef.current = handle;
+      })
+      .catch(() => { if (!cancelled) { setShareState('failed'); setError('Could not connect to the host device.'); } });
+
+    return () => { cancelled = true; };
+    // Re-publishing on camera flip is handled by replaceVideoTrack below.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sharing, matchId, cameraReady]);
+
+  useEffect(() => {
+    if (!sharing) void stopSharing();
+  }, [sharing, stopSharing]);
+
+  // Keep the published feed pointed at the currently selected lens.
+  useEffect(() => {
+    const handle = shareHandleRef.current;
+    const track = mediaStreamRef.current?.getVideoTracks()[0];
+    if (handle && track) void handle.replaceVideoTrack(track);
+  }, [facing, cameraReady]);
+
   // ── Recording ───────────────────────────────────────────────────────────
   const startRecording = useCallback(() => {
     const canvas = canvasRef.current as CanvasWithCapture | null;
@@ -838,6 +538,7 @@ export default function ScoreCameraPage() {
       cancelAnimationFrame(rafRef.current);
       if (timerRef.current) clearInterval(timerRef.current);
       try { recorderRef.current?.state !== 'inactive' && recorderRef.current?.stop(); } catch { /* ignore */ }
+      void shareHandleRef.current?.stop();
       mediaStreamRef.current?.getTracks().forEach(t => t.stop());
       if (recordedUrl) URL.revokeObjectURL(recordedUrl);
       exitImmersive();
@@ -909,6 +610,11 @@ export default function ScoreCameraPage() {
                 <IoTabletLandscape size={16} /> Rotate to landscape for best results
               </div>
 
+              <label className="score-cam__cam-name">
+                <span>Camera name (shown on the host)</span>
+                <input value={camName} onChange={e => setCamName(e.target.value)} maxLength={24} />
+              </label>
+
               {/* PWA install — Android */}
               {showInstallBanner && !isStandalone && (
                 <div className="score-cam__install-banner">
@@ -960,6 +666,13 @@ export default function ScoreCameraPage() {
               Ticker: {tickerPos === 'bottom' ? 'Bottom' : 'Top'}
             </button>
             <button
+              className="score-cam__chip"
+              onClick={() => setTickerDesign(d => (d === 'premium' ? 'glass' : 'premium'))}
+              title="Switch between the glass and premium OBS ticker designs"
+            >
+              Style: {(tickerDesign || overlayConfigRef.current?.tickerConfig?.design || 'glass') === 'premium' ? 'Premium' : 'Glass'}
+            </button>
+            <button
               className={`score-cam__chip ${includeAudio ? 'score-cam__chip--on' : ''}`}
               onClick={() => setIncludeAudio(v => !v)}
               disabled={recording}
@@ -967,6 +680,15 @@ export default function ScoreCameraPage() {
             >
               {includeAudio ? <IoMic size={15} /> : <IoMicOff size={15} />}
               {includeAudio ? ' Audio' : ' Muted'}
+            </button>
+            <button
+              className={`score-cam__chip ${sharing ? 'score-cam__chip--on' : ''}`}
+              onClick={() => setSharing(v => !v)}
+              disabled={!matchId}
+              title={matchId ? 'Send this angle to the multi-camera host' : 'Open with a matchId to share'}
+            >
+              <IoWifi size={15} />
+              {sharing ? ` ${shareState === 'connected' ? 'On Air' : 'Linking…'}` : ' Share to host'}
             </button>
           </div>
 

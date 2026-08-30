@@ -1,0 +1,439 @@
+/* ==========================================================================
+   SCORE CAMERA ADMIN — quick match builder (dark broadcast palette)
+   ========================================================================== */
+
+.cam-admin {
+  min-height: 100vh;
+  background: radial-gradient(circle at 20% 0%, #1e1b3a 0%, #0b0b16 55%, #08080f 100%);
+  color: #e4e4e7;
+  font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  padding-bottom: 48px;
+}
+
+.cam-admin--loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+}
+
+.cam-admin__spinner {
+  width: 34px;
+  height: 34px;
+  border: 3px solid rgba(255, 255, 255, 0.15);
+  border-top-color: #fbbf24;
+  border-radius: 50%;
+  animation: cam-admin-spin 0.9s linear infinite;
+}
+
+@keyframes cam-admin-spin { to { transform: rotate(360deg); } }
+
+/* ── Header ── */
+
+.cam-admin__header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 18px 24px;
+  background: rgba(255, 255, 255, 0.04);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.cam-admin__title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: #fbbf24;
+  flex: 1;
+  min-width: 0;
+}
+
+.cam-admin__title h1 {
+  margin: 0;
+  font-size: 19px;
+  font-weight: 800;
+  color: #fafafa;
+  letter-spacing: 0.2px;
+}
+
+.cam-admin__title span {
+  font-size: 12.5px;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.cam-admin__stats {
+  display: flex;
+  gap: 14px;
+  font-size: 12.5px;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.cam-admin__stats span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.cam-admin__icon-btn {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.06);
+  color: #e4e4e7;
+  cursor: pointer;
+}
+
+.cam-admin__icon-btn:hover { background: rgba(255, 255, 255, 0.12); }
+
+/* ── Tabs ── */
+
+.cam-admin__tabs {
+  display: flex;
+  gap: 8px;
+  padding: 14px 24px 0;
+  flex-wrap: wrap;
+}
+
+.cam-admin__tabs button {
+  padding: 9px 18px;
+  border-radius: 10px 10px 0 0;
+  border: 1px solid transparent;
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(255, 255, 255, 0.65);
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.cam-admin__tabs button.is-active {
+  background: rgba(251, 191, 36, 0.16);
+  border-color: rgba(251, 191, 36, 0.4);
+  color: #fbbf24;
+}
+
+/* ── Layout ── */
+
+.cam-admin__body {
+  padding: 20px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  max-width: 1100px;
+}
+
+.cam-admin__card {
+  background: rgba(255, 255, 255, 0.045);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 16px;
+  padding: 20px;
+}
+
+.cam-admin__card h2 {
+  margin: 0 0 16px;
+  font-size: 15px;
+  font-weight: 700;
+  color: #fafafa;
+}
+
+.cam-admin__form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 14px;
+}
+
+.cam-admin__form-grid label,
+.cam-admin__colors {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.cam-admin__form-grid span,
+.cam-admin__colors > span {
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.cam-admin input,
+.cam-admin select,
+.cam-admin textarea {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(0, 0, 0, 0.35);
+  color: #f4f4f5;
+  font-size: 14px;
+  font-family: inherit;
+}
+
+.cam-admin input:focus,
+.cam-admin select:focus,
+.cam-admin textarea:focus {
+  outline: none;
+  border-color: rgba(251, 191, 36, 0.6);
+}
+
+.cam-admin textarea { resize: vertical; }
+
+.cam-admin__colors > div { display: flex; gap: 7px; flex-wrap: wrap; }
+
+.cam-admin__swatch {
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  border: 2px solid transparent;
+  cursor: pointer;
+}
+
+.cam-admin__swatch.is-on { border-color: #fff; }
+
+/* ── Buttons ── */
+
+.cam-admin__actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 16px;
+}
+
+.cam-admin__btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 16px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.07);
+  color: #e4e4e7;
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.cam-admin__btn:hover:not(:disabled) { background: rgba(255, 255, 255, 0.13); }
+.cam-admin__btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.cam-admin__btn--primary {
+  background: linear-gradient(135deg, #fbbf24, #f59e0b);
+  border-color: transparent;
+  color: #1a1206;
+}
+
+.cam-admin__btn--primary:hover:not(:disabled) { filter: brightness(1.08); }
+
+.cam-admin__btn--ghost {
+  background: transparent;
+  border-style: dashed;
+}
+
+/* ── Teams ── */
+
+.cam-admin__team-list { display: flex; flex-direction: column; gap: 12px; }
+
+.cam-admin__team {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  overflow: hidden;
+}
+
+.cam-admin__team-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 13px 16px;
+  border-left: 4px solid #2563eb;
+  flex-wrap: wrap;
+}
+
+.cam-admin__team-id { display: flex; align-items: center; gap: 12px; }
+
+.cam-admin__team-id img {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  object-fit: cover;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.cam-admin__team-badge {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 800;
+  color: #fff;
+}
+
+.cam-admin__team-id strong { display: block; font-size: 15px; color: #fafafa; }
+.cam-admin__team-id small { font-size: 12px; color: rgba(255, 255, 255, 0.5); }
+
+.cam-admin__team-actions { display: flex; gap: 6px; }
+
+.cam-admin__team-actions button,
+.cam-admin__fixture-actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 7px 12px;
+  border-radius: 9px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.06);
+  color: #d4d4d8;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.cam-admin__team-actions button:hover,
+.cam-admin__fixture-actions button:hover {
+  background: rgba(255, 255, 255, 0.13);
+  color: #fff;
+}
+
+/* ── Roster ── */
+
+.cam-admin__roster {
+  padding: 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.cam-admin__add-player {
+  display: grid;
+  grid-template-columns: 1fr 190px auto;
+  gap: 8px;
+}
+
+.cam-admin__bulk { display: flex; flex-direction: column; gap: 8px; }
+
+.cam-admin__players {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.cam-admin__players li {
+  display: grid;
+  grid-template-columns: 30px 1fr 190px 34px;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border-radius: 9px;
+  background: rgba(0, 0, 0, 0.28);
+}
+
+.cam-admin__player-no {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.cam-admin__player-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: #f4f4f5;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cam-admin__players button {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  background: rgba(239, 68, 68, 0.14);
+  color: #fca5a5;
+  cursor: pointer;
+}
+
+/* ── Fixtures ── */
+
+.cam-admin__fixtures { display: flex; flex-direction: column; gap: 10px; }
+
+.cam-admin__fixture {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 14px 16px;
+  border-radius: 13px;
+  background: rgba(255, 255, 255, 0.045);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  flex-wrap: wrap;
+}
+
+.cam-admin__fixture-main { display: flex; flex-direction: column; gap: 4px; }
+.cam-admin__fixture-main strong { font-size: 15px; color: #fafafa; }
+.cam-admin__fixture-main small { font-size: 12px; color: rgba(255, 255, 255, 0.5); }
+
+.cam-admin__fixture-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+
+.cam-admin__status {
+  align-self: flex-start;
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.7px;
+  text-transform: uppercase;
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.cam-admin__status--live { background: rgba(239, 68, 68, 0.22); color: #fca5a5; }
+.cam-admin__status--completed { background: rgba(34, 197, 94, 0.2); color: #86efac; }
+
+/* ── Misc ── */
+
+.cam-admin__empty {
+  margin: 0;
+  padding: 14px;
+  border-radius: 12px;
+  border: 1px dashed rgba(255, 255, 255, 0.16);
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 13.5px;
+  text-align: center;
+}
+
+.cam-admin__toast {
+  position: fixed;
+  left: 50%;
+  bottom: 26px;
+  transform: translateX(-50%);
+  padding: 11px 20px;
+  border-radius: 11px;
+  background: rgba(24, 24, 33, 0.96);
+  border: 1px solid rgba(251, 191, 36, 0.45);
+  color: #fbbf24;
+  font-size: 13.5px;
+  font-weight: 600;
+  z-index: 60;
+}
+
+@media (max-width: 720px) {
+  .cam-admin__header { flex-wrap: wrap; }
+  .cam-admin__stats { width: 100%; }
+  .cam-admin__add-player { grid-template-columns: 1fr; }
+  .cam-admin__players li { grid-template-columns: 26px 1fr 34px; }
+  .cam-admin__players li select { grid-column: 1 / -1; }
+}

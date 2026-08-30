@@ -9,8 +9,10 @@ import { useTenantNavigate as useNavigate } from './hooks/useTenantNavigate';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AnimatePresence, motion } from 'framer-motion';
 import { 
-  GiCricketBat, 
+  GiCricketBat,
   GiBaseballGlove,
+  GiSprint,
+  GiShield,
 } from 'react-icons/gi';
 import {
   IoBaseball,
@@ -71,6 +73,7 @@ import { useActiveOverlay, useNotification, useCurrentPlayer, useSoldPlayers, us
 import { useAuctionStore } from './store/auctionStore';
 import { extractDriveFileId } from './utils/driveImage';
 import { formatRoleDisplay, getRoleCategory, inferRoleCategoryFromPlayer, parseRoleDetails, getRoleBadgeColor } from './utils/roleFormatter';
+import { getKabaddiRoleCategory } from './utils/kabaddiRoles';
 import './index.css';
 
 // Create Query Client
@@ -2412,8 +2415,21 @@ function HelpModal({ onClose }: { onClose: () => void }) {
 // Role Icon Component - Using react-icons library
 function RoleIcon({ role }: { readonly role: string }) {
   const iconClass = "role-icon-svg";
+
+  // Kabaddi rosters use raider / defender roles — badge them with their own icons.
+  switch (getKabaddiRoleCategory(role)) {
+    case 'Raider':
+      return <GiSprint className={iconClass} />;
+    case 'Defender':
+      return <GiShield className={iconClass} />;
+    case 'All-Rounder':
+      return <IoStar className={iconClass} />;
+    default:
+      break;
+  }
+
   const category = getRoleCategory(role);
-  
+
   switch (category) {
     case 'Batsman':
       return <GiCricketBat className={iconClass} />;

@@ -5,11 +5,12 @@
 
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { GiCricketBat, GiBaseballGlove } from 'react-icons/gi';
+import { GiCricketBat, GiBaseballGlove, GiSprint, GiShield } from 'react-icons/gi';
 import { IoBaseball, IoStar } from 'react-icons/io5';
 import type { Player } from '../../types';
 import { activeConfig } from '../../config';
 import { formatRoleDisplay, getRoleCategory, getRoleBadgeColor as getRoleBadgeHex } from '../../utils/roleFormatter';
+import { getKabaddiRoleCategory } from '../../utils/kabaddiRoles';
 import { getCachedStorageUrl, resolveImageAsync } from '../../services/firebaseStorageService';
 import { extractDriveFileId } from '../../utils/driveImage';
 import { getLiveBlobUrl } from '../../services/mediaBlobCache';
@@ -36,6 +37,12 @@ export function PlayerCard({
   const currencySuffix = useCurrencySuffix();
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const getRoleIcon = (role: Player['role']) => {
+    switch (getKabaddiRoleCategory(role)) {
+      case 'Raider': return <GiSprint className="inline-block" />;
+      case 'Defender': return <GiShield className="inline-block" />;
+      case 'All-Rounder': return <IoStar className="inline-block" />;
+      default: break;
+    }
     const category = getRoleCategory(role);
     switch (category) {
       case 'Batsman': return <GiCricketBat className="inline-block" />;

@@ -22,12 +22,17 @@ import ScoringAdminPage from './pages/ScoringAdminPage'
 import ScoreUpdatePage from './pages/ScoreUpdatePage'
 import ScoreOBSOverlayPage from './pages/ScoreOBSOverlayPage'
 import ScoreCameraPage from './pages/ScoreCameraPage'
+import ScoreCameraAdminPage from './pages/ScoreCameraAdminPage'
+import ScoreCameraHostPage from './pages/ScoreCameraHostPage'
 import ScoreOBSControlDock from './pages/ScoreOBSControlDock'
 import LiveQuestionPage from './pages/LiveQuestionPage'
 import FootballAdminPage from './pages/FootballAdminPage'
 import FootballUpdatePage from './pages/FootballUpdatePage'
 import FootballOBSOverlayPage from './pages/FootballOBSOverlayPage'
 import FootballOBSDockPage from './pages/FootballOBSDockPage'
+import KabaddiAdminPage from './pages/KabaddiAdminPage'
+import KabaddiUpdatePage from './pages/KabaddiUpdatePage'
+import KabaddiOBSOverlayPage from './pages/KabaddiOBSOverlayPage'
 import { TenantGate } from './components/TenantGate/TenantGate'
 import './index.css'
 
@@ -93,6 +98,8 @@ createRoot(document.getElementById('root')!).render(
             <Route path="/cricket/scorer/update" element={<ScoreUpdatePage />} />
             <Route path="/cricket/scorer/obs-overlay" element={<ScoreOBSOverlayPage />} />
             <Route path="/cricket/scorer/camera" element={<ScoreCameraPage />} />
+            <Route path="/cricket/scorer/camera/admin" element={<ScoreCameraAdminPage />} />
+            <Route path="/cricket/scorer/camera/host" element={<ScoreCameraHostPage />} />
             <Route path="/cricket/scorer/obs-dock" element={<ScoreOBSControlDock />} />
             <Route path="/cricket/scorer/live-question" element={<LiveQuestionPage />} />
             {/* Football scorer (legacy top-level — default tenant) */}
@@ -100,6 +107,10 @@ createRoot(document.getElementById('root')!).render(
             <Route path="/football/scorer/update" element={<FootballUpdatePage />} />
             <Route path="/football/scorer/obs-overlay" element={<FootballOBSOverlayPage />} />
             <Route path="/football/scorer/obs-dock" element={<FootballOBSDockPage />} />
+            {/* Kabaddi scorer (legacy top-level — default tenant) */}
+            <Route path="/kabaddi/scorer/admin" element={<KabaddiAdminPage />} />
+            <Route path="/kabaddi/scorer/update" element={<KabaddiUpdatePage />} />
+            <Route path="/kabaddi/scorer/obs-overlay" element={<KabaddiOBSOverlayPage />} />
             {/* Legacy scorer routes (redirects) */}
             <Route path="/scoring/admin" element={<ScoringAdminPage />} />
             <Route path="/match/score/update" element={<ScoreUpdatePage />} />
@@ -126,6 +137,8 @@ createRoot(document.getElementById('root')!).render(
             <Route path="/:tenantSlug/cricket/scorer/update" element={<TenantGate><ScoreUpdatePage /></TenantGate>} />
             <Route path="/:tenantSlug/cricket/scorer/obs-overlay" element={<TenantGate><ScoreOBSOverlayPage /></TenantGate>} />
             <Route path="/:tenantSlug/cricket/scorer/camera" element={<TenantGate><ScoreCameraPage /></TenantGate>} />
+            <Route path="/:tenantSlug/cricket/scorer/camera/admin" element={<TenantGate><ScoreCameraAdminPage /></TenantGate>} />
+            <Route path="/:tenantSlug/cricket/scorer/camera/host" element={<TenantGate><ScoreCameraHostPage /></TenantGate>} />
             <Route path="/:tenantSlug/cricket/scorer/obs-dock" element={<TenantGate><ScoreOBSControlDock /></TenantGate>} />
             <Route path="/:tenantSlug/cricket/scorer/live-question" element={<TenantGate><LiveQuestionPage /></TenantGate>} />
             {/* Football scorer (tenant-scoped) */}
@@ -133,6 +146,10 @@ createRoot(document.getElementById('root')!).render(
             <Route path="/:tenantSlug/football/scorer/update" element={<TenantGate><FootballUpdatePage /></TenantGate>} />
             <Route path="/:tenantSlug/football/scorer/obs-overlay" element={<TenantGate><FootballOBSOverlayPage /></TenantGate>} />
             <Route path="/:tenantSlug/football/scorer/obs-dock" element={<TenantGate><FootballOBSDockPage /></TenantGate>} />
+            {/* Kabaddi scorer (tenant-scoped) */}
+            <Route path="/:tenantSlug/kabaddi/scorer/admin" element={<TenantGate><KabaddiAdminPage /></TenantGate>} />
+            <Route path="/:tenantSlug/kabaddi/scorer/update" element={<TenantGate><KabaddiUpdatePage /></TenantGate>} />
+            <Route path="/:tenantSlug/kabaddi/scorer/obs-overlay" element={<TenantGate><KabaddiOBSOverlayPage /></TenantGate>} />
             {/* Legacy scorer routes */}
             <Route path="/:tenantSlug/scoring/admin" element={<TenantGate><ScoringAdminPage /></TenantGate>} />
             <Route path="/:tenantSlug/match/score/update" element={<TenantGate><ScoreUpdatePage /></TenantGate>} />

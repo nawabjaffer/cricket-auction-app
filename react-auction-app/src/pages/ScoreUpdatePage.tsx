@@ -22,6 +22,7 @@ import type {
   TournamentStats,
 } from '../types/scoring';
 import FieldPlacementEditor from '../components/FieldPlacementEditor/FieldPlacementEditor';
+import LiveCameraSwitcher from '../components/LiveCameraSwitcher/LiveCameraSwitcher';
 import './ScoreUpdatePage.css';
 
 // ── Run buttons layout ───────────────────────────────────────────────────────
@@ -454,6 +455,9 @@ export default function ScoreUpdatePage() {
           </span>
         )}
       </div>
+
+      {/* ── Multi-camera angle control (appears once a camera joins) ─── */}
+      <LiveCameraSwitcher matchId={matchId ?? null} />
 
       {/* ── Tournament Record Chase Alert ───────────────────────────── */}
       {showRecordAlert && teamRecord && (

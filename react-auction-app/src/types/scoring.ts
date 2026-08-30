@@ -486,6 +486,21 @@ export interface MatchLineup {
   players: MatchSquadPlayer[];
 }
 
+// ── Quick Teams (camera admin) ──
+// Ad-hoc teams for knockout / friendly fixtures created straight from the
+// camera admin, with no auction roster behind them.
+
+export interface QuickTeam {
+  id: string;
+  name: string;
+  shortCode?: string;
+  primaryColor?: string;
+  logoUrl?: string;
+  players: MatchSquadPlayer[];
+  createdAt: number;
+  updatedAt: number;
+}
+
 // ── Helper: create empty career stats ──
 
 export function createEmptyCareerStats(playerId: string): PlayerCareerStats {

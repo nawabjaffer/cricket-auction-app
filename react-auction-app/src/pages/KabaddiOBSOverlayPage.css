@@ -1,0 +1,304 @@
+/* ==========================================================================
+   KABADDI OBS OVERLAY — transparent broadcast scorecard (bottom anchored)
+   ========================================================================== */
+
+.kbo {
+  position: fixed;
+  inset: 0;
+  background: transparent;
+  font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  color: var(--kb-text, #fff);
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.kbo[data-empty='true'] { background: transparent; }
+
+/* ── Placement ── */
+
+.kbo__scoreboard {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: center;
+}
+
+.kbo--bottom-center .kbo__scoreboard { left: 50%; bottom: 46px; transform: translateX(-50%); }
+.kbo--bottom-left .kbo__scoreboard { left: 46px; bottom: 46px; align-items: flex-start; }
+.kbo--bottom-right .kbo__scoreboard { right: 46px; bottom: 46px; align-items: flex-end; }
+.kbo--top-center .kbo__scoreboard { left: 50%; top: 46px; transform: translateX(-50%); }
+
+.kbo__tourn-logo img {
+  height: 54px;
+  object-fit: contain;
+  filter: drop-shadow(0 3px 10px rgba(0, 0, 0, 0.6));
+}
+
+/* ── Main strip ── */
+
+.kbo__strip {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 12px 22px;
+  border-radius: 16px;
+  background: linear-gradient(180deg, rgba(10, 10, 10, 0.94), rgba(10, 10, 10, 0.88));
+  border: 2px solid var(--kb-secondary, #1d4ed8);
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.55);
+}
+
+.kbo__team {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 210px;
+}
+
+.kbo__team--away { justify-content: flex-end; }
+
+.kbo__team.is-raiding .kbo__team-name { color: var(--kb-accent, #f59e0b); }
+
+.kbo__team-logo {
+  display: grid;
+  place-items: center;
+  width: 62px;
+  height: 62px;
+  border-radius: 13px;
+  overflow: hidden;
+  background: #1f2937;
+  flex-shrink: 0;
+}
+
+.kbo__team-logo img { width: 100%; height: 100%; object-fit: contain; }
+
+.kbo__team-logo span {
+  font-size: 17px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+}
+
+.kbo__team-info { display: flex; flex-direction: column; gap: 6px; }
+.kbo__team--away .kbo__team-info { align-items: flex-end; }
+
+.kbo__team-name {
+  font-size: 26px;
+  font-weight: 800;
+  letter-spacing: 1.2px;
+  line-height: 1;
+}
+
+/* Players still on the mat */
+.kbo__mat { display: flex; gap: 4px; }
+
+.kbo__mat-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.16);
+  transition: background 0.25s ease;
+}
+
+.kbo__mat-dot.is-on { background: var(--kb-accent, #f59e0b); }
+
+.kbo__raid-flag {
+  position: absolute;
+  top: -14px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: var(--kb-accent, #f59e0b);
+  color: #1a1206;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 1px;
+}
+
+/* ── Score ── */
+
+.kbo__score {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 0 20px;
+  border-left: 1px solid rgba(255, 255, 255, 0.14);
+  border-right: 1px solid rgba(255, 255, 255, 0.14);
+}
+
+.kbo__score-num {
+  font-size: 54px;
+  font-weight: 900;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.kbo__score-sep { font-size: 34px; font-weight: 700; opacity: 0.45; }
+
+/* ── Status bar ── */
+
+.kbo__status {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 7px 18px;
+  border-radius: 11px;
+  background: rgba(10, 10, 10, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+}
+
+.kbo__live {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 10px;
+  border-radius: 5px;
+  background: #ef4444;
+  font-size: 11.5px;
+  letter-spacing: 1px;
+}
+
+.kbo__live-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #fff;
+  animation: kbo-blink 1s ease-in-out infinite;
+}
+
+@keyframes kbo-blink { 50% { opacity: 0.25; } }
+
+.kbo__clock {
+  font-variant-numeric: tabular-nums;
+  color: var(--kb-accent, #f59e0b);
+  font-size: 17px;
+}
+
+.kbo__half { opacity: 0.75; font-size: 12.5px; }
+
+.kbo__raider {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13px;
+  color: #e5e7eb;
+}
+
+.kbo__raider-label {
+  padding: 2px 7px;
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.12);
+  font-size: 9.5px;
+  letter-spacing: 1px;
+  opacity: 0.8;
+}
+
+.kbo__dod {
+  padding: 3px 11px;
+  border-radius: 999px;
+  background: #a855f7;
+  color: #fff;
+  font-size: 11px;
+  letter-spacing: 1px;
+  animation: kbo-pulse 0.9s ease-in-out infinite;
+}
+
+@keyframes kbo-pulse { 50% { opacity: 0.6; } }
+
+.kbo__raid-clock {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 2px;
+  padding: 3px 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  font-variant-numeric: tabular-nums;
+}
+
+.kbo__raid-clock-num { font-size: 19px; font-weight: 900; }
+.kbo__raid-clock-unit { font-size: 11px; opacity: 0.6; }
+
+.kbo__raid-clock--urgent {
+  background: rgba(239, 68, 68, 0.28);
+  border-color: #ef4444;
+  color: #fca5a5;
+  animation: kbo-pulse 0.6s ease-in-out infinite;
+}
+
+/* ── Partner logo ── */
+
+.kbo__partner { position: absolute; top: 34px; right: 34px; }
+
+.kbo__partner img {
+  height: 66px;
+  object-fit: contain;
+  filter: drop-shadow(0 3px 10px rgba(0, 0, 0, 0.6));
+}
+
+/* ── Celebrations ── */
+
+.kbo__celeb {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  text-align: center;
+}
+
+.kbo__celeb-media { max-width: 62%; max-height: 66%; object-fit: contain; }
+
+.kbo__celeb-big {
+  font-size: 132px;
+  font-weight: 900;
+  letter-spacing: 3px;
+  text-shadow: 0 0 46px currentColor, 0 8px 26px rgba(0, 0, 0, 0.75);
+}
+
+.kbo__celeb--tackle .kbo__celeb-big { font-size: 116px; }
+
+.kbo__celeb-sub {
+  font-size: 26px;
+  font-weight: 800;
+  letter-spacing: 4px;
+  color: #f4f4f5;
+  text-shadow: 0 4px 16px rgba(0, 0, 0, 0.8);
+}
+
+.kbo__celeb-player {
+  display: inline-flex;
+  align-items: center;
+  gap: 14px;
+  padding: 11px 26px;
+  border-radius: 13px;
+  border-left: 6px solid currentColor;
+  background: rgba(10, 10, 10, 0.9);
+}
+
+.kbo__celeb-min { font-size: 19px; font-weight: 800; opacity: 0.6; }
+.kbo__celeb-name { font-size: 30px; font-weight: 800; letter-spacing: 0.6px; color: #fff; }
+
+.kbo__celeb-pts {
+  padding: 3px 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.14);
+  font-size: 19px;
+  font-weight: 900;
+}
+
+.kbo__dod-banner {
+  padding: 18px 62px;
+  border-radius: 14px;
+  font-size: 52px;
+  font-weight: 900;
+  letter-spacing: 5px;
+  color: #fff;
+  box-shadow: 0 16px 46px rgba(0, 0, 0, 0.6);
+}

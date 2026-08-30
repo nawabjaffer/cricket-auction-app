@@ -1148,6 +1148,13 @@
 .cb-role-badge.bowler { background: rgba(52,211,153,0.15); color: var(--cb-success); }
 .cb-role-badge.allrounder { background: rgba(167,139,250,0.15); color: #a78bfa; }
 .cb-role-badge.keeper { background: rgba(251,191,36,0.15); color: var(--cb-warning); }
+/* Kabaddi roles */
+.cb-role-badge.role-raider { background: rgba(245,158,11,0.18); color: #fbbf24; }
+.cb-role-badge.role-defender { background: rgba(59,130,246,0.18); color: #60a5fa; }
+.cb-role-badge.role-allrounder { background: rgba(167,139,250,0.15); color: #a78bfa; }
+.cb-role-badge.role-batsman { background: rgba(96,165,250,0.15); color: var(--cb-info); }
+.cb-role-badge.role-bowler { background: rgba(52,211,153,0.15); color: var(--cb-success); }
+.cb-role-badge.role-keeper { background: rgba(251,191,36,0.15); color: var(--cb-warning); }
 
 .cb-price-row {
   display: flex;

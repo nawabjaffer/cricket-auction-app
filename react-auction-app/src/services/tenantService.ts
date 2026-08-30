@@ -9,15 +9,17 @@ import { get, ref, set, update } from 'firebase/database';
 import { realtimeSync } from './realtimeSync';
 import { DEFAULT_TENANT_ID, platformPath } from './tenantPath';
 import type { FootballRulesConfig } from '../types/football';
+import type { KabaddiRulesConfig } from '../types/kabaddi';
 
 export type TenantPlan = 'free' | 'basic' | 'pro' | 'enterprise';
 
 /** Sports a tenant (tournament) has enabled. */
-export type SportKey = 'cricket' | 'football';
+export type SportKey = 'cricket' | 'football' | 'kabaddi';
 
 export const ALL_SPORTS: { key: SportKey; label: string }[] = [
   { key: 'cricket', label: 'Cricket' },
   { key: 'football', label: 'Football' },
+  { key: 'kabaddi', label: 'Kabaddi' },
 ];
 
 export interface TenantRecord {
@@ -35,6 +37,8 @@ export interface TenantRecord {
   // Football rules & regulations (format, timings, subs, discipline).
   // Configured from Platform Admin, consumed by the football scorer.
   footballRules?: FootballRulesConfig;
+  // Kabaddi rules & regulations (format, halves, raid clock, bonus/all-out).
+  kabaddiRules?: KabaddiRulesConfig;
   // Franchise branding / contact
   franchiseName?: string;
   contactEmail?: string;
@@ -123,6 +127,16 @@ class TenantService {
       Object.entries(rules).filter(([, v]) => v !== undefined),
     ) as FootballRulesConfig;
     await set(ref(db, `${TENANT_REGISTRY_PATH()}/${id}/footballRules`), clean);
+  }
+
+  /** Save the kabaddi rules & regulations for a tournament. */
+  async setKabaddiRules(id: string, rules: KabaddiRulesConfig): Promise<void> {
+    const db = await this.getDb();
+    if (!db) return;
+    const clean = Object.fromEntries(
+      Object.entries(rules).filter(([, v]) => v !== undefined),
+    ) as KabaddiRulesConfig;
+    await set(ref(db, `${TENANT_REGISTRY_PATH()}/${id}/kabaddiRules`), clean);
   }
 
   /** Ensure the default tenant record exists (one-time bootstrap). */

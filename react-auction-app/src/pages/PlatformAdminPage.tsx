@@ -13,8 +13,15 @@ import {
   FOOTBALL_FORMATS, FOOTBALL_FORMAT_PRESETS, DEFAULT_FOOTBALL_RULES,
 } from '../types/football';
 import type { FootballFormat, FootballRulesConfig } from '../types/football';
+import {
+  KABADDI_FORMATS, KABADDI_FORMAT_PRESETS, DEFAULT_KABADDI_RULES,
+} from '../types/kabaddi';
+import type { KabaddiFormat, KabaddiRulesConfig } from '../types/kabaddi';
 
 const PLAN_OPTIONS: TenantPlan[] = ['free', 'basic', 'pro', 'enterprise'];
+
+const SPORT_ICON: Record<SportKey, string> = { cricket: '🏏', football: '⚽', kabaddi: '🤼' };
+const SPORT_COLOR: Record<SportKey, string> = { cricket: '#2563eb', football: '#e11d1d', kabaddi: '#7c3aed' };
 
 export default function PlatformAdminPage() {
   const [tenants, setTenants] = useState<TenantRecord[]>([]);
@@ -23,6 +30,7 @@ export default function PlatformAdminPage() {
   const [draft, setDraft] = useState({ id: '', slug: '', name: '', plan: 'pro' as TenantPlan });
   const [creating, setCreating] = useState(false);
   const [rulesFor, setRulesFor] = useState<TenantRecord | null>(null);
+  const [kabaddiRulesFor, setKabaddiRulesFor] = useState<TenantRecord | null>(null);
 
   const refresh = async () => {
     setLoading(true);
@@ -131,7 +139,7 @@ export default function PlatformAdminPage() {
                       <span style={{ fontSize: 11, opacity: 0.6, textTransform: 'uppercase', letterSpacing: 0.5 }}>Sports:</span>
                       {ALL_SPORTS.map((sp) => {
                         const on = sports.includes(sp.key);
-                        const onBg = sp.key === 'football' ? '#e11d1d' : '#2563eb';
+                        const onBg = SPORT_COLOR[sp.key];
                         return (
                           <button key={sp.key} onClick={() => toggleSport(t, sp.key)}
                             title={on ? `Disable ${sp.label}` : `Enable ${sp.label}`}
@@ -141,7 +149,7 @@ export default function PlatformAdminPage() {
                               borderColor: on ? 'transparent' : '#374151',
                               color: on ? '#fff' : '#94a3b8',
                             }}>
-                            {sp.key === 'football' ? '⚽' : '🏏'} {sp.label} {on ? '✓' : ''}
+                            {SPORT_ICON[sp.key]} {sp.label} {on ? '✓' : ''}
                           </button>
                         );
                       })}
@@ -152,6 +160,12 @@ export default function PlatformAdminPage() {
                       {sports.includes('football') && (
                         <button onClick={() => setRulesFor(t)} style={rulesBtn} title="Configure football rules & timing">
                           ⚙️ Football Rules{t.footballRules ? ` · ${t.footballRules.format} · ${t.footballRules.halfDurationMin}′×${t.footballRules.numberOfHalves}` : ' · set up'}
+                        </button>
+                      )}
+                      {sports.includes('kabaddi') && <a href={`/${t.slug}/kabaddi/scorer/admin`} style={{ ...sportLink, color: '#c4b5fd' }}>🤼 Open Kabaddi Scorer →</a>}
+                      {sports.includes('kabaddi') && (
+                        <button onClick={() => setKabaddiRulesFor(t)} style={rulesBtn} title="Configure kabaddi rules & timing">
+                          ⚙️ Kabaddi Rules{t.kabaddiRules ? ` · ${t.kabaddiRules.format} · ${t.kabaddiRules.halfDurationMin}′×${t.kabaddiRules.numberOfHalves}` : ' · set up'}
                         </button>
                       )}
                     </div>
@@ -188,6 +202,121 @@ export default function PlatformAdminPage() {
           }}
         />
       )}
+      {kabaddiRulesFor && (
+        <KabaddiRulesModal
+          tenant={kabaddiRulesFor}
+          onClose={() => setKabaddiRulesFor(null)}
+          onSaved={async (rules) => {
+            setTenants((prev) => prev.map((x) => (x.id === kabaddiRulesFor.id ? { ...x, kabaddiRules: rules } : x)));
+            try { await tenantService.setKabaddiRules(kabaddiRulesFor.id, rules); }
+            catch (err) { setError(err instanceof Error ? err.message : String(err)); }
+            setKabaddiRulesFor(null);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+// ── Kabaddi rules configuration modal ──────────────────────────────────
+
+function KabaddiRulesModal({ tenant, onClose, onSaved }: Readonly<{
+  tenant: TenantRecord;
+  onClose: () => void;
+  onSaved: (rules: KabaddiRulesConfig) => void;
+}>) {
+  const [rules, setRules] = useState<KabaddiRulesConfig>(tenant.kabaddiRules ?? DEFAULT_KABADDI_RULES);
+
+  const applyPreset = (format: KabaddiFormat) => setRules(KABADDI_FORMAT_PRESETS[format]);
+  const set = <K extends keyof KabaddiRulesConfig>(k: K, v: KabaddiRulesConfig[K]) => setRules((r) => ({ ...r, [k]: v }));
+
+  return (
+    <div style={modalOverlay} onClick={onClose}>
+      <div style={modalCard} onClick={(e) => e.stopPropagation()}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+          <h2 style={{ margin: 0, fontSize: 18 }}>🤼 Kabaddi Rules · {tenant.name}</h2>
+          <button onClick={onClose} style={{ ...btnGhost, padding: '6px 10px' }}>✕</button>
+        </div>
+        <p style={{ marginTop: 4, fontSize: 12, opacity: 0.7 }}>
+          A standard match is 40 minutes — two 20-minute halves with a 5-minute break. Raids are capped at 30 seconds.
+        </p>
+
+        <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
+          {KABADDI_FORMATS.map((f) => (
+            <button key={f.value} onClick={() => applyPreset(f.value)}
+              style={{
+                ...formatChip,
+                background: rules.format === f.value ? '#7c3aed' : 'transparent',
+                borderColor: rules.format === f.value ? 'transparent' : '#374151',
+                color: rules.format === f.value ? '#fff' : '#cbd5e1',
+              }}>
+              {f.label}
+            </button>
+          ))}
+        </div>
+
+        <fieldset style={fieldset}>
+          <legend style={legend}>⏱ Timing</legend>
+          <div style={grid3}>
+            <NumField label="Half duration (min)" value={rules.halfDurationMin} onChange={(v) => set('halfDurationMin', v)} />
+            <NumField label="Number of halves" value={rules.numberOfHalves} onChange={(v) => set('numberOfHalves', v)} />
+            <NumField label="Half-time break (min)" value={rules.halfTimeBreakMin} onChange={(v) => set('halfTimeBreakMin', v)} />
+          </div>
+          <div style={grid3}>
+            <NumField label="Raid clock (sec)" value={rules.raidDurationSec} onChange={(v) => set('raidDurationSec', v)} />
+            <ToggleField label="Extra time" value={rules.extraTimeEnabled} onChange={(v) => set('extraTimeEnabled', v)} />
+            <NumField label="ET half (min)" value={rules.extraTimeHalfMin} onChange={(v) => set('extraTimeHalfMin', v)} disabled={!rules.extraTimeEnabled} />
+          </div>
+          <div style={{ fontSize: 12, opacity: 0.65, marginTop: 6 }}>
+            Full time = {rules.halfDurationMin * rules.numberOfHalves} min ({rules.numberOfHalves} × {rules.halfDurationMin}).
+          </div>
+        </fieldset>
+
+        <fieldset style={fieldset}>
+          <legend style={legend}>👥 Squad</legend>
+          <div style={grid3}>
+            <NumField label="Players on court" value={rules.playersPerSide} onChange={(v) => set('playersPerSide', v)} />
+            <NumField label="Substitutes" value={rules.substitutesAllowed} onChange={(v) => set('substitutesAllowed', v)} />
+          </div>
+        </fieldset>
+
+        <fieldset style={fieldset}>
+          <legend style={legend}>🎯 Scoring</legend>
+          <div style={grid3}>
+            <ToggleField label="Bonus line" value={rules.bonusLineEnabled} onChange={(v) => set('bonusLineEnabled', v)} />
+            <NumField label="Bonus needs ≥ defenders" value={rules.bonusMinDefenders} onChange={(v) => set('bonusMinDefenders', v)} disabled={!rules.bonusLineEnabled} />
+            <NumField label="All-out bonus points" value={rules.allOutBonusPoints} onChange={(v) => set('allOutBonusPoints', v)} />
+          </div>
+          <div style={grid3}>
+            <NumField label="Super raid at (points)" value={rules.superRaidPoints} onChange={(v) => set('superRaidPoints', v)} />
+            <NumField label="Super tackle at ≤ defenders" value={rules.superTackleMaxDefenders} onChange={(v) => set('superTackleMaxDefenders', v)} />
+            <NumField label="Super tackle points" value={rules.superTacklePoints} onChange={(v) => set('superTacklePoints', v)} />
+          </div>
+          <div style={grid3}>
+            <ToggleField label="Do-or-die raids" value={rules.doOrDieEnabled} onChange={(v) => set('doOrDieEnabled', v)} />
+            <NumField label="After N empty raids" value={rules.doOrDieAfterEmptyRaids} onChange={(v) => set('doOrDieAfterEmptyRaids', v)} disabled={!rules.doOrDieEnabled} />
+          </div>
+        </fieldset>
+
+        <fieldset style={fieldset}>
+          <legend style={legend}>🟨 Discipline</legend>
+          <div style={grid3}>
+            <ToggleField label="Green cards" value={rules.greenCardEnabled} onChange={(v) => set('greenCardEnabled', v)} />
+            <NumField label="Yellow suspension (min)" value={rules.yellowCardSuspensionMin} onChange={(v) => set('yellowCardSuspensionMin', v)} />
+          </div>
+        </fieldset>
+
+        <label style={{ display: 'block', marginTop: 12 }}>
+          <span style={{ fontSize: 12, opacity: 0.7 }}>Notes for officials (optional)</span>
+          <textarea value={rules.notes ?? ''} onChange={(e) => set('notes', e.target.value)}
+            style={{ ...inp, width: '100%', marginTop: 4, minHeight: 54, resize: 'vertical' }} placeholder="Any tournament-specific regulations…" />
+        </label>
+
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 16 }}>
+          <button onClick={onClose} style={btnGhost}>Cancel</button>
+          <button onClick={() => onSaved({ ...rules, notes: rules.notes?.trim() || undefined })} style={btnPrimary}>Save Rules</button>
+        </div>
+      </div>
     </div>
   );
 }

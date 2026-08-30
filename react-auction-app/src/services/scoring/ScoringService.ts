@@ -11,7 +11,7 @@ import type {
   IScoringAdapter, ScoringProvider, MatchSetup, MatchScoringConfig,
   LiveScore, PlayerMatchStats, PlayerCareerStats,
   ScoringOverlayConfig, ScoringAd, OverlayControlState, MatchLineup,
-  PreMatchState, Innings,
+  PreMatchState, Innings, QuickTeam,
 } from '../../types/scoring';
 import { createEmptyCareerStats } from '../../types/scoring';
 
@@ -214,6 +214,32 @@ export class ScoringService {
     const db = this.ensureDb();
     const snapshot = await get(ref(db, `${this.basePath}/matches/${matchId}/lineups/${teamId}`));
     return snapshot.exists() ? snapshot.val() : null;
+  }
+
+  // ── Quick Teams (camera admin, no auction roster) ──────────────────────────
+
+  async saveQuickTeam(team: QuickTeam): Promise<void> {
+    const db = this.ensureDb();
+    await set(ref(db, `${this.basePath}/quickTeams/${team.id}`), this.stripUndefinedDeep(team));
+  }
+
+  async deleteQuickTeam(teamId: string): Promise<void> {
+    const db = this.ensureDb();
+    await remove(ref(db, `${this.basePath}/quickTeams/${teamId}`));
+  }
+
+  subscribeQuickTeams(callback: (teams: QuickTeam[]) => void): () => void {
+    const db = this.ensureDb();
+    return onValue(ref(db, `${this.basePath}/quickTeams`), (snapshot) => {
+      if (!snapshot.exists()) { callback([]); return; }
+      const data = snapshot.val() as Record<string, QuickTeam>;
+      callback(
+        Object.values(data)
+          .filter((t): t is QuickTeam => !!t?.id)
+          .map(t => ({ ...t, players: t.players ?? [] }))
+          .sort((a, b) => a.name.localeCompare(b.name)),
+      );
+    });
   }
 
   // ── Player Match Notes/Stats ────────────────────────────────────────────────
