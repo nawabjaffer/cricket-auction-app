@@ -212,9 +212,39 @@ export function formatRoleDisplay(rawRole: string | PlayerRole | undefined | nul
 }
 
 /**
- * Get a short badge label (1-3 chars) for compact role display.
+ * Get a short badge label (1-4 chars) for compact role display.
  */
 export function getRoleBadge(role: string | undefined | null): string {
+  if (!role || typeof role !== 'string') return 'BAT';
+  const r = role.trim().toLowerCase();
+
+  // Kabaddi
+  if (/raider|raiding|\braid\b/.test(r)) return 'RAID';
+  if (/left corner|right corner|left cover|right cover|defender|defence|defense/.test(r)) return 'DEF';
+
+  // Volleyball
+  if (/attacker|spiker/.test(r)) return 'ATK';
+  if (/setter/.test(r)) return 'SET';
+  if (/blocker/.test(r)) return 'BLK';
+  if (/libero/.test(r)) return 'LIB';
+
+  // Football
+  if (/striker|forward|fwd|\bst\b|\bcf\b/.test(r)) return 'FWD';
+  if (/midfielder|midfield|winger|\bmid\b|\bcam\b|\bcdm\b|\bcm\b/.test(r)) return 'MID';
+  if (/goalkeeper|goalie|\bgk\b/.test(r)) return 'GK';
+
+  // Basketball
+  if (/point guard|\bpg\b/.test(r)) return 'PG';
+  if (/shooting guard|\bsg\b/.test(r)) return 'SG';
+  if (/small forward|\bsf\b/.test(r)) return 'SF';
+  if (/power forward|\bpf\b/.test(r)) return 'PF';
+  if (/center|\bc\b/.test(r)) return 'C';
+
+  // Badminton
+  if (/singles/.test(r)) return 'SGL';
+  if (/mixed/.test(r)) return 'MIX';
+  if (/doubles/.test(r)) return 'DBL';
+
   const category = getRoleCategory(role);
   switch (category) {
     case 'Wicket Keeper Batsman': return 'WK';
@@ -294,6 +324,36 @@ export function parseRoleDetails(rawRole: string | PlayerRole | undefined): Pars
  * Get theme color class for role badge.
  */
 export function getRoleBadgeColor(role: string | undefined | null): string {
+  if (!role || typeof role !== 'string') return '#3b82f6';
+  const r = role.trim().toLowerCase();
+
+  // Kabaddi
+  if (/raider|raiding|\braid\b/.test(r)) return '#ea580c';
+  if (/left corner|right corner|left cover|right cover|defender|defence|defense/.test(r)) return '#6366f1';
+
+  // Volleyball
+  if (/attacker|spiker/.test(r)) return '#f97316';
+  if (/setter/.test(r)) return '#06b6d4';
+  if (/blocker/.test(r)) return '#8b5cf6';
+  if (/libero/.test(r)) return '#10b981';
+
+  // Football
+  if (/striker|forward|fwd|\bst\b|\bcf\b/.test(r)) return '#ef4444';
+  if (/midfielder|midfield|winger|\bmid\b|\bcam\b|\bcdm\b|\bcm\b/.test(r)) return '#06b6d4';
+  if (/goalkeeper|goalie|\bgk\b/.test(r)) return '#f59e0b';
+
+  // Basketball
+  if (/point guard|\bpg\b/.test(r)) return '#3b82f6';
+  if (/shooting guard|\bsg\b/.test(r)) return '#f59e0b';
+  if (/small forward|\bsf\b/.test(r)) return '#ef4444';
+  if (/power forward|\bpf\b/.test(r)) return '#8b5cf6';
+  if (/center|\bc\b/.test(r)) return '#10b981';
+
+  // Badminton
+  if (/singles/.test(r)) return '#3b82f6';
+  if (/mixed/.test(r)) return '#ec4899';
+  if (/doubles/.test(r)) return '#10b981';
+
   const category = getRoleCategory(role);
   switch (category) {
     case 'Wicket Keeper Batsman': return '#8b5cf6';

@@ -3,6 +3,8 @@
 // Following TypeScript best practices for type safety and documentation
 // ============================================================================
 
+export type AuctionSport = 'cricket' | 'kabaddi' | 'football' | 'volleyball' | 'basketball' | 'badminton' | string;
+
 // Player Types
 
 // Detailed batting statistics
@@ -89,7 +91,25 @@ export type AuctionRoleCategory =
   | 'Wicket Keeper Batsman'
   | 'Batsman'
   | 'Bowler'
-  | 'All-Rounder';
+  | 'All-Rounder'
+  | 'Raider'
+  | 'Defender'
+  | 'Forward'
+  | 'Midfielder'
+  | 'Goalkeeper'
+  | 'Attacker'
+  | 'Setter'
+  | 'Blocker'
+  | 'Libero'
+  | 'Point Guard'
+  | 'Shooting Guard'
+  | 'Small Forward'
+  | 'Power Forward'
+  | 'Center'
+  | 'Singles Player'
+  | 'Doubles Player'
+  | 'Mixed Doubles Player'
+  | (string & {});
 
 export const DEFAULT_AUCTION_ROLE_ORDER: AuctionRoleCategory[] = [
   'Wicket Keeper Batsman',

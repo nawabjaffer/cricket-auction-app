@@ -21,4 +21,5 @@ export {
   useOrganizerLogo,
   useOrganizerName,
   useCurrencySuffix,
+  useSport,
 } from './auctionStore';

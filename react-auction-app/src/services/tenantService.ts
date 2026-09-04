@@ -139,6 +139,23 @@ class TenantService {
     await set(ref(db, `${TENANT_REGISTRY_PATH()}/${id}/kabaddiRules`), clean);
   }
 
+  /**
+   * Delete a tenant completely and purge its entire database tree to reclaim Firebase space.
+   * Clears `platform/tenants/{id}`, `tenants/{id}`, and `tenants/{slug}`.
+   */
+  async deleteTenant(id: string, slug?: string): Promise<void> {
+    const db = await this.getDb();
+    if (!db) throw new Error('Database not initialized');
+    // Remove tenant registry record
+    await set(ref(db, `${TENANT_REGISTRY_PATH()}/${id}`), null);
+    // Remove all data under tenants/{id} (teams, players, auctions, scoring, etc.)
+    await set(ref(db, `tenants/${id}`), null);
+    // Also remove tenants/{slug} if slug is different from id
+    if (slug && slug !== id) {
+      await set(ref(db, `tenants/${slug}`), null);
+    }
+  }
+
   /** Ensure the default tenant record exists (one-time bootstrap). */
   async ensureDefaultTenant(): Promise<TenantRecord> {
     const existing = await this.getTenant(DEFAULT_TENANT_ID);

@@ -6,11 +6,12 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { GiCricketBat, GiBaseballGlove, GiSprint, GiShield } from 'react-icons/gi';
-import { IoBaseball, IoStar } from 'react-icons/io5';
+import { IoBaseball, IoStar, IoFootball } from 'react-icons/io5';
 import type { Player } from '../../types';
 import { activeConfig } from '../../config';
 import { formatRoleDisplay, getRoleCategory, getRoleBadgeColor as getRoleBadgeHex } from '../../utils/roleFormatter';
 import { getKabaddiRoleCategory } from '../../utils/kabaddiRoles';
+import { getFootballRoleCategory } from '../../utils/footballRoles';
 import { getCachedStorageUrl, resolveImageAsync } from '../../services/firebaseStorageService';
 import { extractDriveFileId } from '../../utils/driveImage';
 import { getLiveBlobUrl } from '../../services/mediaBlobCache';
@@ -41,6 +42,13 @@ export function PlayerCard({
       case 'Raider': return <GiSprint className="inline-block" />;
       case 'Defender': return <GiShield className="inline-block" />;
       case 'All-Rounder': return <IoStar className="inline-block" />;
+      default: break;
+    }
+    switch (getFootballRoleCategory(role)) {
+      case 'Forward': return <IoFootball className="inline-block" />;
+      case 'Midfielder': return <IoStar className="inline-block" />;
+      case 'Defender': return <GiShield className="inline-block" />;
+      case 'Goalkeeper': return <GiBaseballGlove className="inline-block" />;
       default: break;
     }
     const category = getRoleCategory(role);

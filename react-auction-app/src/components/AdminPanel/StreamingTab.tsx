@@ -630,7 +630,7 @@ export default function StreamingTab({ onClose }: StreamingTabProps) {
       <div className="admin-panel__section">
         <h3 className="admin-panel__section-title">Overlay Settings</h3>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', color: '#000' }}>
           <label className="admin-panel__checkbox-label">
             <input
               type="checkbox"

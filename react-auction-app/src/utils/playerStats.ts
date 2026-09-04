@@ -1,5 +1,6 @@
 import type { Player } from '../types';
 import { getKabaddiRoleLabel, getKabaddiRoleBadgeClass } from './kabaddiRoles';
+import { getFootballRoleLabel, getFootballRoleBadgeClass } from './footballRoles';
 
 export interface StatItem {
   label: string;
@@ -133,6 +134,8 @@ function getGeneralStats(player: Player): StatItem[] {
 export function getRoleLabel(role: string): string {
   const kabaddi = getKabaddiRoleLabel(role);
   if (kabaddi) return kabaddi;
+  const football = getFootballRoleLabel(role);
+  if (football) return football;
   const r = typeof role === 'string' ? role.toLowerCase() : '';
   if (r.includes('all-rounder') || r.includes('all rounder')) return 'All-Rounder';
   if (r.includes('wicket') && r.includes('bat')) return 'WK-Batsman';
@@ -148,6 +151,8 @@ export function getRoleLabel(role: string): string {
 export function getRoleBadgeClass(role: string): string {
   const kabaddi = getKabaddiRoleBadgeClass(role);
   if (kabaddi) return kabaddi;
+  const football = getFootballRoleBadgeClass(role);
+  if (football) return football;
   const r = typeof role === 'string' ? role.toLowerCase() : '';
   if (r.includes('all-rounder') || r.includes('all rounder')) return 'role-allrounder';
   if (r.includes('wicket')) return 'role-keeper';

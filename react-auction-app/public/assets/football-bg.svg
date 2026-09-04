@@ -1,0 +1,117 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1080" width="100%" height="100%">
+  <defs>
+    <!-- Stadium Night Vignette -->
+    <radialGradient id="pitchGlow" cx="50%" cy="50%" r="70%">
+      <stop offset="0%" stop-color="#064e3b" stop-opacity="0.95"/>
+      <stop offset="40%" stop-color="#022c22" stop-opacity="0.98"/>
+      <stop offset="80%" stop-color="#031611" stop-opacity="1"/>
+      <stop offset="100%" stop-color="#010a08" stop-opacity="1"/>
+    </radialGradient>
+
+    <!-- Turf Grass Stripe Patterns -->
+    <linearGradient id="turfDark" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#047857" stop-opacity="0.85"/>
+      <stop offset="100%" stop-color="#065f46" stop-opacity="0.95"/>
+    </linearGradient>
+
+    <linearGradient id="turfLight" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#059669" stop-opacity="0.85"/>
+      <stop offset="100%" stop-color="#047857" stop-opacity="0.95"/>
+    </linearGradient>
+
+    <!-- Stadium Floodlight Beams -->
+    <radialGradient id="stadiumSpot" cx="50%" cy="0%" r="75%">
+      <stop offset="0%" stop-color="#6ee7b7" stop-opacity="0.35"/>
+      <stop offset="30%" stop-color="#10b981" stop-opacity="0.12"/>
+      <stop offset="100%" stop-color="#000000" stop-opacity="0"/>
+    </radialGradient>
+
+    <!-- Pitch Glow Filter -->
+    <filter id="pitchLineGlow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="4" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+
+    <filter id="intenseLineGlow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="8" result="blur" />
+      <feMerge>
+        <feMergeNode in="blur" />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Deep Stadium Night Sky -->
+  <rect width="1920" height="1080" fill="url(#pitchGlow)" />
+
+  <!-- Stadium Floodlight Cones (Left, Right, Center) -->
+  <polygon points="100,-80 400,1160 -100,1160" fill="url(#stadiumSpot)" opacity="0.6" />
+  <polygon points="1820,-80 2020,1160 1520,1160" fill="url(#stadiumSpot)" opacity="0.6" />
+  <polygon points="960,-100 1500,1180 420,1180" fill="url(#stadiumSpot)" opacity="0.45" />
+
+  <!-- Stadium Seating Ambient Glow -->
+  <ellipse cx="960" cy="540" rx="900" ry="500" fill="none" stroke="rgba(16, 185, 129, 0.15)" stroke-width="1.5" stroke-dasharray="10,15" />
+  <ellipse cx="960" cy="540" rx="800" ry="440" fill="none" stroke="rgba(52, 211, 153, 0.12)" stroke-width="1" />
+
+  <!-- Pitch Playing Field (Centered Perspective) -->
+  <g transform="translate(960, 540)" filter="drop-shadow(0 25px 60px rgba(0,0,0,0.85))">
+    <!-- Pitch Boundary with Grass Stripes -->
+    <g rx="20">
+      <!-- Mowed Stripes (10 vertical bands across 1400px pitch) -->
+      <rect x="-700" y="-380" width="140" height="760" fill="url(#turfDark)" />
+      <rect x="-560" y="-380" width="140" height="760" fill="url(#turfLight)" />
+      <rect x="-420" y="-380" width="140" height="760" fill="url(#turfDark)" />
+      <rect x="-280" y="-380" width="140" height="760" fill="url(#turfLight)" />
+      <rect x="-140" y="-380" width="140" height="760" fill="url(#turfDark)" />
+      <rect x="0" y="-380" width="140" height="760" fill="url(#turfLight)" />
+      <rect x="140" y="-380" width="140" height="760" fill="url(#turfDark)" />
+      <rect x="280" y="-380" width="140" height="760" fill="url(#turfLight)" />
+      <rect x="420" y="-380" width="140" height="760" fill="url(#turfDark)" />
+      <rect x="560" y="-380" width="140" height="760" fill="url(#turfLight)" />
+    </g>
+
+    <!-- Outer Pitch White Touchlines -->
+    <rect x="-700" y="-380" width="1400" height="760" rx="4" fill="none" stroke="#ffffff" stroke-width="4.5" opacity="0.95" filter="url(#pitchLineGlow)" />
+
+    <!-- Halfway Line -->
+    <line x1="0" y1="-380" x2="0" y2="380" stroke="#ffffff" stroke-width="4.5" opacity="0.95" filter="url(#pitchLineGlow)" />
+
+    <!-- Center Circle & Center Spot -->
+    <circle cx="0" cy="0" r="110" fill="none" stroke="#ffffff" stroke-width="4.5" opacity="0.95" filter="url(#pitchLineGlow)" />
+    <circle cx="0" cy="0" r="7" fill="#ffffff" filter="url(#intenseLineGlow)" />
+
+    <!-- Left Penalty Box (18-yard box) -->
+    <rect x="-700" y="-180" width="220" height="360" fill="none" stroke="#ffffff" stroke-width="4" opacity="0.95" filter="url(#pitchLineGlow)" />
+    <!-- Left Goal Area (6-yard box) -->
+    <rect x="-700" y="-90" width="80" height="180" fill="none" stroke="#ffffff" stroke-width="3.5" opacity="0.95" />
+    <!-- Left Penalty Spot -->
+    <circle cx="-550" cy="0" r="5" fill="#ffffff" />
+    <!-- Left Penalty Arc (D) -->
+    <path d="M -480,-65 A 110,110 0 0,1 -480,65" fill="none" stroke="#ffffff" stroke-width="3.5" opacity="0.95" />
+
+    <!-- Right Penalty Box (18-yard box) -->
+    <rect x="480" y="-180" width="220" height="360" fill="none" stroke="#ffffff" stroke-width="4" opacity="0.95" filter="url(#pitchLineGlow)" />
+    <!-- Right Goal Area (6-yard box) -->
+    <rect x="620" y="-90" width="80" height="180" fill="none" stroke="#ffffff" stroke-width="3.5" opacity="0.95" />
+    <!-- Right Penalty Spot -->
+    <circle cx="550" cy="0" r="5" fill="#ffffff" />
+    <!-- Right Penalty Arc (D) -->
+    <path d="M 480,-65 A 110,110 0 0,0 480,65" fill="none" stroke="#ffffff" stroke-width="3.5" opacity="0.95" />
+
+    <!-- Corner Arcs -->
+    <path d="M -700,-350 A 30,30 0 0,1 -670,-380" fill="none" stroke="#ffffff" stroke-width="3.5" />
+    <path d="M -700,350 A 30,30 0 0,0 -670,380" fill="none" stroke="#ffffff" stroke-width="3.5" />
+    <path d="M 700,-350 A 30,30 0 0,0 670,-380" fill="none" stroke="#ffffff" stroke-width="3.5" />
+    <path d="M 700,350 A 30,30 0 0,1 670,380" fill="none" stroke="#ffffff" stroke-width="3.5" />
+  </g>
+
+  <!-- Ambient Stadium Dust Particles -->
+  <g fill="#a7f3d0" opacity="0.5">
+    <circle cx="340" cy="260" r="2" />
+    <circle cx="510" cy="810" r="1.5" />
+    <circle cx="920" cy="190" r="2.5" />
+    <circle cx="1120" cy="890" r="2" />
+    <circle cx="1520" cy="280" r="2.5" />
+    <circle cx="1710" cy="720" r="3" />
+  </g>
+</svg>

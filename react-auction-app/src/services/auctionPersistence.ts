@@ -262,6 +262,8 @@ export interface AdminSettings {
   };
   auctionTitle: string;
   updatedAt: number;
+  /** Selected sport/game for the auction (e.g. 'cricket', 'kabaddi', 'football', etc.) */
+  sport?: 'cricket' | 'kabaddi' | 'football' | 'volleyball' | 'basketball' | 'badminton' | string;
   // Auction role ordering — persisted sequence of role categories
   auctionRoleOrder?: AuctionRoleCategory[];
   // Under-age spotlight threshold (e.g. 18)
@@ -302,6 +304,13 @@ export interface AdminSettings {
    * 'compact'   → slim single-row strip
    */
   obsOverlayStyle?: 'classic' | 'broadcast' | 'compact';
+  /**
+   * Live auction screen presentation style.
+   * 'classic'   → original split hero (default, unchanged behaviour)
+   * 'spotlight' → centered cutout with light rays + split stat columns
+   * 'vibrant'   → accent splash panel with a full stat table
+   */
+  auctionLayout?: 'classic' | 'spotlight' | 'vibrant';
   /** Accent color for the broadcast overlay gradient (default deep blue). */
   obsOverlayAccent?: string;
   // Budget enforcement mode: 'constraint' blocks bids, 'releaseRefund' prompts player drop

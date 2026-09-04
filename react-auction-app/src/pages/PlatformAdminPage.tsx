@@ -2,9 +2,9 @@
 // PLATFORM ADMIN PAGE
 // Super-admin console for managing tournaments (tenants). Lists all tenants
 // from `platform/tenants`, supports creating new tenants, toggling activation,
-// and basic metadata edits. Tournament-scoped data (teams, players, sponsors,
-// themes, settings) is managed inside each tournament admin at
-// `/:tenantSlug/admin`.
+// deactivation, and permanent tenant deletion to reclaim Firebase storage.
+// Tournament-scoped data (teams, players, sponsors, themes, settings) is
+// managed inside each tournament admin at `/:tenantSlug/admin`.
 // ============================================================================
 
 import { useEffect, useState } from 'react';
@@ -27,10 +27,13 @@ export default function PlatformAdminPage() {
   const [tenants, setTenants] = useState<TenantRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [draft, setDraft] = useState({ id: '', slug: '', name: '', plan: 'pro' as TenantPlan });
   const [creating, setCreating] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [rulesFor, setRulesFor] = useState<TenantRecord | null>(null);
   const [kabaddiRulesFor, setKabaddiRulesFor] = useState<TenantRecord | null>(null);
+  const [deleteFor, setDeleteFor] = useState<TenantRecord | null>(null);
 
   const refresh = async () => {
     setLoading(true);
@@ -58,6 +61,8 @@ export default function PlatformAdminPage() {
     try {
       await tenantService.createTenant({ id, slug, name, plan: draft.plan });
       setDraft({ id: '', slug: '', name: '', plan: 'pro' });
+      setSuccessMsg(`Tenant "${name}" created successfully.`);
+      setTimeout(() => setSuccessMsg(null), 3000);
       await refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -65,8 +70,32 @@ export default function PlatformAdminPage() {
   };
 
   const toggle = async (t: TenantRecord) => {
-    await tenantService.updateTenant(t.id, { isActive: !t.isActive });
-    refresh();
+    setError(null);
+    try {
+      await tenantService.updateTenant(t.id, { isActive: !t.isActive });
+      setSuccessMsg(`Tenant "${t.name}" ${t.isActive ? 'deactivated' : 'activated'}.`);
+      setTimeout(() => setSuccessMsg(null), 3000);
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  };
+
+  const handleDeleteTenant = async () => {
+    if (!deleteFor) return;
+    setDeleting(true);
+    setError(null);
+    try {
+      await tenantService.deleteTenant(deleteFor.id, deleteFor.slug);
+      setSuccessMsg(`Tenant "${deleteFor.name}" (${deleteFor.id}) and all its data have been permanently removed.`);
+      setTimeout(() => setSuccessMsg(null), 4000);
+      setDeleteFor(null);
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setDeleting(false);
+    }
   };
 
   const toggleSport = async (t: TenantRecord, sport: SportKey) => {
@@ -86,15 +115,21 @@ export default function PlatformAdminPage() {
 
   return (
     <div style={{ minHeight: '100vh', background: '#0b1020', color: '#e2e8f0', padding: 32, fontFamily: 'system-ui, sans-serif' }}>
-      <div style={{ maxWidth: 960, margin: '0 auto' }}>
+      <div style={{ maxWidth: 980, margin: '0 auto' }}>
         <h1 style={{ margin: 0, fontSize: 24 }}>Platform Admin · Tournaments</h1>
         <p style={{ marginTop: 6, opacity: 0.75, fontSize: 14 }}>
-          Create and manage tournament franchises. Each tournament owns its own teams, players, sponsors, themes, and admin accounts under <code>tenants/&lt;id&gt;/…</code>.
+          Create, configure, deactivate, and remove tournament franchises. Each tournament owns its own teams, players, sponsors, themes, and auction data under <code>tenants/&lt;id&gt;/…</code>.
         </p>
 
         {error && (
           <div style={{ marginTop: 16, padding: 12, background: '#3b0d16', border: '1px solid #b91c1c', borderRadius: 8, color: '#fecaca' }}>
             {error}
+          </div>
+        )}
+
+        {successMsg && (
+          <div style={{ marginTop: 16, padding: 12, background: 'rgba(22, 163, 74, 0.15)', border: '1px solid #16a34a', borderRadius: 8, color: '#86efac' }}>
+            {successMsg}
           </div>
         )}
 
@@ -122,19 +157,34 @@ export default function PlatformAdminPage() {
         <section style={{ marginTop: 24 }}>
           <h2 style={{ margin: 0, fontSize: 16 }}>Tournaments ({tenants.length})</h2>
           {loading ? <p style={{ opacity: 0.7 }}>Loading…</p> : (
-            <div style={{ marginTop: 12, display: 'grid', gap: 10 }}>
+            <div style={{ marginTop: 12, display: 'grid', gap: 12 }}>
               {tenants.map((t) => {
                 const sports = t.sports?.length ? t.sports : (['cricket'] as SportKey[]);
                 const onlyFootball = sports.length === 1 && sports[0] === 'football';
+                const onlyKabaddi = sports.length === 1 && sports[0] === 'kabaddi';
                 return (
-                <div key={t.id} style={rowCard}>
+                <div key={t.id} style={{ ...rowCard, borderLeft: `4px solid ${t.isActive ? '#10b981' : '#ef4444'}` }}>
                   <div style={{ flex: 1 }}>
-                    <div style={{ fontWeight: 700 }}>{t.name}</div>
-                    <div style={{ fontSize: 12, opacity: 0.7 }}>
-                      id: <code>{t.id}</code> · slug: <code>{t.slug}</code> · plan: <code>{t.plan}</code>
-                      {' · '}
-                      <span style={{ color: t.isActive ? '#34d399' : '#f87171' }}>{t.isActive ? 'active' : 'inactive'}</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <span style={{ fontWeight: 800, fontSize: 16 }}>{t.name}</span>
+                      <span style={{
+                        fontSize: 11,
+                        padding: '2px 8px',
+                        borderRadius: 999,
+                        fontWeight: 700,
+                        textTransform: 'uppercase',
+                        background: t.isActive ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)',
+                        color: t.isActive ? '#34d399' : '#f87171',
+                        border: `1px solid ${t.isActive ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.3)'}`,
+                      }}>
+                        {t.isActive ? '● Active' : '○ Inactive'}
+                      </span>
                     </div>
+                    <div style={{ fontSize: 12, opacity: 0.7, marginTop: 4 }}>
+                      id: <code>{t.id}</code> · slug: <code>{t.slug}</code> · plan: <code>{t.plan}</code>
+                    </div>
+
+                    {/* Enabled Sports Selector */}
                     <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                       <span style={{ fontSize: 11, opacity: 0.6, textTransform: 'uppercase', letterSpacing: 0.5 }}>Sports:</span>
                       {ALL_SPORTS.map((sp) => {
@@ -154,32 +204,65 @@ export default function PlatformAdminPage() {
                         );
                       })}
                     </div>
-                    <div style={{ marginTop: 8, display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-                      {sports.includes('cricket') && <a href={`/${t.slug}/cricket/scorer/admin`} style={sportLink}>🏏 Open Cricket Scorer →</a>}
-                      {sports.includes('football') && <a href={`/${t.slug}/football/scorer/admin`} style={{ ...sportLink, color: '#f87171' }}>⚽ Open Football Scorer →</a>}
-                      {sports.includes('football') && (
-                        <button onClick={() => setRulesFor(t)} style={rulesBtn} title="Configure football rules & timing">
-                          ⚙️ Football Rules{t.footballRules ? ` · ${t.footballRules.format} · ${t.footballRules.halfDurationMin}′×${t.footballRules.numberOfHalves}` : ' · set up'}
-                        </button>
+
+                    {/* Direct Links to Scorers and Rules */}
+                    <div style={{ marginTop: 10, display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                      {sports.includes('cricket') && (
+                        <a href={`/${t.slug}/cricket/scorer/admin`} style={sportLink}>🏏 Cricket Scorer →</a>
                       )}
-                      {sports.includes('kabaddi') && <a href={`/${t.slug}/kabaddi/scorer/admin`} style={{ ...sportLink, color: '#c4b5fd' }}>🤼 Open Kabaddi Scorer →</a>}
+                      {sports.includes('football') && (
+                        <>
+                          <a href={`/${t.slug}/football/scorer/admin`} style={{ ...sportLink, color: '#f87171' }}>⚽ Football Scorer →</a>
+                          <button onClick={() => setRulesFor(t)} style={rulesBtn} title="Configure football rules & timing">
+                            ⚙️ Football Rules{t.footballRules ? ` · ${t.footballRules.format}` : ' · set up'}
+                          </button>
+                        </>
+                      )}
                       {sports.includes('kabaddi') && (
-                        <button onClick={() => setKabaddiRulesFor(t)} style={rulesBtn} title="Configure kabaddi rules & timing">
-                          ⚙️ Kabaddi Rules{t.kabaddiRules ? ` · ${t.kabaddiRules.format} · ${t.kabaddiRules.halfDurationMin}′×${t.kabaddiRules.numberOfHalves}` : ' · set up'}
-                        </button>
+                        <>
+                          <a href={`/${t.slug}/kabaddi/scorer/admin`} style={{ ...sportLink, color: '#c4b5fd' }}>🤼 Kabaddi Scorer →</a>
+                          <button onClick={() => setKabaddiRulesFor(t)} style={{ ...rulesBtn, color: '#c4b5fd', background: 'rgba(124, 58, 237, 0.15)', borderColor: 'rgba(124, 58, 237, 0.35)' }} title="Configure kabaddi rules & timing">
+                            ⚙️ Kabaddi Rules{t.kabaddiRules ? ` · ${t.kabaddiRules.format}` : ' · set up'}
+                          </button>
+                        </>
                       )}
                     </div>
                   </div>
-                  <div style={{ display: 'flex', gap: 8 }}>
-                    {/* Primary manage button jumps straight to the sport when only one is enabled */}
-                    <a href={onlyFootball ? `/${t.slug}/football/scorer/admin` : `/${t.slug}/cricket/scorer/admin`}
-                      style={{ ...btnPrimary, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}>
-                      Manage {onlyFootball ? '⚽' : (sports.includes('cricket') ? '🏏' : '⚽')}
-                    </a>
-                    <a href={`/${t.slug}/admin`} style={btnGhost}>Admin</a>
-                    <button onClick={() => toggle(t)} style={btnGhost}>
-                      {t.isActive ? 'Deactivate' : 'Activate'}
-                    </button>
+
+                  {/* Actions Column */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, minWidth: 150 }}>
+                    <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+                      <a href={`/${t.slug}/`} style={{ ...btnPrimary, textDecoration: 'none', padding: '6px 12px', fontSize: 12 }}>
+                        Live Auction
+                      </a>
+                      <a href={`/${t.slug}/admin`} style={{ ...btnGhost, padding: '6px 12px', fontSize: 12, borderColor: '#60a5fa', color: '#93c5fd' }}>
+                        {onlyKabaddi ? '🤼 Kabaddi Admin' : (onlyFootball ? '⚽ Football Admin' : 'Admin')}
+                      </a>
+                    </div>
+                    <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+                      <button onClick={() => toggle(t)}
+                        style={{
+                          ...btnGhost,
+                          padding: '5px 10px',
+                          fontSize: 11,
+                          color: t.isActive ? '#fbbf24' : '#34d399',
+                          borderColor: t.isActive ? 'rgba(251, 191, 36, 0.35)' : 'rgba(52, 211, 153, 0.35)',
+                        }}>
+                        {t.isActive ? 'Deactivate' : 'Activate'}
+                      </button>
+                      <button onClick={() => setDeleteFor(t)}
+                        style={{
+                          ...btnGhost,
+                          padding: '5px 10px',
+                          fontSize: 11,
+                          color: '#f87171',
+                          borderColor: 'rgba(239, 68, 68, 0.35)',
+                          background: 'rgba(239, 68, 68, 0.08)',
+                        }}
+                        title="Permanently remove tenant and optimize Firebase storage space">
+                        🗑 Delete
+                      </button>
+                    </div>
                   </div>
                 </div>
                 );
@@ -189,6 +272,35 @@ export default function PlatformAdminPage() {
           )}
         </section>
       </div>
+
+      {/* Delete Tenant Confirmation Modal */}
+      {deleteFor && (
+        <div style={modalOverlay} onClick={() => setDeleteFor(null)}>
+          <div style={{ ...modalCard, maxWidth: 480, border: '1px solid #ef4444' }} onClick={(e) => e.stopPropagation()}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+              <h2 style={{ margin: 0, fontSize: 18, color: '#f87171' }}>🗑️ Delete Tenant Database</h2>
+              <button onClick={() => setDeleteFor(null)} style={{ ...btnGhost, padding: '6px 10px' }}>✕</button>
+            </div>
+            <p style={{ fontSize: 13, color: '#e2e8f0', lineHeight: 1.5 }}>
+              Are you sure you want to permanently delete tournament <strong>{deleteFor.name}</strong> (<code>{deleteFor.id}</code>)?
+            </p>
+            <div style={{ background: '#1f1315', border: '1px solid #7f1d1d', borderRadius: 8, padding: 12, margin: '12px 0', fontSize: 12, color: '#fca5a5', lineHeight: 1.5 }}>
+              <strong>⚠️ Storage Optimization & Data Purge:</strong>
+              <ul style={{ margin: '6px 0 0 16px', padding: 0 }}>
+                <li>Registry entry <code>platform/tenants/{deleteFor.id}</code> will be removed.</li>
+                <li>All data under <code>tenants/{deleteFor.id}/</code> (teams, players, sold/unsold records, scoring, settings, logs) will be erased.</li>
+                <li>Frees and optimizes database space across Firebase Realtime Database.</li>
+              </ul>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 18 }}>
+              <button onClick={() => setDeleteFor(null)} style={btnGhost} disabled={deleting}>Cancel</button>
+              <button onClick={handleDeleteTenant} disabled={deleting} style={{ ...btnPrimary, background: '#dc2626' }}>
+                {deleting ? 'Purging…' : 'Permanently Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {rulesFor && (
         <FootballRulesModal

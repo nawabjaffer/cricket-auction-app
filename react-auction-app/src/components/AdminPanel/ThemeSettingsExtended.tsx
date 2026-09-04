@@ -4,12 +4,15 @@
 //          Auction Breaks, Loading Screen, Team Owners, Iconic Players
 // ============================================================================
 
-import { useState, useEffect } from 'react';
-import { IoAdd, IoTrash, IoPlay, IoStop, IoCloudUpload } from 'react-icons/io5';
+import { useState, useEffect, useMemo, useRef } from 'react';
+import { IoAdd, IoTrash, IoPlay, IoStop, IoCloudUpload, IoCheckmarkDone, IoSparkles } from 'react-icons/io5';
 import { type AdminSettings, type SpecialCategory, type AuctionBreak, type BudgetRulesConfig, type LoadingScreenConfig, type TeamOwner } from '../../services/auctionPersistence';
 import { uploadFileToStorage } from '../../services';
 import type { Team } from '../../types';
-import { ALL_PLAYER_STAT_FIELDS } from '../../config/playerStatFields';
+import {
+  SPORT_STAT_FIELDS,
+  DEFAULT_SPORT_STAT_FIELDS,
+} from '../../config/playerStatFields';
 
 const DEFAULT_BUDGET_RULES: BudgetRulesConfig = {
   totalBudgetPerTeam: 100,
@@ -22,17 +25,30 @@ const DEFAULT_BUDGET_RULES: BudgetRulesConfig = {
   reservedFundPerRemainingPlayer: 1,
 };
 
+const SPORT_NAMES: Record<string, { label: string; icon: string }> = {
+  cricket: { label: 'Cricket', icon: '🏏' },
+  kabaddi: { label: 'Kabaddi', icon: '🤼' },
+  football: { label: 'Football', icon: '⚽' },
+  volleyball: { label: 'Volleyball', icon: '🏐' },
+  basketball: { label: 'Basketball', icon: '🏀' },
+  badminton: { label: 'Badminton', icon: '🏸' },
+};
+
 interface ThemeSettingsExtendedProps {
   readonly settings: AdminSettings | null;
   /** Called whenever any extended field changes so the parent can merge on save */
   readonly onChange: (partial: Partial<AdminSettings>) => void;
   readonly teams: Team[];
+  readonly sport?: string;
 }
 
-export function ThemeSettingsExtended({ settings, onChange, teams }: ThemeSettingsExtendedProps) {
+export function ThemeSettingsExtended({ settings, onChange, teams, sport = 'cricket' }: ThemeSettingsExtendedProps) {
+  const currentSportKey = (sport || settings?.sport || 'cricket').toLowerCase();
+  const prevSportRef = useRef<string>(currentSportKey);
+
   // Player Stats Fields
   const [playerStatsFields, setPlayerStatsFields] = useState<string[]>(
-    settings?.playerStatsFields ?? ['age', 'matches', 'runs', 'wickets', 'battingBestFigures', 'bowlingBestFigures']
+    settings?.playerStatsFields ?? (DEFAULT_SPORT_STAT_FIELDS[currentSportKey] || DEFAULT_SPORT_STAT_FIELDS.cricket)
   );
 
   // Special Categories
@@ -101,6 +117,15 @@ export function ThemeSettingsExtended({ settings, onChange, teams }: ThemeSettin
     if (settings.mirrorPreloadPersist != null) setMirrorPreloadPersist(settings.mirrorPreloadPersist);
   }, [settings]);
 
+  // When sport selection changes in parent (Auction Game / Sport), auto-switch the stat fields to the new sport's defaults
+  useEffect(() => {
+    if (prevSportRef.current !== currentSportKey) {
+      prevSportRef.current = currentSportKey;
+      const defStats = DEFAULT_SPORT_STAT_FIELDS[currentSportKey] || DEFAULT_SPORT_STAT_FIELDS.cricket;
+      setPlayerStatsFields(defStats);
+    }
+  }, [currentSportKey]);
+
   // Notify parent of every change so it can merge on the single "Save Settings" click
   useEffect(() => {
     onChange({
@@ -126,6 +151,20 @@ export function ThemeSettingsExtended({ settings, onChange, teams }: ThemeSettin
       prev.includes(key) ? prev.filter(f => f !== key) : [...prev, key]
     );
   };
+
+  const applySportDefaults = () => {
+    const defaults = DEFAULT_SPORT_STAT_FIELDS[currentSportKey] || DEFAULT_SPORT_STAT_FIELDS.cricket;
+    setPlayerStatsFields(defaults);
+  };
+
+  const selectAllForSport = () => {
+    const fields = (SPORT_STAT_FIELDS[currentSportKey] || SPORT_STAT_FIELDS.cricket).map(f => f.key);
+    setPlayerStatsFields(fields);
+  };
+
+  const displayedFields = useMemo(() => {
+    return SPORT_STAT_FIELDS[currentSportKey] || SPORT_STAT_FIELDS.cricket;
+  }, [currentSportKey]);
 
   // ─── Special Categories ───────────────────────────────────────────────────
   const addCategory = () => {
@@ -173,23 +212,124 @@ export function ThemeSettingsExtended({ settings, onChange, teams }: ThemeSettin
     }));
   };
 
+  const sportInfo = SPORT_NAMES[currentSportKey] || { label: currentSportKey, icon: '🏆' };
+
   return (
     <div className="admin-extended-settings">
-      {/* ─── Section 1: Player Stats Display Fields ─────────────────────────── */}
+      {/* ─── Section 1: Player Stats Display Fields (Controlled by Auction Game / Sport) ─────────────────────────── */}
       <div className="admin-section-card">
-        <h3 className="admin-section-title">📊 Player Stats Display</h3>
-        <p className="admin-section-desc">Select which stats fields appear on the main auction listing page for each player.</p>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.75rem' }}>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <h3 className="admin-section-title" style={{ margin: 0 }}>📊 Player Stats Display</h3>
+              <span style={{
+                fontSize: '0.78rem',
+                fontWeight: 700,
+                padding: '2px 8px',
+                borderRadius: '6px',
+                background: 'rgba(59, 130, 246, 0.2)',
+                color: '#93c5fd',
+                border: '1px solid rgba(59, 130, 246, 0.35)',
+              }}>
+                {sportInfo.icon} {sportInfo.label}
+              </span>
+            </div>
+            <p className="admin-section-desc" style={{ margin: '0.35rem 0 0' }}>
+              Select which {sportInfo.label} statistics appear on the main auction listing & hero display for each player.
+            </p>
+          </div>
+          <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#f8fafc', background: 'rgba(255,255,255,0.08)', padding: '0.3rem 0.65rem', borderRadius: 8 }}>
+            {playerStatsFields.length} field{playerStatsFields.length === 1 ? '' : 's'} enabled
+          </span>
+        </div>
+
+        {/* Action buttons */}
+        <div style={{ display: 'flex', gap: '8px', margin: '1rem 0 0.85rem', flexWrap: 'wrap' }}>
+          <button
+            type="button"
+            onClick={applySportDefaults}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '5px',
+              padding: '6px 12px',
+              borderRadius: '6px',
+              border: '1px solid rgba(59, 130, 246, 0.4)',
+              background: 'rgba(59, 130, 246, 0.15)',
+              color: '#60a5fa',
+              fontSize: '0.78rem',
+              fontWeight: 600,
+              cursor: 'pointer',
+            }}
+          >
+            <IoSparkles size={14} />
+            Reset to Recommended {sportInfo.label} Stats
+          </button>
+          <button
+            type="button"
+            onClick={selectAllForSport}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '5px',
+              padding: '6px 12px',
+              borderRadius: '6px',
+              border: '1px solid rgba(255, 255, 255, 0.15)',
+              background: 'rgba(255, 255, 255, 0.05)',
+              color: '#e2e8f0',
+              fontSize: '0.78rem',
+              cursor: 'pointer',
+            }}
+          >
+            <IoCheckmarkDone size={14} />
+            Select All
+          </button>
+          <button
+            type="button"
+            onClick={() => setPlayerStatsFields([])}
+            style={{
+              padding: '6px 12px',
+              borderRadius: '6px',
+              border: '1px solid rgba(239, 68, 68, 0.3)',
+              background: 'rgba(239, 68, 68, 0.1)',
+              color: '#fca5a5',
+              fontSize: '0.78rem',
+              cursor: 'pointer',
+            }}
+          >
+            Clear All
+          </button>
+        </div>
+
         <div className="admin-checkbox-grid">
-          {ALL_PLAYER_STAT_FIELDS.map(field => (
-            <label key={field.key} className="admin-checkbox-item">
-              <input
-                type="checkbox"
-                checked={playerStatsFields.includes(field.key)}
-                onChange={() => toggleStatField(field.key)}
-              />
-              <span>{field.label}</span>
-            </label>
-          ))}
+          {displayedFields.map(field => {
+            const isChecked = playerStatsFields.includes(field.key);
+            return (
+              <label key={field.key} className="admin-checkbox-item">
+                <input
+                  type="checkbox"
+                  checked={isChecked}
+                  onChange={() => toggleStatField(field.key)}
+                />
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                  <span>{field.label}</span>
+                  {field.category && field.category !== 'general' && (
+                    <span style={{
+                      fontSize: '0.65rem',
+                      fontWeight: 700,
+                      textTransform: 'uppercase',
+                      padding: '1px 5px',
+                      borderRadius: '4px',
+                      background: 'rgba(255, 255, 255, 0.08)',
+                      color: '#94a3b8',
+                    }}>
+                      {field.category}
+                    </span>
+                  )}
+                </span>
+              </label>
+            );
+          })}
         </div>
       </div>
 
@@ -203,7 +343,7 @@ export function ThemeSettingsExtended({ settings, onChange, teams }: ThemeSettin
             checked={enableSpecialCategories}
             onChange={(e) => setEnableSpecialCategories(e.target.checked)}
           />
-          <span style={{ fontSize: '0.9rem', fontWeight: 600 }}>Enable Special Categories</span>
+          <span style={{ fontSize: '0.9rem', fontWeight: 600, color: '#000' }}>Enable Special Categories</span>
         </label>
         {enableSpecialCategories && (<>
         <div className="admin-items-list">

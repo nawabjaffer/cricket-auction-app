@@ -29,6 +29,7 @@ import {
   IoShieldCheckmark,
   IoKeypad,
   IoInformationCircle,
+  IoFootball,
 } from 'react-icons/io5';
 import {
   Header,
@@ -45,6 +46,8 @@ import {
   AnalyticsCarousel,
   AdminPanel,
   SponsorShowcase,
+  SpotlightLayout,
+  VibrantLayout,
 } from './components';
 import { 
   useAuction, 
@@ -65,16 +68,53 @@ import { useRealtimeDesktopSync, useRealtimeMobileSync } from './hooks/useRealti
 import { audioService, imageCacheService } from './services';
 import { auctionPersistence, type SponsorRecord, type AdminSettings } from './services/auctionPersistence';
 import { featureFlagsService } from './services/featureFlagsService';
-import { ALL_PLAYER_STAT_FIELDS } from './config/playerStatFields';
+import { DEFAULT_SPORT_STAT_FIELDS, getStatFieldDef } from './config/playerStatFields';
 import { auctionRules } from './services/auctionRules';
 import { realtimeSync } from './services/realtimeSync';
 import { getCachedStorageUrl, resolveImageAsync } from './services/firebaseStorageService';
-import { useActiveOverlay, useNotification, useCurrentPlayer, useSoldPlayers, useAvailablePlayers, useOriginalPlayers, useTeams, useOrganizerLogo, useOrganizerName, useCurrencySuffix } from './store';
+import { useActiveOverlay, useNotification, useCurrentPlayer, useSoldPlayers, useUnsoldPlayers, useAvailablePlayers, useOriginalPlayers, useTeams, useOrganizerLogo, useOrganizerName, useCurrencySuffix } from './store';
 import { useAuctionStore } from './store/auctionStore';
 import { extractDriveFileId } from './utils/driveImage';
 import { formatRoleDisplay, getRoleCategory, inferRoleCategoryFromPlayer, parseRoleDetails, getRoleBadgeColor } from './utils/roleFormatter';
 import { getKabaddiRoleCategory } from './utils/kabaddiRoles';
+import { getFootballRoleCategory } from './utils/footballRoles';
 import './index.css';
+
+function getThemeAssetFilter(primary: string, secondary: string): string {
+  const toRgb = (color: string) => {
+    const normalized = color.trim().replace('#', '');
+    if (!/^[\da-f]{6}$/i.test(normalized)) return null;
+    return [0, 2, 4].map((index) => Number.parseInt(normalized.slice(index, index + 2), 16));
+  };
+
+  const primaryRgb = toRgb(primary);
+  const secondaryRgb = toRgb(secondary);
+  if (!primaryRgb || !secondaryRgb) {
+    return 'grayscale(1) sepia(1) saturate(230%) hue-rotate(356deg) brightness(1.01) contrast(0.93)';
+  }
+
+  const average = primaryRgb.map((value, index) => (value + secondaryRgb[index]) / 2);
+  const max = Math.max(...average);
+  const min = Math.min(...average);
+  const lightness = (max + min) / 510;
+  const saturation = max === min ? 0 : (max - min) / (255 - Math.abs(2 * lightness - 1) * 255);
+  const hue = (() => {
+    if (max === min) return 42;
+    const [red, green, blue] = average.map((value) => value / 255);
+    if (max === red) return 60 * (((green - blue) / (max / 255 - min / 255)) % 6);
+    if (max === green) return 60 * ((blue - red) / (max / 255 - min / 255) + 2);
+    return 60 * ((red - green) / (max / 255 - min / 255) + 4);
+  })();
+
+  return [
+    'grayscale(0)',
+    `sepia(${Math.min(0.45, 0.08 + saturation * 0.18).toFixed(2)})`,
+    `saturate(${(1.35 + saturation * 2.1).toFixed(2)})`,
+    `hue-rotate(${Math.round(hue - 42)}deg)`,
+    `brightness(${(0.82 + lightness * 0.42).toFixed(2)})`,
+    `contrast(${(0.92 + saturation * 0.35).toFixed(2)})`,
+  ].join(' ');
+}
 
 // Create Query Client
 const queryClient = new QueryClient({
@@ -178,6 +218,10 @@ function AuctionApp({ mirrorMode = false }: { mirrorMode?: boolean }) {
 
   // Initialize theme and audio
   const { currentTheme } = useTheme();
+  const themeAssetFilter = useMemo(
+    () => getThemeAssetFilter(currentTheme.colors.primary, currentTheme.colors.secondary),
+    [currentTheme.colors.primary, currentTheme.colors.secondary],
+  );
   
   // Initialize Firebase Realtime Database sync for desktop (broadcasts state to mobile devices)
   useRealtimeDesktopSync(!isMirrorMode);
@@ -223,6 +267,7 @@ function AuctionApp({ mirrorMode = false }: { mirrorMode?: boolean }) {
   const notification = useNotification();
   const currentPlayer = useCurrentPlayer();
   const soldPlayers = useSoldPlayers();
+  const unsoldPlayers = useUnsoldPlayers();
   const availablePlayers = useAvailablePlayers();
   const allPlayers = useOriginalPlayers();
   const allTeams = useTeams();
@@ -757,7 +802,59 @@ function AuctionApp({ mirrorMode = false }: { mirrorMode?: boolean }) {
       });
   }, [soldPlayers, allTeams]);
 
+  const currentSport = adminSettings?.sport || 'cricket';
+
   const teamRoleBalance = useMemo(() => {
+    if (currentSport === 'kabaddi') {
+      const counts = { raiding: 0, defense: 0, allround: 0 };
+      selectedTeamPlayers.forEach((player) => {
+        const cat = getKabaddiRoleCategory(player.role);
+        if (cat === 'Raider') counts.raiding += 1;
+        else if (cat === 'Defender') counts.defense += 1;
+        else counts.allround += 1;
+      });
+      const total = Math.max(counts.raiding + counts.defense + counts.allround, 1);
+      const r = Math.round((counts.raiding / total) * 100);
+      const d = Math.round((counts.defense / total) * 100);
+      const a = Math.round((counts.allround / total) * 100);
+      return {
+        cat1Label: 'Raiding',
+        cat1: r,
+        cat2Label: 'Defense',
+        cat2: d,
+        cat3Label: 'All-Round',
+        cat3: a,
+        batting: r,
+        bowling: d,
+        fielding: a,
+      };
+    }
+
+    if (currentSport === 'football') {
+      const counts = { attack: 0, midfield: 0, defense: 0 };
+      selectedTeamPlayers.forEach((player) => {
+        const cat = getFootballRoleCategory(player.role);
+        if (cat === 'Forward') counts.attack += 1;
+        else if (cat === 'Midfielder') counts.midfield += 1;
+        else counts.defense += 1;
+      });
+      const total = Math.max(counts.attack + counts.midfield + counts.defense, 1);
+      const att = Math.round((counts.attack / total) * 100);
+      const mid = Math.round((counts.midfield / total) * 100);
+      const def = Math.round((counts.defense / total) * 100);
+      return {
+        cat1Label: 'Attack',
+        cat1: att,
+        cat2Label: 'Midfield',
+        cat2: mid,
+        cat3Label: 'Defense',
+        cat3: def,
+        batting: att,
+        bowling: mid,
+        fielding: def,
+      };
+    }
+
     const roleCount = {
       batting: 0,
       bowling: 0,
@@ -779,12 +876,22 @@ function AuctionApp({ mirrorMode = false }: { mirrorMode?: boolean }) {
 
     const total = Math.max(roleCount.batting + roleCount.bowling + roleCount.fielding, 1);
 
+    const bat = Math.round((roleCount.batting / total) * 100);
+    const bowl = Math.round((roleCount.bowling / total) * 100);
+    const field = Math.round((roleCount.fielding / total) * 100);
+
     return {
-      batting: Math.round((roleCount.batting / total) * 100),
-      bowling: Math.round((roleCount.bowling / total) * 100),
-      fielding: Math.round((roleCount.fielding / total) * 100),
+      cat1Label: 'Batting',
+      cat1: bat,
+      cat2Label: 'Bowling',
+      cat2: bowl,
+      cat3Label: 'Fielding',
+      cat3: field,
+      batting: bat,
+      bowling: bowl,
+      fielding: field,
     };
-  }, [selectedTeamPlayers]);
+  }, [selectedTeamPlayers, currentSport]);
 
   const selectedTeamStatus = useMemo(() => {
     if (!selectedTeam) {
@@ -860,19 +967,25 @@ function AuctionApp({ mirrorMode = false }: { mirrorMode?: boolean }) {
     setSelectedPlayerName('');
   };
 
-  // Stats rows for player panel — configurable from admin settings
+  // Stats rows for player panel — configurable from admin settings & sport-aware
   const statRows = useMemo(() => {
-    const configuredFields = adminSettings?.playerStatsFields ?? ['age', 'matches', 'runs', 'wickets', 'battingBestFigures', 'bowlingBestFigures'];
-    const rows: { label: string; value: string | number; category: 'batting' | 'bowling' | 'general' }[] = [];
+    const sport = (adminSettings?.sport || 'cricket').toLowerCase();
+    const defaultFields = DEFAULT_SPORT_STAT_FIELDS[sport] || DEFAULT_SPORT_STAT_FIELDS.cricket;
+    const configuredFields = adminSettings?.playerStatsFields && adminSettings.playerStatsFields.length > 0
+      ? adminSettings.playerStatsFields
+      : defaultFields;
+    const rows: { label: string; value: string | number; category: string }[] = [];
 
     if (!currentPlayer) return rows;
 
+    const playerRec = currentPlayer as unknown as Record<string, unknown>;
+
     for (const fieldKey of configuredFields) {
-      const fieldDef = ALL_PLAYER_STAT_FIELDS.find(f => f.key === fieldKey);
+      const fieldDef = getStatFieldDef(fieldKey, sport);
       if (!fieldDef) continue;
 
       let value: string | number | undefined;
-      let category: 'batting' | 'bowling' | 'general' = 'general';
+      let category: string = fieldDef.category || 'general';
 
       if (fieldKey.startsWith('battingStats.')) {
         const statKey = fieldKey.split('.')[1] as keyof typeof currentPlayer.battingStats;
@@ -882,14 +995,18 @@ function AuctionApp({ mirrorMode = false }: { mirrorMode?: boolean }) {
         const statKey = fieldKey.split('.')[1] as keyof typeof currentPlayer.bowlingStats;
         value = currentPlayer.bowlingStats?.[statKey];
         category = 'bowling';
-      } else if (['runs', 'battingBestFigures'].includes(fieldKey)) {
-        value = (currentPlayer as unknown as Record<string, unknown>)[fieldKey] as string | number | undefined;
-        category = 'batting';
-      } else if (['wickets', 'bowlingBestFigures'].includes(fieldKey)) {
-        value = (currentPlayer as unknown as Record<string, unknown>)[fieldKey] as string | number | undefined;
-        category = 'bowling';
-      } else {
-        value = (currentPlayer as unknown as Record<string, unknown>)[fieldKey] as string | number | undefined;
+      } else if (playerRec[fieldKey] !== undefined) {
+        value = playerRec[fieldKey] as string | number | undefined;
+      } else if (playerRec.customStats && (playerRec.customStats as Record<string, unknown>)[fieldKey] !== undefined) {
+        value = (playerRec.customStats as Record<string, unknown>)[fieldKey] as string | number | undefined;
+      }
+
+      // If value is still undefined, check common legacy column fallbacks
+      if (value == null) {
+        if (fieldKey === 'goals' && playerRec.runs != null) value = String(playerRec.runs);
+        if (fieldKey === 'totalPoints' && playerRec.runs != null) value = String(playerRec.runs);
+        if (fieldKey === 'raidPoints' && playerRec.battingBestFigures != null) value = String(playerRec.battingBestFigures);
+        if (fieldKey === 'tacklePoints' && playerRec.wickets != null) value = String(playerRec.wickets);
       }
 
       // Skip empty, N/A, or zero-only values
@@ -901,7 +1018,7 @@ function AuctionApp({ mirrorMode = false }: { mirrorMode?: boolean }) {
     }
 
     return rows;
-  }, [currentPlayer, adminSettings?.playerStatsFields]);
+  }, [currentPlayer, adminSettings?.playerStatsFields, adminSettings?.sport]);
 
   // Get current player image URL
   const playerImageUrl = currentPlayer?.imageUrl ?? null;
@@ -966,14 +1083,52 @@ function AuctionApp({ mirrorMode = false }: { mirrorMode?: boolean }) {
     return <LoadingScreen progress={bootPreload.progress} loaded={bootPreload.loaded} total={bootPreload.total} label={isMirrorMode ? 'Preloading media for mirror...' : undefined} />;
   }
 
+  // Sport-specific default background from public assets
+  const sportBackground = (() => {
+    switch (currentSport) {
+      case 'kabaddi': return '/assets/kabaddi-bg.svg';
+      case 'football': return '/assets/football-bg.svg';
+      case 'volleyball': return '/assets/volleyball-bg.svg';
+      case 'basketball': return '/assets/basketball-bg.svg';
+      case 'badminton': return '/assets/badminton-bg.svg';
+      default: return currentTheme.background || '/assets/BG-1.jpg';
+    }
+  })();
+
+  // Admin-selectable auction screen presentation
+  const auctionLayoutStyle = adminSettings?.auctionLayout ?? 'classic';
+  const auctionLayoutProps = {
+    currentPlayer,
+    playerImageSrc: imageLoadingState === 'error' ? playerPlaceholder : (imgSrc || playerPlaceholder),
+    statRows,
+    currentBid: auction.currentBid,
+    selectedTeam,
+    maxBidForTeam: selectedTeam ? auction.getMaxBidForTeam(selectedTeam) : 0,
+    currencySuffix,
+    organizerName,
+    organizerLogo,
+    currentRound: auction.currentRound,
+    accentColor: currentTheme.colors.accent,
+    primaryColor: currentTheme.colors.primary,
+    secondaryColor: currentTheme.colors.secondary,
+    titleSponsor,
+    sponsors: effectiveSponsors,
+    playerCounts: {
+      available: availablePlayers.length,
+      sold: soldPlayers.length,
+      unsold: unsoldPlayers.length,
+    },
+    teamCount: allTeams.length,
+    headerVisible: showHeader,
+  };
+
   return (
     <div 
-      className={`app-shell text-white${isMirrorMode ? ' mirror-mode' : ''}`}
+      className={`app-shell text-white sport-${currentSport}${isMirrorMode ? ' mirror-mode' : ''}`}
       style={{
-        backgroundImage: currentTheme.background 
-          ? `url(${currentTheme.background})` 
-          : undefined,
-      }}
+        backgroundImage: sportBackground ? `url(${sportBackground})` : undefined,
+        '--theme-asset-filter': themeAssetFilter,
+      } as React.CSSProperties}
     >
       {/* Mirror badge */}
       {isMirrorMode && (
@@ -1002,9 +1157,7 @@ function AuctionApp({ mirrorMode = false }: { mirrorMode?: boolean }) {
             (e.currentTarget as HTMLImageElement).style.display = 'none';
           }}
         />
-      </div>
-
-      {/* Full-screen neon light bands (top + bottom) */}
+      </div> {/* Full-screen neon light bands (top + bottom) */}
       <div className="screen-neon-bands" aria-hidden />
 
       {/* NJS Creative Labs branding watermark */}
@@ -1043,7 +1196,12 @@ function AuctionApp({ mirrorMode = false }: { mirrorMode?: boolean }) {
         document.body
       )}
 
+      {/* Alternate admin-selected layouts replace the classic split hero */}
+      {auctionLayoutStyle === 'spotlight' && <SpotlightLayout {...auctionLayoutProps} />}
+      {auctionLayoutStyle === 'vibrant' && <VibrantLayout {...auctionLayoutProps} />}
+
       {/* Main Player View - Two column layout */}
+      {auctionLayoutStyle === 'classic' && (
       <main className={`hero-split ${showHeader ? '' : 'no-header'}`}>
         {/* LEFT - Player Details */}
         <section className="hero-left">
@@ -1088,6 +1246,17 @@ function AuctionApp({ mirrorMode = false }: { mirrorMode?: boolean }) {
                 </div>
                 <span className="neon-role-icon">
                   {(() => {
+                    const kabaddiRole = getKabaddiRoleCategory(currentPlayer.role);
+                    if (kabaddiRole === 'Raider') return <GiSprint />;
+                    if (kabaddiRole === 'Defender') return <GiShield />;
+                    if (kabaddiRole === 'All-Rounder') return <IoStar />;
+
+                    const footballRole = getFootballRoleCategory(currentPlayer.role);
+                    if (footballRole === 'Forward') return <IoFootball />;
+                    if (footballRole === 'Midfielder') return <IoStar />;
+                    if (footballRole === 'Defender') return <GiShield />;
+                    if (footballRole === 'Goalkeeper') return <GiBaseballGlove />;
+
                     const roleKey = String(currentPlayer.role ?? '')
                       .trim()
                       .toLowerCase()
@@ -1125,6 +1294,34 @@ function AuctionApp({ mirrorMode = false }: { mirrorMode?: boolean }) {
                   transition={{ duration: 0.5, delay: 0.15, ease: [0.32, 0.72, 0, 1] }}
                 >
                   {(() => {
+                    const kabaddiRole = getKabaddiRoleCategory(currentPlayer.role);
+                    if (kabaddiRole) {
+                      const badgeBg = kabaddiRole === 'Raider' ? '#f97316' : (kabaddiRole === 'Defender' ? '#6366f1' : '#eab308');
+                      const badgeText = kabaddiRole === 'Raider' ? 'RAID' : (kabaddiRole === 'Defender' ? 'DEF' : 'AR');
+                      return (
+                        <>
+                          <span className="role-badge-chip role-badge-chip--primary" style={{ background: badgeBg }}>
+                            {badgeText}
+                          </span>
+                          <span className="role-core-text">{formatRoleDisplay(currentPlayer.role)}</span>
+                        </>
+                      );
+                    }
+
+                    const footballRole = getFootballRoleCategory(currentPlayer.role);
+                    if (footballRole) {
+                      const badgeBg = footballRole === 'Forward' ? '#ef4444' : (footballRole === 'Midfielder' ? '#06b6d4' : (footballRole === 'Defender' ? '#10b981' : '#f59e0b'));
+                      const badgeText = footballRole === 'Forward' ? 'FWD' : (footballRole === 'Midfielder' ? 'MID' : (footballRole === 'Defender' ? 'DEF' : 'GK'));
+                      return (
+                        <>
+                          <span className="role-badge-chip role-badge-chip--primary" style={{ background: badgeBg }}>
+                            {badgeText}
+                          </span>
+                          <span className="role-core-text">{formatRoleDisplay(currentPlayer.role)}</span>
+                        </>
+                      );
+                    }
+
                     const parsed = parseRoleDetails(currentPlayer.role);
                     const roleColor = getRoleBadgeColor(currentPlayer.role);
                     return (
@@ -1195,7 +1392,7 @@ function AuctionApp({ mirrorMode = false }: { mirrorMode?: boolean }) {
                     ))}
                   </motion.div>
                 ) : (
-                  /* >9 stats: split batting + bowling grids */
+                  /* >9 stats: split category grids */
                   <motion.div
                     className="stat-split-view"
                     variants={{
@@ -1206,6 +1403,112 @@ function AuctionApp({ mirrorMode = false }: { mirrorMode?: boolean }) {
                     transition={{ duration: 0.4, delay: 0.2 }}
                   >
                     {(() => {
+                      if (currentSport === 'kabaddi') {
+                        const raidRows = statRows.filter(r => r.category === 'raiding' || r.category === 'general');
+                        const defRows = statRows.filter(r => r.category === 'defense');
+                        return (
+                          <>
+                            {raidRows.length > 0 && (
+                              <div className="stat-split-section">
+                                <div className="stat-split-title">🤼 Raiding & Points</div>
+                                <div className="stat-grid-view stat-grid-view--compact">
+                                  {raidRows.map((row, index) => (
+                                    <motion.div
+                                      key={row.label}
+                                      className="stat-grid-cell"
+                                      variants={{
+                                        hidden: { opacity: 0, scale: 0.8 },
+                                        visible: { opacity: 1, scale: 1 },
+                                        exit: { opacity: 0, scale: 0.8 }
+                                      }}
+                                      transition={{ duration: 0.3, delay: 0.1 + index * 0.03 }}
+                                    >
+                                      <span className="stat-grid-value">{row.value}</span>
+                                      <span className="stat-grid-label">{row.label}</span>
+                                    </motion.div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                            {defRows.length > 0 && (
+                              <div className="stat-split-section">
+                                <div className="stat-split-title">🛡️ Defense & Tackles</div>
+                                <div className="stat-grid-view stat-grid-view--compact">
+                                  {defRows.map((row, index) => (
+                                    <motion.div
+                                      key={row.label}
+                                      className="stat-grid-cell"
+                                      variants={{
+                                        hidden: { opacity: 0, scale: 0.8 },
+                                        visible: { opacity: 1, scale: 1 },
+                                        exit: { opacity: 0, scale: 0.8 }
+                                      }}
+                                      transition={{ duration: 0.3, delay: 0.1 + index * 0.03 }}
+                                    >
+                                      <span className="stat-grid-value">{row.value}</span>
+                                      <span className="stat-grid-label">{row.label}</span>
+                                    </motion.div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </>
+                        );
+                      }
+
+                      if (currentSport === 'football') {
+                        const attackRows = statRows.filter(r => r.category === 'attack' || r.category === 'midfield' || r.category === 'general');
+                        const defRows = statRows.filter(r => r.category === 'defense');
+                        return (
+                          <>
+                            {attackRows.length > 0 && (
+                              <div className="stat-split-section">
+                                <div className="stat-split-title">⚽ Attack & Midfield</div>
+                                <div className="stat-grid-view stat-grid-view--compact">
+                                  {attackRows.map((row, index) => (
+                                    <motion.div
+                                      key={row.label}
+                                      className="stat-grid-cell"
+                                      variants={{
+                                        hidden: { opacity: 0, scale: 0.8 },
+                                        visible: { opacity: 1, scale: 1 },
+                                        exit: { opacity: 0, scale: 0.8 }
+                                      }}
+                                      transition={{ duration: 0.3, delay: 0.1 + index * 0.03 }}
+                                    >
+                                      <span className="stat-grid-value">{row.value}</span>
+                                      <span className="stat-grid-label">{row.label}</span>
+                                    </motion.div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                            {defRows.length > 0 && (
+                              <div className="stat-split-section">
+                                <div className="stat-split-title">🛡️ Defense & Discipline</div>
+                                <div className="stat-grid-view stat-grid-view--compact">
+                                  {defRows.map((row, index) => (
+                                    <motion.div
+                                      key={row.label}
+                                      className="stat-grid-cell"
+                                      variants={{
+                                        hidden: { opacity: 0, scale: 0.8 },
+                                        visible: { opacity: 1, scale: 1 },
+                                        exit: { opacity: 0, scale: 0.8 }
+                                      }}
+                                      transition={{ duration: 0.3, delay: 0.1 + index * 0.03 }}
+                                    >
+                                      <span className="stat-grid-value">{row.value}</span>
+                                      <span className="stat-grid-label">{row.label}</span>
+                                    </motion.div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </>
+                        );
+                      }
+
                       const battingRows = statRows.filter(r => r.category === 'batting' || r.category === 'general');
                       const bowlingRows = statRows.filter(r => r.category === 'bowling');
                       return (
@@ -1541,8 +1844,38 @@ function AuctionApp({ mirrorMode = false }: { mirrorMode?: boolean }) {
               transition={{ duration: 0.5 }}
             >
               <div className="orbit-container">
-              {/* Batsman - Bat icons */}
-              {inferRoleCategoryFromPlayer(currentPlayer) === 'Batsman' && (
+              {/* Kabaddi floating elements */}
+              {currentSport === 'kabaddi' && (
+                <>
+                  <span className="float-item float-1">
+                    {getKabaddiRoleCategory(currentPlayer?.role) === 'Defender' ? <GiShield className="float-icon" /> : <GiSprint className="float-icon" />}
+                  </span>
+                  <span className="float-item float-2">
+                    {getKabaddiRoleCategory(currentPlayer?.role) === 'Raider' ? <GiSprint className="float-icon" /> : <IoStar className="float-icon" />}
+                  </span>
+                  <span className="float-item float-3">
+                    <GiShield className="float-icon small" />
+                  </span>
+                </>
+              )}
+
+              {/* Football floating elements */}
+              {currentSport === 'football' && (
+                <>
+                  <span className="float-item float-1">
+                    <IoFootball className="float-icon" />
+                  </span>
+                  <span className="float-item float-2">
+                    {getFootballRoleCategory(currentPlayer?.role) === 'Defender' || getFootballRoleCategory(currentPlayer?.role) === 'Goalkeeper' ? <GiShield className="float-icon" /> : <IoFootball className="float-icon" />}
+                  </span>
+                  <span className="float-item float-3">
+                    <IoFootball className="float-icon small" />
+                  </span>
+                </>
+              )}
+
+              {/* Cricket & Default - Batsman */}
+              {currentSport !== 'kabaddi' && currentSport !== 'football' && inferRoleCategoryFromPlayer(currentPlayer) === 'Batsman' && (
                 <>
                   <span className="float-item float-1">
                     <GiCricketBat className="float-icon" />
@@ -1556,8 +1889,8 @@ function AuctionApp({ mirrorMode = false }: { mirrorMode?: boolean }) {
                 </>
               )}
 
-              {/* Bowler - Ball icons */}
-              {inferRoleCategoryFromPlayer(currentPlayer) === 'Bowler' && (
+              {/* Cricket & Default - Bowler */}
+              {currentSport !== 'kabaddi' && currentSport !== 'football' && inferRoleCategoryFromPlayer(currentPlayer) === 'Bowler' && (
                 <>
                   <span className="float-item float-1">
                     <IoBaseball className="float-icon" />
@@ -1571,8 +1904,8 @@ function AuctionApp({ mirrorMode = false }: { mirrorMode?: boolean }) {
                 </>
               )}
 
-              {/* All-Rounder - Bat + Ball icons */}
-              {inferRoleCategoryFromPlayer(currentPlayer) === 'All-Rounder' && (
+              {/* Cricket & Default - All-Rounder */}
+              {currentSport !== 'kabaddi' && currentSport !== 'football' && inferRoleCategoryFromPlayer(currentPlayer) === 'All-Rounder' && (
                 <>
                   <span className="float-item float-1">
                     <GiCricketBat className="float-icon" />
@@ -1586,8 +1919,8 @@ function AuctionApp({ mirrorMode = false }: { mirrorMode?: boolean }) {
                 </>
               )}
 
-              {/* Wicket-Keeper - Gloves icons */}
-              {inferRoleCategoryFromPlayer(currentPlayer) === 'Wicket Keeper Batsman' && (
+              {/* Cricket & Default - Wicket-Keeper */}
+              {currentSport !== 'kabaddi' && currentSport !== 'football' && inferRoleCategoryFromPlayer(currentPlayer) === 'Wicket Keeper Batsman' && (
                 <>
                   <span className="float-item float-1">
                     <GiBaseballGlove className="float-icon" />
@@ -1605,6 +1938,7 @@ function AuctionApp({ mirrorMode = false }: { mirrorMode?: boolean }) {
           </AnimatePresence>
         </section>
       </main>
+      )}
 
       {/* Team Overlay - Apple-themed sold players view */}
       <AnimatePresence>
@@ -1701,19 +2035,19 @@ function AuctionApp({ mirrorMode = false }: { mirrorMode?: boolean }) {
                     <div className="analytics-card">
                       <div className="analytics-card-title">Balance</div>
                       <div className="analytics-meter-row">
-                        <span>Batting</span>
-                        <div className="analytics-meter"><span style={{ width: `${teamRoleBalance.batting}%` }} /></div>
-                        <strong>{teamRoleBalance.batting}%</strong>
+                        <span>{teamRoleBalance.cat1Label}</span>
+                        <div className="analytics-meter"><span style={{ width: `${teamRoleBalance.cat1}%` }} /></div>
+                        <strong>{teamRoleBalance.cat1}%</strong>
                       </div>
                       <div className="analytics-meter-row">
-                        <span>Bowling</span>
-                        <div className="analytics-meter"><span style={{ width: `${teamRoleBalance.bowling}%` }} /></div>
-                        <strong>{teamRoleBalance.bowling}%</strong>
+                        <span>{teamRoleBalance.cat2Label}</span>
+                        <div className="analytics-meter"><span style={{ width: `${teamRoleBalance.cat2}%` }} /></div>
+                        <strong>{teamRoleBalance.cat2}%</strong>
                       </div>
                       <div className="analytics-meter-row">
-                        <span>Fielding</span>
-                        <div className="analytics-meter"><span style={{ width: `${teamRoleBalance.fielding}%` }} /></div>
-                        <strong>{teamRoleBalance.fielding}%</strong>
+                        <span>{teamRoleBalance.cat3Label}</span>
+                        <div className="analytics-meter"><span style={{ width: `${teamRoleBalance.cat3}%` }} /></div>
+                        <strong>{teamRoleBalance.cat3}%</strong>
                       </div>
                     </div>
 

@@ -139,6 +139,7 @@ export function TeamSquadView({
   const teamPlayers = useMemo(() => {
     if (!activeTeam) return [];
     const roleRank: Record<string, number> = {
+      // Cricket
       batsman: 0,
       'wicket-keeper': 1,
       'wicket keeper': 1,
@@ -149,6 +150,23 @@ export function TeamSquadView({
       'bowling all_rounder': 2,
       'bowling all-rounder': 2,
       bowler: 3,
+      // Kabaddi
+      raider: 0,
+      'left corner': 1,
+      'right corner': 1,
+      'left cover': 2,
+      'right cover': 2,
+      defender: 3,
+      // Football
+      forward: 0,
+      striker: 0,
+      fwd: 0,
+      midfielder: 1,
+      midfield: 1,
+      mid: 1,
+      defense: 2,
+      goalkeeper: 3,
+      gk: 3,
     };
 
     const normalizeRole = (role: string) => role.toLowerCase().trim();

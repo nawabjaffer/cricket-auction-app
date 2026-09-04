@@ -89,8 +89,8 @@
   padding: 8px 12px;
   border-radius: 6px;
   border: 1px solid rgba(255, 255, 255, 0.1);
-  background: rgba(0, 0, 0, 0.3);
-  color: #fff;
+  background: rgba(0, 0, 0, 0.15);
+  color: #000;
   font-size: 0.85rem;
   outline: none;
   transition: border-color 0.2s;
@@ -99,11 +99,12 @@
   border-color: rgba(59, 130, 246, 0.5);
 }
 .admin-input::placeholder {
-  color: rgba(255, 255, 255, 0.3);
+  color: #64748b;
 }
 .admin-input-sm {
   max-width: 100px;
-  flex: 0 0 100px;
+  min-width: 70px;
+  flex: 0 0 90px;
 }
 
 .admin-color-input {

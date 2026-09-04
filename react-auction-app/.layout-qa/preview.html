@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Layout QA</title>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700;800;900&family=Roboto+Condensed:wght@700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../src/components/AuctionLayouts/AuctionLayouts.css">
+<style>
+  html,body{margin:0;padding:0;background:#000;}
+  .stage{position:relative;width:100vw;height:100vh;overflow:hidden;border-bottom:2px solid #333;}
+</style>
+</head>
+<body>
+
+<!-- SPOTLIGHT -->
+<div class="stage">
+  <div class="auction-layout auction-layout--spotlight"
+       style="--al-accent:#f59e0b;--al-bg-inner:#2196F3;--al-bg-mid:#0b3552;--al-bg-outer:#04121c;--al-light-primary-soft:rgba(33,150,243,.46);--al-light-secondary-soft:rgba(25,118,210,.4);--al-light-highlight-soft:rgba(255,255,255,.58);">
+    <div class="al-corner-rays"><span class="al-corner-ray al-corner-ray--left"></span><span class="al-corner-ray al-corner-ray--right"></span><span class="al-corner-ray al-corner-ray--bottom"></span><span class="al-bottom-beams"></span></div>
+    <img class="al-side-smoke" src="../public/extras/d3.gif" alt="">
+    <div class="al-round-chip">Round 2</div>
+    <div class="al-spot-header">
+      <div class="al-spot-org"><span class="al-spot-org-name">EPL AUCTION</span></div>
+      <h1 class="al-spot-name">PRABHAHARAN R</h1>
+      <div class="al-spot-role">Batsman · Right-Hand Bat</div>
+      <div class="al-spot-base">Base ₹5.0L</div>
+    </div>
+    <div class="al-spot-stats al-spot-stats--left">
+      <div class="al-spot-stat"><div class="al-spot-stat-label-bg"><span class="al-spot-stat-label">Matches</span></div><div class="al-spot-stat-value">210</div></div>
+      <div class="al-spot-stat"><div class="al-spot-stat-label-bg"><span class="al-spot-stat-label">Runs</span></div><div class="al-spot-stat-value">9874</div></div>
+      <div class="al-spot-stat"><div class="al-spot-stat-label-bg"><span class="al-spot-stat-label">Average</span></div><div class="al-spot-stat-value">25.3</div></div>
+    </div>
+    <div class="al-spot-player">
+      <img src="../public/placeholder_player.png" alt="">
+      <div class="al-center-rays"><div class="al-ray-ring al-ray-ring--inner"></div><div class="al-ray-beams"></div></div>
+    </div>
+    <div class="al-spot-stats al-spot-stats--right">
+      <div class="al-spot-stat"><div class="al-spot-stat-label-bg"><span class="al-spot-stat-label">Highest</span></div><div class="al-spot-stat-value">199*</div></div>
+      <div class="al-spot-stat"><div class="al-spot-stat-label-bg"><span class="al-spot-stat-label">100s</span></div><div class="al-spot-stat-value">12</div></div>
+      <div class="al-spot-stat"><div class="al-spot-stat-label-bg"><span class="al-spot-stat-label">50s</span></div><div class="al-spot-stat-value">23</div></div>
+    </div>
+    <div class="al-bid-card">
+      <div class="al-bid-team"><span class="al-bid-team-name">Royal Strikers</span></div>
+      <div class="al-bid-amount">₹12.50L</div>
+      <div class="al-bid-max">Max ₹28.0L</div>
+    </div>
+  </div>
+</div>
+
+<!-- VIBRANT -->
+<div class="stage">
+  <div class="auction-layout auction-layout--vibrant" style="--al-accent:#d4ff00;--al-border:rgba(212,255,0,.28);">
+    <div class="al-vib-particles"></div>
+    <div class="al-vib-splash"></div>
+    <div class="al-round-chip">Round 2</div>
+    <div class="al-vib-content">
+      <div>
+        <div class="al-vib-org"><span>EPL AUCTION</span></div>
+        <h1 class="al-vib-name">PRABHAHARAN R</h1>
+        <div class="al-vib-role">Batsman · Right-Hand Bat</div>
+      </div>
+      <div class="al-vib-table">
+        <div class="al-vib-row"><span class="al-vib-row-label">Matches</span><span class="al-vib-row-value">234</span></div>
+        <div class="al-vib-row"><span class="al-vib-row-label">Runs</span><span class="al-vib-row-value">9841</span></div>
+        <div class="al-vib-row"><span class="al-vib-row-label">Average</span><span class="al-vib-row-value">45.21</span></div>
+        <div class="al-vib-row"><span class="al-vib-row-label">Strike Rate</span><span class="al-vib-row-value">119.2</span></div>
+        <div class="al-vib-row"><span class="al-vib-row-label">Highest Score</span><span class="al-vib-row-value">199*</span></div>
+        <div class="al-vib-row"><span class="al-vib-row-label">Base Price</span><span class="al-vib-row-value">₹5.0L</span></div>
+      </div>
+      <div class="al-bid-card">
+      <div class="al-bid-team"><span class="al-bid-team-name">Royal Strikers</span></div>
+      <div class="al-bid-amount">₹12.50L</div>
+      <div class="al-bid-max">Max ₹28.0L</div>
+    </div>
+    </div>
+    <div class="al-vib-player"><img src="../public/placeholder_player.png" alt=""></div>
+    
+  </div>
+</div>
+
+</body>
+</html>

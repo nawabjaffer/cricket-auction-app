@@ -175,6 +175,9 @@ interface AuctionStore {
   // Currency suffix (L = Lakhs, T = Thousands, K = K, etc.)
   currencySuffix: string;
 
+  // Selected sport/game for the auction
+  sport: string;
+
   // Organizer branding
   organizerLogo: string;
   organizerName: string;
@@ -192,6 +195,7 @@ interface AuctionStore {
   setBidIncrementRanges: (ranges: { minAmount: number; maxAmount: number; increment: number; mode?: 'amount' | 'multiplier' }[]) => void;
   setBudgetMode: (mode: 'constraint' | 'releaseRefund') => void;
   setCurrencySuffix: (suffix: string) => void;
+  setSport: (sport: string) => void;
   reconcilePlayerPools: () => void;
   
   // Player selection
@@ -296,6 +300,7 @@ export const useAuctionStore = create<AuctionStore>()(
         budgetMode: 'constraint',
         enableSpecialCategories: false,
         currencySuffix: 'L',
+        sport: 'cricket',
         organizerLogo: _cachedOrganizerLogo,
         organizerName: _cachedOrganizerName,
         auctionState: initialAuctionState,
@@ -377,6 +382,7 @@ export const useAuctionStore = create<AuctionStore>()(
         setBidIncrementRanges: (ranges) => set({ bidIncrementRanges: ranges }),
         setBudgetMode: (mode) => set({ budgetMode: mode }),
         setCurrencySuffix: (suffix) => set({ currencySuffix: suffix }),
+        setSport: (sport) => set({ sport }),
 
         reconcilePlayerPools: () => {
           const { availablePlayers, soldPlayers, unsoldPlayers, currentPlayer, teams } = get();
@@ -1438,6 +1444,7 @@ export const useAuctionStore = create<AuctionStore>()(
           isRound2Active: state.isRound2Active,
           maxUnsoldRounds: state.maxUnsoldRounds,
           auctionRoleOrder: state.auctionRoleOrder,
+          sport: state.sport,
           organizerLogo: state.organizerLogo,
           organizerName: state.organizerName,
         }),
@@ -1465,3 +1472,4 @@ export const useMaxUnsoldRounds = () => useAuctionStore((state) => state.maxUnso
 export const useOrganizerLogo = () => useAuctionStore((state) => state.organizerLogo);
 export const useOrganizerName = () => useAuctionStore((state) => state.organizerName);
 export const useCurrencySuffix = () => useAuctionStore((state) => state.currencySuffix);
+export const useSport = () => useAuctionStore((state) => state.sport);

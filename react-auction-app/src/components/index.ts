@@ -22,3 +22,5 @@ export { ImageLightbox } from './ImageLightbox';
 export { AdminLogin } from './AdminLogin';
 export { SponsorShowcase } from './SponsorShowcase';
 export type { SponsorItem } from './SponsorShowcase';
+export { SpotlightLayout, VibrantLayout, AuctionHomeScreen } from './AuctionLayouts';
+export type { AuctionLayoutProps, AuctionLayoutStyle } from './AuctionLayouts';

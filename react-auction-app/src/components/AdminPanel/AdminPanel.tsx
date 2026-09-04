@@ -23,6 +23,7 @@ import '../AdminPanel/StorageManager.css';
 import './AdminPanel.css';
 import type { Team, Player, SoldPlayer, UnsoldPlayer, AuctionRoleCategory, BattingStats, BowlingStats } from '../../types';
 import { DEFAULT_AUCTION_ROLE_ORDER, createEmptyBattingStats, createEmptyBowlingStats } from '../../types';
+import { SPORT_ROLE_ORDERS, DEFAULT_SPORT_STAT_FIELDS } from '../../config/playerStatFields';
 import { formatRoleDisplay, getRoleCategory, getRoleBadgeColor } from '../../utils/roleFormatter';
 import { localImageCacheService } from '../../services/localImageCache';
 import { getCachedStorageUrl, resolveImageAsync } from '../../services/firebaseStorageService';
@@ -87,6 +88,111 @@ function CompactPlayerAvatar({ imageUrl, playerName }: { readonly imageUrl?: str
 
 type LogoSourceMode = 'drive' | 'upload';
 
+const SPORT_AUCTION_OPTIONS = [
+  {
+    key: 'cricket',
+    name: 'Cricket',
+    icon: '🏏',
+    desc: 'Classic cricket auction screen with pitch aesthetics, batsman/bowler/all-rounder/WK roles, and batting/bowling statistics.',
+    badge: 'Classic',
+    accentColor: '#3b82f6',
+    glowColor: 'rgba(59, 130, 246, 0.35)',
+    presetColors: { primary: '#3b82f6', secondary: '#06b6d4', accent: '#f59e0b' },
+  },
+  {
+    key: 'kabaddi',
+    name: 'Kabaddi',
+    icon: '🤼',
+    desc: 'Pro Kabaddi arena styling with court lines (baulk/bonus line), flame orange & purple aesthetics, and raider/defender roles.',
+    badge: 'Pro Arena',
+    accentColor: '#f97316',
+    glowColor: 'rgba(249, 115, 22, 0.4)',
+    presetColors: { primary: '#f97316', secondary: '#7c3aed', accent: '#fbbf24' },
+  },
+  {
+    key: 'football',
+    name: 'Football',
+    icon: '⚽',
+    desc: 'World-class emerald pitch stadium with floodlights, striker/midfielder/defender/goalkeeper roles, and goals/assists stats.',
+    badge: 'Stadium Pitch',
+    accentColor: '#10b981',
+    glowColor: 'rgba(16, 185, 129, 0.35)',
+    presetColors: { primary: '#10b981', secondary: '#0284c7', accent: '#ef4444' },
+  },
+  {
+    key: 'volleyball',
+    name: 'Volleyball',
+    icon: '🏐',
+    desc: 'Indoor court atmosphere with attack lines and attacker/setter/libero player roles.',
+    badge: 'Indoor Court',
+    accentColor: '#0284c7',
+    glowColor: 'rgba(2, 132, 199, 0.35)',
+    presetColors: { primary: '#0284c7', secondary: '#0369a1', accent: '#facc15' },
+  },
+  {
+    key: 'basketball',
+    name: 'Basketball',
+    icon: '🏀',
+    desc: 'Hardwood arena theme with 3-point key court lines and guard/forward/center player roles.',
+    badge: 'Hardwood Arena',
+    accentColor: '#b45309',
+    glowColor: 'rgba(180, 83, 9, 0.35)',
+    presetColors: { primary: '#b45309', secondary: '#78350f', accent: '#fbbf24' },
+  },
+  {
+    key: 'badminton',
+    name: 'Badminton',
+    icon: '🏸',
+    desc: 'Court layout with service line markings and singles/doubles player roles.',
+    badge: 'Court Arena',
+    accentColor: '#047857',
+    glowColor: 'rgba(4, 120, 87, 0.35)',
+    presetColors: { primary: '#047857', secondary: '#065f46', accent: '#6ee7b7' },
+  },
+];
+
+const AUCTION_LAYOUT_OPTIONS: {
+  key: 'classic' | 'spotlight' | 'vibrant';
+  name: string;
+  icon: string;
+  desc: string;
+  badge: string;
+  hint: string;
+  accentColor: string;
+  glowColor: string;
+}[] = [
+  {
+    key: 'classic',
+    name: 'Classic Split',
+    icon: '🎛️',
+    desc: 'The original two-column auction screen — player details and stat stack on the left, animated player photo with orbiting role icons on the right.',
+    badge: 'Default',
+    hint: 'Bid paddle + analytics',
+    accentColor: '#3b82f6',
+    glowColor: 'rgba(59, 130, 246, 0.35)',
+  },
+  {
+    key: 'spotlight',
+    name: 'Spotlight Reveal',
+    icon: '🔦',
+    desc: 'Broadcast-style centre stage: the player cutout is framed by rotating light rays and smoke, with stats split into skewed labels on both sides.',
+    badge: 'Cinematic',
+    hint: 'Best for big screens',
+    accentColor: '#67e8f9',
+    glowColor: 'rgba(103, 232, 249, 0.35)',
+  },
+  {
+    key: 'vibrant',
+    name: 'Vibrant Splash',
+    icon: '🎨',
+    desc: 'Bold split screen — an accent colour splash panel behind the player with a clean, scannable stat table down the left side.',
+    badge: 'High Contrast',
+    hint: 'Great for streaming',
+    accentColor: '#d4ff00',
+    glowColor: 'rgba(212, 255, 0, 0.3)',
+  },
+];
+
 interface AdminPanelProps {
   readonly isOpen: boolean;
   readonly onClose: () => void;
@@ -122,6 +228,7 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
   const [organizerName, setOrganizerName] = useState('');
   const [organizerLogo, setOrganizerLogo] = useState('');
   const [auctionTitle, setAuctionTitle] = useState('');
+  const [selectedSport, setSelectedSport] = useState<string>('cricket');
   const [primaryColor, setPrimaryColor] = useState('#3b82f6');
   const [secondaryColor, setSecondaryColor] = useState('#06b6d4');
   const [accentColor, setAccentColor] = useState('#f59e0b');
@@ -129,6 +236,7 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
 
   // Auction role ordering
   const [auctionRoleOrder, setAuctionRoleOrder] = useState<AuctionRoleCategory[]>([...DEFAULT_AUCTION_ROLE_ORDER]);
+  const [newRoleInput, setNewRoleInput] = useState('');
   // Easy login mode for /connect-bidding — true = tap team card, false = username/password
   const [easyLoginMode, setEasyLoginMode] = useState(true);
   // Super Admin Mode quick-access credentials for /connect-bidding-admin (mobile)
@@ -155,6 +263,9 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
   // OBS overlay style + accent (broadcast lower-third configuration)
   const [obsOverlayStyle, setObsOverlayStyle] = useState<'classic' | 'broadcast' | 'compact'>('classic');
   const [obsOverlayAccent, setObsOverlayAccent] = useState('#1d4ed8');
+
+  // Live auction screen presentation style
+  const [auctionLayout, setAuctionLayout] = useState<'classic' | 'spotlight' | 'vibrant'>('classic');
 
   // Bid increment ranges
   const [bidIncrementRanges, setBidIncrementRanges] = useState<BidIncrementRange[]>([]);
@@ -365,6 +476,10 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
           setOrganizerName(settings.organizerName);
           setOrganizerLogo(settings.organizerLogo);
           setAuctionTitle(settings.auctionTitle);
+          if (settings.sport) {
+            setSelectedSport(settings.sport);
+            useAuctionStore.getState().setSport(settings.sport);
+          }
           setPrimaryColor(settings.themeColors.primary);
           setSecondaryColor(settings.themeColors.secondary);
           setAccentColor(settings.themeColors.accent);
@@ -385,6 +500,7 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
           }
           if (settings.obsOverlayStyle) setObsOverlayStyle(settings.obsOverlayStyle);
           if (settings.obsOverlayAccent) setObsOverlayAccent(settings.obsOverlayAccent);
+          if (settings.auctionLayout) setAuctionLayout(settings.auctionLayout);
           if (settings.bidIncrementRanges?.length) {
             setBidIncrementRanges(settings.bidIncrementRanges);
             useAuctionStore.getState().setBidIncrementRanges(settings.bidIncrementRanges);
@@ -482,6 +598,7 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
           accent: accentColor,
         },
         auctionTitle,
+        sport: selectedSport || 'cricket',
         updatedAt: Date.now(),
         auctionRoleOrder,
         easyLoginMode,
@@ -494,6 +611,7 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
         currencySuffix: currencySuffix || 'L',
         obsOverlayStyle,
         obsOverlayAccent,
+        auctionLayout,
         budgetMode: budgetMode,
         branding: brandingSettings,
         // Merge in extended settings (player stats, categories, budget, breaks, etc.)
@@ -515,6 +633,7 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
       useAuctionStore.getState().setBidIncrementRanges(bidIncrementRanges);
       useAuctionStore.getState().setAuctionRoleOrder(auctionRoleOrder);
       useAuctionStore.getState().setCurrencySuffix(currencySuffix || 'L');
+      useAuctionStore.getState().setSport(selectedSport || 'cricket');
 
       setSaveStatus('success');
       setTimeout(() => setSaveStatus('idle'), 2000);
@@ -2072,7 +2191,7 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
                     Set the suffix shown after bid amounts (e.g. "L" for Lakhs, "T" for Thousands, "K" for K).
                   </small>
                   <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginBottom: '1rem' }}>
-                    <label style={{ fontSize: '0.85rem', color: '#e2e8f0' }}>Suffix:</label>
+                    <label style={{ fontSize: '0.85rem', color: '#000' }}>Suffix:</label>
                     <select
                       value={currencySuffix}
                       onChange={(e) => setCurrencySuffix(e.target.value)}
@@ -2107,19 +2226,19 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
                           padding: '0.7rem 0.9rem', borderRadius: '10px',
                           background: obsOverlayStyle === opt.key ? 'rgba(29,78,216,0.22)' : '#1e293b',
                           border: `1px solid ${obsOverlayStyle === opt.key ? '#3b82f6' : 'rgba(255,255,255,0.1)'}`,
-                          color: '#e2e8f0',
+                          color: `${obsOverlayStyle === opt.key ? '#000' : '#fff'}`,
                         }}
                       >
-                        <div style={{ fontWeight: 700, fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <div style={{ fontWeight: 700, fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: 6 , color: `${obsOverlayStyle === opt.key ? '#000' : '#fff'}`,}}>
                           {obsOverlayStyle === opt.key && <span style={{ color: '#60a5fa' }}>●</span>}
                           {opt.label}
                         </div>
-                        <div style={{ fontSize: '0.72rem', color: '#94a3b8', marginTop: 2 }}>{opt.desc}</div>
+                        <div style={{ fontSize: '0.72rem', marginTop: 2, color: `${obsOverlayStyle === opt.key ? '#535c68' : '#bbc9de'}`, }}>{opt.desc}</div>
                       </button>
                     ))}
                   </div>
                   <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginBottom: '1rem' }}>
-                    <label style={{ fontSize: '0.85rem', color: '#e2e8f0' }}>Accent color:</label>
+                    <label style={{ fontSize: '0.85rem', color: '#000' }}>Accent color:</label>
                     <input
                       type="color"
                       value={obsOverlayAccent}
@@ -2218,120 +2337,6 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
                     + Add Range
                   </button>
 
-                  <h3 style={{ marginTop: '2rem' }}>Budget Enforcement Mode</h3>
-                  <small style={{ color: '#6b7280', display: 'block', marginBottom: '0.75rem' }}>
-                    Choose how the system handles bids that exceed a team's budget.
-                  </small>
-                  <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem' }}>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.85rem', cursor: 'pointer', color: '#e2e8f0' }}>
-                      <input
-                        type="radio"
-                        name="budgetMode"
-                        checked={budgetMode !== 'releaseRefund'}
-                        onChange={() => setBudgetMode('constraint')}
-                      />
-                      Block Bid (constraint)
-                    </label>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.85rem', cursor: 'pointer', color: '#e2e8f0' }}>
-                      <input
-                        type="radio"
-                        name="budgetMode"
-                        checked={budgetMode === 'releaseRefund'}
-                        onChange={() => setBudgetMode('releaseRefund')}
-                      />
-                      Release & Refund (prompt team to drop a player)
-                    </label>
-                  </div>
-
-                  <h3 style={{ marginTop: '2rem' }}>Auction Role Order</h3>
-                  <small style={{ color: '#6b7280', display: 'block', marginBottom: '0.75rem' }}>
-                    Configure the sequence in which player roles appear during the auction. Drag or use arrows to reorder.
-                  </small>
-                  <div className="admin-role-order-list">
-                    {auctionRoleOrder.map((role, index) => (
-                      <div key={role} className="admin-role-order-item">
-                        <span className="admin-role-order-badge" style={{ background: getRoleBadgeColor(role) }}>
-                          {index + 1}
-                        </span>
-                        <span className="admin-role-order-label">{role}</span>
-                        <div className="admin-role-order-actions">
-                          <button
-                            type="button"
-                            className="admin-btn admin-btn-ghost admin-btn-sm"
-                            disabled={index === 0}
-                            onClick={() => {
-                              const updated = [...auctionRoleOrder];
-                              [updated[index - 1], updated[index]] = [updated[index], updated[index - 1]];
-                              setAuctionRoleOrder(updated);
-                            }}
-                            title="Move up"
-                          >
-                            <IoArrowUp size={14} />
-                          </button>
-                          <button
-                            type="button"
-                            className="admin-btn admin-btn-ghost admin-btn-sm"
-                            disabled={index === auctionRoleOrder.length - 1}
-                            onClick={() => {
-                              const updated = [...auctionRoleOrder];
-                              [updated[index], updated[index + 1]] = [updated[index + 1], updated[index]];
-                              setAuctionRoleOrder(updated);
-                            }}
-                            title="Move down"
-                          >
-                            <IoArrowDown size={14} />
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-
-                  <h3 style={{ marginTop: '2rem' }}>Connect-Bidding Login</h3>
-                  <div className="form-group">
-                    <label className="admin-toggle-row">
-                      <input
-                        type="checkbox"
-                        checked={easyLoginMode}
-                        onChange={(e) => setEasyLoginMode(e.target.checked)}
-                      />
-                      <span>Easy Login Mode</span>
-                    </label>
-                    <small style={{ color: '#6b7280', display: 'block', marginTop: '0.35rem' }}>
-                      {easyLoginMode
-                        ? 'ON — team representatives tap their team card on /connect-bidding to join instantly. No password required.'
-                        : 'OFF — team representatives must enter the username and password configured per team in the Teams tab.'}
-                    </small>
-                  </div>
-
-                  <h3 style={{ marginTop: '2rem' }}>Super Admin Mobile Access</h3>
-                  <p style={{ color: '#64748b', fontSize: '0.82rem', marginBottom: '1rem' }}>
-                    Set a lightweight username/password (separate from your admin email login) so a helper
-                    can open <code>/connect-bidding-admin</code> on their phone and control every team's
-                    bidding, sold/unsold, undo, and player search without needing full admin access.
-                  </p>
-                  <div className="form-row">
-                    <div className="form-group">
-                      <label htmlFor="super-admin-username">Super Admin Username</label>
-                      <input
-                        id="super-admin-username"
-                        type="text"
-                        value={superAdminUsername}
-                        onChange={(e) => setSuperAdminUsername(e.target.value.trim())}
-                        placeholder="e.g. organizer"
-                      />
-                    </div>
-                    <div className="form-group">
-                      <label htmlFor="super-admin-password">Super Admin Password</label>
-                      <input
-                        id="super-admin-password"
-                        type="text"
-                        value={superAdminPassword}
-                        onChange={(e) => setSuperAdminPassword(e.target.value.trim())}
-                        placeholder="Shared with trusted helpers only"
-                      />
-                    </div>
-                  </div>
-
                   <h3 style={{ marginTop: '2rem' }}>Theme Colors</h3>
 
                   <div className="color-grid">
@@ -2387,14 +2392,323 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
                     </div>
                   </div>
 
+                  {/* Auction Game / Sport Selection */}
+                  <div className="admin-sport-section">
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '0.5rem' }}>
+                      <div>
+                        <h3 style={{ margin: 0 }}>Auction Game / Sport</h3>
+                        <p style={{ color: '#94a3b8', fontSize: '0.82rem', margin: '0.25rem 0 0' }}>
+                          Select the game/sport for this tournament. The main auction screen will adapt its background (from local public assets), court/pitch line overlays, player role styling, and stat fields.
+                        </p>
+                      </div>
+                      <span style={{ fontSize: '0.82rem', fontWeight: 700, color: '#f8fafc', background: 'rgba(255,255,255,0.08)', padding: '0.35rem 0.75rem', borderRadius: 8 }}>
+                        Active: {SPORT_AUCTION_OPTIONS.find(s => s.key === selectedSport)?.name || 'Cricket'} {SPORT_AUCTION_OPTIONS.find(s => s.key === selectedSport)?.icon || '🏏'}
+                      </span>
+                    </div>
+
+                    <div className="admin-sport-grid">
+                      {SPORT_AUCTION_OPTIONS.map((sp) => {
+                        const isSelected = selectedSport === sp.key;
+                        const handleSelectSport = () => {
+                          setSelectedSport(sp.key);
+                          setPrimaryColor(sp.presetColors.primary);
+                          setSecondaryColor(sp.presetColors.secondary);
+                          setAccentColor(sp.presetColors.accent);
+                          const defRoles = SPORT_ROLE_ORDERS[sp.key] || SPORT_ROLE_ORDERS.cricket;
+                          setAuctionRoleOrder([...defRoles]);
+                          const defStats = DEFAULT_SPORT_STAT_FIELDS[sp.key] || DEFAULT_SPORT_STAT_FIELDS.cricket;
+                          extendedSettingsRef.current = {
+                            ...extendedSettingsRef.current,
+                            playerStatsFields: defStats,
+                          };
+                        };
+
+                        return (
+                          <div
+                            key={sp.key}
+                            className={`admin-sport-card ${isSelected ? 'active' : ''}`}
+                            style={{
+                              '--sport-accent-color': sp.accentColor,
+                              '--sport-glow-color': sp.glowColor,
+                            } as React.CSSProperties}
+                            onClick={handleSelectSport}
+                          >
+                            <div className="admin-sport-card-header">
+                              <div className="admin-sport-icon-title">
+                                <span className="admin-sport-icon">{sp.icon}</span>
+                                <span className="admin-sport-title">{sp.name}</span>
+                              </div>
+                              <span className="admin-sport-badge">{sp.badge}</span>
+                            </div>
+                            <p className="admin-sport-desc">{sp.desc}</p>
+                            <div className="admin-sport-footer">
+                              <div className="admin-sport-palette" title="Recommended color theme for this sport">
+                                <span className="admin-sport-swatch" style={{ background: sp.presetColors.primary }} />
+                                <span className="admin-sport-swatch" style={{ background: sp.presetColors.secondary }} />
+                                <span className="admin-sport-swatch" style={{ background: sp.presetColors.accent }} />
+                              </div>
+                              <button
+                                type="button"
+                                className="admin-sport-apply-btn"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleSelectSport();
+                                }}
+                                title="Select this sport, apply theme colors, default roles, and stat fields"
+                              >
+                                {isSelected ? 'Selected ✓' : 'Select Sport'}
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Auction Role Order (Dynamically reflects the selected sport) */}
+                  <div style={{ marginTop: '2rem', borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '2rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.5rem' }}>
+                      <div>
+                        <h3 style={{ margin: 0 }}>Auction Role Order</h3>
+                        <small style={{ color: '#94a3b8', display: 'block', marginTop: '0.25rem' }}>
+                          Sequence in which player roles appear during the auction for {SPORT_AUCTION_OPTIONS.find(s => s.key === selectedSport)?.name || selectedSport}. Drag or use arrows to reorder.
+                        </small>
+                      </div>
+                      <button
+                        type="button"
+                        className="admin-btn admin-btn-ghost admin-btn-sm"
+                        onClick={() => {
+                          const defRoles = SPORT_ROLE_ORDERS[selectedSport] || SPORT_ROLE_ORDERS.cricket;
+                          setAuctionRoleOrder([...defRoles]);
+                        }}
+                        title={`Reset to default role sequence for ${selectedSport}`}
+                      >
+                        <IoRefresh size={14} /> Reset to {SPORT_AUCTION_OPTIONS.find(s => s.key === selectedSport)?.name || selectedSport} Roles
+                      </button>
+                    </div>
+
+                    <div className="admin-role-order-list" style={{ marginTop: '0.75rem' }}>
+                      {auctionRoleOrder.map((role, index) => (
+                        <div key={role} className="admin-role-order-item">
+                          <span className="admin-role-order-badge" style={{ background: getRoleBadgeColor(role) }}>
+                            {index + 1}
+                          </span>
+                          <span className="admin-role-order-label">{role}</span>
+                          <div className="admin-role-order-actions">
+                            <button
+                              type="button"
+                              className="admin-btn admin-btn-ghost admin-btn-sm"
+                              disabled={index === 0}
+                              onClick={() => {
+                                const updated = [...auctionRoleOrder];
+                                [updated[index - 1], updated[index]] = [updated[index], updated[index - 1]];
+                                setAuctionRoleOrder(updated);
+                              }}
+                              title="Move up"
+                            >
+                              <IoArrowUp size={14} />
+                            </button>
+                            <button
+                              type="button"
+                              className="admin-btn admin-btn-ghost admin-btn-sm"
+                              disabled={index === auctionRoleOrder.length - 1}
+                              onClick={() => {
+                                const updated = [...auctionRoleOrder];
+                                [updated[index], updated[index + 1]] = [updated[index + 1], updated[index]];
+                                setAuctionRoleOrder(updated);
+                              }}
+                              title="Move down"
+                            >
+                              <IoArrowDown size={14} />
+                            </button>
+                            {auctionRoleOrder.length > 1 && (
+                              <button
+                                type="button"
+                                className="admin-btn admin-btn-ghost admin-btn-sm"
+                                onClick={() => {
+                                  setAuctionRoleOrder(prev => prev.filter((_, i) => i !== index));
+                                }}
+                                title="Remove role from sequence"
+                                style={{ color: '#f87171' }}
+                              >
+                                <IoTrash size={14} />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Add Custom Role */}
+                    <div style={{ display: 'flex', gap: '8px', marginTop: '0.75rem' }}>
+                      <input
+                        type="text"
+                        value={newRoleInput}
+                        onChange={(e) => setNewRoleInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && newRoleInput.trim()) {
+                            const trimmed = newRoleInput.trim();
+                            if (!auctionRoleOrder.includes(trimmed)) {
+                              setAuctionRoleOrder(prev => [...prev, trimmed]);
+                            }
+                            setNewRoleInput('');
+                          }
+                        }}
+                        placeholder={`Add custom role (e.g. ${selectedSport === 'kabaddi' ? 'Right Corner' : (selectedSport === 'football' ? 'Winger' : 'Top Order Batsman')})`}
+                        style={{ flex: 1, padding: '0.5rem 0.75rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(0,0,0,0.3)', color: '#fff', fontSize: '0.85rem' }}
+                      />
+                      <button
+                        type="button"
+                        className="admin-btn admin-btn-ghost admin-btn-sm"
+                        disabled={!newRoleInput.trim()}
+                        onClick={() => {
+                          const trimmed = newRoleInput.trim();
+                          if (trimmed && !auctionRoleOrder.includes(trimmed)) {
+                            setAuctionRoleOrder(prev => [...prev, trimmed]);
+                          }
+                          setNewRoleInput('');
+                        }}
+                      >
+                        <IoAdd size={16} /> Add Role
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Auction Screen Layout */}
+                  <div className="admin-sport-section">
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '0.5rem' }}>
+                      <div>
+                        <h3 style={{ margin: 0 }}>Auction Screen Layout</h3>
+                        <p style={{ color: '#94a3b8', fontSize: '0.82rem', margin: '0.25rem 0 0' }}>
+                          Choose how the live auction screen presents the player on the block. Player name, role, photo, stats, bids, and sponsors are read from your tournament data in every layout.
+                        </p>
+                      </div>
+                      <span style={{ fontSize: '0.82rem', fontWeight: 700, color: '#f8fafc', background: 'rgba(255,255,255,0.08)', padding: '0.35rem 0.75rem', borderRadius: 8 }}>
+                        Active: {AUCTION_LAYOUT_OPTIONS.find(l => l.key === auctionLayout)?.name || 'Classic'}
+                      </span>
+                    </div>
+
+                    <div className="admin-sport-grid">
+                      {AUCTION_LAYOUT_OPTIONS.map((lo) => {
+                        const isSelected = auctionLayout === lo.key;
+                        return (
+                          <div
+                            key={lo.key}
+                            className={`admin-sport-card ${isSelected ? 'active' : ''}`}
+                            style={{
+                              '--sport-accent-color': lo.accentColor,
+                              '--sport-glow-color': lo.glowColor,
+                            } as React.CSSProperties}
+                            onClick={() => setAuctionLayout(lo.key)}
+                          >
+                            <div className="admin-sport-card-header">
+                              <div className="admin-sport-icon-title">
+                                <span className="admin-sport-icon">{lo.icon}</span>
+                                <span className="admin-sport-title">{lo.name}</span>
+                              </div>
+                              <span className="admin-sport-badge">{lo.badge}</span>
+                            </div>
+                            <p className="admin-sport-desc">{lo.desc}</p>
+                            <div className="admin-sport-footer">
+                              <span style={{ fontSize: '0.7rem', color: '#94a3b8', fontWeight: 600 }}>{lo.hint}</span>
+                              <button
+                                type="button"
+                                className="admin-sport-apply-btn"
+                                onClick={(e) => { e.stopPropagation(); setAuctionLayout(lo.key); }}
+                                title={`Use the ${lo.name} auction screen layout`}
+                              >
+                                {isSelected ? 'Selected ✓' : 'Use Layout'}
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
                   {/* Extended Settings - Player Stats, Categories, Budget, Breaks, Loading, Owners, Iconic Players */}
                   <div style={{ marginTop: '2rem', borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '2rem' }}>
                     <h3 style={{ marginBottom: '1rem' }}>Advanced Configuration</h3>
                     <ThemeSettingsExtended
                       settings={loadedAdminSettings}
                       teams={editingTeams}
+                      sport={selectedSport}
                       onChange={(partial) => { extendedSettingsRef.current = partial; }}
                     />
+                  </div>
+
+                  {/* Budget Enforcement Mode */}
+                  <div style={{ marginTop: '2rem', borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '2rem' }}>
+                    <h3 style={{ marginBottom: '0.5rem' }}>Budget Enforcement Mode</h3>
+                    <small style={{ color: '#94a3b8', display: 'block', marginBottom: '0.75rem' }}>
+                      Choose how the system handles bids that exceed a team's budget.
+                    </small>
+                    <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem' }}>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.85rem', cursor: 'pointer', color: '#e2e8f0' }}>
+                        <input
+                          type="radio"
+                          name="budgetMode"
+                          checked={budgetMode !== 'releaseRefund'}
+                          onChange={() => setBudgetMode('constraint')}
+                        />
+                        Block Bid (constraint)
+                      </label>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.85rem', cursor: 'pointer', color: '#e2e8f0' }}>
+                        <input
+                          type="radio"
+                          name="budgetMode"
+                          checked={budgetMode === 'releaseRefund'}
+                          onChange={() => setBudgetMode('releaseRefund')}
+                        />
+                        Release & Refund (prompt team to drop a player)
+                      </label>
+                    </div>
+                  </div>
+
+                  <h3 style={{ marginTop: '2rem' }}>Connect-Bidding Login</h3>
+                  <div className="form-group">
+                    <label className="admin-toggle-row">
+                      <input
+                        type="checkbox"
+                        checked={easyLoginMode}
+                        onChange={(e) => setEasyLoginMode(e.target.checked)}
+                      />
+                      <span>Easy Login Mode</span>
+                    </label>
+                    <small style={{ color: '#6b7280', display: 'block', marginTop: '0.35rem' }}>
+                      {easyLoginMode
+                        ? 'ON — team representatives tap their team card on /connect-bidding to join instantly. No password required.'
+                        : 'OFF — team representatives must enter the username and password configured per team in the Teams tab.'}
+                    </small>
+                  </div>
+
+                  <h3 style={{ marginTop: '2rem' }}>Super Admin Mobile Access</h3>
+                  <p style={{ color: '#64748b', fontSize: '0.82rem', marginBottom: '1rem' }}>
+                    Set a lightweight username/password (separate from your admin email login) so a helper
+                    can open <code>/connect-bidding-admin</code> on their phone and control every team's
+                    bidding, sold/unsold, undo, and player search without needing full admin access.
+                  </p>
+                  <div className="form-row">
+                    <div className="form-group">
+                      <label htmlFor="super-admin-username">Super Admin Username</label>
+                      <input
+                        id="super-admin-username"
+                        type="text"
+                        value={superAdminUsername}
+                        onChange={(e) => setSuperAdminUsername(e.target.value.trim())}
+                        placeholder="e.g. organizer"
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label htmlFor="super-admin-password">Super Admin Password</label>
+                      <input
+                        id="super-admin-password"
+                        type="text"
+                        value={superAdminPassword}
+                        onChange={(e) => setSuperAdminPassword(e.target.value.trim())}
+                        placeholder="Shared with trusted helpers only"
+                      />
+                    </div>
                   </div>
 
                   {/* Branding & Placement Controls */}
