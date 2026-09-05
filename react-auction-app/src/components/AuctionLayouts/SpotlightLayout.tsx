@@ -28,6 +28,8 @@ export function SpotlightLayout(props: AuctionLayoutProps) {
     primaryColor,
     secondaryColor,
     gifHueRotate,
+    gifAssetPath,
+    gifAssets,
     headerVisible,
   } = props;
 
@@ -58,16 +60,19 @@ export function SpotlightLayout(props: AuctionLayoutProps) {
         <span className="al-bottom-beams" />
       </div>
 
-      <img
-        className="al-side-smoke"
-        src="/extras/d3.gif"
-        alt=""
-        aria-hidden
-        loading="eager"
-        decoding="async"
-        style={{ filter: getThemeAssetFilter(primaryColor, secondaryColor, gifHueRotate) }}
-        onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
-      />
+      {(gifAssets ?? [{ key: 'd3', path: gifAssetPath || '/extras/d3.gif', hueRotate: gifHueRotate }]).map(asset => (
+        <img
+          key={asset.key}
+          className="al-side-smoke"
+          src={asset.path}
+          alt=""
+          aria-hidden
+          loading="eager"
+          decoding="async"
+          style={{ filter: getThemeAssetFilter(primaryColor, secondaryColor, asset.hueRotate) }}
+          onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
+        />
+      ))}
 
       <div className="al-round-chip">Round {currentRound}</div>
 

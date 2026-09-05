@@ -38,6 +38,8 @@ export interface AuctionLayoutProps {
   readonly primaryColor: string;
   readonly secondaryColor: string;
   readonly gifHueRotate?: number;
+  readonly gifAssetPath?: string;
+  readonly gifAssets?: readonly { key: string; path: string; hueRotate?: number }[];
   /** Home-screen content shown while no player is on the block. */
   readonly titleSponsor: SponsorRecord | null;
   readonly sponsors: readonly SponsorRecord[];

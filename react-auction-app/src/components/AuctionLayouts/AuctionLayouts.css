@@ -360,14 +360,18 @@
    ══════════════════════════════════════════════════════════════════ */
 
 .auction-layout--vibrant {
-  background-color: var(--al-dark-bg, #050505);
-  background-image: radial-gradient(circle at 30% 50%, #151515 0%, #050505 80%);
+  background-color: var(--al-primary, #050505);
+  background-image: radial-gradient(
+    circle at 30% 50%,
+    color-mix(in srgb, var(--al-secondary, #151515) 72%, #000),
+    var(--al-primary, #050505) 80%
+  );
 }
 
 .al-vib-particles {
   position: absolute;
   inset: 0;
-  background-image: radial-gradient(var(--al-accent, #d4ff00) 1px, transparent 1px);
+  background-image: radial-gradient(var(--al-secondary, var(--al-accent, #d4ff00)) 1px, transparent 1px);
   background-size: 50px 50px;
   opacity: 0.05;
   z-index: 1;
@@ -507,9 +511,25 @@
 }
 
 .al-vib-brush-stroke {
-  stroke-dasharray: 3600;
-  stroke-dashoffset: 3600;
-  animation: alVibBrushReveal 2.4s cubic-bezier(0.42, 0, 0.58, 1) forwards paused;
+  stroke-dasharray: 4400;
+  stroke-dashoffset: 4400;
+  animation: alVibBrushReveal 2.85s cubic-bezier(0.42, 0, 0.58, 1) forwards paused;
+}
+
+.al-vib-brush-stroke.stroke-360 {
+  animation-delay: 0s;
+}
+
+.al-vib-brush-stroke.stroke-318 {
+  animation-delay: 0.12s;
+}
+
+.al-vib-brush-stroke.stroke-320 {
+  animation-delay: 0.20s;
+}
+
+.al-vib-brush-stroke.stroke-440 {
+  animation-delay: 0.32s;
 }
 
 .al-vib-brush-stroke.is-ready {
@@ -518,7 +538,7 @@
 
 @keyframes alVibBrushReveal {
   0% {
-    stroke-dashoffset: 3600;
+    stroke-dashoffset: 4400;
   }
   100% {
     stroke-dashoffset: 0;
@@ -656,13 +676,23 @@
   color: rgba(255, 255, 255, 0.4);
 }
 
+
+.al-home-title::before {
+  text-shadow: -1px 1px 3px rgba(0, 0, 0, 0.6);
+}
+
 .al-home-title {
   font-size: clamp(1.3rem, 3.4vw, 3.4rem);
   font-weight: 900;
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: #ffffff;
-  text-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+  text-shadow: 5px 1px 11px rgba(0, 0, 0, 0.6);
+
+  text-shadow:
+  5px 1px 11px rgba(0, 0, 0, 0.6),
+    -1px 1px 3px rgba(0, 0, 0, 0.6),
+    0 0 20px color-mix(in srgb, var(--al-accent, #d4ff00) 55%, transparent);
   margin: 0;
 }
 
@@ -703,7 +733,11 @@
   gap: 0.2rem;
   padding: 0.65rem 1.4rem;
   border-radius: 14px;
-  background: rgba(255, 255, 255, 0.06);
+  background: color-mix(in srgb, var(--al-secondary, rgba(255, 255, 255, 0.06)) 40%, transparent);
+  filter:
+    drop-shadow(0 3px 2px rgba(4, 30, 40, 0.6))
+    drop-shadow(0 8px 14px rgba(0, 0, 0, 0.34))
+    drop-shadow(0 0 10px color-mix(in srgb, var(--al-accent, #d4ff00) 22%, transparent));
   border: 1px solid rgba(255, 255, 255, 0.12);
   backdrop-filter: blur(10px);
   min-width: 92px;
@@ -740,7 +774,11 @@
   gap: 0.4rem;
   padding: 0.4rem 0.9rem;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.07);
+  background: color-mix(in srgb, var(--al-secondary, rgba(255, 255, 255, 0.06)) 60%, transparent);
+  filter:
+    drop-shadow(0 3px 2px rgba(4, 30, 40, 0.6))
+    drop-shadow(0 8px 14px rgba(0, 0, 0, 0.34))
+    drop-shadow(0 0 10px color-mix(in srgb, var(--al-accent, #d4ff00) 22%, transparent));
   border: 1px solid rgba(255, 255, 255, 0.12);
   font-size: clamp(0.55rem, 0.8vw, 0.8rem);
   font-weight: 700;
@@ -766,7 +804,7 @@
   gap: 0.4rem;
   padding: 0.35rem 0.9rem;
   border-radius: 999px;
-  background: rgba(0, 0, 0, 0.4);
+  background: color-mix(in srgb, var(--al-primary, rgba(0, 0, 0, 0.4)) 40%, transparent);
   border: 1px solid rgba(255, 255, 255, 0.18);
   backdrop-filter: blur(10px);
   font-size: clamp(0.55rem, 0.8vw, 0.8rem);

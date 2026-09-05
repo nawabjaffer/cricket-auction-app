@@ -81,6 +81,12 @@ import { getFootballRoleCategory } from './utils/footballRoles';
 import { getThemeAssetFilter } from './utils/themeAssetFilter';
 import './index.css';
 
+interface GifManifestAsset {
+  key: string;
+  name: string;
+  path: string;
+}
+
 // Create Query Client
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -172,9 +178,29 @@ function AuctionApp({ mirrorMode = false }: { mirrorMode?: boolean }) {
   
   // Admin settings for configurable features
   const [adminSettings, setAdminSettings] = useState<AdminSettings | null>(null);
+  const [gifManifest, setGifManifest] = useState<Record<string, GifManifestAsset>>({});
   
   // Player placeholder image — configurable from admin Theme & Settings
   const playerPlaceholder = adminSettings?.playerPlaceholderImage || '/placeholder_player.png';
+
+  useEffect(() => {
+    let active = true;
+    const loadGifManifest = async () => {
+      try {
+        const response = await fetch('/extras/manifest.json', { cache: 'no-store' });
+        if (!response.ok) throw new Error(`GIF manifest request failed: ${response.status}`);
+        const assets = await response.json() as GifManifestAsset[];
+        if (!active) return;
+        setGifManifest(Object.fromEntries(
+          assets.filter(asset => asset?.key && asset?.path).map(asset => [asset.key, asset]),
+        ));
+      } catch (error) {
+        console.error('[AuctionApp] Failed to load GIF manifest:', error);
+      }
+    };
+    void loadGifManifest();
+    return () => { active = false; };
+  }, []);
 
   // Image loading state
   const [imageLoadingState, setImageLoadingState] = useState<'loading' | 'loaded' | 'error'>('loading');
@@ -220,6 +246,16 @@ function AuctionApp({ mirrorMode = false }: { mirrorMode?: boolean }) {
       ? adminSettings?.gifHueRotateByAsset?.[assetKey]
       : adminSettings?.gifHueRotate,
   );
+  const gifPathFor = (assetKey: string, fallback: string) => gifManifest[assetKey]?.path || fallback;
+  const spotlightGifAssets = Object.values(gifManifest)
+    .filter(asset => /^d\d+$/i.test(asset.key))
+    .map(asset => ({
+      key: asset.key,
+      path: asset.path,
+      hueRotate: Object.prototype.hasOwnProperty.call(adminSettings?.gifHueRotateByAsset ?? {}, asset.key)
+        ? adminSettings?.gifHueRotateByAsset?.[asset.key]
+        : adminSettings?.gifHueRotate,
+    }));
   
   // Initialize Firebase Realtime Database sync for desktop (broadcasts state to mobile devices)
   useRealtimeDesktopSync(!isMirrorMode);
@@ -1112,6 +1148,8 @@ function AuctionApp({ mirrorMode = false }: { mirrorMode?: boolean }) {
     gifHueRotate: Object.prototype.hasOwnProperty.call(adminSettings?.gifHueRotateByAsset ?? {}, 'd3')
       ? adminSettings?.gifHueRotateByAsset?.d3
       : adminSettings?.gifHueRotate,
+    gifAssetPath: gifPathFor('d3', '/extras/d3.gif'),
+    gifAssets: spotlightGifAssets,
     titleSponsor,
     sponsors: effectiveSponsors,
     playerCounts: {
@@ -1141,7 +1179,7 @@ function AuctionApp({ mirrorMode = false }: { mirrorMode?: boolean }) {
       <div className="corner-gifs" aria-hidden>
         <img
           loading="lazy"
-          src="/extras/left-top-right-bottom-corner.gif"
+          src={gifPathFor('cornerLeftTop', '/extras/left-top-right-bottom-corner.gif')}
           alt=""
           className="corner-gif fullscreen"
           style={{ filter: gifFilterFor('cornerLeftTop') }}
@@ -1152,7 +1190,7 @@ function AuctionApp({ mirrorMode = false }: { mirrorMode?: boolean }) {
 
         <img
           loading="lazy"
-          src="/extras/left-bottom-right-top-corner.gif"
+          src={gifPathFor('cornerLeftBottom', '/extras/left-bottom-right-top-corner.gif')}
           alt=""
           className="corner-gif fullscreen"
           style={{ filter: gifFilterFor('cornerLeftBottom') }}

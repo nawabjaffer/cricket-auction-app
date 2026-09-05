@@ -1,0 +1,9 @@
+[
+  { "key": "cornerLeftTop", "name": "Left / top corner", "path": "/extras/left-top-right-bottom-corner.gif" },
+  { "key": "cornerLeftBottom", "name": "Left / bottom corner", "path": "/extras/left-bottom-right-top-corner.gif" },
+  { "key": "waveTopRight", "name": "Top-right wave", "path": "/extras/bottom-wave-top-right.gif" },
+  { "key": "arrows", "name": "Arrow movement", "path": "/extras/arrow-movements-gif.gif" },
+  { "key": "d3", "name": "Animation D3", "path": "/extras/d3.gif" },
+  { "key": "d4", "name": "Animation D4", "path": "/extras/d4.gif" },
+  { "key": "d5", "name": "Animation D5", "path": "/extras/d5.gif" }
+]

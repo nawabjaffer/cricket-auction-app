@@ -89,15 +89,11 @@ function CompactPlayerAvatar({ imageUrl, playerName }: { readonly imageUrl?: str
 
 type LogoSourceMode = 'drive' | 'upload';
 
-const GIF_PREVIEW_ASSETS = [
-  { key: 'cornerLeftTop', name: 'Left / top corner', path: '/extras/left-top-right-bottom-corner.gif' },
-  { key: 'cornerLeftBottom', name: 'Left / bottom corner', path: '/extras/left-bottom-right-top-corner.gif' },
-  { key: 'waveTopRight', name: 'Top-right wave', path: '/extras/bottom-wave-top-right.gif' },
-  { key: 'arrows', name: 'Arrow movement', path: '/extras/arrow-movements-gif.gif' },
-  { key: 'd1', name: 'Animation D1', path: '/extras/d1.gif' },
-  { key: 'd2', name: 'Animation D2', path: '/extras/d2.gif' },
-  { key: 'd3', name: 'Animation D3', path: '/extras/d3.gif' },
-] as const;
+interface GifPreviewAsset {
+  key: string;
+  name: string;
+  path: string;
+}
 
 const SPORT_AUCTION_OPTIONS = [
   {
@@ -245,6 +241,7 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
   const [accentColor, setAccentColor] = useState('#f59e0b');
   const [gifHueRotate, setGifHueRotate] = useState<number | null>(null);
   const [gifHueRotateByAsset, setGifHueRotateByAsset] = useState<Record<string, number | null>>({});
+  const [gifPreviewAssets, setGifPreviewAssets] = useState<GifPreviewAsset[]>([]);
   const [maxUnsoldRounds, setMaxUnsoldRounds] = useState(1);
 
   // Auction role ordering
@@ -329,6 +326,22 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
     secondaryColor,
     getGifHue(assetKey) ?? undefined,
   );
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const loadGifPreviewAssets = async () => {
+      try {
+        const response = await fetch('/extras/manifest.json', { cache: 'no-store' });
+        if (!response.ok) throw new Error(`GIF manifest request failed: ${response.status}`);
+        const assets = await response.json() as GifPreviewAsset[];
+        setGifPreviewAssets(assets.filter(asset => asset?.key && asset?.name && asset?.path));
+      } catch (error) {
+        console.error('[AdminPanel] Failed to load GIF preview manifest:', error);
+        setGifPreviewAssets([]);
+      }
+    };
+    void loadGifPreviewAssets();
+  }, [isOpen]);
 
   // Stats CSV import state
   type StatsImportMatch = { csvRow: Record<string, string>; player: Player; status: 'matched' };
@@ -2468,12 +2481,12 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
                     </div>
 
                     <div style={{ marginTop: '1rem' }}>
-                      <strong style={{ color: '#f8fafc', fontSize: '0.9rem' }}>GIF Preview</strong>
+                      <strong style={{ color: '#000', fontSize: '0.9rem' }}>GIF Preview</strong>
                       <p style={{ color: '#94a3b8', fontSize: '0.78rem', margin: '0.25rem 0 0.75rem' }}>
-                        Each preview uses its real file from <code>public/extras</code>. Set a different hue for every asset.
+                        GIFs are loaded at runtime from <code>/extras/manifest.json</code>. Set a different hue for every asset.
                       </p>
                       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '0.75rem' }}>
-                        {GIF_PREVIEW_ASSETS.map(asset => (
+                        {gifPreviewAssets.map(asset => (
                           <div
                             key={asset.path}
                             style={{
@@ -2536,6 +2549,11 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
                             </div>
                           </div>
                         ))}
+                        {gifPreviewAssets.length === 0 && (
+                          <span style={{ color: '#94a3b8', fontSize: '0.8rem' }}>
+                            Loading GIF assets...
+                          </span>
+                        )}
                       </div>
                     </div>
                   </div>
