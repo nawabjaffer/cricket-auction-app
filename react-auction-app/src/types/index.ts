@@ -75,6 +75,8 @@ export interface Player {
   // Expanded stats (optional for backward compatibility)
   battingStats?: BattingStats;
   bowlingStats?: BowlingStats;
+  /** Sport-specific values imported from non-cricket player sheets. */
+  customStats?: Record<string, string>;
 }
 
 export type PlayerRole =

@@ -68,6 +68,10 @@ describe('AuctionRulesService', () => {
       const team = makeTeam({ allocatedAmount: 100, remainingPurse: 50 });
       expect(rules.validateTotalBudget(team, 50)).toBe(true);
     });
+
+    it.each([-1, Number.NaN, Number.POSITIVE_INFINITY])('rejects invalid bid amount %s', (bidAmount) => {
+      expect(rules.validateTotalBudget(makeTeam(), bidAmount)).toBe(false);
+    });
   });
 
   describe('validatePlayerCount', () => {
@@ -149,6 +153,18 @@ describe('AuctionRulesService', () => {
       const result = rules.validateBid(team, 8, 1, 25);
       expect(result.valid).toBe(false);
       expect(result.ruleId).toBe('RULE_001');
+    });
+
+    it('allows a bid exactly at the calculated maximum', () => {
+      const team = makeTeam({ remainingPurse: 10, remainingPlayers: 6 });
+      const result = rules.validateBid(team, 5, 1, 25);
+      expect(result.valid).toBe(true);
+    });
+
+    it.each([-1, Number.NaN, Number.POSITIVE_INFINITY])('rejects invalid bid amount %s', (bidAmount) => {
+      const result = rules.validateBid(makeTeam(), bidAmount, 1, 25);
+      expect(result.valid).toBe(false);
+      expect(result.ruleId).toBe('RULE_003');
     });
 
     it('warns on unsafe fund threshold', () => {

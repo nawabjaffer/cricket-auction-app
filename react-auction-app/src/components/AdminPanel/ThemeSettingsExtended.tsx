@@ -40,9 +40,10 @@ interface ThemeSettingsExtendedProps {
   readonly onChange: (partial: Partial<AdminSettings>) => void;
   readonly teams: Team[];
   readonly sport?: string;
+  readonly currencySuffix?: string;
 }
 
-export function ThemeSettingsExtended({ settings, onChange, teams, sport = 'cricket' }: ThemeSettingsExtendedProps) {
+export function ThemeSettingsExtended({ settings, onChange, teams, sport = 'cricket', currencySuffix = 'L' }: ThemeSettingsExtendedProps) {
   const currentSportKey = (sport || settings?.sport || 'cricket').toLowerCase();
   const prevSportRef = useRef<string>(currentSportKey);
 
@@ -391,28 +392,28 @@ export function ThemeSettingsExtended({ settings, onChange, teams, sport = 'cric
       {/* ─── Section 3: Budget Rules ────────────────────────────────────────── */}
       <div className="admin-section-card">
         <h3 className="admin-section-title">💰 Budget Rules & Constraints</h3>
-        <p className="admin-section-desc">Configure budget allocation and bidding rules for all teams.</p>
+        <p className="admin-section-desc">Configure budget allocation and bidding rules for all teams. Amounts use the selected currency unit: {currencySuffix}.</p>
         <div className="admin-form-grid">
           <div className="admin-form-field">
-            <label>Total Budget Per Team (Lakhs)</label>
+            <label>Total Budget Per Team ({currencySuffix})</label>
             <input type="number" step="0.5" value={budgetRules.totalBudgetPerTeam}
               onChange={e => setBudgetRules(prev => ({ ...prev, totalBudgetPerTeam: Number(e.target.value) }))}
               className="admin-input" />
           </div>
           <div className="admin-form-field">
-            <label>Max Bid Per Player (Lakhs)</label>
+            <label>Max Bid Per Player ({currencySuffix})</label>
             <input type="number" step="0.5" value={budgetRules.maxBidPerPlayer}
               onChange={e => setBudgetRules(prev => ({ ...prev, maxBidPerPlayer: Number(e.target.value) }))}
               className="admin-input" />
           </div>
           <div className="admin-form-field">
-            <label>Min Bid Increment (Lakhs)</label>
+            <label>Min Bid Increment ({currencySuffix})</label>
             <input type="number" step="0.1" value={budgetRules.minBidIncrement}
               onChange={e => setBudgetRules(prev => ({ ...prev, minBidIncrement: Number(e.target.value) }))}
               className="admin-input" />
           </div>
           <div className="admin-form-field">
-            <label>Max Bid Increment (Lakhs)</label>
+            <label>Max Bid Increment ({currencySuffix})</label>
             <input type="number" step="0.5" value={budgetRules.maxBidIncrement}
               onChange={e => setBudgetRules(prev => ({ ...prev, maxBidIncrement: Number(e.target.value) }))}
               className="admin-input" />
@@ -436,7 +437,7 @@ export function ThemeSettingsExtended({ settings, onChange, teams, sport = 'cric
               className="admin-input" />
           </div>
           <div className="admin-form-field">
-            <label>Reserved Per Remaining Player (Lakhs)</label>
+            <label>Reserved Per Remaining Player ({currencySuffix})</label>
             <input type="number" step="0.5" value={budgetRules.reservedFundPerRemainingPlayer}
               onChange={e => setBudgetRules(prev => ({ ...prev, reservedFundPerRemainingPlayer: Number(e.target.value) }))}
               className="admin-input" />

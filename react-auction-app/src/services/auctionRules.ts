@@ -49,6 +49,7 @@ export class AuctionRulesService {
    * Prevents team from exceeding allocated total fund
    */
   validateTotalBudget(team: Team, bidAmount: number): boolean {
+    if (!Number.isFinite(bidAmount) || bidAmount < 0) return false;
     const totalSpent = team.allocatedAmount - team.remainingPurse;
     return totalSpent + bidAmount <= team.allocatedAmount;
   }
@@ -100,6 +101,15 @@ export class AuctionRulesService {
     playerBasePrice: number = this.minimumPlayerBasePrice,
     playerAge: number | null = null
   ): ValidationResult {
+    if (!Number.isFinite(bidAmount) || bidAmount < 0) {
+      return {
+        valid: false,
+        severity: 'critical',
+        message: 'Bid amount must be a finite value of zero or greater.',
+        ruleId: 'RULE_003',
+      };
+    }
+
     // RULE_004: Check player count
     if (!this.validatePlayerCount(team)) {
       return {

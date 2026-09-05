@@ -23,7 +23,7 @@ import '../AdminPanel/StorageManager.css';
 import './AdminPanel.css';
 import type { Team, Player, SoldPlayer, UnsoldPlayer, AuctionRoleCategory, BattingStats, BowlingStats } from '../../types';
 import { DEFAULT_AUCTION_ROLE_ORDER, createEmptyBattingStats, createEmptyBowlingStats } from '../../types';
-import { SPORT_ROLE_ORDERS, DEFAULT_SPORT_STAT_FIELDS } from '../../config/playerStatFields';
+import { SPORT_ROLE_ORDERS, DEFAULT_SPORT_STAT_FIELDS, getStatFieldsForSport } from '../../config/playerStatFields';
 import { formatRoleDisplay, getRoleCategory, getRoleBadgeColor } from '../../utils/roleFormatter';
 import { localImageCacheService } from '../../services/localImageCache';
 import { getCachedStorageUrl, resolveImageAsync } from '../../services/firebaseStorageService';
@@ -1624,6 +1624,21 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
         average: get(idx.bowlAvg).trim() || '0.00',
       } : undefined;
 
+      const customStats = selectedSport !== 'cricket'
+        ? Object.fromEntries(
+          getStatFieldsForSport(selectedSport)
+            .filter(field => !['age', 'matches'].includes(field.key))
+            .map(field => {
+              const fieldHeader = field.label.toLowerCase();
+              const value = headers.includes(fieldHeader)
+                ? get(headers.indexOf(fieldHeader)).trim()
+                : get(headers.indexOf(field.key.toLowerCase())).trim();
+              return [field.key, value];
+            })
+            .filter(([, value]) => value !== ''),
+        )
+        : undefined;
+
       parsed.push({
         id: idFromCsv || `CSV-${rowIndex + 1}`,
         name: rawName,
@@ -1641,6 +1656,7 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
         whatsappNumber: whatsappNumber || undefined,
         ...(battingStats ? { battingStats } : {}),
         ...(bowlingStats ? { bowlingStats } : {}),
+        ...(customStats ? { customStats } : {}),
       });
     });
 
@@ -1813,6 +1829,28 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
   };
 
   const applyStatsToPlayers = async (matches: StatsImportMatch[]) => {
+    if (selectedSport !== 'cricket') {
+      const fields = getStatFieldsForSport(selectedSport).filter(field => !['age', 'matches'].includes(field.key));
+      const updates = new Map(matches.map(({ csvRow, player }) => {
+        const customStats = { ...(player.customStats || {}) };
+        for (const field of fields) {
+          const candidates = [field.label.toLowerCase(), field.key.toLowerCase()];
+          const value = candidates.map(candidate => csvRow[candidate]).find(candidateValue => candidateValue != null && candidateValue !== '');
+          if (value != null) customStats[field.key] = value;
+        }
+        const matchesValue = csvRow.matches ?? csvRow['matches played'];
+        return [player.id, { ...player, matches: matchesValue || player.matches, customStats }] as const;
+      }));
+      const updatedPlayers = editingPlayers.map(player => updates.get(player.id) || player);
+      setEditingPlayers(updatedPlayers);
+      setAdminPlayerOverrides(updatedPlayers);
+      reconcilePlayerPools();
+      await auctionPersistence.saveAdminPlayers(updatedPlayers);
+      setSaveStatus('success');
+      setTimeout(() => setSaveStatus('idle'), 2000);
+      return;
+    }
+
     const updateMap = new Map<string, { battingStats: BattingStats; bowlingStats: BowlingStats; role: string; matches: string; runs: string; wickets: string; battingBestFigures: string; bowlingBestFigures: string }>();
 
     for (const { csvRow, player } of matches) {
@@ -2799,6 +2837,7 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
                       settings={loadedAdminSettings}
                       teams={editingTeams}
                       sport={selectedSport}
+                      currencySuffix={currencySuffix}
                       onChange={(partial) => { extendedSettingsRef.current = partial; }}
                     />
                   </div>
@@ -3547,7 +3586,7 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
                     </button>
                     <button
                       className="admin-btn admin-btn-info"
-                      onClick={() => downloadPlayersTemplate(editingPlayers)}
+                      onClick={() => downloadPlayersTemplate(editingPlayers, selectedSport)}
                       disabled={isSaving}
                       title="Download current players in sheet format for bulk edit and re-import"
                     >
@@ -3571,7 +3610,7 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
                     </button>
                     <button
                       className="admin-btn admin-btn-info"
-                      onClick={downloadScoresTemplate}
+                      onClick={() => downloadScoresTemplate(selectedSport)}
                       disabled={isSaving}
                       title="Download CSV template for player statistics"
                     >

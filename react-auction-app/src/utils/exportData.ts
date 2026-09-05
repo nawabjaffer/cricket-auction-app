@@ -5,6 +5,7 @@
 
 import type { SoldPlayerRecord, UnsoldPlayerRecord } from '../services/auctionPersistence';
 import type { Player } from '../types';
+import { getStatFieldsForSport } from '../config/playerStatFields';
 
 const escapeCsvCell = (cell: unknown): string => `"${String(cell ?? '').replace(/"/g, '""')}"`;
 
@@ -83,7 +84,13 @@ export function exportSoldPlayers(players: SoldPlayerRecord[]): void {
  * Generate CSV template for importing players
  * Includes headers and sample data row
  */
-export function generatePlayersCSVTemplate(): string {
+export function generatePlayersCSVTemplate(sport = 'cricket'): string {
+  if (sport !== 'cricket') {
+    const fields = getStatFieldsForSport(sport).filter(field => !['age', 'matches'].includes(field.key));
+    const headers = ['ID', 'Name', 'Role', 'Base Price', 'Image URL', 'Phone', 'WhatsApp Number', 'Age', 'Date of Birth', 'Matches', ...fields.map(field => field.label)];
+    const sampleRow = ['PLAYER001', 'Alex Player', '', '0', 'https://example.com/image.jpg', '', '', '25', '', '0', ...fields.map(() => '0')];
+    return [headers.join(','), sampleRow.map(escapeCsvCell).join(',')].join('\n');
+  }
   const headers = [
     'ID',
     'Name',
@@ -173,7 +180,17 @@ export function generatePlayersCSVTemplate(): string {
  * Generate CSV for bulk-editing existing players.
  * Uses the same column order as the import template.
  */
-export function generatePlayersBulkEditCSV(players: Player[]): string {
+export function generatePlayersBulkEditCSV(players: Player[], sport = 'cricket'): string {
+  if (sport !== 'cricket') {
+    const fields = getStatFieldsForSport(sport).filter(field => !['age', 'matches'].includes(field.key));
+    const headers = ['ID', 'Name', 'Role', 'Base Price', 'Image URL', 'Phone', 'WhatsApp Number', 'Age', 'Date of Birth', 'Matches', ...fields.map(field => field.label)];
+    const rows = players.map(player => [
+      player.id, player.name, player.role, player.basePrice, player.imageUrl || '', player.phone || '', player.whatsappNumber || '',
+      player.age ?? '', player.dateOfBirth || '', player.matches || '0',
+      ...fields.map(field => player.customStats?.[field.key] || (player as unknown as Record<string, string>)[field.key] || '0'),
+    ]);
+    return [headers.join(','), ...rows.map(row => row.map(escapeCsvCell).join(','))].join('\n');
+  }
   const headers = [
     'ID',
     'Name',
@@ -266,7 +283,13 @@ export function generatePlayersBulkEditCSV(players: Player[]): string {
  * Generate CSV template for importing player statistics/scores
  * Includes headers and sample data row
  */
-export function generateScoresCSVTemplate(): string {
+export function generateScoresCSVTemplate(sport = 'cricket'): string {
+  if (sport !== 'cricket') {
+    const fields = getStatFieldsForSport(sport).filter(field => !['age', 'matches'].includes(field.key));
+    const headers = ['ID', 'Full Name', 'Matches Played', ...fields.map(field => field.label)];
+    const sampleRow = ['PLAYER001', 'Alex Player', '0', ...fields.map(() => '0')];
+    return [headers.join(','), sampleRow.map(cell => escapeCsvCell(cell)).join(',')].join('\n');
+  }
   const headers = [
     'ID',
     'Full Name',
@@ -337,20 +360,20 @@ export function generateScoresCSVTemplate(): string {
 /**
  * Download players CSV template
  */
-export function downloadPlayersTemplate(players: Player[] = []): void {
+export function downloadPlayersTemplate(players: Player[] = [], sport = 'cricket'): void {
   const hasExistingData = players.length > 0;
   const csv = hasExistingData
-    ? generatePlayersBulkEditCSV(players)
-    : generatePlayersCSVTemplate();
-  downloadCSV(csv, hasExistingData ? 'players-bulk-edit.csv' : 'players-template.csv');
+    ? generatePlayersBulkEditCSV(players, sport)
+    : generatePlayersCSVTemplate(sport);
+  downloadCSV(csv, hasExistingData ? `players-${sport}-bulk-edit.csv` : `players-${sport}-template.csv`);
 }
 
 /**
  * Download scores CSV template
  */
-export function downloadScoresTemplate(): void {
-  const csv = generateScoresCSVTemplate();
-  downloadCSV(csv, 'scores-template.csv');
+export function downloadScoresTemplate(sport = 'cricket'): void {
+  const csv = generateScoresCSVTemplate(sport);
+  downloadCSV(csv, `scores-${sport}-template.csv`);
 }
 
 /**

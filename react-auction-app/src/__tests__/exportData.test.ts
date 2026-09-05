@@ -160,4 +160,37 @@ describe('CSV Templates', () => {
     const lines = csv.trim().split('\n');
     expect(lines.length).toBeGreaterThan(1);
   });
+
+  it('generates sport-specific player and score templates', () => {
+    const playersTemplate = generatePlayersCSVTemplate('kabaddi');
+    const scoresTemplate = generateScoresCSVTemplate('football');
+
+    expect(playersTemplate).toContain('Raid Points');
+    expect(playersTemplate).toContain('Tackle Points');
+    expect(playersTemplate).not.toContain('Batting Innings');
+    expect(scoresTemplate).toContain('Goals');
+    expect(scoresTemplate).toContain('Pass Accuracy %');
+    expect(scoresTemplate).not.toContain('Bowling Matches');
+  });
+
+  it('exports non-cricket custom stats in the selected sport schema', () => {
+    const csv = generatePlayersBulkEditCSV([{
+      id: 'K001',
+      name: 'Kabaddi Player',
+      role: 'Raider',
+      basePrice: 100,
+      imageUrl: '',
+      age: 24,
+      matches: '20',
+      runs: '0',
+      wickets: '0',
+      battingBestFigures: 'N/A',
+      bowlingBestFigures: 'N/A',
+      customStats: { raidPoints: '125', tacklePoints: '4' },
+    } as any], 'kabaddi');
+
+    expect(csv).toContain('Raid Points');
+    expect(csv).toContain('125');
+    expect(csv).toContain('Tackle Points');
+  });
 });
