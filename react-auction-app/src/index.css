@@ -100,20 +100,19 @@ body {
   overflow: hidden;
 }
 
-/* Force all bundled decorative assets to the EPL gold tone */
-.app-shell img[src*="/assets/"],
-.app-shell img[src*="/extras/"] {
+/* Keep bundled non-GIF assets on the configured asset treatment. GIFs receive
+   their tenant-specific filter directly from the rendering component. */
+.app-shell img[src*="/assets/"] {
   filter: var(--asset-gold-filter);
 }
 
 .app-shell img.corner-gif {
   position: absolute;
-  width: 50vw;
-  height: 50vh;
+  width: 100vw;
+  height: 100vh;
   opacity: 0.85;
   transform-origin: center;
   mix-blend-mode: screen;
-  filter: var(--theme-asset-filter, var(--asset-gold-filter)) drop-shadow(0 0 30px rgba(228, 190, 117, 0.42)) drop-shadow(0 10px 40px rgba(0, 0, 0, 0.6));
   animation: cornerGlowPulse 3s ease-in-out infinite;
   object-fit: cover;
 }
@@ -227,11 +226,9 @@ body {
 
 @keyframes cornerGlowPulse {
   0%, 100% {
-    filter: var(--theme-asset-filter, var(--asset-gold-filter)) drop-shadow(0 0 20px rgba(228, 190, 117, 0.32)) drop-shadow(0 10px 40px rgba(0, 0, 0, 0.6));
     opacity: 0.8;
   }
   50% {
-    filter: var(--theme-asset-filter, var(--asset-gold-filter)) drop-shadow(0 0 40px rgba(228, 190, 117, 0.64)) drop-shadow(0 0 60px rgba(228, 190, 117, 0.34)) drop-shadow(0 10px 40px rgba(0, 0, 0, 0.6));
     opacity: 0.95;
   }
 }
@@ -2998,11 +2995,13 @@ button:focus-visible {
   align-items: center;
   justify-content: center;
   padding: 2rem;
+  font-size: 1rem;
+  font-weight: 500;
 }
 
 .team-panel-apple {
   width: 100%;
-  max-width: 900px;
+  max-width: 1100px;
   max-height: 85vh;
   background: linear-gradient(145deg, rgba(30, 30, 35, 0.95) 0%, rgba(20, 20, 25, 0.98) 100%);
   border-radius: 24px;
@@ -3062,7 +3061,8 @@ button:focus-visible {
   border: 1px solid transparent;
   border-radius: 12px;
   color: rgba(255, 255, 255, 0.6);
-  font-size: 0.85rem;
+  font-size: 1rem;
+  font-weight: 600;
   cursor: pointer;
   transition: all 0.2s ease;
   white-space: nowrap;
@@ -3087,8 +3087,8 @@ button:focus-visible {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 0.75rem;
-  font-weight: 600;
+  font-size: 0.85rem;
+  font-weight: 700;
 }
 
 .team-tab.active .tab-number {
@@ -3096,15 +3096,15 @@ button:focus-visible {
 }
 
 .tab-name {
-  font-weight: 500;
+  font-weight: 700;
 }
 
 .tab-count {
   padding: 2px 8px;
   background: rgba(255, 255, 255, 0.1);
   border-radius: 10px;
-  font-size: 0.75rem;
-  font-weight: 600;
+  font-size: 0.85rem;
+  font-weight: 700;
 }
 
 .team-tab.active .tab-count {
@@ -3167,7 +3167,8 @@ button:focus-visible {
   display: flex;
   align-items: center;
   gap: 12px;
-  font-size: 0.9rem;
+  font-size: 1rem;
+  font-weight: 600;
   animation: teamDetailsSlide 0.34s ease-out both;
 }
 
@@ -3178,7 +3179,7 @@ button:focus-visible {
 }
 
 .meta-label {
-  color: rgba(255, 255, 255, 0.4);
+  color: rgba(255, 255, 255, 0.65);
 }
 
 .meta-value {
@@ -3212,8 +3213,8 @@ button:focus-visible {
 }
 
 .analytics-card-title {
-  font-size: 0.78rem;
-  font-weight: 700;
+  font-size: 0.9rem;
+  font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: rgba(255, 255, 255, 0.7);
@@ -3225,7 +3226,8 @@ button:focus-visible {
   grid-template-columns: auto 1fr auto;
   align-items: center;
   gap: 8px;
-  font-size: 0.78rem;
+  font-size: 0.9rem;
+  font-weight: 600;
   color: rgba(255, 255, 255, 0.78);
 }
 
@@ -3274,13 +3276,15 @@ button:focus-visible {
 }
 
 .analytics-warning-text {
-  font-size: 0.72rem;
+  font-size: 0.85rem;
+  font-weight: 600;
   color: #fecaca;
   line-height: 1.25;
 }
 
 .analytics-empty {
-  font-size: 0.78rem;
+  font-size: 0.9rem;
+  font-weight: 600;
 }
 
 /* Sold Players Section */
@@ -3291,8 +3295,8 @@ button:focus-visible {
 }
 
 .section-title {
-  font-size: 0.85rem;
-  font-weight: 600;
+  font-size: 0.95rem;
+  font-weight: 800;
   text-transform: uppercase;
   letter-spacing: 0.1em;
   color: rgba(255, 255, 255, 0.4);
@@ -3343,8 +3347,8 @@ button:focus-visible {
 }
 
 .player-name-apple {
-  font-size: 0.95rem;
-  font-weight: 600;
+  font-size: 1.05rem;
+  font-weight: 700;
   color: white;
   white-space: nowrap;
   overflow: hidden;
@@ -3355,8 +3359,9 @@ button:focus-visible {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 0.8rem;
-  color: rgba(255, 255, 255, 0.5);
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.7);
   margin-top: 2px;
 }
 
@@ -3367,8 +3372,8 @@ button:focus-visible {
 }
 
 .player-price-apple {
-  font-size: 0.9rem;
-  font-weight: 700;
+  font-size: 1rem;
+  font-weight: 800;
   color: #a7f02d;
   white-space: nowrap;
 }
@@ -3378,7 +3383,8 @@ button:focus-visible {
   padding: 40px 20px;
   text-align: center;
   color: rgba(255, 255, 255, 0.3);
-  font-size: 0.95rem;
+  font-size: 1rem;
+  font-weight: 600;
 }
 
 /* Panel Hint */
@@ -3387,8 +3393,9 @@ button:focus-visible {
   background: rgba(0, 0, 0, 0.2);
   border-top: 1px solid rgba(255, 255, 255, 0.05);
   text-align: center;
-  font-size: 0.8rem;
-  color: rgba(255, 255, 255, 0.4);
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.65);
 }
 
 .panel-hint kbd {

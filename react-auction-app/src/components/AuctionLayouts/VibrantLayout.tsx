@@ -5,11 +5,59 @@
 // All content is Firebase-driven via props; nothing here is hardcoded.
 // ============================================================================
 
+import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { formatRoleDisplay } from '../../utils/roleFormatter';
 import { AuctionHomeScreen } from './AuctionHomeScreen';
 import { withAlpha, type AuctionLayoutProps } from './types';
 import './AuctionLayouts.css';
+
+function VibrantPlayerReveal({ imageUrl, playerName }: { readonly imageUrl: string; readonly playerName: string }) {
+  const [imageReady, setImageReady] = useState(false);
+
+  return (
+    <>
+      <svg
+        className="al-vib-brush-defs"
+        width="0"
+        height="0"
+        aria-hidden="true"
+        focusable="false"
+      >
+        <defs>
+          <mask id="al-vib-brush-alpha" maskUnits="userSpaceOnUse" x="0" y="0" width="1920" height="1080">
+            <g fill="#fff">
+              <circle cx="65" cy="170" r="16" opacity="0.65" />
+              <circle cx="170" cy="850" r="12" opacity="0.55" />
+              <circle cx="365" cy="90" r="20" opacity="0.75" />
+              <circle cx="575" cy="900" r="14" opacity="0.62" />
+              <circle cx="825" cy="120" r="18" opacity="0.7" />
+              <circle cx="965" cy="760" r="13" opacity="0.6" />
+              <rect x="230" y="75" width="120" height="7" transform="rotate(-7 230 75)" opacity="0.5" />
+              <rect x="640" y="875" width="150" height="8" transform="rotate(5 640 875)" opacity="0.55" />
+              <path
+                className={`al-vib-brush-stroke${imageReady ? ' is-ready' : ''}`}
+                d="M -260,500 C 40,185 250,810 510,430 S 900,150 1260,520"
+                fill="none"
+                stroke="#fff"
+                strokeWidth="980"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </g>
+          </mask>
+        </defs>
+      </svg>
+      <img
+        src={imageUrl}
+        alt={playerName}
+        className={`al-vib-player-image${imageReady ? ' is-ready' : ''}`}
+        onLoad={() => setImageReady(true)}
+        onError={(event) => { event.currentTarget.style.visibility = 'hidden'; }}
+      />
+    </>
+  );
+}
 
 export function VibrantLayout(props: AuctionLayoutProps) {
   const {
@@ -150,7 +198,11 @@ export function VibrantLayout(props: AuctionLayoutProps) {
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 1.4, delay: 0.25, ease: 'easeOut' }}
             >
-              <img src={playerImageSrc} alt={currentPlayer.name} />
+              <VibrantPlayerReveal
+                key={`${currentPlayer.id}-${playerImageSrc}`}
+                imageUrl={playerImageSrc}
+                playerName={currentPlayer.name}
+              />
             </motion.div>
           </motion.div>
         </AnimatePresence>

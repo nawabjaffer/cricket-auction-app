@@ -10,6 +10,7 @@ import { formatRoleDisplay } from '../../utils/roleFormatter';
 import { AuctionHomeScreen } from './AuctionHomeScreen';
 import { withAlpha, darken, type AuctionLayoutProps } from './types';
 import './AuctionLayouts.css';
+import { getThemeAssetFilter } from '../../utils/themeAssetFilter';
 
 export function SpotlightLayout(props: AuctionLayoutProps) {
   const {
@@ -26,6 +27,7 @@ export function SpotlightLayout(props: AuctionLayoutProps) {
     accentColor,
     primaryColor,
     secondaryColor,
+    gifHueRotate,
     headerVisible,
   } = props;
 
@@ -63,6 +65,7 @@ export function SpotlightLayout(props: AuctionLayoutProps) {
         aria-hidden
         loading="eager"
         decoding="async"
+        style={{ filter: getThemeAssetFilter(primaryColor, secondaryColor, gifHueRotate) }}
         onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
       />
 
@@ -95,12 +98,12 @@ export function SpotlightLayout(props: AuctionLayoutProps) {
                 <span className="al-spot-org-name">{organizerName || 'Auction'}</span>
               </div>
               <h1 className="al-spot-name">{currentPlayer.name}</h1>
-              <div className="al-spot-role">{formatRoleDisplay(currentPlayer.role)}</div>
-              {currentPlayer.basePrice > 0 && (
+              <div className="al-spot-role">{formatRoleDisplay(currentPlayer.role)} {currentPlayer.basePrice > 0 && (
                 <div className="al-spot-base">
                   Base ₹{Number(currentPlayer.basePrice).toFixed(1)}{currencySuffix}
                 </div>
-              )}
+              )}</div>
+
             </motion.div>
 
             <div className="al-spot-stats al-spot-stats--left">

@@ -40,7 +40,7 @@ const season6Theme: Theme = {
   colors: {
     primary: '#FFD700',
     secondary: '#FF6B35',
-    accent: '#C41E3A',
+    accent: '#ffffff',
     success: '#ffffff',
     warning: '#FF9F1C',
     danger: '#E63946',

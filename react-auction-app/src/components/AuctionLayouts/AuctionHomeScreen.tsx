@@ -30,7 +30,7 @@ export function AuctionHomeScreen({
         {titleSponsor && (
           titleSponsor.logoUrl ? (
             <img
-              className="al-home-logo"
+              className="al-home-logo title-sponsor"
               src={titleSponsor.logoUrl}
               alt={`${titleSponsor.name} logo`}
               onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}

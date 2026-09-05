@@ -260,6 +260,10 @@ export interface AdminSettings {
     secondary: string;
     accent: string;
   };
+  /** Optional manual hue rotation for decorative GIF assets. */
+  gifHueRotate?: number;
+  /** Optional per-asset manual hue rotations keyed by public asset path. */
+  gifHueRotateByAsset?: Record<string, number>;
   auctionTitle: string;
   updatedAt: number;
   /** Selected sport/game for the auction (e.g. 'cricket', 'kabaddi', 'football', etc.) */

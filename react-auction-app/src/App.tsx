@@ -78,43 +78,8 @@ import { extractDriveFileId } from './utils/driveImage';
 import { formatRoleDisplay, getRoleCategory, inferRoleCategoryFromPlayer, parseRoleDetails, getRoleBadgeColor } from './utils/roleFormatter';
 import { getKabaddiRoleCategory } from './utils/kabaddiRoles';
 import { getFootballRoleCategory } from './utils/footballRoles';
+import { getThemeAssetFilter } from './utils/themeAssetFilter';
 import './index.css';
-
-function getThemeAssetFilter(primary: string, secondary: string): string {
-  const toRgb = (color: string) => {
-    const normalized = color.trim().replace('#', '');
-    if (!/^[\da-f]{6}$/i.test(normalized)) return null;
-    return [0, 2, 4].map((index) => Number.parseInt(normalized.slice(index, index + 2), 16));
-  };
-
-  const primaryRgb = toRgb(primary);
-  const secondaryRgb = toRgb(secondary);
-  if (!primaryRgb || !secondaryRgb) {
-    return 'grayscale(1) sepia(1) saturate(230%) hue-rotate(356deg) brightness(1.01) contrast(0.93)';
-  }
-
-  const average = primaryRgb.map((value, index) => (value + secondaryRgb[index]) / 2);
-  const max = Math.max(...average);
-  const min = Math.min(...average);
-  const lightness = (max + min) / 510;
-  const saturation = max === min ? 0 : (max - min) / (255 - Math.abs(2 * lightness - 1) * 255);
-  const hue = (() => {
-    if (max === min) return 42;
-    const [red, green, blue] = average.map((value) => value / 255);
-    if (max === red) return 60 * (((green - blue) / (max / 255 - min / 255)) % 6);
-    if (max === green) return 60 * ((blue - red) / (max / 255 - min / 255) + 2);
-    return 60 * ((red - green) / (max / 255 - min / 255) + 4);
-  })();
-
-  return [
-    'grayscale(0)',
-    `sepia(${Math.min(0.45, 0.08 + saturation * 0.18).toFixed(2)})`,
-    `saturate(${(1.35 + saturation * 2.1).toFixed(2)})`,
-    `hue-rotate(${Math.round(hue - 42)}deg)`,
-    `brightness(${(0.82 + lightness * 0.42).toFixed(2)})`,
-    `contrast(${(0.92 + saturation * 0.35).toFixed(2)})`,
-  ].join(' ');
-}
 
 // Create Query Client
 const queryClient = new QueryClient({
@@ -217,10 +182,43 @@ function AuctionApp({ mirrorMode = false }: { mirrorMode?: boolean }) {
   const currentPlayerIdRef = useRef<string | null>(null);
 
   // Initialize theme and audio
-  const { currentTheme } = useTheme();
+  const { currentTheme: baseTheme } = useTheme();
+  const currentTheme = useMemo(() => {
+    if (!adminSettings?.themeColors) return baseTheme;
+
+    return {
+      ...baseTheme,
+      colors: {
+        ...baseTheme.colors,
+        ...adminSettings.themeColors,
+      },
+    };
+  }, [adminSettings?.themeColors, baseTheme]);
+
+  useEffect(() => {
+    const root = document.documentElement;
+    const { colors } = currentTheme;
+    root.style.setProperty('--theme-primary', colors.primary);
+    root.style.setProperty('--theme-secondary', colors.secondary);
+    root.style.setProperty('--theme-accent', colors.accent);
+    root.style.setProperty('--color-primary', colors.primary);
+    root.style.setProperty('--color-secondary', colors.secondary);
+    root.style.setProperty('--color-accent', colors.accent);
+  }, [currentTheme]);
   const themeAssetFilter = useMemo(
-    () => getThemeAssetFilter(currentTheme.colors.primary, currentTheme.colors.secondary),
-    [currentTheme.colors.primary, currentTheme.colors.secondary],
+    () => getThemeAssetFilter(
+      currentTheme.colors.primary,
+      currentTheme.colors.secondary,
+      adminSettings?.gifHueRotate,
+    ),
+    [currentTheme.colors.primary, currentTheme.colors.secondary, adminSettings?.gifHueRotate],
+  );
+  const gifFilterFor = (assetKey: string) => getThemeAssetFilter(
+    currentTheme.colors.primary,
+    currentTheme.colors.secondary,
+    Object.prototype.hasOwnProperty.call(adminSettings?.gifHueRotateByAsset ?? {}, assetKey)
+      ? adminSettings?.gifHueRotateByAsset?.[assetKey]
+      : adminSettings?.gifHueRotate,
   );
   
   // Initialize Firebase Realtime Database sync for desktop (broadcasts state to mobile devices)
@@ -1111,6 +1109,9 @@ function AuctionApp({ mirrorMode = false }: { mirrorMode?: boolean }) {
     accentColor: currentTheme.colors.accent,
     primaryColor: currentTheme.colors.primary,
     secondaryColor: currentTheme.colors.secondary,
+    gifHueRotate: Object.prototype.hasOwnProperty.call(adminSettings?.gifHueRotateByAsset ?? {}, 'd3')
+      ? adminSettings?.gifHueRotateByAsset?.d3
+      : adminSettings?.gifHueRotate,
     titleSponsor,
     sponsors: effectiveSponsors,
     playerCounts: {
@@ -1143,6 +1144,7 @@ function AuctionApp({ mirrorMode = false }: { mirrorMode?: boolean }) {
           src="/extras/left-top-right-bottom-corner.gif"
           alt=""
           className="corner-gif fullscreen"
+          style={{ filter: gifFilterFor('cornerLeftTop') }}
           onError={(e) => {
             (e.currentTarget as HTMLImageElement).style.display = 'none';
           }}
@@ -1153,6 +1155,7 @@ function AuctionApp({ mirrorMode = false }: { mirrorMode?: boolean }) {
           src="/extras/left-bottom-right-top-corner.gif"
           alt=""
           className="corner-gif fullscreen"
+          style={{ filter: gifFilterFor('cornerLeftBottom') }}
           onError={(e) => {
             (e.currentTarget as HTMLImageElement).style.display = 'none';
           }}

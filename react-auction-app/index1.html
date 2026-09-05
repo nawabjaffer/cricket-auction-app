@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Exact Brush Alpha Matte Reveal</title>
+  <style>
+    body {
+      margin: 0;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      background-color: #0b0b0f;
+      font-family: system-ui, -apple-system, sans-serif;
+    }
+
+    /* Container for the image layout */
+    .reveal-box {
+      width: 650px;
+      height: 420px;
+      position: relative;
+      overflow: hidden;
+      border-radius: 16px;
+      box-shadow: 0 30px 60px rgba(0, 0, 0, 0.8);
+      background-color: #141419; /* Canvas background before brush paints it */
+    }
+
+    /* The target image to reveal */
+    .image-to-reveal {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+
+      /* Links the native hardware-accelerated SVG brush alpha matte mask */
+      -webkit-mask-image: url(#brush-alpha-matte);
+      mask-image: url(#brush-alpha-matte);
+    }
+
+    /* --- SVG Mask Animation Engine --- */
+    #paint-stroke-path {
+      /* Hide the stroke completely at the start using dash offset offsets */
+      stroke-dasharray: 2000;
+      stroke-dashoffset: 2000;
+
+      /* Pure CSS trigger for realistic ink paint drawing speed */
+      animation: drawInkStroke 2.2s cubic-bezier(0.42, 0, 0.58, 1) forwards;
+    }
+
+    @keyframes drawInkStroke {
+      0% {
+        stroke-dashoffset: 2000;
+      }
+      100% {
+        stroke-dashoffset: 0;
+      }
+    }
+
+    /* Control Panel Styling */
+    .controls {
+      margin-top: 30px;
+      display: flex;
+      gap: 15px;
+    }
+
+    .btn {
+      padding: 12px 26px;
+      background-color: #6366f1;
+      color: #ffffff;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      box-shadow: 0 4px 14px rgba(99, 102, 241, 0.4);
+      transition: background-color 0.2s, transform 0.1s;
+    }
+
+    .btn:hover {
+      background-color: #4f46e5;
+    }
+
+    .btn:active {
+      transform: scale(0.96);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- 1. THE INLINE ALPHA MATTE GRAPHIC ENGINE (Hidden visually, handles the alpha transparency layout) -->
+  <svg width="0" height="0" style="position: absolute;">
+    <defs>
+      <!-- The ID referenced by our CSS mask-image property -->
+      <mask id="brush-alpha-matte" maskUnits="objectBoundingBox" width="1" height="1">
+
+        <!-- White elements inside a mask reveal the image content -->
+        <!-- This group includes the animated main stroke along with rough grit splatters -->
+        <g fill="#ffffff">
+
+          <!-- Rough Bristle Splatter Textures (Adds grittiness and porous dry brush grain) -->
+          <circle cx="50" cy="80" r="6" opacity="0.7"/>
+          <circle cx="90" cy="310" r="4" opacity="0.5"/>
+          <circle cx="140" cy="60" r="8" opacity="0.8"/>
+          <circle cx="280" cy="350" r="5" opacity="0.6"/>
+          <circle cx="450" cy="40" r="9" opacity="0.7"/>
+          <circle cx="580" cy="330" r="7" opacity="0.9"/>
+          <circle cx="620" cy="110" r="5" opacity="0.8"/>
+
+          <!-- Additional dry hair texture cuts -->
+          <rect x="180" y="45" width="40" height="3" transform="rotate(-5, 180, 45)" opacity="0.5"/>
+          <rect x="340" y="360" width="70" height="4" transform="rotate(3, 340, 360)" opacity="0.6"/>
+          <rect x="510" y="55" width="50" height="3" transform="rotate(-8, 510, 55)" opacity="0.4"/>
+
+          <!-- MAIN BRUSH STROKE: An irregular, stylized snake-path mimicking a real flat hand brush sweep -->
+          <path id="paint-stroke-path" d="M -50,210
+                     C 100,120  200,290  320,180
+                     S 500,100  750,230"
+                fill="none"
+                stroke="#ffffff"
+                stroke-width="460"
+                stroke-linecap="round"
+                stroke-linejoin="round" />
+        </g>
+      </mask>
+    </defs>
+  </svg>
+
+  <!-- 2. THE VISUAL LAYOUT LAYER -->
+  <div class="reveal-box">
+    <!-- Clean public ultra-high resolution image placeholder -->
+    <img src="../public/placeholder_player.png" alt="Textured Masterpiece" class="image-to-reveal">
+  </div>
+
+  <!-- 3. INTERACTIVE CONTROL INTERFACE -->
+  <div class="controls">
+    <button class="btn" onclick="triggerPaintReveal()">Replay Brush Stroke</button>
+  </div>
+
+  <!-- 4. REFLOW ANIMATION SCRIPT -->
+  <script>
+    function triggerPaintReveal() {
+      const strokePath = document.getElementById('paint-stroke-path');
+
+      // Detach CSS animation state completely
+      strokePath.style.animation = 'none';
+
+      // Force local browser thread layout engine reflow
+      strokePath.getBoundingClientRect();
+
+      // Re-apply original class rules to execute animation timeline smoothly
+      strokePath.style.animation = '';
+    }
+  </script>
+
+</body>
+</html>

@@ -29,6 +29,7 @@ import { localImageCacheService } from '../../services/localImageCache';
 import { getCachedStorageUrl, resolveImageAsync } from '../../services/firebaseStorageService';
 import { extractDriveFileId } from '../../utils/driveImage';
 import { getLiveBlobUrl } from '../../services/mediaBlobCache';
+import { getThemeAssetFilter } from '../../utils/themeAssetFilter';
 
 // Small avatar that resolves Google Drive / Firebase Storage URLs the same way
 // PlayerCard does, so admin thumbnails match what the auction listing shows.
@@ -87,6 +88,16 @@ function CompactPlayerAvatar({ imageUrl, playerName }: { readonly imageUrl?: str
 }
 
 type LogoSourceMode = 'drive' | 'upload';
+
+const GIF_PREVIEW_ASSETS = [
+  { key: 'cornerLeftTop', name: 'Left / top corner', path: '/extras/left-top-right-bottom-corner.gif' },
+  { key: 'cornerLeftBottom', name: 'Left / bottom corner', path: '/extras/left-bottom-right-top-corner.gif' },
+  { key: 'waveTopRight', name: 'Top-right wave', path: '/extras/bottom-wave-top-right.gif' },
+  { key: 'arrows', name: 'Arrow movement', path: '/extras/arrow-movements-gif.gif' },
+  { key: 'd1', name: 'Animation D1', path: '/extras/d1.gif' },
+  { key: 'd2', name: 'Animation D2', path: '/extras/d2.gif' },
+  { key: 'd3', name: 'Animation D3', path: '/extras/d3.gif' },
+] as const;
 
 const SPORT_AUCTION_OPTIONS = [
   {
@@ -232,6 +243,8 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
   const [primaryColor, setPrimaryColor] = useState('#3b82f6');
   const [secondaryColor, setSecondaryColor] = useState('#06b6d4');
   const [accentColor, setAccentColor] = useState('#f59e0b');
+  const [gifHueRotate, setGifHueRotate] = useState<number | null>(null);
+  const [gifHueRotateByAsset, setGifHueRotateByAsset] = useState<Record<string, number | null>>({});
   const [maxUnsoldRounds, setMaxUnsoldRounds] = useState(1);
 
   // Auction role ordering
@@ -307,6 +320,15 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
   const organizerLogoFileRef = useRef<HTMLInputElement | null>(null);
   const [organizerLogoUploading, setOrganizerLogoUploading] = useState(false);
   const [uploadFeedback, setUploadFeedback] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+
+  const getGifHue = (assetKey: string) => Object.prototype.hasOwnProperty.call(gifHueRotateByAsset, assetKey)
+    ? gifHueRotateByAsset[assetKey]
+    : gifHueRotate;
+  const getGifFilter = (assetKey: string) => getThemeAssetFilter(
+    primaryColor,
+    secondaryColor,
+    getGifHue(assetKey) ?? undefined,
+  );
 
   // Stats CSV import state
   type StatsImportMatch = { csvRow: Record<string, string>; player: Player; status: 'matched' };
@@ -483,6 +505,10 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
           setPrimaryColor(settings.themeColors.primary);
           setSecondaryColor(settings.themeColors.secondary);
           setAccentColor(settings.themeColors.accent);
+          setGifHueRotate(typeof settings.gifHueRotate === 'number' ? settings.gifHueRotate : null);
+          setGifHueRotateByAsset(Object.fromEntries(
+            Object.entries(settings.gifHueRotateByAsset ?? {}).map(([path, hue]) => [path, hue]),
+          ));
           setMaxUnsoldRounds(settings.maxUnsoldRounds ?? 1);
           useAuctionStore.getState().setMaxUnsoldRounds(settings.maxUnsoldRounds ?? 1);
           if (settings.auctionRoleOrder?.length) {
@@ -597,6 +623,10 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
           secondary: secondaryColor,
           accent: accentColor,
         },
+        gifHueRotate: gifHueRotate ?? undefined,
+        gifHueRotateByAsset: Object.fromEntries(
+          Object.entries(gifHueRotateByAsset).filter((entry): entry is [string, number] => typeof entry[1] === 'number'),
+        ) as Record<string, number>,
         auctionTitle,
         sport: selectedSport || 'cricket',
         updatedAt: Date.now(),
@@ -626,6 +656,9 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
       onSettingsSaved?.(clean);
 
       // Apply theme colors to document
+      document.documentElement.style.setProperty('--theme-primary', primaryColor);
+      document.documentElement.style.setProperty('--theme-secondary', secondaryColor);
+      document.documentElement.style.setProperty('--theme-accent', accentColor);
       document.documentElement.style.setProperty('--color-primary', primaryColor);
       document.documentElement.style.setProperty('--color-secondary', secondaryColor);
       document.documentElement.style.setProperty('--color-accent', accentColor);
@@ -2388,6 +2421,121 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
                           onChange={(e) => setAccentColor(e.target.value)}
                           placeholder="#f59e0b"
                         />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="admin-form-field" style={{ marginTop: '1rem', maxWidth: 560 }}>
+                    <label htmlFor="gif-hue-rotate">Default GIF Hue Rotation (fallback)</label>
+                    <p style={{ color: '#94a3b8', fontSize: '0.82rem', margin: '0.25rem 0 0.5rem' }}>
+                      Set individual GIF colors below. This value is used only when an asset does not have its own override.
+                    </p>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                      <input
+                        id="gif-hue-rotate"
+                        type="range"
+                        min={-180}
+                        max={180}
+                        step={1}
+                        value={gifHueRotate ?? 0}
+                        onChange={(e) => setGifHueRotate(Number(e.target.value))}
+                        style={{ flex: 1 }}
+                      />
+                      <input
+                        type="number"
+                        min={-180}
+                        max={180}
+                        step={1}
+                        value={gifHueRotate ?? ''}
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          setGifHueRotate(value === '' ? null : Math.max(-180, Math.min(180, Number(value))));
+                        }}
+                        placeholder="Auto"
+                        aria-label="GIF hue rotation in degrees"
+                        style={{ width: 90 }}
+                      />
+                      <span style={{ minWidth: 42, color: '#f8fafc', fontWeight: 700 }}>
+                        {gifHueRotate == null ? 'Auto' : `${gifHueRotate}°`}
+                      </span>
+                      <button
+                        type="button"
+                        className="admin-btn admin-btn-secondary admin-btn-sm"
+                        onClick={() => setGifHueRotate(null)}
+                      >
+                        Auto
+                      </button>
+                    </div>
+
+                    <div style={{ marginTop: '1rem' }}>
+                      <strong style={{ color: '#f8fafc', fontSize: '0.9rem' }}>GIF Preview</strong>
+                      <p style={{ color: '#94a3b8', fontSize: '0.78rem', margin: '0.25rem 0 0.75rem' }}>
+                        Each preview uses its real file from <code>public/extras</code>. Set a different hue for every asset.
+                      </p>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '0.75rem' }}>
+                        {GIF_PREVIEW_ASSETS.map(asset => (
+                          <div
+                            key={asset.path}
+                            style={{
+                              overflow: 'hidden',
+                              border: '1px solid rgba(255,255,255,0.14)',
+                              borderRadius: 8,
+                              background: 'rgba(0,0,0,0.28)',
+                            }}
+                          >
+                            <div style={{ height: 100, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                              <img
+                                src={asset.path}
+                                alt={`${asset.name} preview`}
+                                style={{ width: '100%', height: '100%', objectFit: 'contain', filter: getGifFilter(asset.key) }}
+                              />
+                            </div>
+                            <div style={{ padding: '0.45rem 0.55rem', color: '#e2e8f0', fontSize: '0.75rem', fontWeight: 700 }}>
+                              {asset.name}
+                            </div>
+                            <div style={{ padding: '0 0.55rem 0.6rem' }}>
+                              <input
+                                type="range"
+                                min={-180}
+                                max={180}
+                                step={1}
+                                value={getGifHue(asset.key) ?? 0}
+                                onChange={(e) => setGifHueRotateByAsset(prev => ({ ...prev, [asset.key]: Number(e.target.value) }))}
+                                style={{ width: '100%' }}
+                                aria-label={`${asset.name} hue rotation`}
+                              />
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', marginTop: '0.35rem' }}>
+                                <input
+                                  type="number"
+                                  min={-180}
+                                  max={180}
+                                  step={1}
+                                  value={getGifHue(asset.key) ?? ''}
+                                  onChange={(e) => {
+                                    const value = e.target.value;
+                                    setGifHueRotateByAsset(prev => ({
+                                      ...prev,
+                                      [asset.key]: value === '' ? null : Math.max(-180, Math.min(180, Number(value))),
+                                    }));
+                                  }}
+                                  placeholder="Auto"
+                                  aria-label={`${asset.name} hue rotation in degrees`}
+                                  style={{ width: 68 }}
+                                />
+                                <span style={{ color: '#cbd5e1', fontSize: '0.72rem', fontWeight: 700 }}>
+                                  {getGifHue(asset.key) == null ? 'Auto' : `${getGifHue(asset.key)}°`}
+                                </span>
+                                <button
+                                  type="button"
+                                  className="admin-btn admin-btn-secondary admin-btn-sm"
+                                  onClick={() => setGifHueRotateByAsset(prev => ({ ...prev, [asset.key]: null }))}
+                                >
+                                  Auto
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
                       </div>
                     </div>
                   </div>

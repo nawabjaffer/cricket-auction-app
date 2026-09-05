@@ -37,6 +37,7 @@ export interface AuctionLayoutProps {
   readonly accentColor: string;
   readonly primaryColor: string;
   readonly secondaryColor: string;
+  readonly gifHueRotate?: number;
   /** Home-screen content shown while no player is on the block. */
   readonly titleSponsor: SponsorRecord | null;
   readonly sponsors: readonly SponsorRecord[];

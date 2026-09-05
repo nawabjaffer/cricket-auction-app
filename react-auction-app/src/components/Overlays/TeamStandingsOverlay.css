@@ -16,8 +16,9 @@
 
 .team-standings-container {
   position: relative;
-  width: 95vw;
-  max-width: 1400px;
+  width: 90vw;
+  height: 90vh;
+  max-width: none;
   max-height: 90vh;
   overflow: hidden;
   display: flex;
@@ -57,8 +58,8 @@
 
 .team-standings-title {
   text-align: center;
-  font-size: 1.8rem;
-  font-weight: 800;
+  font-size: 2.4rem;
+  font-weight: 900;
   letter-spacing: -0.02em;
   margin-bottom: 24px;
   background: linear-gradient(135deg, #fff, #94a3b8);
@@ -79,7 +80,7 @@
 .team-standings-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.9rem;
+  font-size: 1.15rem;
 }
 
 .team-standings-table thead {
@@ -89,10 +90,10 @@
 }
 
 .team-standings-table th {
-  padding: 14px 16px;
+  padding: 18px 20px;
   text-align: center;
-  font-weight: 700;
-  font-size: 0.75rem;
+  font-weight: 900;
+  font-size: 1rem;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: rgba(148, 163, 184, 0.9);
@@ -113,7 +114,7 @@
 }
 
 .team-standings-table td {
-  padding: 16px;
+  padding: 20px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.04);
   color: rgba(255, 255, 255, 0.9);
 }
@@ -124,12 +125,12 @@
 .team-standings-team-cell {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 16px;
 }
 
 .team-standings-logo {
-  width: 40px;
-  height: 40px;
+  width: 52px;
+  height: 52px;
   object-fit: contain;
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.03);
@@ -137,16 +138,16 @@
 }
 
 .team-standings-name {
-  font-weight: 700;
-  font-size: 1rem;
+  font-weight: 900;
+  font-size: 1.25rem;
   white-space: nowrap;
 }
 
 .td-number {
   text-align: center;
   font-family: 'JetBrains Mono', 'Fira Code', monospace;
-  font-weight: 600;
-  font-size: 0.95rem;
+  font-weight: 800;
+  font-size: 1.15rem;
 }
 
 .td-spent {
@@ -168,15 +169,27 @@
 /* Responsive */
 @media (max-width: 768px) {
   .team-standings-container {
-    width: 98vw;
+    width: 90vw;
+    height: 90vh;
     padding: 16px;
     border-radius: 12px;
   }
   .team-standings-title {
-    font-size: 1.3rem;
+    font-size: 1.8rem;
   }
   .team-standings-table {
-    font-size: 0.75rem;
+    min-width: 900px;
+    font-size: 1rem;
+  }
+  .team-standings-table th {
+    font-size: 0.9rem;
+  }
+  .team-standings-table td {
+    padding: 16px;
+  }
+  .team-standings-name,
+  .td-number {
+    font-size: 1rem;
   }
   .team-standings-logo {
     width: 28px;
