@@ -1608,6 +1608,7 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
       id: findHeaderIndex(headers, ['id', 'playerid', 'player_id']),
       name: findHeaderIndex(headers, ['name', 'playername', 'player_name']),
       role: findHeaderIndex(headers, ['role', 'playerrole', 'player_role']),
+      place: findHeaderIndex(headers, ['place', 'location', 'city', 'home town', 'hometown']),
       basePrice: findHeaderIndex(headers, ['baseprice', 'base_price', 'base price']),
       imageUrl: findHeaderIndex(headers, ['imageurl', 'image_url', 'image', 'photo', 'photourl']),
       phone: findHeaderIndex(headers, ['phone', 'phonenumber', 'phone number', 'mobile', 'mobile number', 'contact number']),
@@ -1715,6 +1716,7 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
         id: idFromCsv || `CSV-${rowIndex + 1}`,
         name: rawName,
         role: (get(idx.role).trim() || 'Player') as Player['role'],
+        place: get(idx.place).trim() || undefined,
         imageUrl: get(idx.imageUrl).trim(),
         basePrice: Number.isFinite(basePrice) ? basePrice : 0,
         age: Number.isFinite(age) ? age : null,
@@ -4441,6 +4443,18 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
                           type="text"
                           value={playerDraft.name}
                           onChange={(e) => setPlayerDraft({ ...playerDraft, name: e.target.value })}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="form-row">
+                      <div className="form-group">
+                        <label>Place</label>
+                        <input
+                          type="text"
+                          value={playerDraft.place || ''}
+                          onChange={(e) => setPlayerDraft({ ...playerDraft, place: e.target.value })}
+                          placeholder="e.g. Bengaluru"
                         />
                       </div>
                     </div>

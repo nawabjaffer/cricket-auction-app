@@ -87,14 +87,15 @@ export function exportSoldPlayers(players: SoldPlayerRecord[]): void {
 export function generatePlayersCSVTemplate(sport = 'cricket'): string {
   if (sport !== 'cricket') {
     const fields = getStatFieldsForSport(sport).filter(field => !['age', 'matches'].includes(field.key));
-    const headers = ['ID', 'Name', 'Role', 'Base Price', 'Image URL', 'Phone', 'WhatsApp Number', 'Age', 'Date of Birth', 'Matches', ...fields.map(field => field.label)];
-    const sampleRow = ['PLAYER001', 'Alex Player', '', '0', 'https://example.com/image.jpg', '', '', '25', '', '0', ...fields.map(() => '0')];
+    const headers = ['ID', 'Name', 'Role', 'Place', 'Base Price', 'Image URL', 'Phone', 'WhatsApp Number', 'Age', 'Date of Birth', 'Matches', ...fields.map(field => field.label)];
+    const sampleRow = ['PLAYER001', 'Alex Player', '', 'Bengaluru', '0', 'https://example.com/image.jpg', '', '', '25', '', '0', ...fields.map(() => '0')];
     return [headers.join(','), sampleRow.map(escapeCsvCell).join(',')].join('\n');
   }
   const headers = [
     'ID',
     'Name',
     'Role',
+    'Place',
     'Base Price',
     'Image URL',
     'Phone',
@@ -134,6 +135,7 @@ export function generatePlayersCSVTemplate(sport = 'cricket'): string {
     'PLAYER001',
     'John Doe',
     'Batsman',
+    'Bengaluru',
     '500000',
     'https://example.com/image.jpg',
     '+919876543210',
@@ -183,9 +185,9 @@ export function generatePlayersCSVTemplate(sport = 'cricket'): string {
 export function generatePlayersBulkEditCSV(players: Player[], sport = 'cricket'): string {
   if (sport !== 'cricket') {
     const fields = getStatFieldsForSport(sport).filter(field => !['age', 'matches'].includes(field.key));
-    const headers = ['ID', 'Name', 'Role', 'Base Price', 'Image URL', 'Phone', 'WhatsApp Number', 'Age', 'Date of Birth', 'Matches', ...fields.map(field => field.label)];
+    const headers = ['ID', 'Name', 'Role', 'Place', 'Base Price', 'Image URL', 'Phone', 'WhatsApp Number', 'Age', 'Date of Birth', 'Matches', ...fields.map(field => field.label)];
     const rows = players.map(player => [
-      player.id, player.name, player.role, player.basePrice, player.imageUrl || '', player.phone || '', player.whatsappNumber || '',
+      player.id, player.name, player.role, player.place || '', player.basePrice, player.imageUrl || '', player.phone || '', player.whatsappNumber || '',
       player.age ?? '', player.dateOfBirth || '', player.matches || '0',
       ...fields.map(field => player.customStats?.[field.key] || (player as unknown as Record<string, string>)[field.key] || '0'),
     ]);
@@ -195,6 +197,7 @@ export function generatePlayersBulkEditCSV(players: Player[], sport = 'cricket')
     'ID',
     'Name',
     'Role',
+    'Place',
     'Base Price',
     'Image URL',
     'Phone',
@@ -236,6 +239,7 @@ export function generatePlayersBulkEditCSV(players: Player[], sport = 'cricket')
       p.id,
       p.name,
       p.role,
+      p.place || '',
       Number.isFinite(p.basePrice) ? p.basePrice : 0,
       p.imageUrl || '',
       p.phone || '',

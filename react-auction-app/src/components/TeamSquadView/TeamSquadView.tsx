@@ -367,9 +367,6 @@ export function TeamSquadView({
   }
 
   // Team colors with fallback
-  const primaryColor = activeTeam.primaryColor || '#3b82f6';
-  const secondaryColor = activeTeam.secondaryColor || '#06b6d4';
-
   return (
     <AnimatePresence>
       <motion.div

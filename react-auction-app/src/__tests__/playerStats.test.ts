@@ -159,6 +159,7 @@ describe('Sport-Specific Config & Stat Fields', () => {
     expect(DEFAULT_SPORT_STAT_FIELDS.kabaddi).toContain('raidPoints');
     expect(DEFAULT_SPORT_STAT_FIELDS.football).toContain('goals');
     expect(DEFAULT_SPORT_STAT_FIELDS.cricket).toContain('runs');
+    expect(DEFAULT_SPORT_STAT_FIELDS.cricket).toContain('place');
   });
 
   it('provides stat fields for each sport', () => {
@@ -173,6 +174,7 @@ describe('Sport-Specific Config & Stat Fields', () => {
     const cricketFields = getStatFieldsForSport('cricket');
     expect(cricketFields.some(f => f.key === 'runs')).toBe(true);
     expect(cricketFields.some(f => f.key === 'wickets')).toBe(true);
+    expect(cricketFields.some(f => f.key === 'place' && f.label === 'Place')).toBe(true);
   });
 
   it('resolves individual field definitions', () => {

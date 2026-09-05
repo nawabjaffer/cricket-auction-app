@@ -58,6 +58,8 @@ export interface Player {
   name: string;
   imageUrl: string;
   role: PlayerRole;
+  /** Player's home place/location shown in configurable auction stats. */
+  place?: string;
   age: number | null;
   matches: string;
   runs: string;

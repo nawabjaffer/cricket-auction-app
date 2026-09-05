@@ -13,6 +13,7 @@ export interface PlayerStatFieldDef {
 /** Sport-specific stat definitions */
 export const SPORT_STAT_FIELDS: Record<string, readonly PlayerStatFieldDef[]> = {
   cricket: [
+    { key: 'place', label: 'Place', sport: 'cricket', category: 'general' },
     { key: 'age', label: 'Age', sport: 'cricket', category: 'general' },
     { key: 'matches', label: 'Matches', sport: 'cricket', category: 'general' },
     { key: 'runs', label: 'Runs', sport: 'cricket', category: 'batting' },
@@ -41,6 +42,7 @@ export const SPORT_STAT_FIELDS: Record<string, readonly PlayerStatFieldDef[]> = 
   ],
 
   kabaddi: [
+    { key: 'place', label: 'Place', sport: 'kabaddi', category: 'general' },
     { key: 'age', label: 'Age', sport: 'kabaddi', category: 'general' },
     { key: 'matches', label: 'Matches Played', sport: 'kabaddi', category: 'general' },
     { key: 'totalPoints', label: 'Total Points', sport: 'kabaddi', category: 'general' },
@@ -59,6 +61,7 @@ export const SPORT_STAT_FIELDS: Record<string, readonly PlayerStatFieldDef[]> = 
   ],
 
   football: [
+    { key: 'place', label: 'Place', sport: 'football', category: 'general' },
     { key: 'age', label: 'Age', sport: 'football', category: 'general' },
     { key: 'matches', label: 'Matches Played', sport: 'football', category: 'general' },
     { key: 'goals', label: 'Goals', sport: 'football', category: 'attack' },
@@ -76,6 +79,7 @@ export const SPORT_STAT_FIELDS: Record<string, readonly PlayerStatFieldDef[]> = 
   ],
 
   volleyball: [
+    { key: 'place', label: 'Place', sport: 'volleyball', category: 'general' },
     { key: 'age', label: 'Age', sport: 'volleyball', category: 'general' },
     { key: 'matches', label: 'Matches Played', sport: 'volleyball', category: 'general' },
     { key: 'totalPoints', label: 'Total Points', sport: 'volleyball', category: 'general' },
@@ -89,6 +93,7 @@ export const SPORT_STAT_FIELDS: Record<string, readonly PlayerStatFieldDef[]> = 
   ],
 
   basketball: [
+    { key: 'place', label: 'Place', sport: 'basketball', category: 'general' },
     { key: 'age', label: 'Age', sport: 'basketball', category: 'general' },
     { key: 'matches', label: 'Games Played', sport: 'basketball', category: 'general' },
     { key: 'pointsPerGame', label: 'Points / Game (PPG)', sport: 'basketball', category: 'attack' },
@@ -103,6 +108,7 @@ export const SPORT_STAT_FIELDS: Record<string, readonly PlayerStatFieldDef[]> = 
   ],
 
   badminton: [
+    { key: 'place', label: 'Place', sport: 'badminton', category: 'general' },
     { key: 'age', label: 'Age', sport: 'badminton', category: 'general' },
     { key: 'matches', label: 'Matches Played', sport: 'badminton', category: 'general' },
     { key: 'winRate', label: 'Win Rate %', sport: 'badminton', category: 'general' },
@@ -117,12 +123,12 @@ export const SPORT_STAT_FIELDS: Record<string, readonly PlayerStatFieldDef[]> = 
 
 /** Default selected stat fields for each sport */
 export const DEFAULT_SPORT_STAT_FIELDS: Record<string, string[]> = {
-  cricket: ['age', 'matches', 'runs', 'wickets', 'battingBestFigures', 'bowlingBestFigures'],
-  kabaddi: ['age', 'matches', 'totalPoints', 'raidPoints', 'tacklePoints', 'superRaids', 'superTackles', 'high5s', 'super10s'],
-  football: ['age', 'matches', 'goals', 'assists', 'cleanSheets', 'saves', 'shotsOnTarget', 'passAccuracy'],
-  volleyball: ['age', 'matches', 'totalPoints', 'spikeKills', 'blocks', 'serviceAces', 'digs'],
-  basketball: ['age', 'matches', 'pointsPerGame', 'reboundsPerGame', 'assistsPerGame', 'steals', 'blocks', 'fieldGoalPct'],
-  badminton: ['age', 'matches', 'winRate', 'smashSpeed', 'worldRanking', 'careerTitles'],
+  cricket: ['place', 'age', 'matches', 'runs', 'wickets', 'battingBestFigures', 'bowlingBestFigures'],
+  kabaddi: ['place', 'age', 'matches', 'totalPoints', 'raidPoints', 'tacklePoints', 'superRaids', 'superTackles', 'high5s', 'super10s'],
+  football: ['place', 'age', 'matches', 'goals', 'assists', 'cleanSheets', 'saves', 'shotsOnTarget', 'passAccuracy'],
+  volleyball: ['place', 'age', 'matches', 'totalPoints', 'spikeKills', 'blocks', 'serviceAces', 'digs'],
+  basketball: ['place', 'age', 'matches', 'pointsPerGame', 'reboundsPerGame', 'assistsPerGame', 'steals', 'blocks', 'fieldGoalPct'],
+  badminton: ['place', 'age', 'matches', 'winRate', 'smashSpeed', 'worldRanking', 'careerTitles'],
 };
 
 /** Default auction role order for each sport */

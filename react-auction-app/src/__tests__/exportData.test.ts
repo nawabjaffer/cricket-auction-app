@@ -130,6 +130,7 @@ describe('CSV Templates', () => {
         id: 'P100',
         name: 'Bulk Player',
         role: 'Batsman',
+        place: 'Bengaluru',
         basePrice: 500,
         imageUrl: 'https://img.test/p100.jpg',
         phone: '+919876543210',
@@ -146,6 +147,8 @@ describe('CSV Templates', () => {
 
     expect(csv).toContain('P100');
     expect(csv).toContain('Bulk Player');
+    expect(csv).toContain('Place');
+    expect(csv).toContain('Bengaluru');
     expect(csv).toContain('+919876543210');
     expect(csv).toContain('+919812345678');
   });
