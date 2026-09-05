@@ -1013,7 +1013,6 @@ function AuctionApp({ mirrorMode = false }: { mirrorMode?: boolean }) {
     if (!currentPlayer) return rows;
 
     const playerRec = currentPlayer as unknown as Record<string, unknown>;
-
     for (const fieldKey of configuredFields) {
       const fieldDef = getStatFieldDef(fieldKey, sport);
       if (!fieldDef) continue;
@@ -1033,6 +1032,20 @@ function AuctionApp({ mirrorMode = false }: { mirrorMode?: boolean }) {
         value = playerRec[fieldKey] as string | number | undefined;
       } else if (playerRec.customStats && (playerRec.customStats as Record<string, unknown>)[fieldKey] !== undefined) {
         value = (playerRec.customStats as Record<string, unknown>)[fieldKey] as string | number | undefined;
+      }
+
+      // Place has appeared under several legacy/import column names. Resolve
+      // those aliases so the configurable Place stat works for existing data.
+      if (fieldKey === 'place' && value == null) {
+        const placeAliases = ['Place', 'location', 'Location', 'city', 'City', 'hometown', 'homeTown'];
+        const customStats = playerRec.customStats as Record<string, unknown> | undefined;
+        for (const alias of placeAliases) {
+          const aliasValue = playerRec[alias] ?? customStats?.[alias];
+          if (aliasValue !== undefined && aliasValue !== null) {
+            value = aliasValue as string | number;
+            break;
+          }
+        }
       }
 
       // If value is still undefined, check common legacy column fallbacks

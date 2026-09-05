@@ -686,6 +686,8 @@ class AuctionPersistenceService {
       if (p.dateOfBirth) record.dateOfBirth = p.dateOfBirth;
       if (p.battingStats) record.battingStats = p.battingStats;
       if (p.bowlingStats) record.bowlingStats = p.bowlingStats;
+      if (p.customStats) record.customStats = p.customStats;
+      if (p.place) record.place = p.place;
       return record;
     });
 

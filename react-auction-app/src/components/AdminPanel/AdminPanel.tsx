@@ -1514,7 +1514,7 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
 
   const handleSavePlayers = async () => {
     if (editingPlayers.length === 0) return;
-
+    console.log('[AdminPanel] Bulk saving images for players:', editingPlayers);
     setIsSaving(true);
     try {
       // Update store (filters sold/unsold automatically)
@@ -1537,6 +1537,7 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
   const handleBulkSaveImages = async (updatedPlayers: Player[]) => {
     setIsSaving(true);
     try {
+      console.log('[AdminPanel] Bulk saving images for players:', updatedPlayers);
       // Persist uploaded image URLs and update store
       await auctionPersistence.saveAdminPlayers(updatedPlayers);
       setAdminPlayerOverrides(updatedPlayers);
