@@ -384,9 +384,30 @@
   top: 0;
   width: 50%;
   height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8vh clamp(1rem, 4vw, 5rem) 12vh;
+  overflow: hidden;
   background-color: var(--al-accent, #d4ff00);
   clip-path: polygon(15% 0, 100% 0, 100% 100%, 0% 100%, 8% 85%, 2% 70%, 12% 55%, 5% 40%, 15% 25%, 8% 10%);
   z-index: 2;
+}
+
+.al-vib-splash-image {
+  position: relative;
+  z-index: 0;
+  display: block;
+  width: clamp(24rem, 44vw, 72rem);
+  max-width: 118%;
+  height: clamp(24rem, 100vh, 68rem);
+  max-height: 120%;
+  object-fit: contain;
+  object-position: center;
+  opacity: 1;
+  filter: drop-shadow(0 1.2rem 2rem rgba(0, 0, 0, 0.22));
+  pointer-events: none;
+  user-select: none;
 }
 
 .al-vib-content {
@@ -405,8 +426,8 @@
   align-items: center;
   gap: 0.6rem;
   color: #ffffff;
-  font-size: clamp(0.65rem, 1.2vw, 1.1rem);
-  font-weight: 700;
+  font-size: clamp(0.65rem, 1.2vw, 1.4rem);
+  font-weight: 900;
   margin-bottom: 0.4rem;
   text-transform: uppercase;
   letter-spacing: 0.1em;
@@ -430,7 +451,7 @@
 }
 
 .al-vib-role {
-  font-size: clamp(0.7rem, 1.3vw, 1.25rem);
+  font-size: clamp(0.7rem, 1.3vw, 1.4rem);
   color: var(--al-accent, #d4ff00);
   text-transform: uppercase;
   font-weight: 800;
@@ -456,8 +477,8 @@
 
 .al-vib-row-label {
   color: #ffffff;
-  font-size: clamp(0.65rem, 1.35vw, 1.4rem);
-  font-weight: 700;
+  font-size: clamp(0.65rem, 2.35vw, 2rem);
+  font-weight: 1000;
   letter-spacing: 1px;
   text-transform: uppercase;
   white-space: nowrap;
@@ -467,8 +488,8 @@
 
 .al-vib-row-value {
   color: #ffffff;
-  font-size: clamp(0.7rem, 1.45vw, 1.5rem);
-  font-weight: 800;
+  font-size: clamp(0.7rem, 1.45vw, 2.4rem);
+  font-weight: 1000;
   white-space: nowrap;
 }
 
@@ -592,7 +613,7 @@
 }
 
 .al-bid-team-name {
-  font-size: clamp(0.7rem, 1.1vw, 1.05rem);
+  font-size: clamp(0.7rem, 1.1vw, 2.05rem);
   font-weight: 800;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -608,7 +629,7 @@
 }
 
 .al-bid-max {
-  font-size: clamp(0.55rem, 0.8vw, 0.8rem);
+  font-size: clamp(0.55rem, 0.9vw, 2.4rem);
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -622,7 +643,7 @@
   z-index: 14;
   display: flex;
   flex-direction: column;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
   gap: 1.1rem;
   text-align: center;
@@ -682,7 +703,7 @@
 }
 
 .al-home-title {
-  font-size: clamp(1.3rem, 3.4vw, 3.4rem);
+  font-size: clamp(1.3rem, 3.4vw, 2.4rem);
   font-weight: 900;
   text-transform: uppercase;
   letter-spacing: 0.06em;
@@ -834,6 +855,17 @@
   .al-spot-player { height: 62%; }
   .al-vib-content { width: 52%; left: 4%; }
   .al-vib-player { height: 70%; right: 0; opacity: 0.85; }
+  .al-vib-splash { padding: 8vh 1rem 12vh; }
+  .al-vib-splash-image {
+    width: clamp(12rem, 42vw, 22rem);
+    height: clamp(20rem, 70vh, 36rem);
+  }
+}
+@media (min-width: 901px) and (max-width: 1400px) {
+  .al-vib-splash-image {
+    width: clamp(15rem, 32vw, 27rem);
+    height: clamp(26rem, 76vh, 42rem);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -14,12 +14,15 @@ import './AuctionLayouts.css';
 
 function VibrantPlayerReveal({
   imageUrl,
+  placeholderUrl,
   playerName,
 }: {
   readonly imageUrl: string;
+  readonly placeholderUrl: string;
   readonly playerName: string;
 }) {
   const [imageReady, setImageReady] = useState(false);
+  const [displayUrl, setDisplayUrl] = useState(imageUrl || placeholderUrl);
 
   return (
     <>
@@ -45,7 +48,7 @@ function VibrantPlayerReveal({
               {/* ============================= */}
 
               <path
-                className={`al-vib-brush-stroke stroke-320 ${
+                className={`al-vib-brush-stroke stroke-370 ${
                   imageReady ? 'is-ready' : ''
                 }`}
                 d='M -250,150 C 200,20 650,300 2150,180'
@@ -108,12 +111,17 @@ function VibrantPlayerReveal({
         </defs>
       </svg>
       <img
-        src={imageUrl}
+        src={displayUrl}
         alt={playerName}
         className={`al-vib-player-image${imageReady ? ' is-ready' : ''}`}
         onLoad={() => setImageReady(true)}
-        onError={(event) => {
-          event.currentTarget.style.visibility = 'hidden';
+        onError={() => {
+          if (displayUrl !== placeholderUrl) {
+            setImageReady(false);
+            setDisplayUrl(placeholderUrl);
+            return;
+          }
+          setImageReady(true);
         }}
       />
     </>
@@ -124,6 +132,7 @@ export function VibrantLayout(props: AuctionLayoutProps) {
   const {
     currentPlayer,
     playerImageSrc,
+    playerPlaceholderSrc,
     statRows,
     currentBid,
     selectedTeam,
@@ -161,7 +170,18 @@ export function VibrantLayout(props: AuctionLayoutProps) {
         initial={{ x: '100%', opacity: 0 }}
         animate={{ x: '0%', opacity: 1 }}
         transition={{ duration: 1, ease: [0.16, 1, 0.3, 1] }}
-      />
+      >
+        {!currentPlayer && (
+          <img
+            className='al-vib-splash-image'
+            src={playerPlaceholderSrc}
+            alt=''
+            onError={(event) => {
+              event.currentTarget.style.display = 'none';
+            }}
+          />
+        )}
+      </motion.div>
 
       <div className='al-round-chip'>Round {currentRound}</div>
 
@@ -280,8 +300,9 @@ export function VibrantLayout(props: AuctionLayoutProps) {
               transition={{ duration: 1.4, delay: 0.25, ease: 'easeOut' }}
             >
               <VibrantPlayerReveal
-                key={`${currentPlayer.id}-${playerImageSrc}`}
+                key={`${currentPlayer.id}-${playerImageSrc}-${playerPlaceholderSrc}`}
                 imageUrl={playerImageSrc}
+                placeholderUrl={playerPlaceholderSrc}
                 playerName={currentPlayer.name}
               />
             </motion.div>

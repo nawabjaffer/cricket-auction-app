@@ -23,6 +23,8 @@ export interface AuctionLayoutProps {
   readonly currentPlayer: Player | null;
   /** Resolved (Storage/Drive) image URL for the current player. */
   readonly playerImageSrc: string;
+  /** Admin-configured image shown when the current player's image is unavailable. */
+  readonly playerPlaceholderSrc: string;
   /** Admin-configured stat rows already filtered for the active sport. */
   readonly statRows: readonly AuctionStatRow[];
   readonly currentBid: number;

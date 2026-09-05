@@ -1134,6 +1134,7 @@ function AuctionApp({ mirrorMode = false }: { mirrorMode?: boolean }) {
   const auctionLayoutProps = {
     currentPlayer,
     playerImageSrc: imageLoadingState === 'error' ? playerPlaceholder : (imgSrc || playerPlaceholder),
+    playerPlaceholderSrc: playerPlaceholder,
     statRows,
     currentBid: auction.currentBid,
     selectedTeam,
