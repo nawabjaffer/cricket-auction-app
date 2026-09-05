@@ -370,10 +370,9 @@
   width: 100%;
   padding: 0.85rem 1rem;
   border-radius: 16px;
-  background: linear-gradient(145deg, rgba(15, 23, 42, 0.86), rgba(30, 41, 59, 0.62));
-  border: 1px solid rgba(148, 163, 184, 0.25);
-  backdrop-filter: blur(14px);
+  backdrop-filter: blur(4px);
   box-shadow: 0 10px 32px rgba(2, 6, 23, 0.42);
+  background: linear-gradient(145deg, rgba(15, 23, 42, 0.64), rgba(30, 41, 59, 0.48));
 }
 
 .tsv-header-logo-shell {
@@ -382,7 +381,6 @@
   border-radius: 16px;
   overflow: hidden;
   flex-shrink: 0;
-  background: rgba(255, 255, 255, 0.08);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -419,7 +417,7 @@
 }
 
 .tsv-team-stats {
-  display: flex;
+  display: none;
   flex-wrap: wrap;
   gap: 0.5rem;
 }
@@ -438,7 +436,7 @@
 }
 
 .tsv-team-name {
-  font-size: clamp(2.5rem, 5vw, 4rem);
+  font-size: clamp(2.5rem, 5vw, 3rem);
   font-weight: 900;
   color: white;
   text-transform: uppercase;
@@ -524,7 +522,6 @@
   border-radius: 16px;
   overflow: hidden;
   background: linear-gradient(165deg, rgba(15, 23, 42, 0.72), rgba(30, 41, 59, 0.48));
-  border: 1px solid rgba(255, 255, 255, 0.06);
   outline: 0;
   backdrop-filter: blur(20px);
   box-shadow: 0 8px 32px rgba(2, 6, 23, 0.3);
@@ -678,15 +675,14 @@
   width: 100%;
   min-height: min(86vh, 460px);
   border-radius: 28px;
-  padding: 1.25rem;
-  background: linear-gradient(165deg, rgba(15, 23, 42, 0.86), rgba(30, 41, 59, 0.6));
-  border: 1px solid rgba(148, 163, 184, 0.22);
-  backdrop-filter: blur(16px);
+  padding: 1rem;
+  backdrop-filter: blur(4px);
   box-shadow: 0 22px 62px rgba(2, 6, 23, 0.52);
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  gap: 1rem;
+  gap: 0.6rem;
+  background: linear-gradient(145deg, rgba(15, 23, 42, 0.64), rgba(30, 41, 59, 0.48));
 }
 
 .tsv-captain-image-wrapper {
@@ -766,16 +762,23 @@
 
 .tsv-brand-section {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 1.2rem;
-  padding: 1.5rem;
+  padding: 1rem;
   border-radius: 16px;
-  background: linear-gradient(145deg, rgba(15, 23, 42, 0.84), rgba(30, 41, 59, 0.58));
+  background: linear-gradient(145deg, rgba(15, 23, 42, 0.64), rgba(30, 41, 59, 0.48));
   border: 1px solid rgba(148, 163, 184, 0.24);
   backdrop-filter: blur(15px);
   box-shadow: 0 10px 30px rgba(2, 6, 23, 0.4);
   width: 100%;
   margin-top: auto;
+}
+
+.tsv-brand-section .tsv-team-stats-panel {
+  flex: 1 1 100%;
+  width: 100%;
+  margin-top: 0.25rem;
 }
 
 .tsv-brand-logo {
@@ -787,7 +790,7 @@
 }
 
 .tsv-brand-info {
-  display: flex;
+  display: none;
   flex-direction: column;
   gap: 0.35rem;
   flex: 1;
@@ -1210,15 +1213,6 @@
   }
 }
 
-/* ── Team Stats Panel (replaces duplicate brand section) ── */
-.tsv-team-stats-panel {
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 16px;
-  padding: 1.2rem;
-  backdrop-filter: blur(8px);
-  margin-top: auto;
-}
 
 .tsv-stats-heading {
   font-size: 0.75rem;
@@ -1231,7 +1225,7 @@
 
 .tsv-stats-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 2fr 2fr 2fr 2fr;
   gap: 0.6rem;
 }
 
@@ -1261,7 +1255,6 @@
 }
 
 .tsv-stat-status {
-  margin-top: 0.8rem;
   text-align: center;
 }
 
@@ -1335,20 +1328,18 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 0.4rem;
-  padding: 1rem;
-  margin-top: 0.75rem;
+  padding: 10px;
   background: linear-gradient(135deg, rgba(228, 190, 117, 0.08), rgba(228, 190, 117, 0.02));
-  border: 1px solid rgba(228, 190, 117, 0.2);
   border-radius: 12px;
+  max-width: 152px
 }
 
 .tsv-title-sponsor-label {
-  font-size: 0.6rem;
+  font-size: 0.8rem;
   text-transform: uppercase;
   letter-spacing: 1.5px;
-  color: rgba(228, 190, 117, 0.8);
-  font-weight: 600;
+  color: rgba(255, 255, 255, 0.9);
+  font-weight: 1000;
 }
 
 .tsv-title-sponsor-logo {
@@ -1370,8 +1361,8 @@
 }
 
 .tsv-header-sponsor-logo {
-  max-width: 80px;
-  max-height: 30px;
+  max-width: 100px;
+  max-height: 80px;
   object-fit: contain;
   opacity: 0.85;
 }
@@ -1608,9 +1599,9 @@
   gap: 0.5rem;
   padding: 0.4rem 0.7rem;
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.04);
   border: 1px solid rgba(228, 190, 117, 0.15);
   min-width: 160px;
+  flex-direction: column;
 }
 
 .tsv-iconic-slot--in-auction {
@@ -1619,12 +1610,10 @@
 }
 
 .tsv-iconic-slot-img-wrap {
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
+  width: 168px;
+  height: 200px;
   overflow: hidden;
   flex-shrink: 0;
-  border: 2px solid rgba(228, 190, 117, 0.35);
 }
 
 .tsv-iconic-slot-img-wrap .tsv-iconic-slot-img,

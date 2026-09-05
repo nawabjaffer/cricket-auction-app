@@ -11,7 +11,7 @@ import {
   type Database 
 } from 'firebase/database';
 import type { Player, Team, SoldPlayer, AuctionRoleCategory } from '../types';
-import { tenantPath } from './tenantPath';
+import { tenantPath, tenantPathFor } from './tenantPath';
 
 // Database paths. Each value is resolved through `tenantPath()` at access time,
 // so the same literal `DB_PATHS.SOLD_PLAYERS` returns
@@ -88,6 +88,9 @@ export interface SponsorRecord {
   active?: boolean;
   isActive?: boolean;
   order?: number;
+  /** Provenance for a sponsor copied from another tenant's sponsor catalog. */
+  sharedFromTenantSlug?: string;
+  sourceSponsorId?: string;
 }
 
 const normalizeSponsorLogoUrl = (rawValue: string | undefined): string => {
@@ -134,7 +137,7 @@ const normalizeSponsorRecord = (sponsor: SponsorRecord, index = 0): SponsorRecor
   const resolvedActive = sponsor.active ?? sponsor.isActive ?? true;
   if (!resolvedActive) return null;
 
-  return {
+  const normalized: SponsorRecord = {
     ...sponsor,
     id: sponsor.id || `sponsor-${index + 1}`,
     name: sponsor.name.trim(),
@@ -144,6 +147,10 @@ const normalizeSponsorRecord = (sponsor: SponsorRecord, index = 0): SponsorRecor
     tier: sponsor.tier?.trim() || '',
     order: Number.isFinite(sponsor.order as number) ? sponsor.order : index,
   };
+
+  return Object.fromEntries(
+    Object.entries(normalized).filter(([, value]) => value !== undefined),
+  ) as SponsorRecord;
 };
 
 // Sold player record format for Firebase
@@ -724,7 +731,18 @@ class AuctionPersistenceService {
     if (!this.db) throw new Error('Database not initialized');
 
     const sponsorsRef = ref(this.db, DB_PATHS.SPONSORS);
-    const snapshot = await get(sponsorsRef);
+    return this.readSponsorsSnapshot(await get(sponsorsRef));
+  }
+
+  /** Get sponsors from a specific tenant for cross-tenant sponsor reuse. */
+  async getSponsorsForTenant(tenantId: string): Promise<SponsorRecord[]> {
+    if (!this.db) throw new Error('Database not initialized');
+
+    const sponsorsRef = ref(this.db, tenantPathFor(tenantId, 'auction/sponsors'));
+    return this.readSponsorsSnapshot(await get(sponsorsRef));
+  }
+
+  private readSponsorsSnapshot(snapshot: Awaited<ReturnType<typeof get>>): SponsorRecord[] {
 
     if (!snapshot.exists()) return [];
 

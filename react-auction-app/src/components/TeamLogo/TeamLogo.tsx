@@ -96,7 +96,7 @@ export const TeamLogo: React.FC<TeamLogoProps> = ({
     ? undefined
     : imageUrls[currentUrlIndex];
 
-  const containerClass = `${SIZE_CLASSES[size]} rounded-xl overflow-hidden bg-white/10 border border-white/20 flex items-center justify-center ${className}`;
+  const containerClass = `${SIZE_CLASSES[size]} rounded-xl overflow-hidden flex items-center justify-center ${className}`;
 
   // If no image is available, show team initials
   if (!currentUrl) {

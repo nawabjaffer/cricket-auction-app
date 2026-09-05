@@ -379,10 +379,15 @@ export function TeamSquadView({
         exit={{ opacity: 0 }}
         transition={{ duration: 0.3 }}
         style={{
+
+          //  background: `
+          //   radial-gradient(circle at 18% 22%, ${primaryColor}2b 0%, transparent 42%),
+          //   radial-gradient(circle at 82% 78%, ${secondaryColor}30 0%, transparent 44%),
+          //   radial-gradient(circle at 52% 42%, var(--theme-accent, ${secondaryColor})26 0%, transparent 38%),
+          //   linear-gradient(140deg, color-mix(in srgb, ${primaryColor} 32%, #060912) 0%, color-mix(in srgb, ${secondaryColor} 24%, #0b1120) 52%, color-mix(in srgb, var(--theme-accent, ${secondaryColor}) 18%, #111827) 100%)
+          // `,
           background: `
-            radial-gradient(circle at 18% 22%, ${primaryColor}2b 0%, transparent 42%),
-            radial-gradient(circle at 82% 78%, ${secondaryColor}30 0%, transparent 44%),
-            linear-gradient(140deg, #060912 0%, #0b1120 45%, #111827 100%)
+            var(--theme-accent)
           `,
         }}
         onClick={onClose}
@@ -453,7 +458,7 @@ export function TeamSquadView({
               <div className="tsv-team-header">
                 <h1 className="tsv-team-name">{activeTeam.name}</h1>
                 <div className="tsv-team-underline" />
-                <h2 className="tsv-squad-label">SQUAD</h2>
+                {/* <h2 className="tsv-squad-label">SQUAD</h2> */}
                 <div className="tsv-team-details">
                   <p className="tsv-team-owner">Brand Owner: {activeTeam.ownerCompany || 'Not Available'}</p>
                   {(() => {
@@ -464,11 +469,23 @@ export function TeamSquadView({
                       </p>
                     ) : null;
                   })()}
-                  {titleSponsor?.logoUrl && (
-                    <div className="tsv-header-title-sponsor">
-                      <img src={titleSponsor.logoUrl} alt={titleSponsor.name} className="tsv-header-sponsor-logo" />
-                    </div>
-                  )}
+                    {/* Title Sponsor Badge */}
+            {titleSponsor?.logoUrl && (
+              <motion.div
+                className="tsv-title-sponsor"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.4, delay: 0.45 }}
+              >
+                <span className="tsv-title-sponsor-label">Title Sponsor</span>
+                <img
+                  src={titleSponsor.logoUrl}
+                  alt={titleSponsor.name}
+                  className="tsv-title-sponsor-logo"
+                  onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                />
+              </motion.div>
+            )}
                   <div className="tsv-team-stats">
                     <span className="tsv-team-stat-chip">Auction Slots: {squadTargetCount}</span>
                     <span className="tsv-team-stat-chip">Filled: {teamPlayers.length}</span>
@@ -479,21 +496,8 @@ export function TeamSquadView({
                   </div>
                 </div>
               </div>
-            </motion.div>
-
-            {/* Iconic Players Section — shown above auction grid */}
-            {iconicSlotsData.length > 0 && (
-              <motion.div
-                className="tsv-iconic-section"
-                initial={{ opacity: 0, y: -10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.4, delay: 0.25 }}
-              >
-                <div className="tsv-iconic-section-header">
-                  <span className="tsv-iconic-section-badge">★ ICON PLAYERS</span>
-                  <span className="tsv-iconic-section-count">{iconicSlotsData.length}</span>
-                </div>
-                <div className="tsv-iconic-section-grid">
+              {iconicSlotsData.length > 0 && (
+              <div className="tsv-iconic-section-grid">
                   {iconicSlotsData.map((iconic, idx) => (
                     <motion.div
                       key={`iconic-${iconic.name}-${idx}`}
@@ -518,8 +522,8 @@ export function TeamSquadView({
                     </motion.div>
                   ))}
                 </div>
-              </motion.div>
-            )}
+              )}
+            </motion.div>
 
             {/* Auction Players Grid */}
             <motion.div
@@ -576,7 +580,6 @@ export function TeamSquadView({
                           }}
                           onError={(e) => { (e.target as HTMLImageElement).src = playerPlaceholderImage; }}
                         />
-                        <div className="tsv-player-overlay" />
                         <div className="tsv-player-footer">
                           <span className="tsv-player-role">{slotRole}</span>
                           <span className="tsv-player-name">{slotName}</span>
@@ -626,6 +629,72 @@ export function TeamSquadView({
                 <p className="tsv-brand-company">{activeTeam.ownerCompany || 'Owner Company'}</p>
                 <p className="tsv-brand-tagline">{activeTeam.brandTagline || 'Brand tagline goes here'}</p>
               </div>
+
+              <motion.div
+                className="tsv-team-stats-panel"
+                initial={{ y: 20, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                transition={{ duration: 0.4, delay: 0.5 }}
+              >
+                <h4 className="tsv-stats-heading">Team Stats
+                <div className="tsv-stat-status">
+                  {remainingSlots === 0 ? (
+                    <span className="tsv-status-badge tsv-status-full">Squad Full</span>
+                  ) : remainingSlots <= 3 ? (
+                    <span className="tsv-status-badge tsv-status-warning">Nearly Full</span>
+                  ) : (
+                    <span className="tsv-status-badge tsv-status-open">Open Slots</span>
+                  )}
+                </div>
+                </h4>
+                <div className="tsv-stats-grid">
+                  <div className="tsv-stat-item">
+                    <span className="tsv-stat-value">{teamPlayers.length}</span>
+                    <span className="tsv-stat-label">Players Filled</span>
+                  </div>
+                  <div className="tsv-stat-item">
+                    <span className="tsv-stat-value">{remainingSlots}</span>
+                    <span className="tsv-stat-label">Players Needed</span>
+                  </div>
+                  <div className="tsv-stat-item">
+                    <span className="tsv-stat-value">₹{highestBuy.toFixed(1)}{currencySuffix}</span>
+                    <span className="tsv-stat-label">Highest Bid</span>
+                  </div>
+                  <div className="tsv-stat-item">
+                    <span className="tsv-stat-value">₹{remainingBudget.toFixed(1)}{currencySuffix}</span>
+                    <span className="tsv-stat-label">Remaining Budget</span>
+                  </div>
+                  <div className="tsv-stat-item">
+                    <span className="tsv-stat-value">₹{spentBudget.toFixed(1)}{currencySuffix}</span>
+                    <span className="tsv-stat-label">Spent</span>
+                  </div>
+                  <div className="tsv-stat-item">
+                    <span className="tsv-stat-value">₹{totalBudget.toFixed(1)}{currencySuffix}</span>
+                    <span className="tsv-stat-label">Total Budget</span>
+                  </div>
+                  {specialCategories.length > 0 && (
+                    <div className="tsv-stat-item">
+                      <span className="tsv-stat-value">{activeTeam.underAgePlayers || 0}</span>
+                      <span className="tsv-stat-label">Under-Age Players</span>
+                    </div>
+                  )}
+                  {specialCategories.map(cat => {
+                    const count = teamPlayers.filter(p => {
+                      const age = typeof p.age === 'number' ? p.age : null;
+                      if (age === null) return false;
+                      if (cat.ageMin != null && age < cat.ageMin) return false;
+                      if (cat.ageMax != null && age > cat.ageMax) return false;
+                      return true;
+                    }).length;
+                    return (
+                      <div key={cat.id} className="tsv-stat-item">
+                        <span className="tsv-stat-value" style={{ color: cat.color }}>{count}</span>
+                        <span className="tsv-stat-label">{cat.label}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </motion.div>
             </motion.div>
 
           </div>
@@ -705,89 +774,6 @@ export function TeamSquadView({
               })()}
             </motion.div>
 
-            {/* Title Sponsor Badge */}
-            {titleSponsor?.logoUrl && (
-              <motion.div
-                className="tsv-title-sponsor"
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.4, delay: 0.45 }}
-              >
-                <span className="tsv-title-sponsor-label">Title Sponsor</span>
-                <img
-                  src={titleSponsor.logoUrl}
-                  alt={titleSponsor.name}
-                  className="tsv-title-sponsor-logo"
-                  onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-                />
-                <span className="tsv-title-sponsor-name">{titleSponsor.name}</span>
-              </motion.div>
-            )}
-
-            <motion.div
-              className="tsv-team-stats-panel"
-              initial={{ y: 20, opacity: 0 }}
-              animate={{ y: 0, opacity: 1 }}
-              transition={{ duration: 0.4, delay: 0.5 }}
-            >
-              <h4 className="tsv-stats-heading">Team Stats</h4>
-              <div className="tsv-stats-grid">
-                <div className="tsv-stat-item">
-                  <span className="tsv-stat-value">{teamPlayers.length}</span>
-                  <span className="tsv-stat-label">Players Filled</span>
-                </div>
-                <div className="tsv-stat-item">
-                  <span className="tsv-stat-value">{remainingSlots}</span>
-                  <span className="tsv-stat-label">Players Needed</span>
-                </div>
-                <div className="tsv-stat-item">
-                  <span className="tsv-stat-value">₹{highestBuy.toFixed(1)}{currencySuffix}</span>
-                  <span className="tsv-stat-label">Highest Bid</span>
-                </div>
-                <div className="tsv-stat-item">
-                  <span className="tsv-stat-value">₹{remainingBudget.toFixed(1)}{currencySuffix}</span>
-                  <span className="tsv-stat-label">Remaining Budget</span>
-                </div>
-                <div className="tsv-stat-item">
-                  <span className="tsv-stat-value">₹{spentBudget.toFixed(1)}{currencySuffix}</span>
-                  <span className="tsv-stat-label">Spent</span>
-                </div>
-                <div className="tsv-stat-item">
-                  <span className="tsv-stat-value">₹{totalBudget.toFixed(1)}{currencySuffix}</span>
-                  <span className="tsv-stat-label">Total Budget</span>
-                </div>
-                {specialCategories.length > 0 && (
-                  <div className="tsv-stat-item">
-                    <span className="tsv-stat-value">{activeTeam.underAgePlayers || 0}</span>
-                    <span className="tsv-stat-label">Under-Age Players</span>
-                  </div>
-                )}
-                {specialCategories.map(cat => {
-                  const count = teamPlayers.filter(p => {
-                    const age = typeof p.age === 'number' ? p.age : null;
-                    if (age === null) return false;
-                    if (cat.ageMin != null && age < cat.ageMin) return false;
-                    if (cat.ageMax != null && age > cat.ageMax) return false;
-                    return true;
-                  }).length;
-                  return (
-                    <div key={cat.id} className="tsv-stat-item">
-                      <span className="tsv-stat-value" style={{ color: cat.color }}>{count}</span>
-                      <span className="tsv-stat-label">{cat.label}</span>
-                    </div>
-                  );
-                })}
-              </div>
-              <div className="tsv-stat-status">
-                {remainingSlots === 0 ? (
-                  <span className="tsv-status-badge tsv-status-full">Squad Full</span>
-                ) : remainingSlots <= 3 ? (
-                  <span className="tsv-status-badge tsv-status-warning">Nearly Full</span>
-                ) : (
-                  <span className="tsv-status-badge tsv-status-open">Open Slots</span>
-                )}
-              </div>
-            </motion.div>
           </div>
         </motion.div>
 

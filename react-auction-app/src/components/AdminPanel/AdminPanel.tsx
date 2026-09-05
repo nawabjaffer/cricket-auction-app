@@ -30,6 +30,8 @@ import { getCachedStorageUrl, resolveImageAsync } from '../../services/firebaseS
 import { extractDriveFileId } from '../../utils/driveImage';
 import { getLiveBlobUrl } from '../../services/mediaBlobCache';
 import { getThemeAssetFilter } from '../../utils/themeAssetFilter';
+import { getActiveTenant } from '../../services/tenantPath';
+import { tenantService } from '../../services/tenantService';
 
 // Small avatar that resolves Google Drive / Firebase Storage URLs the same way
 // PlayerCard does, so admin thumbnails match what the auction listing shows.
@@ -287,6 +289,10 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
   const { teams, setTeams, soldPlayers, setSoldPlayers, unsoldPlayers, setUnsoldPlayers, originalPlayers, setAdminPlayerOverrides, reconcilePlayerPools } = useAuctionStore();
   const [editingTeams, setEditingTeams] = useState<Team[]>([]);
   const [editingSponsors, setEditingSponsors] = useState<SponsorRecord[]>([]);
+  const [sharedSponsorTenantSlug, setSharedSponsorTenantSlug] = useState('');
+  const [sharedSponsors, setSharedSponsors] = useState<SponsorRecord[]>([]);
+  const [selectedSharedSponsorIds, setSelectedSharedSponsorIds] = useState<string[]>([]);
+  const [isLoadingSharedSponsors, setIsLoadingSharedSponsors] = useState(false);
   const [teamLogoSources, setTeamLogoSources] = useState<Record<string, LogoSourceMode>>({});
   const [teamOwnerLogoSources, setTeamOwnerLogoSources] = useState<Record<string, LogoSourceMode>>({});
   const [sponsorLogoSources, setSponsorLogoSources] = useState<Record<string, LogoSourceMode>>({});
@@ -743,6 +749,72 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
     } finally {
       setIsSavingSponsors(false);
     }
+  };
+
+  const handleLoadSharedSponsors = async () => {
+    const sourceSlug = sharedSponsorTenantSlug.trim();
+    if (!sourceSlug) {
+      showUploadFeedback('Enter a tenant slug or ID to load its sponsors.', 'error');
+      return;
+    }
+
+    setIsLoadingSharedSponsors(true);
+    try {
+      const sourceTenant = await tenantService.resolveBySlug(sourceSlug);
+      const sourceTenantId = sourceTenant?.id ?? sourceSlug;
+      if (sourceTenantId === getActiveTenant()) {
+        showUploadFeedback('Choose a different tenant to import sponsors from.', 'error');
+        setSharedSponsors([]);
+        setSelectedSharedSponsorIds([]);
+        return;
+      }
+
+      const sponsors = await auctionPersistence.getSponsorsForTenant(sourceTenantId);
+      setSharedSponsors(sponsors);
+      setSelectedSharedSponsorIds([]);
+      if (!sponsors.length) {
+        showUploadFeedback(`No active sponsors found for tenant "${sourceSlug}".`, 'error');
+      }
+    } catch (error) {
+      console.error('[AdminPanel] Failed to load shared sponsors:', error);
+      showUploadFeedback('Failed to load sponsors from that tenant.', 'error');
+      setSharedSponsors([]);
+      setSelectedSharedSponsorIds([]);
+    } finally {
+      setIsLoadingSharedSponsors(false);
+    }
+  };
+
+  const handleAddSharedSponsors = () => {
+    const sourceSlug = sharedSponsorTenantSlug.trim();
+    const selected = sharedSponsors.filter((sponsor) => selectedSharedSponsorIds.includes(sponsor.id));
+    if (!sourceSlug || selected.length === 0) return;
+
+    const importedSourceIds = new Set(
+      editingSponsors
+        .map((sponsor) => sponsor.sourceSponsorId)
+        .filter((id): id is string => Boolean(id)),
+    );
+    const newSponsors = selected
+      .filter((sponsor) => !importedSourceIds.has(sponsor.id))
+      .map((sponsor, index) => ({
+        ...sponsor,
+        id: typeof crypto !== 'undefined' && 'randomUUID' in crypto
+          ? crypto.randomUUID()
+          : `sponsor-${Date.now()}-${index}`,
+        order: editingSponsors.length + index + 1,
+        sharedFromTenantSlug: sourceSlug,
+        sourceSponsorId: sponsor.id,
+      }));
+
+    if (!newSponsors.length) {
+      showUploadFeedback('The selected sponsors are already added to this tenant.', 'error');
+      return;
+    }
+
+    setEditingSponsors((current) => [...current, ...newSponsors]);
+    setSelectedSharedSponsorIds([]);
+    showUploadFeedback(`${newSponsors.length} existing sponsor${newSponsors.length === 1 ? '' : 's'} added.`, 'success');
   };
 
   const handleAddTeam = () => {
@@ -3319,6 +3391,72 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
                         ))}
                       </select>
                     </label>
+                  </div>
+
+                  <div className="admin-media-field" style={{ marginBottom: '1rem' }}>
+                    <div className="admin-media-header">
+                      <label>Reuse Existing Sponsors</label>
+                      <span>Import sponsors from another tenant slug or ID</span>
+                    </div>
+                    <div className="form-row">
+                      <div className="form-group">
+                        <label htmlFor="shared-sponsor-tenant">Source Tenant</label>
+                        <input
+                          id="shared-sponsor-tenant"
+                          type="text"
+                          value={sharedSponsorTenantSlug}
+                          onChange={(e) => setSharedSponsorTenantSlug(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') void handleLoadSharedSponsors();
+                          }}
+                          placeholder="e.g., summer-league"
+                        />
+                      </div>
+                      <div className="form-group" style={{ alignSelf: 'end' }}>
+                        <button
+                          type="button"
+                          className="admin-btn admin-btn-secondary"
+                          onClick={() => void handleLoadSharedSponsors()}
+                          disabled={isLoadingSharedSponsors || isSavingSponsors}
+                        >
+                          {isLoadingSharedSponsors ? 'Loading...' : 'Load Sponsors'}
+                        </button>
+                      </div>
+                    </div>
+
+                    {sharedSponsors.length > 0 && (
+                      <div className="admin-source-option" style={{ display: 'block', marginTop: '0.75rem' }}>
+                        {sharedSponsors.map((sponsor) => {
+                          const alreadyImported = editingSponsors.some(
+                            (current) => current.sourceSponsorId === sponsor.id,
+                          );
+                          return (
+                            <label key={sponsor.id} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', margin: '0.35rem 0' }}>
+                              <input
+                                type="checkbox"
+                                checked={selectedSharedSponsorIds.includes(sponsor.id)}
+                                disabled={alreadyImported}
+                                onChange={(e) => {
+                                  setSelectedSharedSponsorIds((current) => e.target.checked
+                                    ? [...current, sponsor.id]
+                                    : current.filter((id) => id !== sponsor.id));
+                                }}
+                              />
+                              <span>{sponsor.name}{alreadyImported ? ' (already added)' : ''}</span>
+                            </label>
+                          );
+                        })}
+                        <button
+                          type="button"
+                          className="admin-btn admin-btn-primary admin-btn-sm"
+                          onClick={handleAddSharedSponsors}
+                          disabled={selectedSharedSponsorIds.length === 0 || isSavingSponsors}
+                          style={{ marginTop: '0.5rem' }}
+                        >
+                          Add Selected Sponsors
+                        </button>
+                      </div>
+                    )}
                   </div>
 
                   <div className="teams-list">
