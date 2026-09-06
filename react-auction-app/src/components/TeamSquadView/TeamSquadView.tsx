@@ -547,50 +547,78 @@ export function TeamSquadView({
                     const slotAmount = isPlayer ? `₹${slot.player.soldAmount}${currencySuffix}` : '—';
 
                     return (
-                    <motion.div
-                      key={slotKey}
-                      className="tsv-player-item"
-                      initial={{ scale: 0.9, opacity: 0 }}
-                      animate={{ scale: 1, opacity: 1 }}
-                      transition={{ duration: 0.25, delay: Math.min(0.3 + index * 0.015, 0.6) }}
-                    >
-                      <div className="tsv-player-card">
-                        {teamLogoForDisplay && (
+                      <motion.div
+                        key={slotKey}
+                        className='tsv-player-item'
+                        initial={{ scale: 0.9, opacity: 0 }}
+                        animate={{ scale: 1, opacity: 1 }}
+                        transition={{
+                          duration: 0.25,
+                          delay: Math.min(0.3 + index * 0.015, 0.6),
+                        }}
+                      >
+                        <div className='tsv-player-card'>
+                          {teamLogoForDisplay && (
+                            <img
+                              src={teamLogoForDisplay}
+                              alt=''
+                              className='tsv-player-team-watermark'
+                              onError={(e) => {
+                                (e.target as HTMLImageElement).style.display =
+                                  'none';
+                              }}
+                            />
+                          )}
                           <img
-                            src={teamLogoForDisplay}
-                            alt=""
-                            className="tsv-player-team-watermark"
-                            onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                            src={slotImage}
+                            alt={slotName}
+                            className='tsv-player-image'
+                            loading='eager'
+                            style={{
+                              cursor:
+                                isPlayer && slot.player.imageUrl
+                                  ? 'pointer'
+                                  : undefined,
+                            }}
+                            onClick={(e) => {
+                              if (isPlayer && slot.player.imageUrl) {
+                                e.stopPropagation();
+                                setLightboxSrc(slot.player.imageUrl);
+                              }
+                            }}
+                            onError={(e) => {
+                              (e.target as HTMLImageElement).src =
+                                playerPlaceholderImage;
+                            }}
                           />
-                        )}
-                        <img
-                          src={slotImage}
-                          alt={slotName}
-                          className="tsv-player-image"
-                          loading="eager"
-                          style={{ cursor: isPlayer && slot.player.imageUrl ? 'pointer' : undefined }}
-                          onClick={(e) => {
-                            if (isPlayer && slot.player.imageUrl) {
-                              e.stopPropagation();
-                              setLightboxSrc(slot.player.imageUrl);
-                            }
-                          }}
-                          onError={(e) => { (e.target as HTMLImageElement).src = playerPlaceholderImage; }}
-                        />
-                        <div className="tsv-player-footer">
-                          <span className="tsv-player-role">{slotRole}</span>
-                          <span className="tsv-player-name">{slotName}</span>
-                          <div className="tsv-player-meta-row">
-                            <span className="tsv-player-meta">
-                              {playerMetaText}
-                            </span>
-                            <span className="tsv-player-amount">
-                              {slotAmount}
-                            </span>
+                          {/* <img
+                            src={displayUrl}
+                            alt={playerName}
+                            className={`al-vib-player-image${imageReady ? ' is-ready' : ''}`}
+                            onLoad={() => setImageReady(true)}
+                            onError={() => {
+                              if (displayUrl !== placeholderUrl) {
+                                setImageReady(false);
+                                setDisplayUrl(placeholderUrl);
+                                return;
+                              }
+                              setImageReady(true);
+                            }}
+                          /> */}
+                          <div className='tsv-player-footer'>
+                            <span className='tsv-player-role'>{slotRole}</span>
+                            <span className='tsv-player-name'>{slotName}</span>
+                            <div className='tsv-player-meta-row'>
+                              <span className='tsv-player-meta'>
+                                {playerMetaText}
+                              </span>
+                              <span className='tsv-player-amount'>
+                                {slotAmount}
+                              </span>
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    </motion.div>
+                      </motion.div>
                     );
                   })}
                 </div>

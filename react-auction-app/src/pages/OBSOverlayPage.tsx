@@ -32,8 +32,10 @@ const FB_CONFIG = {
   appId:       '1:830797180032:web:a0f0a92678ecc36fedca65',
 };
 const OBS_APP_NAME = 'obs-overlay';
+// console.log('[OBSOverlay] Initializing Firebase app for OBS overlay:', OBS_APP_NAME, getApps());
 const obsApp = getApps().find((a) => a.name === OBS_APP_NAME) ?? initializeApp(FB_CONFIG, OBS_APP_NAME);
 const obsDb  = getDatabase(obsApp);
+
 // Paths are resolved dynamically at subscribe-time so TenantGate's
 // `setActiveTenant()` has already run and the tenant id uses the
 // canonical form (underscores, not hyphens from the URL slug).
@@ -43,6 +45,8 @@ interface OverlayPlayer {
   id: string; name: string; role: string;
   imageUrl: string; basePrice: number;
   age?: number | null;
+  place?:string | null;
+  dateOfBirth?: string | null;
   battingStyle?: string; bowlingStyle?: string;
   matches?: string; runs?: string; wickets?: string;
   battingBestFigures?: string; bowlingBestFigures?: string;
@@ -57,6 +61,7 @@ interface OverlayPlayer {
     bestBowling: string; economy: string; average: string; strikeRate: string;
     threeWickets: string; fiveWickets: string; maidens: string; runs: string;
   };
+  customStats?: Record<string, unknown>;
 }
 interface OverlayTeam {
   id: string; name: string; logoUrl: string;
@@ -94,6 +99,7 @@ const roleLabel = (r: string) => {
     batsman: 'BATTER', batter: 'BATTER', bowler: 'BOWLER',
     'all-rounder': 'ALL-ROUNDER', allrounder: 'ALL-ROUNDER',
     'wicket-keeper': 'WICKET-KEEPER', wicketkeeper: 'WICKET-KEEPER',
+    'raider': 'RAIDER', raiders: 'RAIDER', defender: 'DEFENDER',
   };
   return m[r?.toLowerCase()] ?? r?.toUpperCase() ?? 'PLAYER';
 };
@@ -408,13 +414,17 @@ export default function OBSOverlayPage({ browserMode = false }: { readonly brows
     const pathSponsors = tenantPath('auction/sponsors');
     const pathAdminSet = tenantPath('auction/adminSettings');
 
+    // console.log('[OBSOverlay] Subscribing to RTDB paths:', pathState, pathControl, pathSponsors, pathAdminSet);
+    // console.log('[OBSOverlay] Subscribed to state path:', state, pathState);
     const unsubState = onValue(
       ref(obsDb, pathState),
       (snap) => {
+        console.log('[OBSOverlay] State snapshot received:', snap.val());
         setConnected(true);
         if (!snap.exists()) return;
         const s = snap.val() as OverlayState;
         setState(s);
+        console.log('[OBSOverlay] Received state update:', s);
         const ov = s.activeOverlay;
         if ((ov === 'sold' || ov === 'unsold') && !animatingRef.current) {
           // Build a unique key for this player+overlay to avoid re-triggering
@@ -447,6 +457,7 @@ export default function OBSOverlayPage({ browserMode = false }: { readonly brows
       },
       (err) => console.error('[OBSOverlay] state error:', err)
     );
+    console.log('[OBSOverlay] Subscribed to state path:', state, pathState);
     const unsubControl = onValue(
       ref(obsDb, pathControl),
       (snap) => {
@@ -535,6 +546,7 @@ export default function OBSOverlayPage({ browserMode = false }: { readonly brows
 
   // Show recent bid panel briefly, then hide to keep only active team card visible.
   useEffect(() => {
+    console.log('[OBSOverlay] currentPlayer changed:', currentPlayer, 'hasPlayer:', currentBid, 'latestBidKey:', latestBidKey, 'latestVisibleBidKeyRef:', latestVisibleBidKeyRef.current);
     if (!hasPlayer || !latestBidKey) {
       setShowRecentBid(false);
       return;
@@ -632,7 +644,7 @@ export default function OBSOverlayPage({ browserMode = false }: { readonly brows
         {!currentPlayer && !activeOverlay && !isBreak && (
           <motion.div className="obs-standby" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
             <span className="obs-standby__dot" />
-            <span className="obs-standby__text">OVERLAY ACTIVE · STANDBY</span>
+            <span className="obs-standby__text">OVERLAY ACTIVE · STANDBY {JSON.stringify(currentPlayer)} {JSON.stringify(activeOverlay)}</span>
           </motion.div>
         )}
       </AnimatePresence>

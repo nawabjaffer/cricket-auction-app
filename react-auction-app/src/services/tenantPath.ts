@@ -16,7 +16,7 @@
 // is transparently treated as belonging to the default tenant.
 // ============================================================================
 
-export const DEFAULT_TENANT_ID = 'epl_2026';
+export const DEFAULT_TENANT_ID = 'pkl_2026';
 
 /** Allow-listed characters in a tenant id/slug: letters, digits, `_`, `-`. */
 const TENANT_ID_PATTERN = /^[a-zA-Z0-9_-]+$/;
@@ -62,6 +62,7 @@ export function getActiveTenant(): string {
 
 /** Returns `tenants/{activeTenantId}/{relativePath}`. */
 export function tenantPath(relativePath: string): string {
+  console.log('[tenantPath] Resolving tenant path for active tenant:', _activeTenantId, 'relativePath:', relativePath);
   const clean = (relativePath ?? '').replace(/^\/+/, '');
   return `tenants/${_activeTenantId}/${clean}`;
 }
