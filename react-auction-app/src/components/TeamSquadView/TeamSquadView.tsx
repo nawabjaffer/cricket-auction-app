@@ -591,20 +591,6 @@ export function TeamSquadView({
                                 playerPlaceholderImage;
                             }}
                           />
-                          {/* <img
-                            src={displayUrl}
-                            alt={playerName}
-                            className={`al-vib-player-image${imageReady ? ' is-ready' : ''}`}
-                            onLoad={() => setImageReady(true)}
-                            onError={() => {
-                              if (displayUrl !== placeholderUrl) {
-                                setImageReady(false);
-                                setDisplayUrl(placeholderUrl);
-                                return;
-                              }
-                              setImageReady(true);
-                            }}
-                          /> */}
                           <div className='tsv-player-footer'>
                             <span className='tsv-player-role'>{slotRole}</span>
                             <span className='tsv-player-name'>{slotName}</span>
