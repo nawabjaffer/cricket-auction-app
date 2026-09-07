@@ -3,7 +3,7 @@
 // Manage auction configuration, teams, players, theme, and export data
 // ============================================================================
 
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 import { IoClose, IoSave, IoRefresh, IoDownload, IoVideocam, IoAdd, IoTrash, IoArrowUp, IoArrowDown, IoSearch, IoStatsChart, IoCloudUpload } from 'react-icons/io5';
@@ -722,6 +722,25 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
     }
   };
 
+  const handleApplyTeamBudgetDefaults = useCallback((defaults: { totalBudget: number; playerThreshold: number }) => {
+    const nextTeams = editingTeams.map((team) => {
+      const spent = soldPlayers
+        .filter((sold) => sold.teamId === team.id || sold.teamName === team.name)
+        .reduce((sum, sold) => sum + (sold.soldAmount || 0), 0);
+      const allocatedAmount = Math.max(0, defaults.totalBudget, spent);
+      const playersBought = team.playersBought || 0;
+      return {
+        ...team,
+        allocatedAmount,
+        totalPlayerThreshold: Math.max(playersBought, defaults.playerThreshold),
+        remainingPurse: Math.max(0, allocatedAmount - spent),
+        remainingPlayers: Math.max(0, Math.max(playersBought, defaults.playerThreshold) - playersBought),
+      };
+    });
+    setEditingTeams(nextTeams);
+    showUploadFeedback(`Applied ${defaults.totalBudget}${currencySuffix} budget and ${defaults.playerThreshold} player slots to ${nextTeams.length} teams.`);
+  }, [editingTeams, soldPlayers, currencySuffix]);
+
   const handleDeleteTeam = (index: number) => {
     const teamToDelete = editingTeams[index];
     if (!teamToDelete) return;
@@ -831,10 +850,10 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
       ownerCompany: '',
       brandTagline: '',
       playersBought: 0,
-      totalPlayerThreshold: 11,
-      remainingPlayers: 11,
-      allocatedAmount: 0,
-      remainingPurse: 0,
+      totalPlayerThreshold: loadedAdminSettings?.budgetRules?.maxPlayersAllowed ?? 15,
+      remainingPlayers: loadedAdminSettings?.budgetRules?.maxPlayersAllowed ?? 15,
+      allocatedAmount: loadedAdminSettings?.budgetRules?.totalBudgetPerTeam ?? 100,
+      remainingPurse: loadedAdminSettings?.budgetRules?.totalBudgetPerTeam ?? 100,
       highestBid: 0,
       captain: '',
       underAgePlayers: 0,
@@ -2914,6 +2933,7 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
                       sport={selectedSport}
                       currencySuffix={currencySuffix}
                       onChange={(partial) => { extendedSettingsRef.current = partial; }}
+                      onApplyTeamDefaults={handleApplyTeamBudgetDefaults}
                     />
                   </div>
 

@@ -428,6 +428,7 @@ body.obs-overlay-host #root {
    BID HISTORY — Floating above player card
    ═══════════════════════════════════════════════════════════════════════════ */
 .obs-bid-history {
+  display: none;
   position: absolute;
   bottom: 282px;
   left: 50%;
@@ -658,7 +659,7 @@ body.obs-overlay-host #root {
 /* Blue gradient that fades the image out toward the top (around the ears) */
 .obsb__img-grad {
   position: absolute;
-  inset: 0;
+  inset: 1;
   background:
     linear-gradient(180deg, color-mix(in srgb, var(--obsb-accent) 92%, #000) 0%, color-mix(in srgb, var(--obsb-accent) 30%, transparent) 34%, transparent 60%),
     linear-gradient(0deg, rgba(3, 8, 24, 0.55) 0%, transparent 40%);
@@ -666,7 +667,7 @@ body.obs-overlay-host #root {
 }
 .obsb__img-role {
   position: absolute;
-  top: 12px;
+  bottom: 12px;
   left: 50%;
   transform: translateX(-50%);
   font-size: 0.72rem;
@@ -712,14 +713,14 @@ body.obs-overlay-host #root {
   background: linear-gradient(135deg, color-mix(in srgb, var(--obsb-accent) 30%, transparent), transparent);
 }
 .obsb__box-lbl {
-  font-size: 0.62rem;
-  font-weight: 700;
+  font-size: 1rem;
+  font-weight: 800;
   letter-spacing: 0.16em;
   color: rgba(255, 255, 255, 0.55);
 }
 .obsb__box-val {
-  font-size: 1.15rem;
-  font-weight: 800;
+  font-size: 1.5rem;
+  font-weight: 1000;
   color: #fff;
 }
 .obsb__box--base .obsb__box-val { color: #fbbf24; }
@@ -753,18 +754,34 @@ body.obs-overlay-host #root {
 }
 .obsb__meta-cell:last-child { border-right: none; }
 .obsb__meta-lbl {
-  font-size: 0.56rem;
-  font-weight: 700;
+  font-size: 0.8rem;
+  font-weight: 800;
   letter-spacing: 0.12em;
   color: rgba(255, 255, 255, 0.5);
 }
 .obsb__meta-val {
   font-size: 0.82rem;
-  font-weight: 700;
+  font-weight: 800;
   color: #e8eefc;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.team-bid-overlay {
+  /* Add your styles for the team bid overlay here */
+  position: absolute;
+    bottom: 10%;
+    left: 50%;
+    z-index: 100;
+    pointer-events: none;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+
+    &.obs {
+      transform: translateX(-50%) !important;
+    }
 }
 
 /* ── Center: BIG current bid ── */
@@ -855,16 +872,16 @@ body.obs-overlay-host #root {
   border-top: 1px solid rgba(255, 255, 255, 0.08);
 }
 .obsb__stat-val {
-  font-size: 1.35rem;
-  font-weight: 900;
+  font-size: 2rem;
+  font-weight: 1000;
   color: #fbbf24;
   line-height: 1;
 }
 .obsb__stat-lbl {
-  font-size: 0.56rem;
-  font-weight: 700;
+  font-size: 0.8rem;
+  font-weight: 800;
   letter-spacing: 0.1em;
-  color: rgba(255, 255, 255, 0.6);
+  color: rgba(255, 255, 255, 1);
 }
 
 /* ── Bottom broadcast marquee ── */
@@ -930,8 +947,59 @@ body.obs-overlay-host #root {
 
 /* Scale down gracefully below 1600px so it fits 720p sources too */
 @media (max-width: 1600px) {
-  .obsb__img { width: 200px; height: 250px; }
+  .obsb__img { width: 220px; height: 284px; }
   .obsb__bid-value { font-size: 4.2rem; }
   .obsb__lower { grid-template-columns: auto minmax(280px, 320px) 1fr auto; }
   .obsb__stats { min-width: 260px; }
+}
+
+
+
+.score-obs__top-bar {
+  position: absolute;
+  top: -580px;
+  left: 10px;
+  right: 10px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  z-index: 5;
+}
+
+.score-obs__top-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.score-obs__tournament-logo {
+  width: 100px;
+    height: 100px;
+    -o-object-fit: contain;
+    object-fit: contain;
+    border-radius: 10px;
+    margin: 20px;
+}
+
+.score-obs__tournament-name {
+  font-size: 18px;
+  font-weight: 700;
+  color: #fbbf24;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.6);
+}
+
+.score-obs__top-right {
+  display: flex;
+  flex-direction: column-reverse;
+  align-items: center;
+}
+
+.score-obs__live-badge {
+  padding: 4px 14px;
+  background: rgba(239, 68, 68, 0.9);
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  animation: obs-pulse 2s ease-in-out infinite;
 }

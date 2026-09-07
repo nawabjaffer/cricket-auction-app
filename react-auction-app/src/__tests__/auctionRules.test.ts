@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { AuctionRulesService } from '../services/auctionRules';
+import { calculateBudgetPreflight } from '../components/AdminPanel/ThemeSettingsExtended';
 import type { Team } from '../types';
 
 const defaultConfig = {
@@ -208,5 +209,35 @@ describe('AuctionRulesService', () => {
       expect(rules.underAgeLimit).toBe(19);
       expect(rules.maxUnderAgePlayers).toBe(2);
     });
+  });
+});
+
+describe('Budget rule preflight', () => {
+  const baseRules = {
+    totalBudgetPerTeam: 100,
+    maxBidPerPlayer: 50,
+    minBidIncrement: 0.5,
+    maxBidIncrement: 10,
+    safeFundBufferPercent: 10,
+    minPlayersRequired: 7,
+    maxPlayersAllowed: 15,
+    reservedFundPerRemainingPlayer: 1,
+  };
+
+  it('calculates reserve and effective opening bid from common defaults', () => {
+    expect(calculateBudgetPreflight(baseRules)).toEqual({
+      minimumReserve: 7,
+      openingMaxBid: 94,
+      effectiveMaxBid: 50,
+      isViable: true,
+    });
+  });
+
+  it('flags a budget that cannot reserve the minimum squad', () => {
+    expect(calculateBudgetPreflight({ ...baseRules, totalBudgetPerTeam: 6 }).isViable).toBe(false);
+  });
+
+  it('flags inconsistent squad and increment constraints', () => {
+    expect(calculateBudgetPreflight({ ...baseRules, maxPlayersAllowed: 5, maxBidIncrement: 0.25 }).isViable).toBe(false);
   });
 });

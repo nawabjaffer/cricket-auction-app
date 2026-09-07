@@ -250,6 +250,7 @@
   height: 68px;
   border-radius: 20px;
   display: flex;
+  z-index: -2;
   align-items: center;
   justify-content: center;
   background: rgba(255,255,255,0.12);
@@ -272,6 +273,7 @@
 
 .cb-team-bid-name {
   font-size: 0.86rem;
+  z-index: -2;
 }
 
 .cb-team-bid-hint {
@@ -294,6 +296,7 @@
 .cb-bid-context__player,
 .cb-bid-context__leader {
   display: flex;
+  flex-direction: column;
   align-items: center;
   gap: 0.5rem;
   min-width: 0;
@@ -303,22 +306,29 @@
 .cb-bid-context small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cb-bid-context strong { font-size: 0.76rem; }
 .cb-bid-context small { margin-top: 2px; color: rgba(255,255,255,0.6); font-size: 0.62rem; }
-.cb-team-bid-max { font-size: 0.7rem; color: #fbbf24; font-weight: 800; }
+
+.cb-team-bid-max {
+  font-size: 0.8rem;
+  color: #fbbf24;
+  font-weight: 900;
+  background: #000;
+  border-radius: 10%;
+  padding: 0px 4px;
+}
+
 .cb-team-bid-blocked {
   position: absolute;
-  top: 0.55rem;
-  left: 0.6rem;
-  display: grid;
-  place-items: center;
-  width: 1.35rem;
-  height: 1.35rem;
-  border-radius: 50%;
-  background: rgba(239,68,68,0.92);
-  color: #fff;
-  font-size: 1rem;
-  font-weight: 900;
-  line-height: 1;
-  z-index: 2;
+    display: grid;
+    place-items: center;
+    width: 10rem;
+    height: 12.4rem;
+    border-radius: 7%;
+    background: rgba(239, 68, 68, 0.92);
+    color: #fff;
+    font-size: 164px;
+    font-weight: 900;
+    line-height: 1;
+    z-index: -1;
 }
 
 /* ── Login Form ── */
@@ -2151,6 +2161,10 @@
    DESKTOP BREAKPOINT (min-width: 1024px)
    ═══════════════════════════════════════════════════════ */
 @media (min-width: 1024px) {
+  .cb-team-bid-blocked {
+    width: 8rem;
+    height: 12.4rem;
+  }
   .cb-login-page {
     justify-content: center;
   }
@@ -2226,6 +2240,10 @@
    WIDE DESKTOP (min-width: 1400px)
    ═══════════════════════════════════════════════════════ */
 @media (min-width: 1400px) {
+  .cb-team-bid-blocked {
+    width: 7rem;
+    height: 13.4rem;
+  }
   .cb-login-scroll {
     max-width: 1100px;
   }
@@ -2631,6 +2649,10 @@
 @media (min-width: 768px) {
   .cb-wishlist-tab { padding: 1.5rem 1.25rem 6rem; }
   .cb-wishlist-pool { max-height: 60vh; }
+  .cb-team-bid-blocked {
+    width: 10rem;
+    height: 11rem;
+  }
 }
 
 /* ═══════════════════════════════════════════════════════

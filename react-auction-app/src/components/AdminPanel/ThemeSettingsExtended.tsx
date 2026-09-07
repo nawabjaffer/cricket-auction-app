@@ -41,9 +41,33 @@ interface ThemeSettingsExtendedProps {
   readonly teams: Team[];
   readonly sport?: string;
   readonly currencySuffix?: string;
+  /** Apply the common budget defaults to every configured team. */
+  readonly onApplyTeamDefaults?: (defaults: { totalBudget: number; playerThreshold: number }) => void;
 }
 
-export function ThemeSettingsExtended({ settings, onChange, teams, sport = 'cricket', currencySuffix = 'L' }: ThemeSettingsExtendedProps) {
+export function calculateBudgetPreflight(rules: BudgetRulesConfig): {
+  minimumReserve: number;
+  openingMaxBid: number;
+  effectiveMaxBid: number;
+  isViable: boolean;
+} {
+  const minimumReserve = Math.max(0, rules.minPlayersRequired) * Math.max(0, rules.reservedFundPerRemainingPlayer);
+  const openingMaxBid = Math.max(
+    0,
+    rules.totalBudgetPerTeam - Math.max(0, rules.minPlayersRequired - 1) * Math.max(0, rules.reservedFundPerRemainingPlayer),
+  );
+  return {
+    minimumReserve,
+    openingMaxBid,
+    effectiveMaxBid: Math.min(openingMaxBid, Math.max(0, rules.maxBidPerPlayer)),
+    isViable: rules.totalBudgetPerTeam >= minimumReserve
+      && rules.maxPlayersAllowed >= rules.minPlayersRequired
+      && rules.minBidIncrement > 0
+      && rules.maxBidIncrement >= rules.minBidIncrement,
+  };
+}
+
+export function ThemeSettingsExtended({ settings, onChange, teams, sport = 'cricket', currencySuffix = 'L', onApplyTeamDefaults }: ThemeSettingsExtendedProps) {
   const currentSportKey = (sport || settings?.sport || 'cricket').toLowerCase();
   const prevSportRef = useRef<string>(currentSportKey);
 
@@ -62,8 +86,10 @@ export function ThemeSettingsExtended({ settings, onChange, teams, sport = 'cric
 
   // Budget Rules
   const [budgetRules, setBudgetRules] = useState<BudgetRulesConfig>(
-    settings?.budgetRules ?? DEFAULT_BUDGET_RULES
+    { ...DEFAULT_BUDGET_RULES, ...settings?.budgetRules }
   );
+
+  const budgetPreflight = useMemo(() => calculateBudgetPreflight(budgetRules), [budgetRules]);
 
   // Auction Breaks
   const [auctionBreaks, setAuctionBreaks] = useState<AuctionBreak[]>(
@@ -107,7 +133,7 @@ export function ThemeSettingsExtended({ settings, onChange, teams, sport = 'cric
     if (settings.playerStatsFields) setPlayerStatsFields(settings.playerStatsFields);
     if (settings.enableSpecialCategories != null) setEnableSpecialCategories(settings.enableSpecialCategories);
     if (settings.specialCategories) setSpecialCategories(settings.specialCategories);
-    if (settings.budgetRules) setBudgetRules(settings.budgetRules);
+    if (settings.budgetRules) setBudgetRules({ ...DEFAULT_BUDGET_RULES, ...settings.budgetRules });
     if (settings.auctionBreaks) setAuctionBreaks(settings.auctionBreaks);
     if (settings.currentBreakId != null) setCurrentBreakId(settings.currentBreakId);
     if (settings.loadingScreen) setLoadingScreen(settings.loadingScreen);
@@ -442,6 +468,22 @@ export function ThemeSettingsExtended({ settings, onChange, teams, sport = 'cric
               onChange={e => setBudgetRules(prev => ({ ...prev, reservedFundPerRemainingPlayer: Number(e.target.value) }))}
               className="admin-input" />
           </div>
+        </div>
+        <div className={`admin-budget-preflight ${budgetPreflight.isViable ? 'is-valid' : 'is-invalid'}`}>
+          <div>
+            <strong>{budgetPreflight.isViable ? 'Auction constraints look viable' : 'Review auction constraints'}</strong>
+            <span>Minimum reserve: {budgetPreflight.minimumReserve.toFixed(1)}{currencySuffix} · Opening max bid: {budgetPreflight.openingMaxBid.toFixed(1)}{currencySuffix} · Effective player cap: {budgetPreflight.effectiveMaxBid.toFixed(1)}{currencySuffix}</span>
+          </div>
+          {onApplyTeamDefaults && (
+            <button
+              type="button"
+              className="admin-btn admin-btn-secondary admin-btn-sm"
+              onClick={() => onApplyTeamDefaults({ totalBudget: budgetRules.totalBudgetPerTeam, playerThreshold: budgetRules.maxPlayersAllowed })}
+              disabled={teams.length === 0}
+            >
+              Apply budget & squad defaults to {teams.length} teams
+            </button>
+          )}
         </div>
       </div>
 

@@ -30,6 +30,29 @@
   line-height: 1.5;
 }
 
+.admin-budget-preflight {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: 1rem;
+  padding: 0.85rem 1rem;
+  border: 1px solid rgba(59, 130, 246, 0.25);
+  border-radius: 8px;
+  background: rgba(59, 130, 246, 0.08);
+  color: #0f172a;
+}
+.admin-budget-preflight.is-invalid {
+  border-color: rgba(239, 68, 68, 0.4);
+  background: rgba(239, 68, 68, 0.08);
+}
+.admin-budget-preflight strong,
+.admin-budget-preflight span { display: block; }
+.admin-budget-preflight span { margin-top: 0.25rem; font-size: 0.78rem; opacity: 0.72; }
+@media (max-width: 700px) {
+  .admin-budget-preflight { align-items: stretch; flex-direction: column; }
+}
+
 /* Checkbox grid for stat fields */
 .admin-checkbox-grid {
   display: grid;

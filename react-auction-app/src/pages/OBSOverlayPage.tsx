@@ -21,6 +21,7 @@ import type { Player, Team, PlayerRole } from '../types';
 import type { SponsorRecord, AdminSettings } from '../services/auctionPersistence';
 import { tenantPath } from '../services/tenantPath';
 import './OBSOverlayPage.css';
+import { useOrganizerLogo, useOrganizerName } from '../store';
 
 // ── Firebase: module-level synchronous init ──────────────────────────────────
 const FB_CONFIG = {
@@ -242,81 +243,283 @@ function BroadcastPlayerCard({
   const stats = cricHeroesStats(player);
   const meta = metaRow(player);
   const hasBid = !!selectedTeam && currentBid > 0;
+  const organizerLogo = useOrganizerLogo();
+  const organizerName = useOrganizerName();
 
   return (
-    <motion.div className="obsb"
+    <motion.div
+      className='obsb'
       style={{ '--obsb-accent': accent } as React.CSSProperties}
       initial={{ opacity: 0, y: 120 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: 100 }}
-      transition={{ type: 'spring', stiffness: 240, damping: 26 }}>
-
-      <div className="obsb__lower">
-        {/* Left: player image with blue gradient (fades near the ears/top) */}
-        <div className="obsb__img">
-          {playerImgSrc ? (
-            <img src={playerImgSrc} alt={player.name} className="obsb__img-el"
-              onError={(e) => { (e.target as HTMLImageElement).style.opacity = '0'; }} />
-          ) : (
-            <div className="obsb__img-fallback">{player.name.charAt(0).toUpperCase()}</div>
+      transition={{ type: 'spring', stiffness: 240, damping: 26 }}
+    >
+      <motion.div
+        className='score-obs__top-bar'
+        initial={{ y: -40, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        transition={{ type: 'spring', stiffness: 200, damping: 28, delay: 0.2 }}
+      >
+        <div className='score-obs__top-left'>
+          {organizerLogo && (
+            <img
+              src={organizerLogo}
+              alt={organizerName}
+              className='score-obs__tournament-logo'
+            />
           )}
-          <div className="obsb__img-grad" />
-          <div className="obsb__img-role">{roleLabel(player.role)}</div>
+        </div>
+      </motion.div>
+
+      <div className='obsb__lower'>
+        {/* Left: player image with blue gradient (fades near the ears/top) */}
+        <div className='obsb__img'>
+          {playerImgSrc ? (
+            <img
+              src={playerImgSrc}
+              alt={player.name}
+              className='obsb__img-el'
+              onError={(e) => {
+                (e.target as HTMLImageElement).style.opacity = '0';
+              }}
+            />
+          ) : (
+            <div className='obsb__img-fallback'>
+              {player.name.charAt(0).toUpperCase()}
+            </div>
+          )}
+          <div className='obsb__img-grad' />
+          <div className='obsb__img-role'>{roleLabel(player.role)}</div>
         </div>
 
         {/* Middle: round + base boxes, name, meta row */}
-        <div className="obsb__mid">
-          <div className="obsb__topboxes">
-            <div className="obsb__box obsb__box--round">
-              <span className="obsb__box-lbl">PLAYER</span>
-              <span className="obsb__box-val">#{(player.id || '').replace(/\D/g, '').slice(-3) || '—'}</span>
+        <div className='obsb__mid'>
+          <div className='obsb__topboxes'>
+            <div className='obsb__box obsb__box--round'>
+              <span className='obsb__box-lbl'>PLAYER</span>
+              <span className='obsb__box-val'>
+                #{(player.id || '').replace(/\D/g, '').slice(-3) || '—'}
+              </span>
             </div>
-            <div className="obsb__box obsb__box--base">
-              <span className="obsb__box-lbl">BASE PRICE</span>
-              <span className="obsb__box-val">{fmt(player.basePrice)}</span>
+            <div className='obsb__box obsb__box--base'>
+              <span className='obsb__box-lbl'>BASE PRICE</span>
+              <span className='obsb__box-val'>{fmt(player.basePrice)}</span>
             </div>
           </div>
-          <div className="obsb__name">{player.name}</div>
-          <div className="obsb__meta">
+          <div className='obsb__name'>{player.name}</div>
+          <div className='obsb__meta'>
             {meta.map((m) => (
-              <div key={m.label} className="obsb__meta-cell">
-                <span className="obsb__meta-lbl">{m.label}</span>
-                <span className="obsb__meta-val">{m.value}</span>
+              <div key={m.label} className='obsb__meta-cell'>
+                <span className='obsb__meta-lbl'>{m.label}</span>
+                <span className='obsb__meta-val'>{m.value}</span>
               </div>
             ))}
           </div>
         </div>
 
         {/* Center: BIG current bid */}
-        <div className="obsb__bidwrap">
-          <div className="obsb__bid-label">{hasBid ? 'CURRENT BID' : 'BASE PRICE'}</div>
-          <motion.div className="obsb__bid-value"
+
+        {/* existing one deprecated fro new ui*/}
+        {
+          <div className='obsb__bidwrap'>
+            <AnimatePresence>
+              {hasBid && (
+                <motion.div
+                  className='team-bid-overlay obs'
+                  initial={{ opacity: 0, y: 40, scale: 0.85 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: -30, scale: 0.9 }}
+                  transition={{ type: 'spring', damping: 22, stiffness: 280 }}
+                >
+                  {/* Paddle Logo — rises above the card */}
+                  <motion.div
+                    className='team-bid-paddle'
+                    key={`paddle-${selectedTeam.id}-${currentBid}`}
+                    initial={{ y: -60, scale: 0.8, opacity: 0, rotate: -20 }}
+                    animate={{ y: -20, scale: 1.4, opacity: 1, rotate: 0 }}
+                    transition={{
+                      type: 'spring',
+                      stiffness: 350,
+                      damping: 16,
+                      delay: 0.1,
+                    }}
+                  >
+                    <motion.div
+                      className='team-bid-paddle-inner'
+                      animate={{ y: [0, -1, 0], scale: [1.0, 1.4, 1.0] }}
+                      transition={{
+                        duration: 2.2,
+                        repeat: Infinity,
+                        ease: 'easeInOut',
+                      }}
+                    >
+                      {teamLogoSrc && (
+                        <img
+                          src={teamLogoSrc}
+                          alt=''
+                          className='team-bid-paddle-logo'
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).style.display =
+                              'none';
+                          }}
+                        />
+                      )}
+                    </motion.div>
+                    <div className='team-bid-paddle-stick' />
+                    {/* Glow ring */}
+                    <motion.div
+                      className='team-bid-paddle-glow'
+                      animate={{ y: [-8, -8, -8] }}
+                      transition={{
+                        duration: 2.2,
+                        repeat: Infinity,
+                        ease: 'easeInOut',
+                      }}
+                    />
+                  </motion.div>
+
+                  <div className='team-bid-card'>
+                    {/* Blurred team logo background */}
+                    {teamLogoSrc && (
+                      <img
+                        src={teamLogoSrc}
+                        alt=''
+                        className='team-bid-bg-logo'
+                        aria-hidden='true'
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).style.display = 'none';
+                        }}
+                      />
+                    )}
+                    <div className='team-bid-header-row'>
+                      {teamLogoSrc && (
+                        <img
+                          src={teamLogoSrc}
+                          alt=''
+                          className='team-bid-logo'
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).style.display =
+                              'none';
+                          }}
+                        />
+                      )}
+                      <div className='team-bid-name'>{selectedTeam.name}</div>
+                    </div>
+                    {/* Bid amount — animated on change */}
+                    <motion.div
+                      className='team-bid-amount'
+                      key={`bid-${currentBid}`}
+                      initial={{ scale: 1.3, color: '#fbbf24' }}
+                      animate={{ scale: 1, color: '#ffffff' }}
+                      transition={{
+                        type: 'spring',
+                        stiffness: 300,
+                        damping: 15,
+                      }}
+                    >
+                      {fmt(hasBid ? currentBid : player.basePrice)}
+                    </motion.div>
+                  </div>
+
+                  {/* Ripple burst on new bid */}
+                  <motion.div
+                    className='team-bid-ripple'
+                    key={`ripple-${currentBid}`}
+                    initial={{ scale: 0.5, opacity: 0.8 }}
+                    animate={{ scale: 2.5, opacity: 0 }}
+                    transition={{ duration: 0.6, ease: 'easeOut' }}
+                  />
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* This section is commented out for now
+          <div className='obsb__bid-label'>
+            {hasBid ? 'CURRENT BID' : 'BASE PRICE'}
+          </div>
+          {
+            // fmt(hasBid ? currentBid : player.basePrice)}
+
+            hasBid && (
+              <motion.div
+                className='team-bid-paddle'
+                key={`paddle-${selectedTeam!.id}-${currentBid}`}
+                initial={{ y: -60, scale: 0.8, opacity: 0, rotate: -20 }}
+                animate={{ y: -20, scale: 1.4, opacity: 1, rotate: 0 }}
+                transition={{
+                  type: 'spring',
+                  stiffness: 350,
+                  damping: 16,
+                  delay: 0.1,
+                }}
+              >
+                <motion.div
+                  className='team-bid-paddle-inner'
+                  animate={{ y: [0, -1, 0], scale: [1.0, 1.4, 1.0] }}
+                  transition={{
+                    duration: 2.2,
+                    repeat: Infinity,
+                    ease: 'easeInOut',
+                  }}
+                >
+                  {teamLogoSrc && (
+                    <img
+                      src={teamLogoSrc}
+                      alt=''
+                      className='team-bid-paddle-logo'
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).style.display = 'none';
+                      }}
+                    />
+                  )}
+                </motion.div>
+                <div className='team-bid-paddle-stick' />
+
+                <motion.div
+                  className='team-bid-paddle-glow'
+                  animate={{ y: [-8, -8, -8] }}
+                  transition={{
+                    duration: 2.2,
+                    repeat: Infinity,
+                    ease: 'easeInOut',
+                  }}
+                />
+              </motion.div>
+            )
+
+            // (
+            //   <div className="obsb__bid-team">
+            //     {teamLogoSrc && <img src={teamLogoSrc} alt="" className="obsb__bid-team-logo"
+            //       onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />}
+            //     <span>{selectedTeam!.name}</span>
+            //   </div>
+            // )
+          }
+          <motion.div
+            className='obsb__bid-value'
             key={`bid-${hasBid ? currentBid : player.basePrice}`}
             initial={{ scale: 1.25, color: accent }}
             animate={{ scale: 1, color: '#ffffff' }}
-            transition={{ type: 'spring', stiffness: 300, damping: 15 }}>
+            transition={{ type: 'spring', stiffness: 300, damping: 15 }}
+          >
             {fmt(hasBid ? currentBid : player.basePrice)}
           </motion.div>
-          {hasBid && (
-            <div className="obsb__bid-team">
-              {teamLogoSrc && <img src={teamLogoSrc} alt="" className="obsb__bid-team-logo"
-                onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />}
-              <span>{selectedTeam!.name}</span>
-            </div>
-          )}
-        </div>
+          */}
+          </div>
+        }
 
         {/* Right: CricHeroes stats */}
         {stats.length > 0 && (
-          <div className="obsb__stats">
-            <div className="obsb__stats-title">
-              <span className="obsb__stats-dot" /> CRICHEROES STATS
+          <div className='obsb__stats'>
+            <div className='obsb__stats-title'>
+              <span className='obsb__stats-dot' /> PLAYER STATS
             </div>
-            <div className="obsb__stats-grid">
+            <div className='obsb__stats-grid'>
               {stats.map((s) => (
-                <div key={s.label} className="obsb__stat">
-                  <span className="obsb__stat-val">{s.value}</span>
-                  <span className="obsb__stat-lbl">{s.label}</span>
+                <div key={s.label} className='obsb__stat'>
+                  <span className='obsb__stat-val'>{s.value}</span>
+                  <span className='obsb__stat-lbl'>{s.label}</span>
                 </div>
               ))}
             </div>
@@ -776,7 +979,7 @@ export default function OBSOverlayPage({ browserMode = false }: { readonly brows
         )}
       </AnimatePresence>
 
-      {/* ── BID HISTORY (shown above the player card) ─────────────────── */}
+      {/* ── BID HISTORY hidden for better UX ───────────────────
       <AnimatePresence>
         {hasPlayer && latestBid && showRecentBid && (
           <motion.div className="obs-bid-history"
@@ -796,6 +999,7 @@ export default function OBSOverlayPage({ browserMode = false }: { readonly brows
           </motion.div>
         )}
       </AnimatePresence>
+      */}
 
       {/* ── SOLD / UNSOLD ANIMATION ─────────────────────────────────────── */}
       <AnimatePresence>
