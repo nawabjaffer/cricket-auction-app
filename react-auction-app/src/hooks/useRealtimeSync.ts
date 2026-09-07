@@ -360,18 +360,25 @@ export function useRealtimeMobileSync(enabled = true): RealtimeMobileSyncState {
     bowlingStats: syncState.currentPlayer.bowlingStats,
   } : null;
 
+  const selectedTeamRecord = syncState.selectedTeam
+    ? syncState.teams.find((team) => team.id === syncState.selectedTeam?.id)
+    : null;
+
   const selectedTeam: Team | null = syncState.selectedTeam ? {
     id: syncState.selectedTeam.id,
     name: syncState.selectedTeam.name,
     logoUrl: syncState.selectedTeam.logoUrl,
-    remainingPurse: 0,
-    playersBought: 0,
-    totalPlayerThreshold: 0,
-    remainingPlayers: 0,
-    allocatedAmount: 0,
-    highestBid: 0,
-    captain: '',
-    underAgePlayers: 0,
+    remainingPurse: selectedTeamRecord?.remainingPurse || 0,
+    playersBought: selectedTeamRecord?.playersBought || 0,
+    totalPlayerThreshold: selectedTeamRecord?.totalPlayerThreshold || 0,
+    remainingPlayers: Math.max(
+      0,
+      (selectedTeamRecord?.totalPlayerThreshold || 0) - (selectedTeamRecord?.playersBought || 0),
+    ),
+    allocatedAmount: selectedTeamRecord?.allocatedAmount || 0,
+    highestBid: selectedTeamRecord?.highestBid || 0,
+    captain: selectedTeamRecord?.captain || '',
+    underAgePlayers: selectedTeamRecord?.underAgePlayers || 0,
     primaryColor: syncState.selectedTeam.primaryColor,
     secondaryColor: syncState.selectedTeam.secondaryColor,
   } : null;
@@ -383,7 +390,10 @@ export function useRealtimeMobileSync(enabled = true): RealtimeMobileSyncState {
     remainingPurse: t.remainingPurse,
     playersBought: t.playersBought,
     totalPlayerThreshold: t.totalPlayerThreshold,
-    remainingPlayers: 0,
+    remainingPlayers: Math.max(
+      0,
+      (t.totalPlayerThreshold || 0) - (t.playersBought || 0),
+    ),
     allocatedAmount: t.allocatedAmount || 0,
     highestBid: t.highestBid || 0,
     captain: t.captain || '',

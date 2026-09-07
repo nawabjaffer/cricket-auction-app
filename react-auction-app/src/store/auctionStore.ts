@@ -81,7 +81,9 @@ function reconcileTeamsWithSoldPlayers(teams: Team[], soldPlayers: SoldPlayer[])
     const spent = soldForTeam.reduce((sum, p) => sum + (p.soldAmount || 0), 0);
     const allocatedAmount = Math.max(0, team.allocatedAmount || 0);
     const playersBought = soldForTeam.length;
-    const totalPlayerThreshold = team.totalPlayerThreshold || playersBought;
+    const totalPlayerThreshold = Number.isFinite(team.totalPlayerThreshold)
+      ? Math.max(0, team.totalPlayerThreshold)
+      : playersBought;
     const remainingPlayers = Math.max(totalPlayerThreshold - playersBought, 0);
     const highestBid = Math.max(0, ...soldForTeam.map((p) => p.soldAmount || 0));
 
@@ -436,6 +438,7 @@ export const useAuctionStore = create<AuctionStore>()(
             selectedTeam: null,
             bidHistory: [],
             lastBidTeamId: null,
+            activeOverlay: null,
             auctionState: {
               ...get().auctionState,
               currentPlayer: player,

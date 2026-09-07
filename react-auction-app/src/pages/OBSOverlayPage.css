@@ -5,6 +5,16 @@
    ============================================================================ */
 
 /* ── Container ── */
+html.obs-overlay-host,
+body.obs-overlay-host {
+  background: transparent !important;
+}
+body.obs-overlay-host #root {
+  max-width: none;
+  margin: 0;
+  padding: 0;
+}
+
 .obs-overlay {
   position: fixed;
   inset: 0;

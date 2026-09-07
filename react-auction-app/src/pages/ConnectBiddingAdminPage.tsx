@@ -21,6 +21,7 @@ import { tenantPath } from '../services/tenantPath';
 import { TeamLogo } from '../components/TeamLogo/TeamLogo';
 import { PlayerImage } from '../components/PlayerImage/PlayerImage';
 import { getRoleLabel, getRoleBadgeClass } from '../utils/playerStats';
+import { auctionRules } from '../services/auctionRules';
 import { useCurrencySuffix } from '../store';
 import '../components/MobileBidding/MobileBidding.css';
 
@@ -74,6 +75,7 @@ export default function ConnectBiddingAdminPage() {
     currentPlayer,
     currentBid,
     selectedTeam,
+    bidHistory,
     teams,
     auctionActive,
     isConnected,
@@ -366,6 +368,7 @@ export default function ConnectBiddingAdminPage() {
     () => teams.find((t) => t.id === teamSession?.teamId) || teams.find((t) => t.name === teamSession?.teamName) || null,
     [teams, teamSession],
   );
+  const lastBidTeamId = bidHistory[bidHistory.length - 1]?.teamId;
 
   const themePrimary = '#e4be75';
   const themeSecondary = '#24467c';
@@ -741,10 +744,28 @@ export default function ConnectBiddingAdminPage() {
               )}
             </div>
 
+            {currentPlayer && (
+              <div className="cb-bid-context" aria-live="polite">
+                <div className="cb-bid-context__player">
+                  <PlayerImage imageUrl={currentPlayer.imageUrl || ''} playerName={currentPlayer.name} size="sm" className="cb-player-img" />
+                  <span><strong>{currentPlayer.name}</strong><small>Current player</small></span>
+                </div>
+                <div className="cb-bid-context__leader">
+                  {selectedTeam?.logoUrl && <TeamLogo logoUrl={selectedTeam.logoUrl} teamName={selectedTeam.name} size="sm" />}
+                  <span><strong>{selectedTeam?.name || 'No bids yet'}</strong><small>{selectedTeam ? `Leading at ${formatLakhs(currentBid)}` : `Opening at ${formatLakhs(currentBid)}`}</small></span>
+                </div>
+              </div>
+            )}
+
             <div className="cb-team-card-grid cb-team-bid-grid">
               {(customizeOrderMode ? orderedTeamIds.map(id => orderedTeams.find(t => t.id === id)).filter((t): t is typeof orderedTeams[number] => !!t) : orderedTeams).map((team, index, arr) => {
                 const isLeading = selectedTeam?.id === team.id;
                 const canRaiseBid = !!currentPlayer && isConnected && auctionActive && !busyTeamId;
+                const maxBid = currentPlayer ? auctionRules.calculateMaxBid(team) : 0;
+                const nextBid = currentBid + 100;
+                const blockedByTurn = !!lastBidTeamId && lastBidTeamId === team.id;
+                const blockedByRules = !!currentPlayer && !auctionRules.validateBid(team, nextBid, currentPlayer.basePrice, currentPlayer.age).valid;
+                const isBlocked = !customizeOrderMode && (blockedByTurn || blockedByRules);
                 return (
                   <motion.button
                     key={team.id}
@@ -756,10 +777,11 @@ export default function ConnectBiddingAdminPage() {
                       position: 'relative',
                     } as React.CSSProperties}
                     whileTap={{ scale: canRaiseBid && !customizeOrderMode ? 0.96 : 1 }}
-                    disabled={!canRaiseBid && !customizeOrderMode}
+                    disabled={(!canRaiseBid || isBlocked) && !customizeOrderMode}
                     onClick={() => { if (!customizeOrderMode) handleRaiseBid(team.id, team.name); }}
                     aria-label={`Raise bid for ${team.name}`}
                   >
+                    {isBlocked && <span className="cb-team-bid-blocked" title={blockedByTurn ? 'The leading team must wait for another bid' : 'This team cannot afford or accept the next bid'} aria-label="Team cannot bid">&#8856;</span>}
                     {isLeading && !customizeOrderMode && (
                       <span className="cb-team-bid-badge">LEADING</span>
                     )}
@@ -771,6 +793,7 @@ export default function ConnectBiddingAdminPage() {
                       )}
                     </div>
                     <span className="cb-team-card-name cb-team-bid-name">{team.name}</span>
+                    {!customizeOrderMode && <span className="cb-team-bid-max">Max {formatLakhs(maxBid)}</span>}
                     {customizeOrderMode ? (
                       <div className="cb-team-reorder-controls" onClick={(e) => e.stopPropagation()}>
                         <button type="button" className="cb-reorder-btn" disabled={index === 0} onClick={() => moveTeamOrder(team.id, -1)} aria-label={`Move ${team.name} earlier`}>
@@ -782,7 +805,7 @@ export default function ConnectBiddingAdminPage() {
                       </div>
                     ) : (
                       <span className="cb-team-bid-hint">
-                        {busyTeamId === team.id ? 'Placing bid...' : 'Tap logo to raise bid'}
+                        {isBlocked ? (blockedByTurn ? 'Waiting for another team' : 'Cannot bid') : (busyTeamId === team.id ? 'Placing bid...' : 'Tap logo to raise bid')}
                       </span>
                     )}
                   </motion.button>

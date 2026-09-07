@@ -123,6 +123,15 @@ export default function ScoreOBSOverlayPage() {
   const preloadedUrlsRef = useRef(new Set<string>());
 
   useEffect(() => {
+    document.documentElement.classList.add('obs-overlay-host');
+    document.body.classList.add('obs-overlay-host');
+    return () => {
+      document.documentElement.classList.remove('obs-overlay-host');
+      document.body.classList.remove('obs-overlay-host');
+    };
+  }, []);
+
+  useEffect(() => {
     localOverlayRef.current = localOverlay;
   }, [localOverlay]);
 

@@ -148,6 +148,7 @@ export interface RealtimeAuctionState {
     remainingPurse: number;
     playersBought: number;
     totalPlayerThreshold: number;
+    remainingPlayers: number;
     primaryColor?: string;
     secondaryColor?: string;
     allocatedAmount?: number;
@@ -382,6 +383,7 @@ class RealtimeSyncService {
         remainingPurse: t.remainingPurse,
         playersBought: t.playersBought,
         totalPlayerThreshold: t.totalPlayerThreshold,
+        remainingPlayers: t.remainingPlayers,
         primaryColor: t.primaryColor,
         secondaryColor: t.secondaryColor,
         allocatedAmount: t.allocatedAmount,

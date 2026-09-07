@@ -393,6 +393,15 @@ export default function OBSOverlayPage({ browserMode = false }: { readonly brows
   // Dynamic currency format using admin-configured suffix
   const fmt = (n: number) => fmtWithSuffix(n, adminSettings?.currencySuffix || 'L');
 
+  useEffect(() => {
+    document.documentElement.classList.add('obs-overlay-host');
+    document.body.classList.add('obs-overlay-host');
+    return () => {
+      document.documentElement.classList.remove('obs-overlay-host');
+      document.body.classList.remove('obs-overlay-host');
+    };
+  }, []);
+
   // 'g' key to toggle TeamStandingsOverlay
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
