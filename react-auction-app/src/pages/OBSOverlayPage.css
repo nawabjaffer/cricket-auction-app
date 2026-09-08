@@ -955,7 +955,7 @@ body.obs-overlay-host #root {
 
 
 
-.score-obs__top-bar {
+.auction-obs__top-bar {
   position: absolute;
   top: -580px;
   left: 10px;
@@ -966,13 +966,13 @@ body.obs-overlay-host #root {
   z-index: 5;
 }
 
-.score-obs__top-left {
+.auction-obs__top-left {
   display: flex;
   align-items: center;
   gap: 10px;
 }
 
-.score-obs__tournament-logo {
+.auction-obs__tournament-logo {
   width: 100px;
     height: 100px;
     -o-object-fit: contain;
@@ -981,20 +981,20 @@ body.obs-overlay-host #root {
     margin: 20px;
 }
 
-.score-obs__tournament-name {
+.auction-obs__tournament-name {
   font-size: 18px;
   font-weight: 700;
   color: #fbbf24;
   text-shadow: 0 2px 8px rgba(0, 0, 0, 0.6);
 }
 
-.score-obs__top-right {
+.auction-obs__top-right {
   display: flex;
   flex-direction: column-reverse;
   align-items: center;
 }
 
-.score-obs__live-badge {
+.auction-obs__live-badge {
   padding: 4px 14px;
   background: rgba(239, 68, 68, 0.9);
   border-radius: 6px;

@@ -17,7 +17,8 @@ import SoldAnimation from '../components/Live/SoldAnimation';
 import { BreakOverlay } from '../components/Overlays/BreakOverlay';
 import { TeamStandingsOverlay } from '../components/Overlays/TeamStandingsOverlay';
 import { TopPicksOverlay } from '../components/Overlays/TopPicksOverlay';
-import type { Player, Team, PlayerRole } from '../types';
+import { TeamSquadView } from '../components/TeamSquadView';
+import type { Player, Team, PlayerRole, SoldPlayer } from '../types';
 import type { SponsorRecord, AdminSettings } from '../services/auctionPersistence';
 import { tenantPath } from '../services/tenantPath';
 import './OBSOverlayPage.css';
@@ -71,7 +72,13 @@ interface OverlayTeam {
   totalPlayerThreshold?: number;
   highestBid?: number;
   captain?: string;
+  iconicPlayers?: string[];
+  allocatedAmount?: number;
+  underAgePlayers?: number;
   primaryColor?: string; secondaryColor?: string;
+  brandLogoUrl?: string;
+  ownerCompany?: string;
+  brandTagline?: string;
 }
 interface BidHistoryEntry {
   teamId: string; teamName: string; teamLogoUrl?: string;
@@ -577,8 +584,6 @@ export default function OBSOverlayPage({ browserMode = false }: { readonly brows
   } | null>(null);
   const [marquee, setMarquee] = useState<{ enabled: boolean; text?: string } | null>(null);
   const [overlayReq, setOverlayReq] = useState<{ mode: string; teamId?: string | null; lastUpdate?: number } | null>(null);
-  const [showRecentBid, setShowRecentBid] = useState(false);
-  const latestVisibleBidKeyRef = useRef<string>('');
   const [activeOverlay, setActiveOverlay] = useState<'sold' | 'unsold' | null>(null);
   const [connected,     setConnected]    = useState(false);
   const [sponsors,      setSponsors]     = useState<SponsorRecord[]>([]);
@@ -727,7 +732,6 @@ export default function OBSOverlayPage({ browserMode = false }: { readonly brows
   const currentBid    = state?.currentBid    ?? 0;
   const selectedTeam  = state?.selectedTeam  ?? null;
   const teams         = state?.teams         ?? [];
-  const bidHistory    = state?.bidHistory    ?? [];
   // Effective overlay mode: a recent, non-auction mobile request (from
   // connect-bidding-admin) overrides the desktop for the stats/squad/top-picks
   // views. A desktop 'break' always wins (full-screen). Otherwise desktop leads.
@@ -747,30 +751,12 @@ export default function OBSOverlayPage({ browserMode = false }: { readonly brows
   const reqSquadTeamId = reqActive && effectiveMode === 'teamSquad' ? overlayReq!.teamId : broadcastControl?.teamSquadTeamId;
   const overlayModeActive = isBreak || isStandings || isTeamSquad || isTeamStandings || isTopPicks;
   const hasPlayer     = !!currentPlayer && !activeOverlay && !overlayModeActive;
-  const latestBid = bidHistory.at(-1) ?? null;
   // Overlay visual style (admin-configurable) + broadcast marquee control.
   const overlayStyle = adminSettings?.obsOverlayStyle ?? 'classic';
   const isBroadcastStyle = overlayStyle === 'broadcast';
   const overlayAccent = adminSettings?.obsOverlayAccent || '#1d4ed8';
   const marqueeEnabled = marquee?.enabled ?? true;
   const marqueeText = marquee?.text;
-  const latestBidKey = latestBid ? `${latestBid.teamId}-${latestBid.amount}-${latestBid.timestamp}` : '';
-
-  // Show recent bid panel briefly, then hide to keep only active team card visible.
-  useEffect(() => {
-    console.log('[OBSOverlay] currentPlayer changed:', currentPlayer, 'hasPlayer:', currentBid, 'latestBidKey:', latestBidKey, 'latestVisibleBidKeyRef:', latestVisibleBidKeyRef.current);
-    if (!hasPlayer || !latestBidKey) {
-      setShowRecentBid(false);
-      return;
-    }
-
-    if (latestBidKey === latestVisibleBidKeyRef.current) return;
-
-    latestVisibleBidKeyRef.current = latestBidKey;
-    setShowRecentBid(true);
-    const timer = setTimeout(() => setShowRecentBid(false), 3000);
-    return () => clearTimeout(timer);
-  }, [hasPlayer, latestBidKey]);
 
   // Focused team for standings panel
   const standingsTeam = useMemo(() => {
@@ -841,6 +827,47 @@ export default function OBSOverlayPage({ browserMode = false }: { readonly brows
     : null;
   const soldBid = overlaySnapshot?.bid ?? currentBid;
 
+  const squadTeams = useMemo<Team[]>(() => teams.map((team) => ({
+    id: team.id,
+    name: team.name,
+    logoUrl: team.logoUrl,
+    playersBought: team.playersBought ?? 0,
+    totalPlayerThreshold: team.totalPlayerThreshold ?? 0,
+    remainingPlayers: 0,
+    allocatedAmount: team.allocatedAmount ?? team.remainingPurse ?? 0,
+    remainingPurse: team.remainingPurse ?? 0,
+    highestBid: team.highestBid ?? 0,
+    captain: team.captain ?? '',
+    iconicPlayers: team.iconicPlayers,
+    underAgePlayers: team.underAgePlayers ?? 0,
+    primaryColor: team.primaryColor,
+    secondaryColor: team.secondaryColor,
+    brandLogoUrl: team.brandLogoUrl,
+    ownerCompany: team.ownerCompany,
+    brandTagline: team.brandTagline,
+  })), [teams]);
+
+  const squadSoldPlayers = useMemo<SoldPlayer[]>(() => soldPlayersObs.map((player) => {
+    const raw = player as typeof player & Record<string, unknown>;
+    return {
+      id: player.id,
+      name: player.name || String(raw.playerName ?? ''),
+      role: (String(raw.role ?? 'Player') as PlayerRole),
+      imageUrl: String(raw.imageUrl ?? ''),
+      age: player.age ?? null,
+      matches: String(raw.matches ?? ''),
+      runs: String(raw.runs ?? ''),
+      wickets: String(raw.wickets ?? ''),
+      battingBestFigures: String(raw.battingBestFigures ?? ''),
+      bowlingBestFigures: String(raw.bowlingBestFigures ?? ''),
+      basePrice: Number(raw.basePrice ?? 0),
+      soldAmount: player.soldAmount ?? 0,
+      teamName: player.teamName,
+      teamId: player.teamId,
+      soldDate: String(raw.soldDate ?? raw.timestamp ?? ''),
+    };
+  }), [soldPlayersObs]);
+
   return (
     <div className={`obs-overlay ${browserMode ? 'obs-overlay--mirror' : ''}`}>
       {browserMode && (
@@ -856,7 +883,7 @@ export default function OBSOverlayPage({ browserMode = false }: { readonly brows
         {!currentPlayer && !activeOverlay && !isBreak && (
           <motion.div className="obs-standby" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
             <span className="obs-standby__dot" />
-            <span className="obs-standby__text">OVERLAY ACTIVE · STANDBY {JSON.stringify(currentPlayer)} {JSON.stringify(activeOverlay)}</span>
+            <span className="obs-standby__text">OVERLAY ACTIVE · STANDBY</span>
           </motion.div>
         )}
       </AnimatePresence>
@@ -1094,32 +1121,25 @@ export default function OBSOverlayPage({ browserMode = false }: { readonly brows
       </AnimatePresence>
 
       {/* ── TEAM SQUAD VIEW ───────────────────────────────────────────── */}
-      <AnimatePresence>
-        {isTeamSquad && squadTeam && (
-          <motion.div
-            className="obs-team-squad"
-            initial={{ opacity: 0, scale: 0.96 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.96 }}
-            transition={{ duration: 0.35 }}
-          >
-            <div className="obs-team-squad__header">
-              {squadTeam.logoUrl && (
-                <img src={squadTeam.logoUrl} alt="" className="obs-team-squad__logo" />
-              )}
-              <div className="obs-team-squad__name">{squadTeam.name}</div>
-              <div className="obs-team-squad__meta">
-                <span>{squadTeam.playersBought ?? 0} Players</span>
-                <span>•</span>
-                <span>Purse {fmt(squadTeam.remainingPurse ?? 0)}</span>
-              </div>
-            </div>
-            <div className="obs-team-squad__note">
-              Squad view mirrors the main screen. Detailed player grid appears on the desktop.
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {isTeamSquad && squadTeam && squadTeam.logoUrl && (
+        <TeamSquadView
+          teamId={squadTeam.id}
+          teams={squadTeams}
+          soldPlayers={squadSoldPlayers}
+          allPlayers={squadSoldPlayers}
+          specialCategories={adminSettings?.specialCategories}
+          teamOwners={adminSettings?.teamOwners}
+          titleSponsor={adminSettings?.branding?.showTitleSponsorInTeamView !== false
+            ? sponsors.find((sponsor) => sponsor.isTitleSponsor && sponsor.logoUrl) ?? null
+            : null}
+          reduceThresholdByIconPlayers={adminSettings?.branding?.reduceThresholdByIconPlayers !== false}
+          squadViewMode={adminSettings?.branding?.squadViewMode || 'iconPlayers'}
+          squadTheme={adminSettings?.branding?.squadTheme || 'default'}
+          readOnly
+          compact
+          onClose={() => undefined}
+        />
+      )}
 
       {/* ── TEAM STANDINGS OVERLAY (press 'g' or broadcastMode 'teamStandings') ── */}
       <TeamStandingsOverlay

@@ -41,6 +41,10 @@ interface TeamSquadViewProps {
   readonly squadViewMode?: 'iconPlayers' | 'owners';
   /** Visual style variant for squad UI */
   readonly squadTheme?: 'default' | 'premium' | 'royal';
+  /** Read-only broadcast presentation used by the OBS browser source. */
+  readonly readOnly?: boolean;
+  /** Compact broadcast layout with smaller roster slots. */
+  readonly compact?: boolean;
 }
 
 /**
@@ -64,6 +68,8 @@ export function TeamSquadView({
   reduceThresholdByIconPlayers = true,
   squadViewMode = 'iconPlayers',
   squadTheme = 'default',
+  readOnly = false,
+  compact = false,
 }: TeamSquadViewProps) {
   const currencySuffix = useCurrencySuffix();
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
@@ -350,6 +356,7 @@ export function TeamSquadView({
 
   // Handle ESC key to close
   useEffect(() => {
+    if (readOnly) return;
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         e.preventDefault();
@@ -359,7 +366,7 @@ export function TeamSquadView({
 
     globalThis.addEventListener('keydown', handleKeyDown);
     return () => globalThis.removeEventListener('keydown', handleKeyDown);
-  }, [onClose]);
+  }, [onClose, readOnly]);
 
   if (!activeTeam) {
     console.warn('[TeamSquadView] Team not found:', teamId);
@@ -370,7 +377,7 @@ export function TeamSquadView({
   return (
     <AnimatePresence>
       <motion.div
-        className={`team-squad-view team-squad-view--${squadTheme}`}
+        className={`team-squad-view team-squad-view--${squadTheme}${compact ? ' team-squad-view--compact' : ''}${readOnly ? ' team-squad-view--readonly' : ''}`}
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
@@ -387,7 +394,7 @@ export function TeamSquadView({
             var(--theme-accent)
           `,
         }}
-        onClick={onClose}
+        onClick={readOnly ? undefined : onClose}
       >
         {/* Decorative Background Elements */}
         <div className="tsv-decorative-elements" aria-hidden="true">
@@ -443,7 +450,7 @@ export function TeamSquadView({
               animate={{ y: 0, opacity: 1 }}
               transition={{ duration: 0.5, delay: 0.2 }}
             >
-              <div className="tsv-header-logo-shell">
+              <div className={`tsv-header-logo-shell ${readOnly ? 'tsv-header-logo-shell--readonly' : ''}`}>
                 <TeamLogo
                   logoUrl={activeTeam.logoUrl}
                   teamName={activeTeam.name}
@@ -469,7 +476,7 @@ export function TeamSquadView({
                     {/* Title Sponsor Badge */}
             {titleSponsor?.logoUrl && (
               <motion.div
-                className="tsv-title-sponsor"
+                className={`tsv-title-sponsor ${readOnly ? 'tsv-title-sponsor--readonly' : ''}`}
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.4, delay: 0.45 }}
@@ -530,7 +537,7 @@ export function TeamSquadView({
               transition={{ duration: 0.4, delay: 0.3 }}
             >
               {displaySlots.length > 0 ? (
-                <div className="tsv-players-grid">
+                <div className={`tsv-players-grid ${readOnly ? 'tsv-players-grid--readonly' : ''}`}>
                   {displaySlots.map((slot, index) => {
                     const isPlayer = slot.kind === 'player';
                     const playerMetaText = isPlayer
@@ -576,12 +583,12 @@ export function TeamSquadView({
                             loading='eager'
                             style={{
                               cursor:
-                                isPlayer && slot.player.imageUrl
+                                !readOnly && isPlayer && slot.player.imageUrl
                                   ? 'pointer'
                                   : undefined,
                             }}
                             onClick={(e) => {
-                              if (isPlayer && slot.player.imageUrl) {
+                              if (!readOnly && isPlayer && slot.player.imageUrl) {
                                 e.stopPropagation();
                                 setLightboxSrc(slot.player.imageUrl);
                               }
@@ -591,7 +598,7 @@ export function TeamSquadView({
                                 playerPlaceholderImage;
                             }}
                           />
-                          <div className='tsv-player-footer'>
+                          <div className={`tsv-player-footer ${readOnly ? ' tsv-player-footer--readonly' : ''}`}>
                             <span className='tsv-player-role'>{slotRole}</span>
                             <span className='tsv-player-name'>{slotName}</span>
                             <div className='tsv-player-meta-row'>
@@ -788,7 +795,7 @@ export function TeamSquadView({
           </div>
         </motion.div>
 
-        <motion.div
+        {!readOnly && <motion.div
           className="tsv-team-fab"
           initial={{ opacity: 0, scale: 0.9 }}
           animate={{ opacity: 1, scale: 1 }}
@@ -832,17 +839,17 @@ export function TeamSquadView({
               </motion.div>
             )}
           </AnimatePresence>
-        </motion.div>
+        </motion.div>}
 
         {/* Close Hint */}
-        <motion.div
+        {!readOnly && <motion.div
           className="tsv-close-hint"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ duration: 0.3, delay: 0.6 }}
         >
           Press <kbd>ESC</kbd> to close
-        </motion.div>
+        </motion.div>}
 
         {/* Player image lightbox */}
         <ImageLightbox
