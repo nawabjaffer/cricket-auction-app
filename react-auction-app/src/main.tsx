@@ -1,6 +1,6 @@
 import { Component, StrictMode, type ReactNode } from 'react'
 import { createRoot } from 'react-dom/client'
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate, useParams } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { setupDebugConsole } from './utils/logger'
 
@@ -33,6 +33,8 @@ import FootballOBSDockPage from './pages/FootballOBSDockPage'
 import KabaddiAdminPage from './pages/KabaddiAdminPage'
 import KabaddiUpdatePage from './pages/KabaddiUpdatePage'
 import KabaddiOBSOverlayPage from './pages/KabaddiOBSOverlayPage'
+import GenericScorerPage from './pages/GenericScorerPage'
+import type { SportKey } from './services/tenantService'
 import { TenantGate } from './components/TenantGate/TenantGate'
 import './index.css'
 
@@ -133,23 +135,27 @@ createRoot(document.getElementById('root')!).render(
             <Route path="/:tenantSlug/obs-dock" element={<TenantGate><OBSDockPage /></TenantGate>} />
             <Route path="/:tenantSlug/mirror" element={<TenantGate><MirrorPage /></TenantGate>} />
             <Route path="/:tenantSlug/connect-bidding-admin" element={<TenantGate><ConnectBiddingAdminPage /></TenantGate>} />
-            <Route path="/:tenantSlug/cricket/scorer/admin" element={<TenantGate><ScoringAdminPage /></TenantGate>} />
-            <Route path="/:tenantSlug/cricket/scorer/update" element={<TenantGate><ScoreUpdatePage /></TenantGate>} />
-            <Route path="/:tenantSlug/cricket/scorer/obs-overlay" element={<TenantGate><ScoreOBSOverlayPage /></TenantGate>} />
+            <Route path="/:tenantSlug/cricket/scorer/admin" element={<TenantGate requiredSport="cricket"><ScoringAdminPage /></TenantGate>} />
+            <Route path="/:tenantSlug/cricket/scorer/update" element={<TenantGate requiredSport="cricket"><ScoreUpdatePage /></TenantGate>} />
+            <Route path="/:tenantSlug/cricket/scorer/obs-overlay" element={<TenantGate requiredSport="cricket"><ScoreOBSOverlayPage /></TenantGate>} />
             <Route path="/:tenantSlug/cricket/scorer/camera" element={<TenantGate><ScoreCameraPage /></TenantGate>} />
             <Route path="/:tenantSlug/cricket/scorer/camera/admin" element={<TenantGate><ScoreCameraAdminPage /></TenantGate>} />
             <Route path="/:tenantSlug/cricket/scorer/camera/host" element={<TenantGate><ScoreCameraHostPage /></TenantGate>} />
             <Route path="/:tenantSlug/cricket/scorer/obs-dock" element={<TenantGate><ScoreOBSControlDock /></TenantGate>} />
             <Route path="/:tenantSlug/cricket/scorer/live-question" element={<TenantGate><LiveQuestionPage /></TenantGate>} />
             {/* Football scorer (tenant-scoped) */}
-            <Route path="/:tenantSlug/football/scorer/admin" element={<TenantGate><FootballAdminPage /></TenantGate>} />
-            <Route path="/:tenantSlug/football/scorer/update" element={<TenantGate><FootballUpdatePage /></TenantGate>} />
-            <Route path="/:tenantSlug/football/scorer/obs-overlay" element={<TenantGate><FootballOBSOverlayPage /></TenantGate>} />
+            <Route path="/:tenantSlug/football/scorer/admin" element={<TenantGate requiredSport="football"><FootballAdminPage /></TenantGate>} />
+            <Route path="/:tenantSlug/football/scorer/update" element={<TenantGate requiredSport="football"><FootballUpdatePage /></TenantGate>} />
+            <Route path="/:tenantSlug/football/scorer/obs-overlay" element={<TenantGate requiredSport="football"><FootballOBSOverlayPage /></TenantGate>} />
             <Route path="/:tenantSlug/football/scorer/obs-dock" element={<TenantGate><FootballOBSDockPage /></TenantGate>} />
             {/* Kabaddi scorer (tenant-scoped) */}
-            <Route path="/:tenantSlug/kabaddi/scorer/admin" element={<TenantGate><KabaddiAdminPage /></TenantGate>} />
-            <Route path="/:tenantSlug/kabaddi/scorer/update" element={<TenantGate><KabaddiUpdatePage /></TenantGate>} />
-            <Route path="/:tenantSlug/kabaddi/scorer/obs-overlay" element={<TenantGate><KabaddiOBSOverlayPage /></TenantGate>} />
+            <Route path="/:tenantSlug/kabaddi/scorer/admin" element={<TenantGate requiredSport="kabaddi"><KabaddiAdminPage /></TenantGate>} />
+            <Route path="/:tenantSlug/kabaddi/scorer/update" element={<TenantGate requiredSport="kabaddi"><KabaddiUpdatePage /></TenantGate>} />
+            <Route path="/:tenantSlug/kabaddi/scorer/obs-overlay" element={<TenantGate requiredSport="kabaddi"><KabaddiOBSOverlayPage /></TenantGate>} />
+            {/* Generic tenant-scoped scorer routes. TenantGate is the source of truth for platform-enabled sports. */}
+            <Route path="/:tenantSlug/:gameType/scorer/admin" element={<TenantSportRoute mode="admin" />} />
+            <Route path="/:tenantSlug/:gameType/scorer/update" element={<TenantSportRoute mode="update" />} />
+            <Route path="/:tenantSlug/:gameType/scorer/obs-overlay" element={<TenantSportRoute mode="obs-overlay" />} />
             {/* Legacy scorer routes */}
             <Route path="/:tenantSlug/scoring/admin" element={<TenantGate><ScoringAdminPage /></TenantGate>} />
             <Route path="/:tenantSlug/match/score/update" element={<TenantGate><ScoreUpdatePage /></TenantGate>} />
@@ -163,3 +169,12 @@ createRoot(document.getElementById('root')!).render(
     </ErrorBoundary>
   </StrictMode>,
 )
+
+function TenantSportRoute({ mode }: Readonly<{ mode: 'admin' | 'update' | 'obs-overlay' }>) {
+  const { gameType } = useParams<{ gameType: string }>();
+  return (
+    <TenantGate requiredSport={gameType as SportKey}>
+      <GenericScorerPage mode={mode} />
+    </TenantGate>
+  );
+}

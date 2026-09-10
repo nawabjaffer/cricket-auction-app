@@ -11,11 +11,14 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { useParams } from 'react-router-dom';
 import { setActiveTenant, DEFAULT_TENANT_ID } from '../../services/tenantPath';
-import { tenantService, type TenantRecord } from '../../services/tenantService';
+import { tenantService, type SportKey, type TenantRecord } from '../../services/tenantService';
 
-interface Props { children: ReactNode }
+interface Props {
+  children: ReactNode;
+  requiredSport?: SportKey;
+}
 
-export function TenantGate({ children }: Props) {
+export function TenantGate({ children, requiredSport }: Props) {
   const { tenantSlug } = useParams<{ tenantSlug: string }>();
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -29,14 +32,21 @@ export function TenantGate({ children }: Props) {
     // Fast-path: slug matches the default id/slug — no network.
     if (!slug || slug === DEFAULT_TENANT_ID || slug === DEFAULT_TENANT_ID.replace(/_/g, '-')) {
       setActiveTenant(DEFAULT_TENANT_ID);
-      setTenant({
+      const defaultTenant: TenantRecord = {
         id: DEFAULT_TENANT_ID,
         slug: DEFAULT_TENANT_ID.replace(/_/g, '-'),
         name: 'EPL 2026',
         plan: 'pro',
         isActive: true,
         createdAt: 0,
-      });
+        sports: ['cricket'],
+      };
+      if (requiredSport && requiredSport !== 'cricket') {
+        setTenant(null);
+        setError(`${requiredSport} scoring is not enabled for this tournament.`);
+      } else {
+        setTenant(defaultTenant);
+      }
       setReady(true);
       return;
     }
@@ -52,7 +62,13 @@ export function TenantGate({ children }: Props) {
           setActiveTenant(DEFAULT_TENANT_ID);
         } else {
           setActiveTenant(found.id);
-          setTenant(found);
+          const enabledSports = found.sports?.length ? found.sports : ['cricket' as SportKey];
+          if (requiredSport && !enabledSports.includes(requiredSport)) {
+            setError(`${requiredSport} scoring is not enabled for this tournament.`);
+            setTenant(null);
+          } else {
+            setTenant(found);
+          }
         }
       } catch (err) {
         if (cancelled) return;
@@ -63,7 +79,7 @@ export function TenantGate({ children }: Props) {
       if (!cancelled) setReady(true);
     })();
     return () => { cancelled = true; };
-  }, [tenantSlug]);
+  }, [tenantSlug, requiredSport]);
 
   if (!ready) {
     return (

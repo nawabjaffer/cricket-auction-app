@@ -14,12 +14,15 @@ import type { KabaddiRulesConfig } from '../types/kabaddi';
 export type TenantPlan = 'free' | 'basic' | 'pro' | 'enterprise';
 
 /** Sports a tenant (tournament) has enabled. */
-export type SportKey = 'cricket' | 'football' | 'kabaddi';
+export type SportKey = 'cricket' | 'football' | 'kabaddi' | 'badminton' | 'basketball' | 'volleyball';
 
 export const ALL_SPORTS: { key: SportKey; label: string }[] = [
   { key: 'cricket', label: 'Cricket' },
   { key: 'football', label: 'Football' },
   { key: 'kabaddi', label: 'Kabaddi' },
+  { key: 'badminton', label: 'Badminton' },
+  { key: 'basketball', label: 'Basketball' },
+  { key: 'volleyball', label: 'Volleyball' },
 ];
 
 export interface TenantRecord {
