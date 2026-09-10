@@ -116,6 +116,7 @@ export default function KabaddiOBSOverlayPage() {
   const raidLeft = config.showRaidClock ? raidSecondsRemaining(live, rules) : null;
   const raidingA = live.raidingTeamId === match.teamA.id;
   const raidingB = live.raidingTeamId === match.teamB.id;
+  const latestEvent = live.events?.length ? live.events[live.events.length - 1] : null;
 
   const theme = {
     '--kb-primary': config.primaryColor,
@@ -157,6 +158,14 @@ export default function KabaddiOBSOverlayPage() {
             raiding={raidingB}
             playersPerSide={rules.playersPerSide}
           />
+        </div>
+
+        <div className="kbo__ribbon" aria-live="polite">
+          <span className="kbo__ribbon-brand">{match.competition || config.tournamentName || 'KABADDI'}</span>
+          <span className="kbo__ribbon-item">RAID <strong>#{live.raidNumber || 0}</strong></span>
+          <span className="kbo__ribbon-item">RAID PTS <strong>{live.teamA.totalRaidPoints + live.teamB.totalRaidPoints}</strong></span>
+          <span className="kbo__ribbon-item">TACKLE PTS <strong>{live.teamA.totalTacklePoints + live.teamB.totalTacklePoints}</strong></span>
+          {latestEvent && <span className="kbo__ribbon-event">{latestEvent.playerName || latestEvent.type.replaceAll('_', ' ')} · +{latestEvent.points}</span>}
         </div>
 
         <div className="kbo__status">

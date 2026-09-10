@@ -20,7 +20,7 @@
   position: absolute;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 0;
   align-items: center;
 }
 
@@ -40,12 +40,11 @@
 .kbo__strip {
   display: flex;
   align-items: center;
-  gap: 18px;
-  padding: 12px 22px;
-  border-radius: 16px;
-  background: linear-gradient(180deg, rgba(10, 10, 10, 0.94), rgba(10, 10, 10, 0.88));
-  border: 2px solid var(--kb-secondary, #1d4ed8);
-  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.55);
+  gap: 0;
+  min-width: min(1120px, calc(100vw - 48px));
+  padding: 0;
+  background: transparent;
+  filter: drop-shadow(0 10px 14px rgba(0, 0, 0, 0.58));
 }
 
 .kbo__team {
@@ -53,19 +52,29 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  min-width: 210px;
+  min-width: 0;
+  width: 39%;
+  min-height: 76px;
+  padding: 10px 24px;
+  background: linear-gradient(105deg, color-mix(in srgb, var(--kb-primary, #0b5d2a) 88%, #06120c), #0d331f);
+  border: 2px solid color-mix(in srgb, var(--kb-primary, #35d05d) 85%, #e8bd43);
+  clip-path: polygon(0 18%, 3% 0, 97% 0, 100% 50%, 97% 100%, 3% 100%);
 }
 
-.kbo__team--away { justify-content: flex-end; }
+.kbo__team--away {
+  justify-content: flex-end;
+  background: linear-gradient(255deg, color-mix(in srgb, var(--kb-secondary, #13548a) 88%, #06111d), #102d4d);
+  border-color: color-mix(in srgb, var(--kb-secondary, #4ca8ef) 85%, #e8bd43);
+}
 
 .kbo__team.is-raiding .kbo__team-name { color: var(--kb-accent, #f59e0b); }
 
 .kbo__team-logo {
   display: grid;
   place-items: center;
-  width: 62px;
-  height: 62px;
-  border-radius: 13px;
+  width: 54px;
+  height: 54px;
+  border-radius: 50%;
   overflow: hidden;
   background: #1f2937;
   flex-shrink: 0;
@@ -83,7 +92,7 @@
 .kbo__team--away .kbo__team-info { align-items: flex-end; }
 
 .kbo__team-name {
-  font-size: 26px;
+  font-size: clamp(18px, 2.2vw, 30px);
   font-weight: 800;
   letter-spacing: 1.2px;
   line-height: 1;
@@ -93,14 +102,17 @@
 .kbo__mat { display: flex; gap: 4px; }
 
 .kbo__mat-dot {
-  width: 9px;
-  height: 9px;
+  width: 11px;
+  height: 11px;
   border-radius: 50%;
   background: rgba(255, 255, 255, 0.16);
   transition: background 0.25s ease;
 }
 
-.kbo__mat-dot.is-on { background: var(--kb-accent, #f59e0b); }
+.kbo__mat-dot.is-on {
+  background: #a7f3d0;
+  box-shadow: 0 0 7px #36d973;
+}
 
 .kbo__raid-flag {
   position: absolute;
@@ -121,20 +133,50 @@
 .kbo__score {
   display: flex;
   align-items: baseline;
-  gap: 10px;
-  padding: 0 20px;
-  border-left: 1px solid rgba(255, 255, 255, 0.14);
-  border-right: 1px solid rgba(255, 255, 255, 0.14);
+  gap: 8px;
+  width: 22%;
+  min-height: 82px;
+  justify-content: center;
+  padding: 0 14px;
+  background: linear-gradient(180deg, #fffdf5, #e9e6db);
+  border: 3px solid #d9a72d;
+  clip-path: polygon(12% 0, 88% 0, 100% 50%, 88% 100%, 12% 100%, 0 50%);
+  color: #160f1d;
+  box-shadow: 0 0 0 4px rgba(92, 37, 121, .9);
 }
 
 .kbo__score-num {
-  font-size: 54px;
+  font-size: clamp(34px, 4.2vw, 62px);
   font-weight: 900;
   line-height: 1;
   font-variant-numeric: tabular-nums;
 }
 
-.kbo__score-sep { font-size: 34px; font-weight: 700; opacity: 0.45; }
+.kbo__score-sep { font-size: 18px; font-weight: 900; opacity: 0.65; }
+
+/* Compact broadcast furniture inspired by the supplied PKL references. */
+.kbo__ribbon {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  width: min(860px, calc(100vw - 120px));
+  min-height: 30px;
+  margin: -1px auto 0;
+  padding: 3px 18px;
+  background: linear-gradient(90deg, #4b1268, #7d1e94 48%, #4b1268);
+  border: 1px solid #dba6ec;
+  clip-path: polygon(7% 0, 93% 0, 100% 100%, 0 100%);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.kbo__ribbon-brand { flex: 1; color: #f9d57d; }
+.kbo__ribbon-item { padding: 0 12px; border-left: 1px solid rgba(255,255,255,.24); }
+.kbo__ribbon-item strong { color: #fff4b0; margin-left: 4px; }
+.kbo__ribbon-event { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-left: 12px; color: #e9d5ff; }
 
 /* ── Status bar ── */
 
@@ -143,9 +185,9 @@
   align-items: center;
   gap: 12px;
   padding: 7px 18px;
-  border-radius: 11px;
-  background: rgba(10, 10, 10, 0.9);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 0 0 7px 7px;
+  background: linear-gradient(180deg, #3d1156, #21092f);
+  border: 1px solid rgba(229, 177, 255, 0.45);
   font-size: 14px;
   font-weight: 700;
   letter-spacing: 0.6px;
@@ -301,4 +343,19 @@
   letter-spacing: 5px;
   color: #fff;
   box-shadow: 0 16px 46px rgba(0, 0, 0, 0.6);
+}
+
+@media (max-width: 720px) {
+  .kbo--bottom-center .kbo__scoreboard { bottom: 18px; }
+  .kbo__strip { min-width: calc(100vw - 14px); }
+  .kbo__team { padding: 7px 10px; min-height: 58px; gap: 6px; }
+  .kbo__team-logo { width: 38px; height: 38px; }
+  .kbo__team-name { font-size: 14px; letter-spacing: .3px; }
+  .kbo__mat { gap: 2px; }
+  .kbo__mat-dot { width: 7px; height: 7px; }
+  .kbo__score { min-height: 62px; width: 24%; padding: 0 6px; }
+  .kbo__ribbon { width: calc(100vw - 34px); overflow: hidden; white-space: nowrap; }
+  .kbo__ribbon-item:nth-of-type(3), .kbo__ribbon-event { display: none; }
+  .kbo__status { gap: 6px; padding: 5px 8px; font-size: 11px; }
+  .kbo__raider { display: none; }
 }

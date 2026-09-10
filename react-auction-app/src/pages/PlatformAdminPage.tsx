@@ -20,8 +20,12 @@ import type { KabaddiFormat, KabaddiRulesConfig } from '../types/kabaddi';
 
 const PLAN_OPTIONS: TenantPlan[] = ['free', 'basic', 'pro', 'enterprise'];
 
-const SPORT_ICON: Record<SportKey, string> = { cricket: '🏏', football: '⚽', kabaddi: '🤼' };
-const SPORT_COLOR: Record<SportKey, string> = { cricket: '#2563eb', football: '#e11d1d', kabaddi: '#7c3aed' };
+const SPORT_ICON: Record<SportKey, string> = {
+  cricket: '🏏', football: '⚽', kabaddi: '🤼', badminton: '🏸', basketball: '🏀', volleyball: '🏐',
+};
+const SPORT_COLOR: Record<SportKey, string> = {
+  cricket: '#2563eb', football: '#e11d1d', kabaddi: '#7c3aed', badminton: '#0891b2', basketball: '#ea580c', volleyball: '#16a34a',
+};
 
 export default function PlatformAdminPage() {
   const [tenants, setTenants] = useState<TenantRecord[]>([]);
@@ -207,9 +211,15 @@ export default function PlatformAdminPage() {
 
                     {/* Direct Links to Scorers and Rules */}
                     <div style={{ marginTop: 10, display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-                      {sports.includes('cricket') && (
-                        <a href={`/${t.slug}/cricket/scorer/admin`} style={sportLink}>🏏 Cricket Scorer →</a>
-                      )}
+                      {sports.map((sport) => {
+                        const meta = ALL_SPORTS.find((item) => item.key === sport);
+                        if (!meta) return null;
+                        return (
+                          <a key={sport} href={`/${t.slug}/${sport}/scorer/admin`} style={{ ...sportLink, color: SPORT_COLOR[sport] }}>
+                            {SPORT_ICON[sport]} {meta.label} Scorer →
+                          </a>
+                        );
+                      })}
                       {sports.includes('football') && (
                         <>
                           <a href={`/${t.slug}/football/scorer/admin`} style={{ ...sportLink, color: '#f87171' }}>⚽ Football Scorer →</a>
