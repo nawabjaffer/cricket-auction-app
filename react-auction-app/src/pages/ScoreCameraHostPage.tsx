@@ -21,9 +21,14 @@ import { useTenantNavigate as useNavigate, getTenantSlugFromPath } from '../hook
 import { broadcastDb } from '../services/camera/broadcastDb';
 import { multiCamService, SOURCE_STALE_MS, type CameraSource } from '../services/camera/multiCamService';
 import { drawScoreTicker, drawCelebration, resolveCeleb, getImg, type CelebType, type TickerPosition } from '../utils/broadcastCanvas';
+import { drawTeamScoreTicker } from '../utils/teamBroadcastCanvas';
+import type { TeamBroadcastState } from '../utils/teamScoreboard';
 import type {
   LiveScore, MatchSetup, ScoringOverlayConfig, OverlayControlState, MatchLineup, TickerDesign,
 } from '../types/scoring';
+import type { SportKey } from '../services/tenantService';
+import { DEFAULT_FOOTBALL_OVERLAY_CONFIG } from '../types/football';
+import { DEFAULT_KABADDI_OVERLAY_CONFIG, DEFAULT_KABADDI_RULES } from '../types/kabaddi';
 import './ScoreCameraHostPage.css';
 
 type CanvasWithCapture = HTMLCanvasElement & { captureStream?: (fps?: number) => MediaStream };
@@ -41,9 +46,11 @@ function fmtClock(ms: number): string {
   return `${Math.floor(total / 60)}:${(total % 60).toString().padStart(2, '0')}`;
 }
 
-export default function ScoreCameraHostPage() {
+export default function ScoreCameraHostPage({ gameType = 'cricket' }: Readonly<{ gameType?: SportKey }>) {
   const navigate = useNavigate();
   const tenantSlug = getTenantSlugFromPath(window.location.pathname);
+  const namespace = gameType === 'cricket' ? 'scoring' : gameType;
+  const teamBroadcastRef = useRef<TeamBroadcastState | null>(null);
 
   const [matchId, setMatchId] = useState<string | null>(null);
   const [sources, setSources] = useState<CameraSource[]>([]);
@@ -92,12 +99,30 @@ export default function ScoreCameraHostPage() {
 
   // ── Init signalling ──
   useEffect(() => {
-    multiCamService.initialize(broadcastDb, tenantPath('scoring'));
-  }, []);
+    multiCamService.initialize(broadcastDb, tenantPath(namespace));
+  }, [namespace]);
 
   // ── Live score + branding (same sources as the OBS overlay) ──
   useEffect(() => {
     if (!matchId) return;
+    if (gameType !== 'cricket') {
+      const state: TeamBroadcastState = gameType === 'football'
+        ? { sport: 'football', match: null, live: null, config: DEFAULT_FOOTBALL_OVERLAY_CONFIG }
+        : { sport: 'kabaddi', match: null, live: null, config: DEFAULT_KABADDI_OVERLAY_CONFIG, rules: DEFAULT_KABADDI_RULES };
+      teamBroadcastRef.current = state;
+      const base = tenantPath(namespace);
+      const unsubs = [
+        onValue(ref(broadcastDb, `${base}/matches/${matchId}/setup`), s => { state.match = s.exists() ? s.val() : null; }),
+        onValue(ref(broadcastDb, `${base}/matches/${matchId}/live`), s => { state.live = s.exists() ? s.val() : null; }),
+        onValue(ref(broadcastDb, `${base}/overlayConfig`), s => {
+          state.config = { ...(state.sport === 'football' ? DEFAULT_FOOTBALL_OVERLAY_CONFIG : DEFAULT_KABADDI_OVERLAY_CONFIG), ...s.val() };
+        }),
+      ];
+      if (state.sport === 'kabaddi') {
+        unsubs.push(onValue(ref(broadcastDb, `${base}/rules`), s => { state.rules = { ...DEFAULT_KABADDI_RULES, ...s.val() }; }));
+      }
+      return () => { unsubs.forEach(u => u()); teamBroadcastRef.current = null; };
+    }
     const base = tenantPath('scoring');
     const unsubs: Array<() => void> = [];
     unsubs.push(onValue(ref(broadcastDb, `${base}/matches/${matchId}/setup`), s => {
@@ -139,7 +164,7 @@ export default function ScoreCameraHostPage() {
       lastAnimTsRef.current = ts;
     }));
     return () => unsubs.forEach(u => u());
-  }, [matchId]);
+  }, [matchId, gameType, namespace]);
 
   // ── Camera sources + program selection ──
   useEffect(() => {
@@ -220,7 +245,9 @@ export default function ScoreCameraHostPage() {
           ctx.textBaseline = 'middle';
           ctx.fillText('Waiting for a camera to join…', W / 2, H / 2);
         }
-        if (showTickerRef.current) {
+        if (showTickerRef.current && teamBroadcastRef.current) {
+          drawTeamScoreTicker(ctx, W, H, teamBroadcastRef.current, tickerPosRef.current);
+        } else if (showTickerRef.current) {
           drawScoreTicker(ctx, W, H, {
             live: liveRef.current,
             match: matchRef.current,
@@ -299,7 +326,7 @@ export default function ScoreCameraHostPage() {
   };
 
   const joinUrl = matchId
-    ? `${window.location.origin}${tenantSlug ? `/${tenantSlug}` : ''}/cricket/scorer/camera?matchId=${matchId}&share=1`
+    ? `${window.location.origin}${tenantSlug ? `/${tenantSlug}` : ''}/${gameType}/scorer/camera?matchId=${matchId}&share=1`
     : '';
 
   const copyJoinUrl = async () => {
@@ -316,7 +343,7 @@ export default function ScoreCameraHostPage() {
   return (
     <div className="cam-host">
       <header className="cam-host__bar">
-        <button className="cam-host__icon-btn" onClick={() => navigate('/cricket/scorer/camera/admin')} title="Back">
+        <button className="cam-host__icon-btn" onClick={() => navigate(`/${gameType}/scorer/admin`)} title="Back">
           <IoArrowBack size={20} />
         </button>
         <div className="cam-host__title">

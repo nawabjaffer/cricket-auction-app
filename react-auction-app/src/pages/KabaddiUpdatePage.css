@@ -106,11 +106,46 @@
 
 .kbu__clock-block { display: flex; flex-direction: column; align-items: center; gap: 8px; }
 
+.kbu__clock-label {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 1.4px;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.5);
+}
+
 .kbu__clock {
-  font-size: 26px;
-  font-weight: 800;
+  font-size: 40px;
+  font-weight: 900;
+  line-height: 1;
   font-variant-numeric: tabular-nums;
   color: #f59e0b;
+}
+
+.kbu__clock.is-urgent { color: #f87171; animation: kbu-pulse 0.6s ease-in-out infinite; }
+
+@keyframes kbu-pulse { 50% { opacity: 0.55; } }
+
+.kbu__total-time {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  font-size: 14px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: #e4e4e7;
+}
+
+.kbu__total-time small {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.55);
 }
 
 .kbu__clock-btn {
@@ -128,26 +163,6 @@
 }
 
 .kbu__clock-btn.is-running { background: rgba(239, 68, 68, 0.2); border-color: rgba(239, 68, 68, 0.5); color: #fca5a5; }
-
-.kbu__raid-clock {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 4px 12px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.09);
-  font-size: 13px;
-  font-weight: 800;
-  font-variant-numeric: tabular-nums;
-}
-
-.kbu__raid-clock.is-urgent {
-  background: rgba(239, 68, 68, 0.26);
-  color: #fca5a5;
-  animation: kbu-pulse 0.6s ease-in-out infinite;
-}
-
-@keyframes kbu-pulse { 50% { opacity: 0.55; } }
 
 /* ── Halves ── */
 
@@ -215,12 +230,132 @@
 
 .kbu__raid-start { display: flex; gap: 9px; flex-wrap: wrap; }
 
+/* Raider / defender selection side-by-side */
+.kbu__sides {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  margin-bottom: 15px;
+}
+
+.kbu__side { display: flex; flex-direction: column; gap: 9px; min-width: 0; }
+
+.kbu__side h3 {
+  margin: 0;
+  font-size: 11.5px;
+  font-weight: 800;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.kbu__picker {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+  gap: 8px;
+}
+
+.kbu__pick {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  padding: 9px 5px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.05);
+  color: #e4e4e7;
+  cursor: pointer;
+  position: relative;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.kbu__pick:hover { background: rgba(255, 255, 255, 0.1); }
+
+.kbu__pick.is-on {
+  border-color: #f59e0b;
+  background: rgba(245, 158, 11, 0.18);
+  box-shadow: 0 0 0 1px #f59e0b inset;
+}
+
+.kbu__pick-photo {
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  overflow: hidden;
+  background: rgba(0, 0, 0, 0.45);
+  font-size: 17px;
+  font-weight: 800;
+  color: #fff;
+}
+
+.kbu__pick-photo img { width: 100%; height: 100%; object-fit: cover; }
+
+.kbu__pick-name {
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.2;
+  text-align: center;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.kbu__pick-pts {
+  position: absolute;
+  top: 5px;
+  right: 6px;
+  min-width: 17px;
+  padding: 1px 4px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.6);
+  font-size: 9.5px;
+  font-weight: 800;
+  text-align: center;
+  color: #f59e0b;
+}
+
 .kbu__raid-live {
   display: flex;
   align-items: center;
   gap: 11px;
   margin-bottom: 15px;
   flex-wrap: wrap;
+}
+
+.kbu__raid-current {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 13px 5px 5px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  font-size: 13px;
+}
+
+.kbu__raid-current img {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid #f59e0b;
+}
+
+.kbu__raid-pts {
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: #f59e0b;
+  color: #1a1206;
+  font-size: 10.5px;
+  font-weight: 900;
+}
+
+@media (max-width: 640px) {
+  .kbu__sides { grid-template-columns: 1fr; }
 }
 
 .kbu__raid-team {

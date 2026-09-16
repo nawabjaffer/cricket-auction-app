@@ -41,9 +41,13 @@ export interface KabaddiTeam {
   name: string;
   shortName: string;       // 3-letter code shown on the scoreboard, e.g. "TAM"
   logoUrl?: string;
+  /** Looping transparent GIF/WebM played above the team logo on the overlay. */
+  animationUrl?: string;
   primaryColor?: string;
   secondaryColor?: string;
   coach?: string;
+  /** Auction team this was imported from, e.g. from `/{tenantSlug}/admin`. */
+  sourceTeamId?: string;
   createdAt: number;
   updatedAt: number;
 }
@@ -77,6 +81,8 @@ export interface KabaddiPlayer {
   rating?: number;
   ranking?: number;
   marketValue?: string;
+  /** Sold player this was imported from, e.g. from `/{tenantSlug}/admin`. */
+  sourcePlayerId?: string;
   createdAt: number;
   updatedAt: number;
 }
@@ -88,6 +94,7 @@ export interface KabaddiTeamRef {
   name: string;
   shortName: string;
   logoUrl?: string;
+  animationUrl?: string;
   primaryColor?: string;
 }
 
@@ -201,6 +208,7 @@ export interface KabaddiLiveState {
   raidingTeamId: string | null;
   raiderId?: string;
   raiderName?: string;
+  raiderPhotoUrl?: string;
   raidNumber: number;
   /** Epoch ms when the 30-second raid clock started (0 = not running). */
   raidClockStartedAt: number;
@@ -461,4 +469,10 @@ export function isSuperTackle(defendersOnCourt: number, rules?: KabaddiRulesConf
 export function isBonusAvailable(defendersOnCourt: number, rules?: KabaddiRulesConfig | null): boolean {
   if (rules && !rules.bonusLineEnabled) return false;
   return defendersOnCourt >= (rules?.bonusMinDefenders ?? 6);
+}
+
+/** Points a player has scored so far in this match, derived from the event log. */
+export function playerMatchPoints(live: KabaddiLiveState | null, playerId?: string): number {
+  if (!live?.events?.length || !playerId) return 0;
+  return live.events.reduce((total, ev) => (ev.playerId === playerId ? total + (ev.points || 0) : total), 0);
 }

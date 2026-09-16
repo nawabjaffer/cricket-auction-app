@@ -56,6 +56,11 @@
 
 .kba__counts { display: flex; gap: 14px; font-size: 12.5px; color: rgba(255, 255, 255, 0.6); }
 .kba__counts span { display: inline-flex; align-items: center; gap: 5px; }
+.kba__counts--bar {
+  padding: 12px 24px;
+  background: rgba(255, 255, 255, 0.04);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
 
 /* ── Tabs ── */
 

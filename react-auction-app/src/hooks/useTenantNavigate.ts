@@ -11,7 +11,8 @@ import { useLocation, useNavigate, type NavigateOptions } from 'react-router-dom
 
 const RESERVED = new Set([
   '', 'admin', 'live', 'live-admin', 'camera', 'connect-bididng', 'connect-bidding',
-  'diagnostics', 'obs-overlay', 'obs-dock', 'platform-admin',
+  'diagnostics', 'obs-overlay', 'obs-dock', 'platform-admin', 'cricket', 'football',
+  'kabaddi', 'scoring', 'match', 'score',
 ]);
 
 export function getTenantSlugFromPath(pathname: string): string | null {

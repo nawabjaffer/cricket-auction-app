@@ -10,12 +10,17 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   IoAdd, IoTrash, IoSave, IoClose, IoPeople, IoShirt, IoSettings,
-  IoDesktop, IoFlash, IoPlay, IoPencil, IoTrophy,
+  IoDesktop, IoFlash, IoPlay, IoPencil, IoTrophy, IoVideocam, IoStatsChart,
 } from 'react-icons/io5';
 import { realtimeSync } from '../services/realtimeSync';
 import { kabaddiService } from '../services/kabaddi';
+import { auctionPersistence } from '../services/auctionPersistence';
+import type { SoldPlayerRecord } from '../services/auctionPersistence';
+import { uploadFileToStorage } from '../services';
+import { getKabaddiRoleCategory } from '../utils/kabaddiRoles';
 import { tenantPath } from '../services/tenantPath';
 import { useTenantNavigate as useNavigate, getTenantSlugFromPath } from '../hooks/useTenantNavigate';
+import { withScorerAdminChrome } from './withScorerAdminChrome';
 import {
   KABADDI_POSITIONS, KABADDI_DEFENDER_ROLES, DEFAULT_KABADDI_OVERLAY_CONFIG,
   DEFAULT_KABADDI_RULES, createEmptyKabaddiLiveState,
@@ -24,6 +29,7 @@ import type {
   KabaddiTeam, KabaddiPlayer, KabaddiMatchSetup, KabaddiOverlayConfig,
   KabaddiPosition, KabaddiDefenderRole, KabaddiRulesConfig, KabaddiAnimationConfig,
 } from '../types/kabaddi';
+import type { Team } from '../types';
 import './KabaddiAdminPage.css';
 
 type Tab = 'teams' | 'players' | 'matches' | 'overlay';
@@ -45,7 +51,7 @@ const ANIMATION_FIELDS = [
   { key: 'doOrDieAnimation', flag: 'enableDoOrDieAnimation', label: 'Do or Die', hint: 'Third consecutive empty raid' },
 ] as const;
 
-export default function KabaddiAdminPage() {
+function KabaddiAdminPageContent() {
   const navigate = useNavigate();
   const tenantSlug = getTenantSlugFromPath(window.location.pathname);
 
@@ -73,6 +79,7 @@ export default function KabaddiAdminPage() {
         const db = realtimeSync.getDatabase();
         if (!db) throw new Error('no db');
         kabaddiService.initialize(db, tenantPath('kabaddi'));
+        auctionPersistence.initialize(db);
         if (!cancelled) setReady(true);
       } catch {
         if (!cancelled) retry = setTimeout(() => void init(), 800);
@@ -101,11 +108,113 @@ export default function KabaddiAdminPage() {
 
   useEffect(() => { void reloadMatches(); }, [reloadMatches]);
 
+  // ── Auction teams (source of truth from /{tenantSlug}/admin) ──
+  const [auctionTeams, setAuctionTeams] = useState<Team[]>([]);
+
+  const reloadAuctionTeams = useCallback(async () => {
+    if (!ready) return;
+    try { setAuctionTeams((await auctionPersistence.getTeams()) ?? []); } catch { /* ignore */ }
+  }, [ready]);
+
+  useEffect(() => { void reloadAuctionTeams(); }, [reloadAuctionTeams]);
+
+  const importableAuctionTeams = useMemo(
+    () => auctionTeams.filter(at => !teams.some(kt => kt.sourceTeamId === at.id
+      || kt.name.trim().toLowerCase() === at.name.trim().toLowerCase())),
+    [auctionTeams, teams],
+  );
+
+  const importAuctionTeam = async (at: Team) => {
+    setBusy(true);
+    try {
+      await kabaddiService.saveTeam({
+        id: makeId('kteam'),
+        name: at.name,
+        shortName: at.name.slice(0, 3).toUpperCase(),
+        primaryColor: at.primaryColor || '#7c3aed',
+        secondaryColor: at.secondaryColor,
+        logoUrl: at.brandLogoUrl || at.logoUrl || undefined,
+        coach: at.ownerCompany || undefined,
+        sourceTeamId: at.id,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      });
+      flash(`Imported ${at.name} from Auction Admin`);
+    } catch (e) { flash(`Failed: ${String(e)}`); } finally { setBusy(false); }
+  };
+
+  // ── Sold players (source of truth from /{tenantSlug}/admin) ──
+  const [soldPlayers, setSoldPlayers] = useState<SoldPlayerRecord[]>([]);
+
+  const reloadSoldPlayers = useCallback(async () => {
+    if (!ready) return;
+    try { setSoldPlayers(await auctionPersistence.getSoldPlayers()); } catch { /* ignore */ }
+  }, [ready]);
+
+  useEffect(() => { void reloadSoldPlayers(); }, [reloadSoldPlayers]);
+
+  const kabaddiPositionFor = (role: string): { position: KabaddiPosition; defenderRole?: KabaddiDefenderRole } => {
+    const category = getKabaddiRoleCategory(role);
+    if (category === 'Raider') return { position: 'RAIDER' };
+    if (category === 'Defender') return { position: 'DEFENDER', defenderRole: 'left_corner' };
+    return { position: 'ALL_ROUNDER' };
+  };
+
+  // Auction records don't always carry teamId, so fall back to the team name.
+  const teamForSoldPlayer = useCallback((sp: SoldPlayerRecord): KabaddiTeam | undefined => teams.find(t =>
+    (!!sp.teamId && !!t.sourceTeamId && t.sourceTeamId === sp.teamId)
+    || (!!sp.teamName && t.name.trim().toLowerCase() === sp.teamName.trim().toLowerCase())
+  ), [teams]);
+
+  const importablePlayers = useMemo(() => soldPlayers.filter(sp => {
+    const mappedTeam = teamForSoldPlayer(sp);
+    if (!mappedTeam) return false;
+    return !players.some(p => (!!p.sourcePlayerId && p.sourcePlayerId === sp.id)
+      || (p.teamId === mappedTeam.id && p.name.trim().toLowerCase() === sp.playerName.trim().toLowerCase()));
+  }), [soldPlayers, teamForSoldPlayer, players]);
+
+  /** Sold players whose auction team has no kabaddi team yet — import the team first. */
+  const unmappedSoldTeams = useMemo(() => {
+    const names = new Set<string>();
+    for (const sp of soldPlayers) if (!teamForSoldPlayer(sp) && sp.teamName) names.add(sp.teamName);
+    return [...names];
+  }, [soldPlayers, teamForSoldPlayer]);
+
+  const importSoldPlayer = async (sp: SoldPlayerRecord) => {
+    const mappedTeam = teamForSoldPlayer(sp);
+    if (!mappedTeam) return;
+    const { position, defenderRole } = kabaddiPositionFor(sp.role);
+    setBusy(true);
+    try {
+      await kabaddiService.savePlayer({
+        id: makeId('kplayer'),
+        teamId: mappedTeam.id,
+        name: sp.playerName,
+        position,
+        defenderRole,
+        photoUrl: sp.imageUrl || undefined,
+        age: sp.age ?? undefined,
+        isStarter: true,
+        sourcePlayerId: sp.id,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      });
+    } catch (e) { flash(`Failed: ${String(e)}`); }
+  };
+
+  const importAllPlayers = async () => {
+    setBusy(true);
+    try {
+      for (const sp of importablePlayers) await importSoldPlayer(sp);
+      flash(`Imported ${importablePlayers.length} player(s) from Auction Admin`);
+    } finally { setBusy(false); }
+  };
+
   // ── Teams ──
-  const [teamForm, setTeamForm] = useState({ name: '', shortName: '', primaryColor: '#7c3aed', logoUrl: '', coach: '' });
+  const [teamForm, setTeamForm] = useState({ name: '', shortName: '', primaryColor: '#7c3aed', logoUrl: '', animationUrl: '', coach: '' });
   const [editTeamId, setEditTeamId] = useState<string | null>(null);
 
-  const resetTeam = () => { setTeamForm({ name: '', shortName: '', primaryColor: '#7c3aed', logoUrl: '', coach: '' }); setEditTeamId(null); };
+  const resetTeam = () => { setTeamForm({ name: '', shortName: '', primaryColor: '#7c3aed', logoUrl: '', animationUrl: '', coach: '' }); setEditTeamId(null); };
 
   const saveTeam = async () => {
     if (!teamForm.name.trim()) { flash('Team name required'); return; }
@@ -118,13 +227,23 @@ export default function KabaddiAdminPage() {
         shortName: (teamForm.shortName.trim() || teamForm.name.slice(0, 3)).toUpperCase(),
         primaryColor: teamForm.primaryColor,
         logoUrl: teamForm.logoUrl.trim() || undefined,
+        animationUrl: teamForm.animationUrl.trim() || undefined,
         coach: teamForm.coach.trim() || undefined,
+        sourceTeamId: existing?.sourceTeamId,
         createdAt: existing?.createdAt ?? Date.now(),
         updatedAt: Date.now(),
       });
       flash(existing ? 'Team updated' : 'Team created');
       resetTeam();
     } catch (e) { flash(`Failed: ${String(e)}`); } finally { setBusy(false); }
+  };
+
+  const uploadTeamAnimation = async (file: File) => {
+    try {
+      const url = await uploadFileToStorage(file, `media/kabaddi/teams/anim-${Date.now()}`);
+      setTeamForm(f => ({ ...f, animationUrl: url }));
+      flash('Animation uploaded');
+    } catch { flash('Upload failed'); }
   };
 
   // ── Players ──
@@ -195,8 +314,8 @@ export default function KabaddiAdminPage() {
       const id = makeId('kmatch');
       const setup: KabaddiMatchSetup = {
         id,
-        teamA: { id: a.id, name: a.name, shortName: a.shortName, logoUrl: a.logoUrl, primaryColor: a.primaryColor },
-        teamB: { id: b.id, name: b.name, shortName: b.shortName, logoUrl: b.logoUrl, primaryColor: b.primaryColor },
+        teamA: { id: a.id, name: a.name, shortName: a.shortName, logoUrl: a.logoUrl, animationUrl: a.animationUrl, primaryColor: a.primaryColor },
+        teamB: { id: b.id, name: b.name, shortName: b.shortName, logoUrl: b.logoUrl, animationUrl: b.animationUrl, primaryColor: b.primaryColor },
         venue: matchForm.venue.trim() || 'Indoor Court',
         date: new Date(matchForm.date).toISOString(),
         competition: matchForm.competition.trim() || undefined,
@@ -246,26 +365,25 @@ export default function KabaddiAdminPage() {
     }));
   };
 
+  const uploadAnimMedia = async (key: typeof ANIMATION_FIELDS[number]['key'], file: File) => {
+    try {
+      const url = await uploadFileToStorage(file, `media/kabaddi/animations/${key}-${Date.now()}`);
+      setAnim(key, { mediaUrl: url });
+      flash('Upload successful');
+    } catch { flash('Upload failed'); }
+  };
+
   if (!ready) {
     return <div className="kba kba--loading"><div className="kba__spinner" /><p>Connecting…</p></div>;
   }
 
   return (
     <div className="kba">
-      <header className="kba__header">
-        <div className="kba__brand">
-          <span className="kba__logo">🤼</span>
-          <div>
-            <h1>Kabaddi Control Room</h1>
-            <span>Teams, players, fixtures and broadcast overlay</span>
-          </div>
-        </div>
-        <div className="kba__counts">
-          <span><IoPeople size={14} /> {teams.length} teams</span>
-          <span><IoShirt size={14} /> {players.length} players</span>
-          <span><IoTrophy size={14} /> {matches.length} matches</span>
-        </div>
-      </header>
+      <div className="kba__counts kba__counts--bar">
+        <span><IoPeople size={14} /> {teams.length} teams</span>
+        <span><IoShirt size={14} /> {players.length} players</span>
+        <span><IoTrophy size={14} /> {matches.length} matches</span>
+      </div>
 
       <nav className="kba__tabs">
         <button className={tab === 'teams' ? 'is-active' : ''} onClick={() => setTab('teams')}>Teams</button>
@@ -280,11 +398,56 @@ export default function KabaddiAdminPage() {
       {tab === 'teams' && (
         <section className="kba__body">
           <div className="kba__card">
+            <h2>Import from Auction Admin</h2>
+            <p className="kba__hint">
+              Teams are managed once in <code>/{tenantSlug}/admin</code> and reused here — no need to re-enter names,
+              logos or colours for kabaddi.
+            </p>
+            {importableAuctionTeams.length === 0 ? (
+              <p className="kba__empty">
+                {auctionTeams.length === 0
+                  ? 'No teams found in the Auction Admin yet.'
+                  : 'All auction teams are already imported.'}
+              </p>
+            ) : (
+              <div className="kba__list">
+                {importableAuctionTeams.map(at => (
+                  <div key={at.id} className="kba__row" style={{ borderLeftColor: at.primaryColor }}>
+                    <div className="kba__row-id">
+                      {(at.brandLogoUrl || at.logoUrl)
+                        ? <img src={at.brandLogoUrl || at.logoUrl} alt={at.name} />
+                        : <span className="kba__badge" style={{ background: at.primaryColor }}>{at.name.slice(0, 3).toUpperCase()}</span>}
+                      <div><strong>{at.name}</strong></div>
+                    </div>
+                    <div className="kba__row-actions">
+                      <button onClick={() => importAuctionTeam(at)} disabled={busy}><IoAdd size={15} /> Import</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className="kba__actions">
+              <button className="kba__btn" onClick={reloadAuctionTeams}><IoSettings size={16} /> Refresh from Auction Admin</button>
+            </div>
+          </div>
+
+          <div className="kba__card">
             <h2>{editTeamId ? 'Edit team' : 'Add team'}</h2>
             <div className="kba__grid">
               <label><span>Name *</span><input value={teamForm.name} onChange={e => setTeamForm(f => ({ ...f, name: e.target.value }))} placeholder="Chennai Chargers" /></label>
               <label><span>Short code</span><input value={teamForm.shortName} maxLength={4} onChange={e => setTeamForm(f => ({ ...f, shortName: e.target.value }))} placeholder="CHE" /></label>
               <label><span>Logo URL</span><input value={teamForm.logoUrl} onChange={e => setTeamForm(f => ({ ...f, logoUrl: e.target.value }))} placeholder="https://…" /></label>
+              <label>
+                <span>Overlay animation (looping GIF/PNG)</span>
+                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                  <input value={teamForm.animationUrl} onChange={e => setTeamForm(f => ({ ...f, animationUrl: e.target.value }))} placeholder="https://… transparent .gif" style={{ flex: 1 }} />
+                  <label className="kba__btn" style={{ cursor: 'pointer', margin: 0 }}>
+                    Upload
+                    <input type="file" accept="image/*" style={{ display: 'none' }} onChange={e => { if (e.target.files?.[0]) void uploadTeamAnimation(e.target.files[0]); }} />
+                  </label>
+                  {teamForm.animationUrl && <img src={teamForm.animationUrl} alt="" style={{ width: 34, height: 34, objectFit: 'contain' }} />}
+                </div>
+              </label>
               <label><span>Coach</span><input value={teamForm.coach} onChange={e => setTeamForm(f => ({ ...f, coach: e.target.value }))} /></label>
               <label><span>Colour</span><input type="color" value={teamForm.primaryColor} onChange={e => setTeamForm(f => ({ ...f, primaryColor: e.target.value }))} /></label>
             </div>
@@ -306,7 +469,7 @@ export default function KabaddiAdminPage() {
                   </div>
                 </div>
                 <div className="kba__row-actions">
-                  <button onClick={() => { setTeamForm({ name: t.name, shortName: t.shortName, primaryColor: t.primaryColor ?? '#7c3aed', logoUrl: t.logoUrl ?? '', coach: t.coach ?? '' }); setEditTeamId(t.id); }}><IoPencil size={15} /></button>
+                  <button onClick={() => { setTeamForm({ name: t.name, shortName: t.shortName, primaryColor: t.primaryColor ?? '#7c3aed', logoUrl: t.logoUrl ?? '', animationUrl: t.animationUrl ?? '', coach: t.coach ?? '' }); setEditTeamId(t.id); }}><IoPencil size={15} /></button>
                   <button onClick={async () => { if (window.confirm(`Delete ${t.name}?`)) { await kabaddiService.deleteTeam(t.id); flash('Team deleted'); } }}><IoTrash size={15} /></button>
                 </div>
               </div>
@@ -318,6 +481,44 @@ export default function KabaddiAdminPage() {
       {/* ── Players ── */}
       {tab === 'players' && (
         <section className="kba__body">
+          <div className="kba__card">
+            <h2>Import from Auction Admin</h2>
+            <p className="kba__hint">
+              Players sold in <code>/{tenantSlug}/admin</code> are matched to their imported team and can be added to
+              the kabaddi roster in one click. Role is guessed from the auction role (raider / defender / all-rounder)
+              and can be edited afterwards.
+            </p>
+            {importablePlayers.length === 0 ? (
+              <p className="kba__empty">
+                {soldPlayers.length === 0 ? 'No sold players found in the Auction Admin yet.' : 'All eligible players are already imported.'}
+              </p>
+            ) : (
+              <>
+                <ul className="kba__players">
+                  {importablePlayers.map(sp => (
+                    <li key={sp.id}>
+                      <span className="kba__pname">{sp.playerName}</span>
+                      <small>{sp.teamName} · {sp.role}</small>
+                      <button onClick={() => importSoldPlayer(sp)} disabled={busy}><IoAdd size={14} /></button>
+                    </li>
+                  ))}
+                </ul>
+                <div className="kba__actions">
+                  <button className="kba__btn kba__btn--primary" onClick={importAllPlayers} disabled={busy}>
+                    <IoAdd size={16} /> Import all {importablePlayers.length} players
+                  </button>
+                  <button className="kba__btn" onClick={reloadSoldPlayers}><IoSettings size={16} /> Refresh</button>
+                </div>
+              </>
+            )}
+            {unmappedSoldTeams.length > 0 && (
+              <p className="kba__hint">
+                Waiting on a kabaddi team for: <strong>{unmappedSoldTeams.join(', ')}</strong>. Import those teams on the
+                Teams tab (or create one with the same name) and their players will appear here.
+              </p>
+            )}
+          </div>
+
           <div className="kba__card">
             <h2>{editPlayerId ? 'Edit player' : 'Add player'}</h2>
             <div className="kba__grid">
@@ -456,6 +657,8 @@ export default function KabaddiAdminPage() {
                 <div className="kba__row-actions">
                   <button onClick={() => openIn('/kabaddi/scorer/update', m.id)}><IoFlash size={15} /> Score</button>
                   <button onClick={() => openIn('/kabaddi/scorer/obs-overlay', m.id)}><IoDesktop size={15} /> Overlay</button>
+                  <button onClick={() => openIn('/kabaddi/scorer/camera', m.id)}><IoVideocam size={15} /> Camera</button>
+                  <button onClick={() => openIn('/kabaddi/scorer/obs-dock', m.id)}><IoStatsChart size={15} /> Dock</button>
                   <button onClick={async () => { await kabaddiService.updateMatchStatus(m.id, 'live'); await reloadMatches(); flash('Match is live'); }}><IoPlay size={15} /></button>
                   <button onClick={async () => { if (window.confirm('Delete match?')) { await kabaddiService.deleteMatch(m.id); await reloadMatches(); flash('Deleted'); } }}><IoTrash size={15} /></button>
                 </div>
@@ -516,9 +719,28 @@ export default function KabaddiAdminPage() {
                   </div>
                   <div className="kba__grid">
                     <label><span>Text</span><input value={anim?.text ?? ''} onChange={e => setAnim(field.key, { text: e.target.value })} /></label>
-                    <label><span>Media URL (image / gif)</span><input value={anim?.mediaUrl ?? ''} onChange={e => setAnim(field.key, { mediaUrl: e.target.value })} /></label>
+                    <label>
+                      <span>Media URL (image / gif)</span>
+                      <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                        <input value={anim?.mediaUrl ?? ''} onChange={e => setAnim(field.key, { mediaUrl: e.target.value })} style={{ flex: 1 }} />
+                        <label className="kba__btn" style={{ cursor: 'pointer', margin: 0 }}>
+                          Upload
+                          <input type="file" accept="image/*" style={{ display: 'none' }} onChange={e => { if (e.target.files?.[0]) void uploadAnimMedia(field.key, e.target.files[0]); }} />
+                        </label>
+                      </div>
+                    </label>
                     <label><span>Duration (ms)</span><input type="number" min={500} step={250} value={anim?.durationMs ?? 4000} onChange={e => setAnim(field.key, { durationMs: Number(e.target.value) || 4000 })} /></label>
                     <label><span>Colour</span><input type="color" value={anim?.color ?? '#f59e0b'} onChange={e => setAnim(field.key, { color: e.target.value })} /></label>
+                  </div>
+                  <div style={{ marginTop: '0.75rem', padding: '1rem', background: 'rgba(0,0,0,0.3)', borderRadius: 8, textAlign: 'center' }}>
+                    {anim?.mediaUrl ? (
+                      <img src={anim.mediaUrl} alt="preview" style={{ maxWidth: 200, maxHeight: 120, borderRadius: 8, objectFit: 'contain' }} />
+                    ) : (
+                      <span style={{ fontSize: 24, fontWeight: 900, color: anim?.color ?? '#f59e0b', textShadow: `0 0 20px ${anim?.color ?? '#f59e0b'}80` }}>
+                        {anim?.text || field.label}
+                      </span>
+                    )}
+                    <p className="kba__hint" style={{ marginTop: 4 }}>{anim?.mediaUrl ? 'Custom media' : 'Default text'} · {anim?.durationMs ?? 4000}ms</p>
                   </div>
                 </div>
               );
@@ -544,3 +766,8 @@ export default function KabaddiAdminPage() {
     </div>
   );
 }
+
+export default withScorerAdminChrome(KabaddiAdminPageContent, {
+  gameType: 'kabaddi',
+  subtitle: 'Teams, players, fixtures and broadcast overlay',
+});

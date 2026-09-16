@@ -13,6 +13,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { initializeApp, getApps } from 'firebase/app';
 import { getDatabase, ref, onValue, set as fbSet } from 'firebase/database';
 import { tenantPath } from '../services/tenantPath';
+import { useBroadcastOverlaySurface } from '../hooks/useBroadcastOverlaySurface';
 import type {
   LiveScore, OverlayControlState, OverlayType,
   ScoringOverlayConfig, ScoringAd, MatchSetup, LiveQuestion,
@@ -82,6 +83,7 @@ function tickerSurname(rawName: string, maxChars = 12): string {
 }
 
 export default function ScoreOBSOverlayPage() {
+  useBroadcastOverlaySurface();
   const [matchId, setMatchId] = useState<string | null>(null);
   const [urlMatchId, setUrlMatchId] = useState<string | null>(null);
   const [urlPinned, setUrlPinned] = useState(false);

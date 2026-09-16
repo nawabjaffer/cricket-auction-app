@@ -15,6 +15,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { initializeApp, getApps } from 'firebase/app';
 import { getDatabase, ref, onValue } from 'firebase/database';
 import { tenantPath } from '../services/tenantPath';
+import { useBroadcastOverlaySurface } from '../hooks/useBroadcastOverlaySurface';
 import {
   computeMatchMinute, FOOTBALL_HALF_LABELS, DEFAULT_FOOTBALL_OVERLAY_CONFIG,
 } from '../types/football';
@@ -37,6 +38,7 @@ const fbApp = getApps().find((a) => a.name === FB_APP) ?? initializeApp(FB_CONFI
 const fbDb = getDatabase(fbApp);
 
 export default function FootballOBSOverlayPage() {
+  useBroadcastOverlaySurface();
   const [matchId, setMatchId] = useState<string | null>(null);
   const [match, setMatch] = useState<FootballMatchSetup | null>(null);
   const [live, setLive] = useState<FootballLiveState | null>(null);

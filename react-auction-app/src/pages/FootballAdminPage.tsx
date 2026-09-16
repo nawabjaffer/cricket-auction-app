@@ -9,7 +9,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   IoAdd, IoTrash, IoSave, IoClose, IoShirt, IoPeople, IoFootball,
-  IoImage, IoColorPalette, IoPencil, IoDesktop, IoStatsChart, IoPlay,
+  IoImage, IoColorPalette, IoPencil, IoDesktop, IoStatsChart, IoPlay, IoVideocam,
 } from 'react-icons/io5';
 import { useAdminAuth } from '../hooks/useAdminAuth';
 import { useTenantNavigate as useNavigate, getTenantSlugFromPath } from '../hooks/useTenantNavigate';
@@ -19,6 +19,7 @@ import { realtimeSync } from '../services/realtimeSync';
 import { footballService } from '../services/football';
 import { tenantService } from '../services/tenantService';
 import { uploadFileToStorage } from '../services';
+import { withScorerAdminChrome } from './withScorerAdminChrome';
 import {
   FOOTBALL_POSITIONS, FOOTBALL_FORMATIONS, DEFAULT_FOOTBALL_OVERLAY_CONFIG, DEFAULT_FOOTBALL_RULES,
 } from '../types/football';
@@ -32,7 +33,7 @@ type Tab = 'teams' | 'players' | 'matches' | 'overlay';
 
 const uid = (prefix: string) => `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
 
-export default function FootballAdminPage() {
+function FootballAdminPageContent() {
   const navigate = useNavigate();
   const location = useLocation();
   const tenantSlug = getTenantSlugFromPath(location.pathname);
@@ -97,22 +98,6 @@ export default function FootballAdminPage() {
 
   return (
     <div className="fb-admin">
-      <header className="fb-admin__header">
-        <div className="fb-admin__brand">
-          <IoFootball size={26} />
-          <div>
-            <h1>Football Scorer</h1>
-            <p>Team &amp; player management · match setup · broadcast overlay</p>
-          </div>
-        </div>
-        <div className="fb-admin__header-actions">
-          <button className="fb-admin__ghost" onClick={() => navigate('/cricket/scorer/admin')}>
-            Switch to Cricket
-          </button>
-          <button className="fb-admin__ghost" onClick={() => navigate('/admin')}>Main Admin</button>
-        </div>
-      </header>
-
       <nav className="fb-admin__tabs">
         {([
           { id: 'teams', label: 'Teams', icon: <IoShirt size={18} /> },
@@ -152,6 +137,11 @@ export default function FootballAdminPage() {
     </div>
   );
 }
+
+export default withScorerAdminChrome(FootballAdminPageContent, {
+  gameType: 'football',
+  subtitle: 'Team & player management · match setup · broadcast overlay',
+});
 
 // ════════════════════════════════════════════════════════════════════════════
 // TEAMS TAB
@@ -580,6 +570,9 @@ function MatchesTab({ teams, matches, baseUrl, rules, onFlash, onChanged }: {
               </button>
               <button className="fb-btn fb-btn--sm fb-btn--ghost" onClick={() => window.open(`${baseUrl}/football/scorer/obs-overlay?matchId=${m.id}`, '_blank')}>
                 <IoDesktop size={14} /> Overlay
+              </button>
+              <button className="fb-btn fb-btn--sm fb-btn--ghost" onClick={() => window.open(`${baseUrl}/football/scorer/camera?matchId=${m.id}`, '_blank')}>
+                <IoVideocam size={14} /> Camera
               </button>
               <button className="fb-btn fb-btn--sm fb-btn--ghost" onClick={() => window.open(`${baseUrl}/football/scorer/obs-dock?matchId=${m.id}`, '_blank')}>
                 <IoStatsChart size={14} /> Dock

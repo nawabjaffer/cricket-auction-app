@@ -1,0 +1,129 @@
+/* ============================================================================
+   KABADDI OBS DOCK — stats board (top raiders / defenders) with player photos
+   Transparent background for OBS; purple / amber theme.
+   ============================================================================ */
+
+.kbd {
+  position: fixed;
+  inset: 0;
+  background: transparent;
+  font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  display: flex;
+  align-items: flex-end;
+  padding: 32px;
+  --kbd-primary: #0a0a0a;
+  --kbd-secondary: #1d4ed8;
+  --kbd-accent: #f59e0b;
+  --kbd-text: #ffffff;
+}
+
+.kbd__panel {
+  width: 420px;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--kbd-primary) 96%, #000), var(--kbd-primary));
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.55);
+}
+
+/* ── Header ───────────────────────────────────────────────────────────────── */
+.kbd__header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 20px;
+  background: linear-gradient(120deg, var(--kbd-secondary), color-mix(in srgb, var(--kbd-secondary) 55%, #000));
+}
+.kbd__tourn { height: 42px; width: auto; object-fit: contain; }
+.kbd__title-wrap { flex: 1; }
+.kbd__title {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 900;
+  letter-spacing: 1px;
+  color: #fff;
+  text-transform: uppercase;
+}
+.kbd__subtitle { font-size: 0.78rem; color: rgba(255, 255, 255, 0.8); margin-top: 2px; }
+
+/* ── List ─────────────────────────────────────────────────────────────────── */
+.kbd__list { padding: 12px; display: flex; flex-direction: column; gap: 8px; min-height: 260px; }
+.kbd__empty { padding: 40px; text-align: center; color: rgba(255, 255, 255, 0.4); }
+
+.kbd__row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+.kbd__row--lead {
+  background: rgba(245, 158, 11, 0.1);
+  border-color: var(--kbd-accent);
+}
+
+.kbd__rank {
+  font-size: 1.3rem;
+  font-weight: 900;
+  color: var(--kbd-accent);
+  min-width: 26px;
+  text-align: center;
+}
+
+.kbd__photo {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border: 2px solid var(--kbd-secondary);
+  font-size: 1.3rem;
+  font-weight: 800;
+  color: #fff;
+}
+.kbd__photo img { width: 100%; height: 100%; object-fit: cover; }
+
+.kbd__info { flex: 1; min-width: 0; }
+.kbd__name {
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.kbd__team {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.78rem;
+  color: rgba(255, 255, 255, 0.6);
+  margin-top: 2px;
+}
+.kbd__team img { width: 16px; height: 16px; object-fit: contain; }
+
+.kbd__stat { display: flex; flex-direction: column; align-items: center; min-width: 56px; }
+.kbd__stat-num {
+  font-size: 1.8rem;
+  font-weight: 900;
+  color: var(--kbd-accent);
+  line-height: 1;
+}
+.kbd__stat-label {
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: rgba(255, 255, 255, 0.5);
+  margin-top: 2px;
+}
+
+@media (max-width: 720px) {
+  .kbd { padding: 16px; }
+  .kbd__panel { width: 100%; }
+}

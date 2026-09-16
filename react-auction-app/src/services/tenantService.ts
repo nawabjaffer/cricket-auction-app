@@ -34,6 +34,8 @@ export interface TenantRecord {
   logoUrl?: string;
   // Enabled sports for this tournament (default: cricket only).
   sports?: SportKey[];
+  /** Sport opened by generic scoring/admin, update, and overlay routes. */
+  primarySport?: SportKey;
   // Football rules & regulations (format, timings, subs, discipline).
   // Configured from Platform Admin, consumed by the football scorer.
   footballRules?: FootballRulesConfig;
@@ -111,11 +113,14 @@ class TenantService {
    * the array is fully overwritten (avoids Firebase array-merge leftovers when
    * the new list is shorter than the old one).
    */
-  async setTenantSports(id: string, sports: SportKey[]): Promise<void> {
+  async setTenantSports(id: string, sports: SportKey[], primarySport?: SportKey): Promise<void> {
     const db = await this.getDb();
     if (!db) return;
     const unique = Array.from(new Set(sports));
-    await set(ref(db, `${TENANT_REGISTRY_PATH()}/${id}/sports`), unique);
+    const primary = primarySport && unique.includes(primarySport)
+      ? primarySport
+      : unique.at(-1) ?? 'cricket';
+    await update(ref(db, `${TENANT_REGISTRY_PATH()}/${id}`), { sports: unique, primarySport: primary });
   }
 
   /** Save the football rules & regulations for a tournament. */

@@ -5,8 +5,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { IoAdd, IoTrash, IoSave, IoClose, IoPlay, IoStop, IoTrophy, IoSettings, IoImage, IoFlash, IoVideocam, IoLink, IoDesktop, IoPencil, IoPeople, IoGameController, IoFootball } from 'react-icons/io5';
-import { GiCricketBat } from 'react-icons/gi';
+import { IoAdd, IoTrash, IoSave, IoClose, IoPlay, IoStop, IoTrophy, IoSettings, IoImage, IoFlash, IoVideocam, IoLink, IoDesktop, IoPencil, IoPeople, IoGameController } from 'react-icons/io5';
 import { useAdminAuth } from '../hooks/useAdminAuth';
 import { useTenantNavigate as useNavigate } from '../hooks/useTenantNavigate';
 import { getTenantSlugFromPath } from '../hooks/useTenantNavigate';
@@ -22,6 +21,7 @@ import { uploadFileToStorage } from '../services';
 import { DEFAULT_MVP_WEIGHTS, MATCH_STAGE_LABELS } from '../types/scoring';
 import type { MatchSetup, MatchStage, ScoringAd, ScoringOverlayConfig, LiveQuestion, MatchScoringConfig, PreMatchState, PreMatchPhase, ImpactPlayer, TossConfig, MatchLineup, TickerConfig, OBSWebSocketConfig, MVPWeights, AnimationConfig, OBSReplayButton, OBSButtonSeriesStep, OBSReplayConfig, TickerStatWidget } from '../types/scoring';
 import type { SoldPlayer } from '../types';
+import { withScorerAdminChrome } from './withScorerAdminChrome';
 import './ScoringAdminPage.css';
 
 type Tab = 'matches' | 'provider' | 'ads' | 'overlay' | 'animations' | 'prematch' | 'ticker' | 'stats' | 'obs';
@@ -39,7 +39,7 @@ const DEFAULT_OVERLAY_CONFIG: ScoringOverlayConfig = {
   liveQuestions: [],
 };
 
-export default function ScoringAdminPage() {
+function ScoringAdminPageContent() {
   const navigate = useNavigate();
   const location = useLocation();
   const tenantSlug = getTenantSlugFromPath(location.pathname);
@@ -134,42 +134,6 @@ export default function ScoringAdminPage() {
   return (
     <div className="scoring-admin">
       <div className="scoring-admin__bg" />
-
-      {/* Header */}
-      <header className="scoring-admin__header">
-        <div className="scoring-admin__header-left">
-          <GiCricketBat size={28} color="#fbbf24" />
-          <div>
-            <h1 className="scoring-admin__title">Scoring Admin</h1>
-            <p className="scoring-admin__subtitle">Match setup, overlays & live controls</p>
-          </div>
-        </div>
-        <button className="scoring-admin__close-btn" onClick={() => navigate('/admin')}>
-          <IoClose size={20} />
-        </button>
-      </header>
-
-      {/* Quick Actions Bar */}
-      <div className="scoring-admin__quick-actions">
-        <button className="scoring-admin__quick-btn" onClick={() => navigate('/cricket/scorer/update')}>
-          <IoPencil size={14} /> Update Scorecard
-        </button>
-        <button className="scoring-admin__quick-btn" onClick={() => window.open(`${baseUrl}/cricket/scorer/obs-overlay`, '_blank')}>
-          <IoDesktop size={14} /> OBS Overlay
-        </button>
-        <button className="scoring-admin__quick-btn" onClick={() => window.open(`${baseUrl}/cricket/scorer/camera`, '_blank')}>
-          <IoVideocam size={14} /> Camera Recorder
-        </button>
-        <button className="scoring-admin__quick-btn" onClick={() => window.open(`${baseUrl}/cricket/scorer/obs-dock`, '_blank')}>
-          <IoGameController size={14} /> OBS Control Dock
-        </button>
-        <button className="scoring-admin__quick-btn" onClick={() => navigate('/football/scorer/admin')} title="Football Scorer">
-          <IoFootball size={14} /> Football Scorer
-        </button>
-        <button className="scoring-admin__quick-btn" onClick={() => navigate('/admin')}>
-          <IoSettings size={14} /> Auction Admin
-        </button>
-      </div>
 
       {/* Tabs */}
       <nav className="scoring-admin__tabs">
@@ -284,6 +248,11 @@ export default function ScoringAdminPage() {
     </div>
   );
 }
+
+export default withScorerAdminChrome(ScoringAdminPageContent, {
+  gameType: 'cricket',
+  subtitle: 'Match setup, overlays & live controls',
+});
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // MATCHES TAB

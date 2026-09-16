@@ -29,6 +29,11 @@ import { tenantPath } from '../services/tenantPath';
 import { useTenantNavigate as useNavigate } from '../hooks/useTenantNavigate';
 import { broadcastDb } from '../services/camera/broadcastDb';
 import { multiCamService } from '../services/camera/multiCamService';
+import type { SportKey } from '../services/tenantService';
+import type { TeamBroadcastState } from '../utils/teamScoreboard';
+import { drawTeamScoreTicker } from '../utils/teamBroadcastCanvas';
+import { DEFAULT_FOOTBALL_OVERLAY_CONFIG } from '../types/football';
+import { DEFAULT_KABADDI_OVERLAY_CONFIG, DEFAULT_KABADDI_RULES } from '../types/kabaddi';
 import type { LiveScore, MatchSetup, ScoringOverlayConfig, OverlayControlState, MatchLineup, TickerDesign } from '../types/scoring';
 import {
   drawScoreTicker, drawCelebration, resolveCeleb, getImg,
@@ -78,8 +83,11 @@ function exitImmersive() {
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
-export default function ScoreCameraPage() {
+export default function ScoreCameraPage({ gameType = 'cricket' }: Readonly<{ gameType?: SportKey }>) {
   const navigate = useNavigate();
+  const namespace = gameType === 'cricket' ? 'scoring' : gameType;
+  const teamBroadcastRef = useRef<TeamBroadcastState | null>(null);
+  const [teamTitle, setTeamTitle] = useState('');
 
   // DOM refs
   const videoElRef = useRef<HTMLVideoElement | null>(null);
@@ -186,6 +194,32 @@ export default function ScoreCameraPage() {
   // Subscribe to Firebase live score + match setup
   useEffect(() => {
     if (!matchId) return;
+    if (gameType !== 'cricket') {
+      const state: TeamBroadcastState = gameType === 'football'
+        ? { sport: 'football', match: null, live: null, config: DEFAULT_FOOTBALL_OVERLAY_CONFIG }
+        : { sport: 'kabaddi', match: null, live: null, config: DEFAULT_KABADDI_OVERLAY_CONFIG, rules: DEFAULT_KABADDI_RULES };
+      teamBroadcastRef.current = state;
+      const base = tenantPath(namespace);
+      const onError = () => setError('Cannot load match broadcast data. Check your connection and access.');
+      const unsubs = [
+        onValue(ref(camDb, `${base}/matches/${matchId}/setup`), snap => {
+          state.match = snap.exists() ? snap.val() : null;
+          setTeamTitle(state.match ? `${state.match.teamA.name} vs ${state.match.teamB.name}` : 'Match Camera');
+        }, onError),
+        onValue(ref(camDb, `${base}/matches/${matchId}/live`), snap => {
+          state.live = snap.exists() ? snap.val() : null;
+        }, onError),
+        onValue(ref(camDb, `${base}/overlayConfig`), snap => {
+          state.config = { ...(state.sport === 'football' ? DEFAULT_FOOTBALL_OVERLAY_CONFIG : DEFAULT_KABADDI_OVERLAY_CONFIG), ...snap.val() };
+        }, onError),
+      ];
+      if (state.sport === 'kabaddi') {
+        unsubs.push(onValue(ref(camDb, `${base}/rules`), snap => {
+          state.rules = { ...DEFAULT_KABADDI_RULES, ...snap.val() };
+        }, onError));
+      }
+      return () => { unsubs.forEach(unsub => unsub()); teamBroadcastRef.current = null; };
+    }
     const base = tenantPath('scoring');
     const unsubs: Array<() => void> = [];
     unsubs.push(onValue(ref(camDb, `${base}/matches/${matchId}/setup`), snap => {
@@ -234,7 +268,7 @@ export default function ScoreCameraPage() {
       lastAnimTsRef.current = ts;
     }));
     return () => { unsubs.forEach(u => u()); };
-  }, [matchId]);
+  }, [matchId, gameType, namespace]);
 
   // ── Draw loop ──────────────────────────────────────────────────────────────
   const drawFrame = useCallback(() => {
@@ -257,7 +291,9 @@ export default function ScoreCameraPage() {
           ctx.fillStyle = '#000000';
           ctx.fillRect(0, 0, W, H);
         }
-        if (showTickerRef.current) {
+        if (showTickerRef.current && teamBroadcastRef.current) {
+          drawTeamScoreTicker(ctx, W, H, teamBroadcastRef.current, tickerPosRef.current);
+        } else if (showTickerRef.current) {
           drawScoreTicker(ctx, W, H, {
             live: liveRef.current,
             match: matchRef.current,
@@ -403,7 +439,7 @@ export default function ScoreCameraPage() {
     const stream = mediaStreamRef.current;
     if (!stream) return;
 
-    multiCamService.initialize(camDb, tenantPath('scoring'));
+    multiCamService.initialize(camDb, tenantPath(namespace));
     setShareState('connecting');
     multiCamService
       .publish(matchId, { id: sourceIdRef.current, name: camName, facing }, stream, s => setShareState(s))
@@ -416,7 +452,7 @@ export default function ScoreCameraPage() {
     return () => { cancelled = true; };
     // Re-publishing on camera flip is handled by replaceVideoTrack below.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sharing, matchId, cameraReady]);
+  }, [sharing, matchId, cameraReady, namespace]);
 
   useEffect(() => {
     if (!sharing) void stopSharing();
@@ -546,7 +582,7 @@ export default function ScoreCameraPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const title = match ? `${match.teamA?.name ?? 'Team A'} vs ${match.teamB?.name ?? 'Team B'}` : 'Match Camera';
+  const title = gameType !== 'cricket' ? teamTitle || 'Match Camera' : match ? `${match.teamA?.name ?? 'Team A'} vs ${match.teamB?.name ?? 'Team B'}` : 'Match Camera';
 
   return (
     <div className="score-cam">
@@ -559,7 +595,7 @@ export default function ScoreCameraPage() {
       {/* Top bar — hidden while recording so the burned-in branding shows cleanly */}
       {!recording && (
         <div className="score-cam__topbar">
-          <button className="score-cam__icon-btn" onClick={() => { exitImmersive(); navigate('/cricket/scorer/admin'); }} title="Back">
+          <button className="score-cam__icon-btn" onClick={() => { exitImmersive(); navigate(`/${gameType}/scorer/admin`); }} title="Back">
             <IoArrowBack size={22} />
           </button>
           <div className="score-cam__title">{title}</div>
@@ -665,13 +701,13 @@ export default function ScoreCameraPage() {
             >
               Ticker: {tickerPos === 'bottom' ? 'Bottom' : 'Top'}
             </button>
-            <button
+            {gameType === 'cricket' && <button
               className="score-cam__chip"
               onClick={() => setTickerDesign(d => (d === 'premium' ? 'glass' : 'premium'))}
               title="Switch between the glass and premium OBS ticker designs"
             >
               Style: {(tickerDesign || overlayConfigRef.current?.tickerConfig?.design || 'glass') === 'premium' ? 'Premium' : 'Glass'}
-            </button>
+            </button>}
             <button
               className={`score-cam__chip ${includeAudio ? 'score-cam__chip--on' : ''}`}
               onClick={() => setIncludeAudio(v => !v)}

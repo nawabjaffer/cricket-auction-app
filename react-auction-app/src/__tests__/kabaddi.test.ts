@@ -94,6 +94,25 @@ describe('resolveRaid', () => {
     expect(celebration).toBeNull();
   });
 
+  it('gives the defence the tackle when touches were entered before the raider was caught', () => {
+    const live = freshLive({ raidingTeamId: A });
+    const { live: next, events } = kabaddiService.resolveRaid(
+      live, { raidingTeamId: A, touches: 2, bonus: true, raiderOut: true }, RULES,
+    );
+    expect(next.teamA.score).toBe(0);
+    expect(next.teamB.score).toBe(1);
+    expect(next.teamA.playersOnCourt).toBe(6);
+    expect(next.teamB.playersOnCourt).toBe(7);
+    expect(events.some(e => e.type === 'tackle_point')).toBe(true);
+    expect(events.some(e => e.type === 'touch_point' || e.type === 'bonus_point')).toBe(false);
+  });
+
+  it('rejects an unknown raiding team instead of silently scoring team B', () => {
+    expect(() => kabaddiService.resolveRaid(
+      freshLive(), { raidingTeamId: 'unknown', touches: 1, bonus: false, raiderOut: false }, RULES,
+    )).toThrow('Unknown raiding team');
+  });
+
   it('pays two points for a super tackle with a thin defence', () => {
     const base = freshLive();
     const live = freshLive({ raidingTeamId: A, teamB: { ...base.teamB, playersOnCourt: 3 } });

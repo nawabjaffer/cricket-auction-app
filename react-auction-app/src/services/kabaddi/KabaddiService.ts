@@ -344,6 +344,9 @@ class KabaddiService {
     },
     rules: KabaddiRulesConfig = DEFAULT_KABADDI_RULES,
   ): RaidResolution {
+    if (input.raidingTeamId !== live.teamAId && input.raidingTeamId !== live.teamBId) {
+      throw new Error(`Unknown raiding team: ${input.raidingTeamId}`);
+    }
     const raidSide = this.sideOf(live, input.raidingTeamId);
     const defSide = raidSide === 'teamA' ? 'teamB' : 'teamA';
     const defTeamId = defSide === 'teamA' ? live.teamAId : live.teamBId;
@@ -358,7 +361,7 @@ class KabaddiService {
       && next[defSide].playersOnCourt >= rules.bonusMinDefenders;
     const raidPoints = touches + (bonusAwarded ? 1 : 0);
 
-    if (raidPoints > 0) {
+    if (raidPoints > 0 && !input.raiderOut) {
       // Raider banks points; every tagged defender leaves the mat.
       next = {
         ...next,
@@ -449,6 +452,7 @@ class KabaddiService {
       raidingTeamId: nextRaidingTeamId,
       raiderId: undefined,
       raiderName: undefined,
+      raiderPhotoUrl: undefined,
       raidClockStartedAt: 0,
       isDoOrDie: rules.doOrDieEnabled
         && next[nextSide].consecutiveEmptyRaids >= rules.doOrDieAfterEmptyRaids,

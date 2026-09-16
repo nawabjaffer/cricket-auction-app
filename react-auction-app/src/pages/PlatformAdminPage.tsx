@@ -102,11 +102,14 @@ export default function PlatformAdminPage() {
     const current = t.sports?.length ? t.sports : (['cricket'] as SportKey[]);
     const next = current.includes(sport) ? current.filter((s) => s !== sport) : [...current, sport];
     if (next.length === 0) { setError('A tournament must have at least one sport enabled.'); return; }
+    const primarySport = current.includes(sport)
+      ? (t.primarySport === sport ? next.at(-1) : t.primarySport ?? next.at(-1))
+      : sport;
     // Optimistic local update so the UI reflects immediately (no stale read).
-    setTenants((prev) => prev.map((x) => (x.id === t.id ? { ...x, sports: next } : x)));
+    setTenants((prev) => prev.map((x) => (x.id === t.id ? { ...x, sports: next, primarySport } : x)));
     setError(null);
     try {
-      await tenantService.setTenantSports(t.id, next);
+      await tenantService.setTenantSports(t.id, next, primarySport);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
       refresh(); // revert to server truth on failure
@@ -199,7 +202,7 @@ export default function PlatformAdminPage() {
                               borderColor: on ? 'transparent' : '#374151',
                               color: on ? '#fff' : '#94a3b8',
                             }}>
-                            {SPORT_ICON[sp.key]} {sp.label} {on ? '✓' : ''}
+                            {SPORT_ICON[sp.key]} {sp.label} {on ? (t.primarySport === sp.key ? '· Primary' : '✓') : ''}
                           </button>
                         );
                       })}

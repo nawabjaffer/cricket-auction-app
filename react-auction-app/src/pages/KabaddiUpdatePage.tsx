@@ -19,7 +19,7 @@ import { tenantPath } from '../services/tenantPath';
 import { useTenantNavigate as useNavigate } from '../hooks/useTenantNavigate';
 import {
   computeKabaddiClock, raidSecondsRemaining, KABADDI_HALF_LABELS,
-  createEmptyKabaddiLiveState, DEFAULT_KABADDI_RULES, isBonusAvailable,
+  createEmptyKabaddiLiveState, DEFAULT_KABADDI_RULES, isBonusAvailable, playerMatchPoints,
 } from '../types/kabaddi';
 import type {
   KabaddiMatchSetup, KabaddiLiveState, KabaddiPlayer, KabaddiRulesConfig,
@@ -45,6 +45,7 @@ export default function KabaddiUpdatePage() {
   const [raiderId, setRaiderId] = useState('');
   const [touches, setTouches] = useState(0);
   const [bonus, setBonus] = useState(false);
+  const [tacklerIds, setTacklerIds] = useState<string[]>([]);
 
   const undoStack = useRef<KabaddiLiveState[]>([]);
 
@@ -159,10 +160,19 @@ export default function KabaddiUpdatePage() {
       raidingTeamId: teamId,
       raiderId: raiderId || undefined,
       raiderName: player?.name,
+      raiderPhotoUrl: player?.photoUrl,
       raidClockStartedAt: Date.now(),
     };
     await persist(next, false);
+    setTacklerIds([]);
     if (next.isDoOrDie) await triggerOverlay('do_or_die');
+  };
+
+  const selectRaider = async (playerId: string) => {
+    if (!live) { setRaiderId(playerId); return; }
+    const p = players.find(x => x.id === playerId);
+    setRaiderId(playerId);
+    await persist({ ...live, raiderId: playerId || undefined, raiderName: p?.name, raiderPhotoUrl: p?.photoUrl }, false);
   };
 
   const resolveRaid = async (opts: { raiderOut: boolean }) => {
@@ -171,6 +181,7 @@ export default function KabaddiUpdatePage() {
     setBusy(true);
     try {
       const player = players.find(p => p.id === cur.raiderId);
+      const tacklers = opts.raiderOut ? players.filter(p => tacklerIds.includes(p.id)) : [];
       const result = kabaddiService.resolveRaid(cur, {
         raidingTeamId: cur.raidingTeamId,
         touches,
@@ -178,16 +189,32 @@ export default function KabaddiUpdatePage() {
         raiderOut: opts.raiderOut,
         raiderId: cur.raiderId,
         raiderName: player?.name,
+        tacklerIds: tacklers.length ? tacklers.map(p => p.id) : undefined,
+        tacklerNames: tacklers.length ? tacklers.map(p => p.name) : undefined,
       }, rules);
 
       await persist(result.live);
 
-      // Credit season stats for the raider / defence.
-      const raidPts = result.events.filter(e => e.type === 'touch_point' || e.type === 'bonus_point')
-        .reduce((n, e) => n + e.points, 0);
-      if (cur.raiderId && raidPts > 0) {
-        await kabaddiService.incrementPlayerStat(cur.raiderId, 'raidPoints', raidPts);
+      // Credit season stats from the normalized events so tackles and super
+      // plays are recorded for the actual player involved.
+      const statUpdates: Promise<void>[] = [];
+      for (const event of result.events) {
+        if (event.type === 'touch_point' || event.type === 'bonus_point') {
+          if (event.playerId && event.points > 0) {
+            statUpdates.push(kabaddiService.incrementPlayerStat(event.playerId, 'raidPoints', event.points));
+          }
+        } else if (event.type === 'tackle_point' || event.type === 'super_tackle') {
+          if (event.playerId && event.points > 0) {
+            statUpdates.push(kabaddiService.incrementPlayerStat(event.playerId, 'tacklePoints', event.points));
+          }
+          if (event.type === 'super_tackle' && event.playerId) {
+            statUpdates.push(kabaddiService.incrementPlayerStat(event.playerId, 'superTackles'));
+          }
+        } else if (event.type === 'super_raid' && event.playerId) {
+          statUpdates.push(kabaddiService.incrementPlayerStat(event.playerId, 'superRaids'));
+        }
       }
+      for (const statUpdate of statUpdates) await statUpdate;
 
       if (result.celebration) {
         const ev = result.events.find(e =>
@@ -198,6 +225,7 @@ export default function KabaddiUpdatePage() {
       setTouches(0);
       setBonus(false);
       setRaiderId('');
+      setTacklerIds([]);
       if (result.live.isDoOrDie) await triggerOverlay('do_or_die');
     } catch (e) {
       flash(`Failed: ${String(e)}`);
@@ -230,6 +258,16 @@ export default function KabaddiUpdatePage() {
     if (!live?.raidingTeamId) return [];
     return players.filter(p => p.teamId === live.raidingTeamId);
   }, [players, live?.raidingTeamId]);
+
+  const defenderOptions = useMemo(() => {
+    if (!live?.raidingTeamId || !match) return [];
+    const defendingTeamId = live.raidingTeamId === match.teamA.id ? match.teamB.id : match.teamA.id;
+    return players.filter(p => p.teamId === defendingTeamId);
+  }, [players, live?.raidingTeamId, match]);
+
+  const toggleTackler = (playerId: string) => {
+    setTacklerIds(ids => (ids.includes(playerId) ? ids.filter(x => x !== playerId) : [...ids, playerId]));
+  };
 
   const bonusOn = defendingSide ? isBonusAvailable(defendingSide.playersOnCourt, rules) : false;
 
@@ -270,16 +308,18 @@ export default function KabaddiUpdatePage() {
           raiding={live?.raidingTeamId === match.teamA.id}
         />
         <div className="kbu__clock-block">
-          <span className="kbu__clock">{String(minute).padStart(2, '0')}:{String(second).padStart(2, '0')}</span>
+          <span className="kbu__clock-label">Raid {live?.raidNumber ? live.raidNumber + 1 : 1}</span>
+          <span className={`kbu__clock ${raidLeft !== null && raidLeft <= 5 ? 'is-urgent' : ''}`}>
+            {raidLeft !== null ? `${raidLeft}s` : `${rules.raidDurationSec}s`}
+          </span>
+          <span className="kbu__total-time">
+            <IoTimer size={13} /> {String(minute).padStart(2, '0')}:{String(second).padStart(2, '0')}
+            <small>{KABADDI_HALF_LABELS[live?.half ?? 'not_started']}</small>
+          </span>
           <button className={`kbu__clock-btn ${live?.running ? 'is-running' : ''}`} onClick={toggleClock}>
             {live?.running ? <IoPause size={17} /> : <IoPlay size={17} />}
             {live?.running ? 'Pause' : 'Start'}
           </button>
-          {raidLeft !== null && (
-            <span className={`kbu__raid-clock ${raidLeft <= 5 ? 'is-urgent' : ''}`}>
-              <IoTimer size={14} /> {raidLeft}s
-            </span>
-          )}
         </div>
         <TeamScore
           name={match.teamB.shortName}
@@ -314,18 +354,32 @@ export default function KabaddiUpdatePage() {
 
         {!live?.raidingTeamId || live.raidClockStartedAt === 0 ? (
           <>
-            <p className="kbu__hint">Choose the raiding side to start the {rules.raidDurationSec}-second raid clock.</p>
-            <div className="kbu__raid-start">
-              <select value={raiderId} onChange={e => setRaiderId(e.target.value)}>
-                <option value="">Raider (optional)</option>
-                {players.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-              </select>
-              <button className="kbu__btn kbu__btn--a" onClick={() => startRaid(match.teamA.id)}>
-                {match.teamA.shortName} raids
-              </button>
-              <button className="kbu__btn kbu__btn--b" onClick={() => startRaid(match.teamB.id)}>
-                {match.teamB.shortName} raids
-              </button>
+            <p className="kbu__hint">Pick the raider, then start the {rules.raidDurationSec}-second raid clock.</p>
+            <div className="kbu__sides">
+              <div className="kbu__side">
+                <h3 style={{ color: match.teamA.primaryColor }}>{match.teamA.shortName}</h3>
+                <PlayerPicker
+                  players={players.filter(p => p.teamId === match.teamA.id)}
+                  selectedIds={raiderId ? [raiderId] : []}
+                  onPick={id => setRaiderId(id === raiderId ? '' : id)}
+                  live={live}
+                />
+                <button className="kbu__btn kbu__btn--a" onClick={() => startRaid(match.teamA.id)}>
+                  {match.teamA.shortName} raids
+                </button>
+              </div>
+              <div className="kbu__side">
+                <h3 style={{ color: match.teamB.primaryColor }}>{match.teamB.shortName}</h3>
+                <PlayerPicker
+                  players={players.filter(p => p.teamId === match.teamB.id)}
+                  selectedIds={raiderId ? [raiderId] : []}
+                  onPick={id => setRaiderId(id === raiderId ? '' : id)}
+                  live={live}
+                />
+                <button className="kbu__btn kbu__btn--b" onClick={() => startRaid(match.teamB.id)}>
+                  {match.teamB.shortName} raids
+                </button>
+              </div>
             </div>
           </>
         ) : (
@@ -334,15 +388,35 @@ export default function KabaddiUpdatePage() {
               <span className="kbu__raid-team" style={{ background: raidingTeam?.primaryColor }}>
                 {raidingTeam?.shortName} raiding
               </span>
-              {raiderOptions.length > 0 && (
-                <select value={live.raiderId ?? ''} onChange={async e => {
-                  const p = players.find(x => x.id === e.target.value);
-                  await persist({ ...live, raiderId: e.target.value || undefined, raiderName: p?.name }, false);
-                }}>
-                  <option value="">Select raider</option>
-                  {raiderOptions.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                </select>
+              {live.raiderName && (
+                <span className="kbu__raid-current">
+                  {live.raiderPhotoUrl && <img src={live.raiderPhotoUrl} alt="" />}
+                  <strong>{live.raiderName}</strong>
+                  <span className="kbu__raid-pts">{playerMatchPoints(live, live.raiderId)} pts</span>
+                </span>
               )}
+            </div>
+
+            <div className="kbu__sides">
+              <div className="kbu__side">
+                <h3>Raider</h3>
+                <PlayerPicker
+                  players={raiderOptions}
+                  selectedIds={live.raiderId ? [live.raiderId] : []}
+                  onPick={id => void selectRaider(id === live.raiderId ? '' : id)}
+                  live={live}
+                />
+              </div>
+              <div className="kbu__side">
+                <h3>Defender(s) who tackled</h3>
+                <PlayerPicker
+                  players={defenderOptions}
+                  selectedIds={tacklerIds}
+                  onPick={toggleTackler}
+                  live={live}
+                />
+                <p className="kbu__hint">Tap the defenders involved before recording a tackle.</p>
+              </div>
             </div>
 
             <div className="kbu__outcome">
@@ -369,7 +443,7 @@ export default function KabaddiUpdatePage() {
                 <IoFlash size={16} /> Raider returns safe
               </button>
               <button className="kbu__btn kbu__btn--danger" disabled={busy} onClick={() => resolveRaid({ raiderOut: true })}>
-                <IoShieldCheckmark size={16} /> Raider tackled
+                <IoShieldCheckmark size={16} /> Raider tackled{tacklerIds.length ? ` (${tacklerIds.length})` : ''}
               </button>
             </div>
             <p className="kbu__hint">
@@ -414,6 +488,37 @@ function TeamScore({ name, color, score, onCourt, total, raiding }: Readonly<{
           <i key={i} className={i < onCourt ? 'is-on' : ''} />
         ))}
       </span>
+    </div>
+  );
+}
+
+/** Tap-friendly photo grid — faster than a dropdown while scoring live. */
+function PlayerPicker({ players, selectedIds, onPick, live }: Readonly<{
+  players: KabaddiPlayer[];
+  selectedIds: string[];
+  onPick: (playerId: string) => void;
+  live: KabaddiLiveState | null;
+}>) {
+  if (players.length === 0) {
+    return <p className="kbu__hint">No players on this roster. Add them in the Kabaddi Admin.</p>;
+  }
+  return (
+    <div className="kbu__picker">
+      {players.map(p => (
+        <button
+          key={p.id}
+          type="button"
+          className={`kbu__pick ${selectedIds.includes(p.id) ? 'is-on' : ''}`}
+          onClick={() => onPick(p.id)}
+          title={p.name}
+        >
+          <span className="kbu__pick-photo">
+            {p.photoUrl ? <img src={p.photoUrl} alt="" /> : <span>{p.name.charAt(0)}</span>}
+          </span>
+          <span className="kbu__pick-name">{p.number ? `#${p.number} ` : ''}{p.name}</span>
+          <span className="kbu__pick-pts">{playerMatchPoints(live, p.id)}</span>
+        </button>
+      ))}
     </div>
   );
 }

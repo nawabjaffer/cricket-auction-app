@@ -1,5 +1,5 @@
 import OBSOverlayPage from './OBSOverlayPage';
-import ScoreOBSOverlayPage from './ScoreOBSOverlayPage';
+import TenantScoringRouterPage from './TenantScoringRouterPage';
 
 export default function OBSOverlayRouterPage() {
   const params = new URLSearchParams(window.location.search);
@@ -7,5 +7,5 @@ export default function OBSOverlayRouterPage() {
   const mode = params.get('mode');
   const scoringMode = hasMatchId || mode === 'scoring';
 
-  return scoringMode ? <ScoreOBSOverlayPage /> : <OBSOverlayPage />;
+  return scoringMode ? <TenantScoringRouterPage route="overlay" /> : <OBSOverlayPage />;
 }

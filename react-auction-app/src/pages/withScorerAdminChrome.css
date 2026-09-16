@@ -1,0 +1,58 @@
+/* ============================================================================
+   SCORER ADMIN CHROME — shared header + quick-actions bar reused by every
+   game type's admin page via the withScorerAdminChrome HOC.
+   ============================================================================ */
+
+.scorer-chrome__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 28px;
+  background: rgba(10, 10, 20, 0.65);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+.scorer-chrome__header-left { display: flex; align-items: center; gap: 14px; }
+.scorer-chrome__icon { font-size: 28px; line-height: 1; }
+.scorer-chrome__title { margin: 0; font-size: 1.4rem; font-weight: 800; color: #fff; }
+.scorer-chrome__subtitle { margin: 4px 0 0; font-size: 0.82rem; color: rgba(255, 255, 255, 0.65); }
+
+.scorer-chrome__close-btn {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: #fff;
+  border-radius: 10px;
+  width: 38px;
+  height: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.scorer-chrome__close-btn:hover { background: rgba(255, 255, 255, 0.16); }
+
+.scorer-chrome__quick-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 12px 28px;
+  background: rgba(10, 10, 20, 0.4);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+.scorer-chrome__quick-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.06);
+  color: #e2e8f0;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.scorer-chrome__quick-btn:hover { background: rgba(255, 255, 255, 0.14); }
+
+@media (max-width: 720px) {
+  .scorer-chrome__header, .scorer-chrome__quick-actions { padding: 14px 16px; }
+}

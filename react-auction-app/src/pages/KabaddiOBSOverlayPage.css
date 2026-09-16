@@ -22,12 +22,15 @@
   flex-direction: column;
   gap: 8px;
   align-items: center;
+  left: 0;
+  right: 0;
+  width: 100%;
 }
 
-.kbo--bottom-center .kbo__scoreboard { left: 50%; bottom: 46px; transform: translateX(-50%); }
-.kbo--bottom-left .kbo__scoreboard { left: 46px; bottom: 46px; align-items: flex-start; }
-.kbo--bottom-right .kbo__scoreboard { right: 46px; bottom: 46px; align-items: flex-end; }
-.kbo--top-center .kbo__scoreboard { left: 50%; top: 46px; transform: translateX(-50%); }
+.kbo--bottom-center .kbo__scoreboard { bottom: 46px; }
+.kbo--bottom-left .kbo__scoreboard { bottom: 46px; }
+.kbo--bottom-right .kbo__scoreboard { bottom: 46px; }
+.kbo--top-center .kbo__scoreboard { top: 46px; }
 
 .kbo__tourn-logo img {
   height: 54px;
@@ -40,11 +43,14 @@
 .kbo__strip {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 18px;
-  padding: 12px 22px;
-  border-radius: 16px;
+  width: 100%;
+  padding: 12px 46px;
+  border-radius: 0;
   background: linear-gradient(180deg, rgba(10, 10, 10, 0.94), rgba(10, 10, 10, 0.88));
-  border: 2px solid var(--kb-secondary, #1d4ed8);
+  border-top: 2px solid var(--kb-secondary, #1d4ed8);
+  border-bottom: 2px solid var(--kb-secondary, #1d4ed8);
   box-shadow: 0 14px 40px rgba(0, 0, 0, 0.55);
 }
 
@@ -53,7 +59,23 @@
   display: flex;
   align-items: center;
   gap: 12px;
+  flex: 1;
   min-width: 210px;
+}
+
+/* Looping transparent team animation sits above the crest. */
+.kbo__team-logo-wrap { position: relative; flex-shrink: 0; }
+
+.kbo__team-anim {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  height: 78px;
+  max-width: 130px;
+  object-fit: contain;
+  pointer-events: none;
+  filter: drop-shadow(0 4px 14px rgba(0, 0, 0, 0.55));
 }
 
 .kbo__team--away { justify-content: flex-end; }
@@ -186,6 +208,29 @@
   gap: 7px;
   font-size: 13px;
   color: #e5e7eb;
+}
+
+.kbo__raider-photo {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  overflow: hidden;
+  border: 2px solid var(--kb-accent, #f59e0b);
+  flex-shrink: 0;
+}
+
+.kbo__raider-photo img { width: 100%; height: 100%; object-fit: cover; }
+
+.kbo__raider-name { font-weight: 800; }
+
+.kbo__raider-pts {
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: var(--kb-accent, #f59e0b);
+  color: #1a1206;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.5px;
 }
 
 .kbo__raider-label {
