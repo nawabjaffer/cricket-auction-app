@@ -11,6 +11,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { initializeApp, getApps } from 'firebase/app';
 import { getDatabase, ref, onValue } from 'firebase/database';
 import { tenantPath } from '../services/tenantPath';
+import { ResolvedImage } from '../components/ResolvedImage';
 import { DEFAULT_KABADDI_OVERLAY_CONFIG } from '../types/kabaddi';
 import type { KabaddiPlayer, KabaddiTeam, KabaddiOverlayConfig, KabaddiTopPerformer } from '../types/kabaddi';
 import './KabaddiOBSDockPage.css';
@@ -89,7 +90,7 @@ export default function KabaddiOBSDockPage() {
     <div className="kbd" style={theme}>
       <div className="kbd__panel">
         <div className="kbd__header">
-          {config.tournamentLogo && <img className="kbd__tourn" src={config.tournamentLogo} alt="" crossOrigin="anonymous" />}
+          {config.tournamentLogo && <ResolvedImage className="kbd__tourn" src={config.tournamentLogo} size={192} />}
           <div className="kbd__title-wrap">
             <AnimatePresence mode="wait">
               <motion.h1 key={board.key} className="kbd__title"
@@ -110,12 +111,12 @@ export default function KabaddiOBSDockPage() {
                 initial={{ opacity: 0, x: 30 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.08 }}>
                 <span className="kbd__rank">{i + 1}</span>
                 <div className="kbd__photo">
-                  {p.photoUrl ? <img src={p.photoUrl} alt={p.playerName} crossOrigin="anonymous" /> : <span>{p.playerName.charAt(0)}</span>}
+                  <ResolvedImage src={p.photoUrl} alt={p.playerName} size={128} fallback={<span>{p.playerName.charAt(0)}</span>} />
                 </div>
                 <div className="kbd__info">
                   <div className="kbd__name">{p.playerName}</div>
                   <div className="kbd__team">
-                    {p.teamLogoUrl && <img src={p.teamLogoUrl} alt="" crossOrigin="anonymous" />}
+                    {p.teamLogoUrl && <ResolvedImage src={p.teamLogoUrl} size={48} />}
                     {p.teamName}
                   </div>
                 </div>

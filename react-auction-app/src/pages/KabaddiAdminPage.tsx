@@ -21,6 +21,7 @@ import { getKabaddiRoleCategory } from '../utils/kabaddiRoles';
 import { tenantPath } from '../services/tenantPath';
 import { useTenantNavigate as useNavigate, getTenantSlugFromPath } from '../hooks/useTenantNavigate';
 import { withScorerAdminChrome } from './withScorerAdminChrome';
+import { ResolvedImage } from '../components/ResolvedImage';
 import {
   KABADDI_POSITIONS, KABADDI_DEFENDER_ROLES, DEFAULT_KABADDI_OVERLAY_CONFIG,
   DEFAULT_KABADDI_RULES, createEmptyKabaddiLiveState,
@@ -415,7 +416,7 @@ function KabaddiAdminPageContent() {
                   <div key={at.id} className="kba__row" style={{ borderLeftColor: at.primaryColor }}>
                     <div className="kba__row-id">
                       {(at.brandLogoUrl || at.logoUrl)
-                        ? <img src={at.brandLogoUrl || at.logoUrl} alt={at.name} />
+                          ? <ResolvedImage src={at.brandLogoUrl || at.logoUrl} alt={at.name} size={96} />
                         : <span className="kba__badge" style={{ background: at.primaryColor }}>{at.name.slice(0, 3).toUpperCase()}</span>}
                       <div><strong>{at.name}</strong></div>
                     </div>
@@ -445,7 +446,7 @@ function KabaddiAdminPageContent() {
                     Upload
                     <input type="file" accept="image/*" style={{ display: 'none' }} onChange={e => { if (e.target.files?.[0]) void uploadTeamAnimation(e.target.files[0]); }} />
                   </label>
-                  {teamForm.animationUrl && <img src={teamForm.animationUrl} alt="" style={{ width: 34, height: 34, objectFit: 'contain' }} />}
+                  {teamForm.animationUrl && <ResolvedImage src={teamForm.animationUrl} size={96} style={{ width: 34, height: 34, objectFit: 'contain' }} />}
                 </div>
               </label>
               <label><span>Coach</span><input value={teamForm.coach} onChange={e => setTeamForm(f => ({ ...f, coach: e.target.value }))} /></label>
@@ -462,7 +463,7 @@ function KabaddiAdminPageContent() {
             {teams.map(t => (
               <div key={t.id} className="kba__row" style={{ borderLeftColor: t.primaryColor }}>
                 <div className="kba__row-id">
-                  {t.logoUrl ? <img src={t.logoUrl} alt={t.name} /> : <span className="kba__badge" style={{ background: t.primaryColor }}>{t.shortName}</span>}
+                  {t.logoUrl ? <ResolvedImage src={t.logoUrl} alt={t.name} size={96} /> : <span className="kba__badge" style={{ background: t.primaryColor }}>{t.shortName}</span>}
                   <div>
                     <strong>{t.name}</strong>
                     <small>{players.filter(p => p.teamId === t.id).length} players{t.coach ? ` · ${t.coach}` : ''}</small>
@@ -693,6 +694,7 @@ function KabaddiAdminPageContent() {
               <button className={overlayConfig.showLiveBadge ? 'is-on' : ''} onClick={() => setOverlayConfig(c => ({ ...c, showLiveBadge: !c.showLiveBadge }))}>LIVE badge</button>
               <button className={overlayConfig.showTimer ? 'is-on' : ''} onClick={() => setOverlayConfig(c => ({ ...c, showTimer: !c.showTimer }))}>Match clock</button>
               <button className={overlayConfig.showRaidClock ? 'is-on' : ''} onClick={() => setOverlayConfig(c => ({ ...c, showRaidClock: !c.showRaidClock }))}>Raid clock</button>
+              <button className={overlayConfig.showRaiderInfo ? 'is-on' : ''} onClick={() => setOverlayConfig(c => ({ ...c, showRaiderInfo: !c.showRaiderInfo }))}>Raider info</button>
               <button className={overlayConfig.showMatDiagram ? 'is-on' : ''} onClick={() => setOverlayConfig(c => ({ ...c, showMatDiagram: !c.showMatDiagram }))}>Players on mat</button>
             </div>
           </div>
@@ -734,7 +736,7 @@ function KabaddiAdminPageContent() {
                   </div>
                   <div style={{ marginTop: '0.75rem', padding: '1rem', background: 'rgba(0,0,0,0.3)', borderRadius: 8, textAlign: 'center' }}>
                     {anim?.mediaUrl ? (
-                      <img src={anim.mediaUrl} alt="preview" style={{ maxWidth: 200, maxHeight: 120, borderRadius: 8, objectFit: 'contain' }} />
+                      <ResolvedImage src={anim.mediaUrl} alt="preview" size={320} style={{ maxWidth: 200, maxHeight: 120, borderRadius: 8, objectFit: 'contain' }} />
                     ) : (
                       <span style={{ fontSize: 24, fontWeight: 900, color: anim?.color ?? '#f59e0b', textShadow: `0 0 20px ${anim?.color ?? '#f59e0b'}80` }}>
                         {anim?.text || field.label}

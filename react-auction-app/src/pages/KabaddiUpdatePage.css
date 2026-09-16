@@ -124,6 +124,17 @@
 
 .kbu__clock.is-urgent { color: #f87171; animation: kbu-pulse 0.6s ease-in-out infinite; }
 
+.kbu__grace-clock {
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: rgba(34, 197, 94, 0.16);
+  border: 1px solid rgba(34, 197, 94, 0.45);
+  color: #86efac;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.4px;
+}
+
 @keyframes kbu-pulse { 50% { opacity: 0.55; } }
 
 .kbu__total-time {
@@ -301,6 +312,7 @@
   overflow: hidden;
   display: -webkit-box;
   -webkit-line-clamp: 2;
+  line-clamp: 2;
   -webkit-box-orient: vertical;
 }
 
@@ -353,6 +365,85 @@
   font-size: 10.5px;
   font-weight: 900;
 }
+
+.kbu__advanced {
+  margin-top: 18px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.kbu__advanced-toggle {
+  border: 0;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.58);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+  cursor: pointer;
+}
+
+.kbu__advanced-toggle:hover { color: #f59e0b; }
+
+.kbu__advanced-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 10px;
+  padding: 12px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.24);
+}
+
+.kbu__advanced-row { display: flex; gap: 8px; flex-wrap: wrap; }
+
+.kbu__advanced-panel input {
+  width: 90px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(0, 0, 0, 0.35);
+  color: #fff;
+}
+
+.kbu__advanced-heading {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 6px 0 0;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.7);
+  padding-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.kbu__sub-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.kbu__sub-team-name {
+  min-width: 36px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.kbu__sub-row select {
+  flex: 1;
+  min-width: 140px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(0, 0, 0, 0.35);
+  color: #fff;
+  font-size: 12.5px;
+}
+
+.kbu__btn--sm { padding: 8px 14px; font-size: 12px; }
 
 @media (max-width: 640px) {
   .kbu__sides { grid-template-columns: 1fr; }
@@ -457,11 +548,20 @@
 
 /* ── Log ── */
 
+.kbu__log-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.kbu__log-header h2 { margin: 0; }
+
 .kbu__log { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 5px; }
 
 .kbu__log li {
   display: grid;
-  grid-template-columns: 40px 130px 1fr auto;
+  grid-template-columns: 40px 130px 1fr auto auto;
   align-items: center;
   gap: 9px;
   padding: 7px 11px;
@@ -469,6 +569,21 @@
   background: rgba(0, 0, 0, 0.28);
   font-size: 13px;
 }
+
+.kbu__log-edit { display: flex; gap: 4px; }
+
+.kbu__log-edit button {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.08);
+  color: #f4f4f5;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.kbu__log-edit button:hover { background: rgba(245, 158, 11, 0.24); }
 
 .kbu__log-min { font-size: 11.5px; font-weight: 700; color: rgba(255, 255, 255, 0.4); }
 

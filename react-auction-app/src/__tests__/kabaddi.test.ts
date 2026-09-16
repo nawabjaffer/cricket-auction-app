@@ -145,6 +145,78 @@ describe('resolveRaid', () => {
     expect(next.isDoOrDie).toBe(true);
   });
 
+  it('eliminates the selected raider when a do-or-die raid is empty', () => {
+    const base = freshLive();
+    const live = freshLive({
+      raidingTeamId: A,
+      isDoOrDie: true,
+      teamA: { ...base.teamA, playersOnCourt: 7 },
+    });
+    const { live: next, events } = kabaddiService.resolveRaid(
+      live,
+      { raidingTeamId: A, touches: 0, bonus: false, raiderOut: false, raiderId: 'raider-1', raiderName: 'Raider 1' },
+      RULES,
+    );
+    expect(next.teamB.score).toBe(1);
+    expect(next.teamA.playersOnCourt).toBe(6);
+    expect(next.teamA.consecutiveEmptyRaids).toBe(0);
+    expect(events.some(e => e.type === 'do_or_die_fail')).toBe(true);
+  });
+
+  it('tracks specific touched-out defenders and revives specific raiders from the roster', () => {
+    const teamAIds = ['a1', 'a2', 'a3', 'a4', 'a5', 'a6', 'a7'];
+    const teamBIds = ['b1', 'b2', 'b3', 'b4', 'b5', 'b6', 'b7'];
+    const base = freshLive();
+    const live = freshLive({
+      raidingTeamId: A,
+      teamA: { ...base.teamA, onCourtIds: [...teamAIds], startingIds: [...teamAIds] },
+      teamB: { ...base.teamB, onCourtIds: [...teamBIds], startingIds: [...teamBIds] },
+    });
+    const { live: next } = kabaddiService.resolveRaid(
+      live,
+      { raidingTeamId: A, touches: 2, bonus: false, raiderOut: false, touchedIds: ['b1', 'b2'] },
+      RULES,
+    );
+    expect(next.teamB.onCourtIds).toEqual(['b3', 'b4', 'b5', 'b6', 'b7']);
+    expect(next.teamB.playersOnCourt).toBe(5);
+    // Raiding side has no one currently out, so revival has nothing to add.
+    expect(next.teamA.onCourtIds).toEqual(teamAIds);
+    expect(next.teamA.playersOnCourt).toBe(7);
+  });
+
+  it('revives the specific raider sent out by a tackle from the starting roster', () => {
+    const teamAIds = ['a1', 'a2', 'a3', 'a4', 'a5', 'a6', 'a7'];
+    const teamBIds = ['b1', 'b2', 'b3', 'b4', 'b5', 'b6', 'b7'];
+    const base = freshLive();
+    const live = freshLive({
+      raidingTeamId: A,
+      teamA: { ...base.teamA, onCourtIds: teamAIds.slice(0, 6), startingIds: [...teamAIds] },
+      teamB: { ...base.teamB, onCourtIds: [...teamBIds], startingIds: [...teamBIds] },
+    });
+    const { live: next } = kabaddiService.resolveRaid(
+      live,
+      { raidingTeamId: A, touches: 0, bonus: false, raiderOut: true, raiderId: 'a1', tacklerIds: ['b1'] },
+      RULES,
+    );
+    expect(next.teamA.onCourtIds).not.toContain('a1');
+    expect(next.teamA.playersOnCourt).toBe(5);
+    // teamB was already full (7/7) so there's no bench player to revive.
+    expect(next.teamB.onCourtIds).toEqual(teamBIds);
+  });
+
+  it('substitutes a player into both the on-court list and the starting roster', () => {
+    const teamAIds = ['a1', 'a2', 'a3', 'a4', 'a5', 'a6', 'a7'];
+    const base = freshLive();
+    const live = freshLive({
+      teamA: { ...base.teamA, onCourtIds: [...teamAIds], startingIds: [...teamAIds] },
+    });
+    const { live: next, event } = kabaddiService.substitutePlayer(live, A, 'a4', 'bench-1', 'Bench One', 'Player Four');
+    expect(next.teamA.onCourtIds).toContain('bench-1');
+    expect(next.teamA.onCourtIds).not.toContain('a4');
+    expect(next.teamA.startingIds).toContain('bench-1');
+    expect(event.type).toBe('substitution');
+  });
+
   it('awards an all-out with bonus points and revives the emptied side', () => {
     const base = freshLive();
     const live = freshLive({ raidingTeamId: A, teamB: { ...base.teamB, playersOnCourt: 2 } });

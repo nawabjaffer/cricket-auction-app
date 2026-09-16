@@ -16,6 +16,7 @@ import { initializeApp, getApps } from 'firebase/app';
 import { getDatabase, ref, onValue } from 'firebase/database';
 import { tenantPath } from '../services/tenantPath';
 import { useBroadcastOverlaySurface } from '../hooks/useBroadcastOverlaySurface';
+import { ResolvedImage } from '../components/ResolvedImage';
 import {
   computeKabaddiClock, raidSecondsRemaining, KABADDI_HALF_LABELS,
   DEFAULT_KABADDI_OVERLAY_CONFIG, DEFAULT_KABADDI_RULES, playerMatchPoints,
@@ -23,6 +24,7 @@ import {
 import type {
   KabaddiMatchSetup, KabaddiLiveState, KabaddiOverlayConfig,
   KabaddiOverlayControl, KabaddiAnimationConfig, KabaddiRulesConfig, KabaddiTeamState,
+  KabaddiTeam, KabaddiTeamRef, KabaddiPlayer,
 } from '../types/kabaddi';
 import './KabaddiOBSOverlayPage.css';
 
@@ -58,11 +60,45 @@ function celebFor(type: KabaddiOverlayControl['activeOverlay'], config: KabaddiO
   }
 }
 
+function enrichTeam(team: KabaddiTeamRef, teams: KabaddiTeam[]): KabaddiTeamRef {
+  const latest = teams.find(candidate => candidate.id === team.id)
+    ?? teams.find(candidate => candidate.name.trim().toLowerCase() === team.name.trim().toLowerCase());
+  if (!latest) return team;
+  return {
+    ...team,
+    name: latest.name || team.name,
+    shortName: latest.shortName || team.shortName,
+    logoUrl: latest.logoUrl || team.logoUrl,
+    animationUrl: latest.animationUrl || team.animationUrl,
+    primaryColor: latest.primaryColor || team.primaryColor,
+  };
+}
+
+interface MatRosterEntry { player: KabaddiPlayer; onCourt: boolean }
+
+/** The starting lineup for a team with each player's current on-mat status. */
+function matchRosterFor(
+  teamId: string, players: KabaddiPlayer[], state: KabaddiTeamState, playersPerSide: number,
+): MatRosterEntry[] {
+  const roster = players.filter(p => p.teamId === teamId);
+  if (roster.length === 0) return [];
+  const startingIds = state.startingIds?.length
+    ? state.startingIds
+    : roster.filter(p => p.isStarter !== false).slice(0, playersPerSide).map(p => p.id);
+  const onCourt = new Set(state.onCourtIds?.length ? state.onCourtIds : startingIds);
+  return startingIds
+    .map(id => roster.find(p => p.id === id))
+    .filter((p): p is KabaddiPlayer => !!p)
+    .map(player => ({ player, onCourt: onCourt.has(player.id) }));
+}
+
 export default function KabaddiOBSOverlayPage() {
   useBroadcastOverlaySurface();
   const [matchId, setMatchId] = useState<string | null>(null);
   const [match, setMatch] = useState<KabaddiMatchSetup | null>(null);
   const [live, setLive] = useState<KabaddiLiveState | null>(null);
+  const [teams, setTeams] = useState<KabaddiTeam[]>([]);
+  const [players, setPlayers] = useState<KabaddiPlayer[]>([]);
   const [config, setConfig] = useState<KabaddiOverlayConfig>(DEFAULT_KABADDI_OVERLAY_CONFIG);
   const [rules, setRules] = useState<KabaddiRulesConfig>(DEFAULT_KABADDI_RULES);
   const [control, setControl] = useState<KabaddiOverlayControl | null>(null);
@@ -89,6 +125,14 @@ export default function KabaddiOBSOverlayPage() {
       onValue(ref(fbDb, `${base}/rules`), s =>
         setRules(s.exists() ? { ...DEFAULT_KABADDI_RULES, ...s.val() } : DEFAULT_KABADDI_RULES)),
       onValue(ref(fbDb, `${base}/matches/${matchId}/overlay`), s => setControl(s.exists() ? s.val() : null)),
+      onValue(ref(fbDb, `${base}/teams`), s => {
+        const val = (s.val() as Record<string, KabaddiTeam>) ?? {};
+        setTeams(Object.values(val).filter(t => !!t?.id));
+      }),
+      onValue(ref(fbDb, `${base}/players`), s => {
+        const val = (s.val() as Record<string, KabaddiPlayer>) ?? {};
+        setPlayers(Object.values(val).filter(p => !!p?.id));
+      }),
     ];
     return () => unsubs.forEach(u => u());
   }, [matchId]);
@@ -116,8 +160,10 @@ export default function KabaddiOBSOverlayPage() {
   const { minute, second } = computeKabaddiClock(live);
   const clock = `${String(minute).padStart(2, '0')}:${String(second).padStart(2, '0')}`;
   const raidLeft = config.showRaidClock ? raidSecondsRemaining(live, rules) : null;
-  const raidingA = live.raidingTeamId === match.teamA.id;
-  const raidingB = live.raidingTeamId === match.teamB.id;
+  const teamA = enrichTeam(match.teamA, teams);
+  const teamB = enrichTeam(match.teamB, teams);
+  const raidingA = live.raidingTeamId === teamA.id;
+  const raidingB = live.raidingTeamId === teamB.id;
 
   const theme = {
     '--kb-primary': config.primaryColor,
@@ -130,17 +176,29 @@ export default function KabaddiOBSOverlayPage() {
     <div className={`kbo kbo--${config.scoreboardPosition}`} style={theme}>
       <div className="kbo__scoreboard">
         {config.tournamentLogo && (
-          <div className="kbo__tourn-logo"><img src={config.tournamentLogo} alt="" crossOrigin="anonymous" /></div>
+          <div className="kbo__tourn-logo"><ResolvedImage src={config.tournamentLogo} size={192} /></div>
         )}
 
         <div className="kbo__strip">
+          <span className="kbo__glow-line kbo__glow-line--1" />
+          <span className="kbo__glow-line kbo__glow-line--2" />
+
+          {raidLeft !== null && (
+            <span className={`kbo__raid-clock-float ${raidLeft <= 5 ? 'kbo__raid-clock-float--urgent' : ''}`}>
+              <span className="kbo__raid-clock-num">{raidLeft}</span>
+              <span className="kbo__raid-clock-unit">s</span>
+            </span>
+          )}
+
           <TeamBlock
             side="home"
-            name={match.teamA.shortName}
-            logoUrl={match.teamA.logoUrl}
-            animationUrl={match.teamA.animationUrl}
-            color={match.teamA.primaryColor}
+            name={teamA.shortName}
+            fullName={teamA.name}
+            logoUrl={teamA.logoUrl}
+            animationUrl={teamA.animationUrl}
+            color={teamA.primaryColor}
             state={live.teamA}
+            roster={matchRosterFor(teamA.id, players, live.teamA, rules.playersPerSide)}
             raiding={raidingA}
             playersPerSide={rules.playersPerSide}
           />
@@ -153,11 +211,13 @@ export default function KabaddiOBSOverlayPage() {
 
           <TeamBlock
             side="away"
-            name={match.teamB.shortName}
-            logoUrl={match.teamB.logoUrl}
-            animationUrl={match.teamB.animationUrl}
-            color={match.teamB.primaryColor}
+            name={teamB.shortName}
+            fullName={teamB.name}
+            logoUrl={teamB.logoUrl}
+            animationUrl={teamB.animationUrl}
+            color={teamB.primaryColor}
             state={live.teamB}
+            roster={matchRosterFor(teamB.id, players, live.teamB, rules.playersPerSide)}
             raiding={raidingB}
             playersPerSide={rules.playersPerSide}
           />
@@ -170,10 +230,10 @@ export default function KabaddiOBSOverlayPage() {
           {config.showTimer && <span className="kbo__clock">{clock}</span>}
           <span className="kbo__half">{KABADDI_HALF_LABELS[live.half]}</span>
 
-          {live.raiderName && (
+          {config.showRaiderInfo && live.raiderName && (
             <span className="kbo__raider">
               {live.raiderPhotoUrl && (
-                <span className="kbo__raider-photo"><img src={live.raiderPhotoUrl} alt="" crossOrigin="anonymous" /></span>
+                <span className="kbo__raider-photo"><ResolvedImage src={live.raiderPhotoUrl} size={96} /></span>
               )}
               <span className="kbo__raider-label">RAIDER</span>
               <span className="kbo__raider-name">{live.raiderName}</span>
@@ -182,18 +242,11 @@ export default function KabaddiOBSOverlayPage() {
           )}
 
           {live.isDoOrDie && <span className="kbo__dod">DO OR DIE</span>}
-
-          {raidLeft !== null && (
-            <span className={`kbo__raid-clock ${raidLeft <= 5 ? 'kbo__raid-clock--urgent' : ''}`}>
-              <span className="kbo__raid-clock-num">{raidLeft}</span>
-              <span className="kbo__raid-clock-unit">s</span>
-            </span>
-          )}
         </div>
       </div>
 
       {config.broadcastPartnerLogo && (
-        <div className="kbo__partner"><img src={config.broadcastPartnerLogo} alt="" crossOrigin="anonymous" /></div>
+        <div className="kbo__partner"><ResolvedImage src={config.broadcastPartnerLogo} size={192} /></div>
       )}
 
       <AnimatePresence>
@@ -203,15 +256,17 @@ export default function KabaddiOBSOverlayPage() {
   );
 }
 
-// ── Team block: logo, code, players still on the mat ─────────────────────────
+// ── Team block: logo, full name, players still on the mat ────────────────────
 
-function TeamBlock({ side, name, logoUrl, animationUrl, color, state, raiding, playersPerSide }: Readonly<{
+function TeamBlock({ side, name, fullName, logoUrl, animationUrl, color, state, roster, raiding, playersPerSide }: Readonly<{
   side: 'home' | 'away';
   name: string;
+  fullName: string;
   logoUrl?: string;
   animationUrl?: string;
   color?: string;
   state: KabaddiTeamState;
+  roster: MatRosterEntry[];
   raiding: boolean;
   playersPerSide: number;
 }>) {
@@ -219,21 +274,32 @@ function TeamBlock({ side, name, logoUrl, animationUrl, color, state, raiding, p
   const logo = (
     <div className="kbo__team-logo-wrap">
       {animationUrl && (
-        <img className="kbo__team-anim" src={animationUrl} alt="" crossOrigin="anonymous" />
+        <ResolvedImage className="kbo__team-anim" src={animationUrl} size={240} />
       )}
       <div className="kbo__team-logo" style={{ background: color }}>
-        {logoUrl ? <img src={logoUrl} alt="" crossOrigin="anonymous" /> : <span>{name}</span>}
+        <ResolvedImage src={logoUrl} size={192} fallback={<span>{name}</span>} />
       </div>
     </div>
   );
   const info = (
     <div className="kbo__team-info">
-      <span className="kbo__team-name">{name}</span>
-      <span className="kbo__mat" title={`${state.playersOnCourt} on the mat`}>
-        {dots.map((on, i) => (
-          <i key={i} className={`kbo__mat-dot ${on ? 'is-on' : ''}`} />
-        ))}
-      </span>
+      <span className="kbo__team-name">{fullName}</span>
+      {roster.length > 0 ? (
+        <span className="kbo__mat kbo__mat--players" title={`${roster.filter(r => r.onCourt).length} on the mat`}>
+          {roster.map(({ player, onCourt }) => (
+            <span key={player.id} className={`kbo__mat-player ${onCourt ? 'is-on' : 'is-out'}`} title={player.name}>
+              <ResolvedImage src={player.photoUrl} size={64} fallback={<span>{player.name.charAt(0)}</span>} />
+              {!onCourt && <span className="kbo__mat-out-icon" aria-hidden="true" />}
+            </span>
+          ))}
+        </span>
+      ) : (
+        <span className="kbo__mat" title={`${state.playersOnCourt} on the mat`}>
+          {dots.map((on, i) => (
+            <i key={i} className={`kbo__mat-dot ${on ? 'is-on' : ''}`} />
+          ))}
+        </span>
+      )}
     </div>
   );
 
@@ -260,7 +326,7 @@ function KabaddiCelebration({ control, config }: Readonly<{
       <motion.div className="kbo__celeb"
         initial={{ opacity: 0, scale: 0.7 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 1.08 }}
         transition={{ type: 'spring', stiffness: 240, damping: 22 }}>
-        <img src={anim.mediaUrl} alt="" className="kbo__celeb-media" crossOrigin="anonymous" />
+        <ResolvedImage src={anim.mediaUrl} className="kbo__celeb-media" size={960} />
       </motion.div>
     );
   }

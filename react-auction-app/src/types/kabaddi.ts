@@ -170,6 +170,10 @@ export interface KabaddiTeamState {
   score: number;
   /** Players currently on the mat (starts at playersPerSide). */
   playersOnCourt: number;
+  /** Player IDs currently on the mat — drives the overlay mat + scorer pickers. */
+  onCourtIds?: string[];
+  /** The full starting lineup for this match (revivals return players from here). */
+  startingIds?: string[];
   /** Consecutive empty raids — the 3rd raid becomes do-or-die. */
   consecutiveEmptyRaids: number;
   allOutsConceded: number;
@@ -274,6 +278,8 @@ export interface KabaddiOverlayConfig {
   showLiveBadge: boolean;
   showTimer: boolean;
   showRaidClock: boolean;
+  /** Show the active raider name/photo/points in the live scorebar. */
+  showRaiderInfo: boolean;
   showMatDiagram: boolean;
   /** Kabaddi scoreboard sits along the bottom of frame by default. */
   scoreboardPosition: 'bottom-left' | 'bottom-center' | 'bottom-right' | 'top-center';
@@ -299,6 +305,7 @@ export const DEFAULT_KABADDI_OVERLAY_CONFIG: KabaddiOverlayConfig = {
   showLiveBadge: true,
   showTimer: true,
   showRaidClock: true,
+  showRaiderInfo: true,
   showMatDiagram: true,
   scoreboardPosition: 'bottom-center',
   enableSuperRaidAnimation: true,
@@ -333,6 +340,7 @@ export interface KabaddiRulesConfig {
   numberOfHalves: number;      // 2
   halfTimeBreakMin: number;    // 5
   raidDurationSec: number;     // 30
+  raidInputGraceSec: number;   // scorer input grace after the raid clock expires
   // Extra time
   extraTimeEnabled: boolean;
   extraTimeHalfMin: number;
@@ -358,7 +366,7 @@ export interface KabaddiRulesConfig {
 export const KABADDI_FORMAT_PRESETS: Record<KabaddiFormat, KabaddiRulesConfig> = {
   standard: {
     format: 'standard', playersPerSide: 7, substitutesAllowed: 5,
-    halfDurationMin: 20, numberOfHalves: 2, halfTimeBreakMin: 5, raidDurationSec: 30,
+    halfDurationMin: 20, numberOfHalves: 2, halfTimeBreakMin: 5, raidDurationSec: 30, raidInputGraceSec: 15,
     extraTimeEnabled: false, extraTimeHalfMin: 5,
     bonusLineEnabled: true, bonusMinDefenders: 6, allOutBonusPoints: 2,
     superRaidPoints: 3, superTackleMaxDefenders: 3, superTacklePoints: 2,
@@ -367,7 +375,7 @@ export const KABADDI_FORMAT_PRESETS: Record<KabaddiFormat, KabaddiRulesConfig> =
   },
   circle: {
     format: 'circle', playersPerSide: 7, substitutesAllowed: 4,
-    halfDurationMin: 20, numberOfHalves: 2, halfTimeBreakMin: 5, raidDurationSec: 30,
+    halfDurationMin: 20, numberOfHalves: 2, halfTimeBreakMin: 5, raidDurationSec: 30, raidInputGraceSec: 15,
     extraTimeEnabled: false, extraTimeHalfMin: 5,
     bonusLineEnabled: false, bonusMinDefenders: 6, allOutBonusPoints: 2,
     superRaidPoints: 3, superTackleMaxDefenders: 3, superTacklePoints: 2,
@@ -376,7 +384,7 @@ export const KABADDI_FORMAT_PRESETS: Record<KabaddiFormat, KabaddiRulesConfig> =
   },
   youth: {
     format: 'youth', playersPerSide: 7, substitutesAllowed: 5,
-    halfDurationMin: 15, numberOfHalves: 2, halfTimeBreakMin: 5, raidDurationSec: 30,
+    halfDurationMin: 15, numberOfHalves: 2, halfTimeBreakMin: 5, raidDurationSec: 30, raidInputGraceSec: 15,
     extraTimeEnabled: false, extraTimeHalfMin: 5,
     bonusLineEnabled: true, bonusMinDefenders: 6, allOutBonusPoints: 2,
     superRaidPoints: 3, superTackleMaxDefenders: 3, superTacklePoints: 2,
@@ -385,7 +393,7 @@ export const KABADDI_FORMAT_PRESETS: Record<KabaddiFormat, KabaddiRulesConfig> =
   },
   beach: {
     format: 'beach', playersPerSide: 6, substitutesAllowed: 4,
-    halfDurationMin: 15, numberOfHalves: 2, halfTimeBreakMin: 5, raidDurationSec: 30,
+    halfDurationMin: 15, numberOfHalves: 2, halfTimeBreakMin: 5, raidDurationSec: 30, raidInputGraceSec: 15,
     extraTimeEnabled: false, extraTimeHalfMin: 5,
     bonusLineEnabled: false, bonusMinDefenders: 5, allOutBonusPoints: 2,
     superRaidPoints: 3, superTackleMaxDefenders: 2, superTacklePoints: 2,
@@ -431,6 +439,15 @@ export function raidSecondsRemaining(live: KabaddiLiveState | null, rules?: Kaba
   const limit = rules?.raidDurationSec ?? 30;
   const elapsed = Math.floor((Date.now() - live.raidClockStartedAt) / 1000);
   return Math.max(0, limit - elapsed);
+}
+
+/** Remaining scorer-input grace after the raid clock reaches zero. */
+export function raidInputGraceRemaining(live: KabaddiLiveState | null, rules?: KabaddiRulesConfig | null): number | null {
+  if (!live?.raidClockStartedAt) return null;
+  const limit = rules?.raidDurationSec ?? 30;
+  const grace = rules?.raidInputGraceSec ?? 15;
+  const elapsed = Math.floor((Date.now() - live.raidClockStartedAt) / 1000);
+  return Math.max(0, limit + grace - elapsed);
 }
 
 /** Clock offset (minutes) at which the given half begins. */

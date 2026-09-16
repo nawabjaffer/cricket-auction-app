@@ -308,12 +308,14 @@ class KabaddiService {
   ): { live: KabaddiLiveState; event: KabaddiMatchEvent } {
     const otherSide = emptiedSide === 'teamA' ? 'teamB' : 'teamA';
     const otherTeamId = otherSide === 'teamA' ? live.teamAId : live.teamBId;
+    const emptiedState = live[emptiedSide];
     const next: KabaddiLiveState = {
       ...live,
       [emptiedSide]: {
-        ...live[emptiedSide],
+        ...emptiedState,
         playersOnCourt: rules.playersPerSide,
-        allOutsConceded: live[emptiedSide].allOutsConceded + 1,
+        onCourtIds: emptiedState.startingIds ?? emptiedState.onCourtIds,
+        allOutsConceded: emptiedState.allOutsConceded + 1,
       },
       [otherSide]: {
         ...live[otherSide],
@@ -322,6 +324,32 @@ class KabaddiService {
       },
     };
     return { live: next, event: this.makeEvent(next, 'all_out', otherTeamId, rules.allOutBonusPoints) };
+  }
+
+  /** Removes `count` players from the mat — specific IDs when known, else just the tally. */
+  private sendOut(state: KabaddiTeamState, count: number, playerIds?: string[]): KabaddiTeamState {
+    if (count <= 0) return state;
+    if (playerIds?.length && state.onCourtIds?.length) {
+      const toRemove = playerIds.slice(0, count);
+      const onCourtIds = state.onCourtIds.filter(id => !toRemove.includes(id));
+      return { ...state, playersOnCourt: onCourtIds.length, onCourtIds };
+    }
+    return { ...state, playersOnCourt: Math.max(0, state.playersOnCourt - count) };
+  }
+
+  /** Revives up to `count` players back onto the mat from the starting lineup. */
+  private revive(state: KabaddiTeamState, count: number, rules: KabaddiRulesConfig): KabaddiTeamState {
+    if (count <= 0) return state;
+    if (!state.startingIds?.length) {
+      return { ...state, playersOnCourt: Math.min(rules.playersPerSide, state.playersOnCourt + count) };
+    }
+    const onCourtIds = [...(state.onCourtIds ?? [])];
+    const outPool = state.startingIds.filter(id => !onCourtIds.includes(id));
+    for (let i = 0; i < count && outPool.length > 0; i++) {
+      const revivedId = outPool.shift();
+      if (revivedId) onCourtIds.push(revivedId);
+    }
+    return { ...state, playersOnCourt: onCourtIds.length, onCourtIds };
   }
 
   /**
@@ -339,6 +367,8 @@ class KabaddiService {
       raiderOut: boolean;
       raiderId?: string;
       raiderName?: string;
+      touchedIds?: string[];
+      touchedNames?: string[];
       tacklerIds?: string[];
       tacklerNames?: string[];
     },
@@ -362,27 +392,25 @@ class KabaddiService {
     const raidPoints = touches + (bonusAwarded ? 1 : 0);
 
     if (raidPoints > 0 && !input.raiderOut) {
-      // Raider banks points; every tagged defender leaves the mat.
+      // Raider banks points; every tagged defender leaves the mat and one
+      // team-mate is revived per touch.
       next = {
         ...next,
         [raidSide]: {
-          ...next[raidSide],
+          ...this.revive(next[raidSide], touches, rules),
           score: next[raidSide].score + raidPoints,
           totalRaidPoints: next[raidSide].totalRaidPoints + touches,
           totalBonusPoints: next[raidSide].totalBonusPoints + (bonusAwarded ? 1 : 0),
           consecutiveEmptyRaids: 0,
-          // Tagged defenders revive one team-mate each.
-          playersOnCourt: Math.min(rules.playersPerSide, next[raidSide].playersOnCourt + touches),
         },
-        [defSide]: {
-          ...next[defSide],
-          playersOnCourt: Math.max(0, next[defSide].playersOnCourt - touches),
-        },
+        [defSide]: this.sendOut(next[defSide], touches, input.touchedIds),
       };
 
       if (touches > 0) {
         events.push(this.makeEvent(next, 'touch_point', input.raidingTeamId, touches, {
           playerId: input.raiderId, playerName: input.raiderName,
+          opponentIds: input.touchedIds,
+          opponentNames: input.touchedNames,
         }));
       }
       if (bonusAwarded) {
@@ -404,14 +432,12 @@ class KabaddiService {
       next = {
         ...next,
         [defSide]: {
-          ...next[defSide],
+          ...this.revive(next[defSide], 1, rules),
           score: next[defSide].score + points,
           totalTacklePoints: next[defSide].totalTacklePoints + points,
-          playersOnCourt: Math.min(rules.playersPerSide, next[defSide].playersOnCourt + 1),
         },
         [raidSide]: {
-          ...next[raidSide],
-          playersOnCourt: Math.max(0, next[raidSide].playersOnCourt - 1),
+          ...this.sendOut(next[raidSide], 1, input.raiderId ? [input.raiderId] : undefined),
           consecutiveEmptyRaids: 0,
         },
       };
@@ -422,6 +448,26 @@ class KabaddiService {
         playerName: input.tacklerNames?.[0],
       }));
       if (superTackle) celebration = 'super_tackle';
+    } else if (live.isDoOrDie && input.raiderId) {
+      // A failed do-or-die raid eliminates the raider and awards the defence.
+      next = {
+        ...next,
+        [defSide]: {
+          ...this.revive(next[defSide], 1, rules),
+          score: next[defSide].score + 1,
+          totalTacklePoints: next[defSide].totalTacklePoints + 1,
+        },
+        [raidSide]: {
+          ...this.sendOut(next[raidSide], 1, [input.raiderId]),
+          consecutiveEmptyRaids: 0,
+        },
+      };
+      events.push(this.makeEvent(next, 'do_or_die_fail', defTeamId, 1, {
+        playerId: input.raiderId,
+        playerName: input.raiderName,
+        opponentIds: input.raiderId ? [input.raiderId] : undefined,
+        opponentNames: input.raiderName ? [input.raiderName] : undefined,
+      }));
     } else {
       // Empty raid — counts toward do-or-die.
       const empties = next[raidSide].consecutiveEmptyRaids + 1;
@@ -461,6 +507,33 @@ class KabaddiService {
     };
 
     return { live: next, events, celebration };
+  }
+
+  /**
+   * Swaps a bench player in for an on-court (or already out) player. Updates
+   * both the live on-court list and the starting lineup so future revivals
+   * bring back the substitute, not the player they replaced.
+   */
+  substitutePlayer(
+    live: KabaddiLiveState, teamId: string, outPlayerId: string, inPlayerId: string, inPlayerName?: string, outPlayerName?: string,
+  ): { live: KabaddiLiveState; event: KabaddiMatchEvent } {
+    const side = this.sideOf(live, teamId);
+    const state = live[side];
+    const onCourtIds = (state.onCourtIds ?? []).map(id => (id === outPlayerId ? inPlayerId : id));
+    const startingIds = (state.startingIds ?? []).map(id => (id === outPlayerId ? inPlayerId : id));
+    const next: KabaddiLiveState = {
+      ...live,
+      [side]: { ...state, onCourtIds, startingIds },
+      lastUpdated: Date.now(),
+    };
+    const event = this.makeEvent(next, 'substitution', teamId, 0, {
+      playerId: inPlayerId,
+      playerName: inPlayerName,
+      opponentIds: outPlayerId ? [outPlayerId] : undefined,
+      opponentNames: outPlayerName ? [outPlayerName] : undefined,
+    });
+    next.events = [...next.events, event].slice(-200);
+    return { live: next, event };
   }
 
   // ── Aggregations (stats dock) ──────────────────────────────────────────────
