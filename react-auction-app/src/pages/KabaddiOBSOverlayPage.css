@@ -172,7 +172,7 @@
 .kbo__mat-dot.is-on { background: var(--kb-accent, #f59e0b); }
 
 /* Players still on the mat — photo avatars, sourced from the Kabaddi Admin roster */
-.kbo__mat--players { gap: 6px; flex-wrap: wrap; max-width: 300px; }
+.kbo__mat--players { gap: 6px; max-width: 420px; }
 
 .kbo__mat-player {
   position: relative;
