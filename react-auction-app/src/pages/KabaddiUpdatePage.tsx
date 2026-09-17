@@ -49,13 +49,11 @@ export default function KabaddiUpdatePage() {
   const [raiderId, setRaiderId] = useState('');
   const [touches, setTouches] = useState(0);
   const [touchedDefenderIds, setTouchedDefenderIds] = useState<string[]>([]);
-  const [excludedDefenderIds, setExcludedDefenderIds] = useState<string[]>([]);
   const [bonus, setBonus] = useState(false);
   const [tacklerIds, setTacklerIds] = useState<string[]>([]);
   const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
   const [showCorrections, setShowCorrections] = useState(false);
   const [subOutId, setSubOutId] = useState<Record<string, string>>({});
-  const [subInId, setSubInId] = useState<Record<string, string>>({});
 
   const undoStack = useRef<KabaddiLiveState[]>([]);
   const redoStack = useRef<KabaddiLiveState[]>([]);
@@ -176,6 +174,12 @@ export default function KabaddiUpdatePage() {
     return seeded;
   }, [live, match, matchId, rules.playersPerSide, scorerPlayers]);
 
+  // Know who raids first (from the toss) as soon as the match loads, rather
+  // than waiting for the scorer to press a button.
+  useEffect(() => {
+    if (ready && match && !live) void ensureLive();
+  }, [ready, match, live, ensureLive]);
+
   const triggerOverlay = useCallback(async (type: KabaddiOverlayType, event?: KabaddiLiveState['events'][number]) => {
     if (!matchId) return;
     await kabaddiService.triggerOverlay(matchId, {
@@ -295,7 +299,6 @@ export default function KabaddiUpdatePage() {
       setTouches(0);
       setBonus(false);
       setRaiderId('');
-      setExcludedDefenderIds(ids => Array.from(new Set([...ids, ...touchedDefenderIds])));
       setTouchedDefenderIds([]);
       setTacklerIds([]);
       if (result.live.isDoOrDie) await triggerOverlay('do_or_die');
@@ -336,19 +339,24 @@ export default function KabaddiUpdatePage() {
     flash('Redo applied');
   };
 
-  const substitutePlayer = async (teamId: string) => {
+  const substitutePlayer = async (teamId: string, outId: string, inId: string) => {
     const cur = await ensureLive();
-    if (!cur) return;
-    const outId = subOutId[teamId];
-    const inId = subInId[teamId];
-    if (!outId || !inId) { flash('Pick both players for the substitution'); return; }
+    if (!cur || !outId || !inId) return;
     const outPlayer = scorerPlayers.find(p => p.id === outId);
     const inPlayer = scorerPlayers.find(p => p.id === inId);
     const result = kabaddiService.substitutePlayer(cur, teamId, outId, inId, inPlayer?.name, outPlayer?.name);
     await persist(result.live);
     setSubOutId(ids => ({ ...ids, [teamId]: '' }));
-    setSubInId(ids => ({ ...ids, [teamId]: '' }));
     flash(`${inPlayer?.name ?? 'Substitute'} is on for ${outPlayer?.name ?? 'the bench'}`);
+  };
+
+  /** Manual correction for a wrong toss/turn entry — only allowed before a raid clock is running. */
+  const forceRaidingTeam = async (teamId: string) => {
+    const cur = await ensureLive();
+    if (!cur) return;
+    if (cur.raidClockStartedAt) { flash('Finish the current raid first'); return; }
+    await persist({ ...cur, raidingTeamId: teamId }, false);
+    flash('Raiding team corrected');
   };
 
   const adjustEventPoints = async (eventId: string, delta: number) => {
@@ -378,6 +386,11 @@ export default function KabaddiUpdatePage() {
   const raidingTeam = useMemo(() => {
     if (!live?.raidingTeamId || !match) return null;
     return live.raidingTeamId === match.teamA.id ? match.teamA : match.teamB;
+  }, [live?.raidingTeamId, match]);
+
+  const defendingTeamRef = useMemo(() => {
+    if (!live?.raidingTeamId || !match) return null;
+    return live.raidingTeamId === match.teamA.id ? match.teamB : match.teamA;
   }, [live?.raidingTeamId, match]);
 
   const defendingSide = live && match
@@ -414,17 +427,32 @@ export default function KabaddiUpdatePage() {
   const defenderOptions = useMemo(() => {
     if (!live?.raidingTeamId || !match) return [];
     const defendingTeamId = live.raidingTeamId === match.teamA.id ? match.teamB.id : match.teamA.id;
+    // Touched defenders are removed the instant a raid resolves (server-side
+    // onCourtIds), so the live roster is always the single source of truth —
+    // no separate client-side exclusion list to fall out of sync.
     const onCourt = new Set(onCourtIdsFor(defendingTeamId));
     return scorerPlayers
-      .filter(p => p.teamId === defendingTeamId && onCourt.has(p.id) && !excludedDefenderIds.includes(p.id))
+      .filter(p => p.teamId === defendingTeamId && onCourt.has(p.id))
       .sort(startersFirst);
-  }, [scorerPlayers, live?.raidingTeamId, match, excludedDefenderIds, onCourtIdsFor]);
+  }, [scorerPlayers, live?.raidingTeamId, match, onCourtIdsFor]);
 
   /** Only the 7 active players — the rest live under Advanced options. */
   const activePlayersFirst = (teamId: string) => {
     const onCourt = new Set(onCourtIdsFor(teamId));
     return scorerPlayers.filter(p => p.teamId === teamId && onCourt.has(p.id)).sort(startersFirst);
   };
+
+  /** The starting lineup for a team with each player's current on-mat status — feeds the photo mat display. */
+  const rosterFor = useCallback((teamId: string): { player: KabaddiPlayer; onCourt: boolean }[] => {
+    if (!live || !match) return [];
+    const side = teamId === match.teamA.id ? live.teamA : live.teamB;
+    const startingIds = side.startingIds?.length ? side.startingIds : defaultLineup(teamId);
+    const onCourt = new Set(side.onCourtIds?.length ? side.onCourtIds : startingIds);
+    return startingIds
+      .map(id => scorerPlayers.find(p => p.id === id))
+      .filter((p): p is KabaddiPlayer => !!p)
+      .map(player => ({ player, onCourt: onCourt.has(player.id) }));
+  }, [live, match, scorerPlayers, defaultLineup]);
 
   const toggleTouchedDefender = (playerId: string) => {
     setTouchedDefenderIds(ids => {
@@ -453,6 +481,11 @@ export default function KabaddiUpdatePage() {
     return <div className="kbu kbu--empty"><div className="kbu__spinner" /><p>Loading match…</p></div>;
   }
 
+  // Raids alternate turn by turn regardless of outcome — always show the
+  // team whose turn it is on the left and the defence on the right.
+  const currentRaidTeam = raidingTeam ?? match.teamA;
+  const currentDefendTeam = defendingTeamRef ?? match.teamB;
+
   return (
     <div className="kbu">
       <header className="kbu__bar">
@@ -467,15 +500,16 @@ export default function KabaddiUpdatePage() {
 
       {toast && <div className="kbu__toast">{toast}</div>}
 
-      {/* ── Scoreboard ── */}
+      {/* ── Scoreboard — raiding team always on the left, defence on the right ── */}
       <section className="kbu__scoreboard">
         <TeamScore
-          name={match.teamA.shortName}
-          color={match.teamA.primaryColor}
-          score={live?.teamA.score ?? 0}
-          onCourt={live?.teamA.playersOnCourt ?? rules.playersPerSide}
+          name={currentRaidTeam.shortName}
+          color={currentRaidTeam.primaryColor}
+          score={(currentRaidTeam.id === match.teamA.id ? live?.teamA.score : live?.teamB.score) ?? 0}
+          onCourt={(currentRaidTeam.id === match.teamA.id ? live?.teamA.playersOnCourt : live?.teamB.playersOnCourt) ?? rules.playersPerSide}
           total={rules.playersPerSide}
-          raiding={live?.raidingTeamId === match.teamA.id}
+          raiding={live?.raidingTeamId === currentRaidTeam.id}
+          roster={rosterFor(currentRaidTeam.id)}
         />
         <div className="kbu__clock-block">
           <span className="kbu__clock-label">Raid {live?.raidNumber ? live.raidNumber + 1 : 1}</span>
@@ -495,12 +529,13 @@ export default function KabaddiUpdatePage() {
           </button>
         </div>
         <TeamScore
-          name={match.teamB.shortName}
-          color={match.teamB.primaryColor}
-          score={live?.teamB.score ?? 0}
-          onCourt={live?.teamB.playersOnCourt ?? rules.playersPerSide}
+          name={currentDefendTeam.shortName}
+          color={currentDefendTeam.primaryColor}
+          score={(currentDefendTeam.id === match.teamA.id ? live?.teamA.score : live?.teamB.score) ?? 0}
+          onCourt={(currentDefendTeam.id === match.teamA.id ? live?.teamA.playersOnCourt : live?.teamB.playersOnCourt) ?? rules.playersPerSide}
           total={rules.playersPerSide}
-          raiding={live?.raidingTeamId === match.teamB.id}
+          raiding={live?.raidingTeamId === currentDefendTeam.id}
+          roster={rosterFor(currentDefendTeam.id)}
         />
       </section>
 
@@ -527,32 +562,45 @@ export default function KabaddiUpdatePage() {
 
         {!live?.raidingTeamId || live.raidClockStartedAt === 0 ? (
           <>
-            <p className="kbu__hint">Pick the raider, then start the {rules.raidDurationSec}-second raid clock.</p>
+            <p className="kbu__hint">
+              <strong style={{ color: currentRaidTeam.primaryColor }}>{currentRaidTeam.shortName}</strong> raids next — pick the raider, then start the {rules.raidDurationSec}-second clock. Raids alternate automatically after each raid.
+            </p>
             <div className="kbu__sides">
               <div className="kbu__side">
-                <h3 style={{ color: match.teamA.primaryColor }}>{match.teamA.shortName}</h3>
+                <h3 style={{ color: currentRaidTeam.primaryColor }}>{currentRaidTeam.shortName} · raiding</h3>
                 <PlayerPicker
-                  players={activePlayersFirst(match.teamA.id)}
+                  players={activePlayersFirst(currentRaidTeam.id)}
                   selectedIds={raiderId ? [raiderId] : []}
                   onPick={id => setRaiderId(id === raiderId ? '' : id)}
                   live={live}
                 />
-                <button className="kbu__btn kbu__btn--a" onClick={() => startRaid(match.teamA.id)}>
-                  {match.teamA.shortName} raids
+                <button
+                  className="kbu__btn kbu__btn--primary"
+                  style={{ background: currentRaidTeam.primaryColor }}
+                  onClick={() => startRaid(currentRaidTeam.id)}
+                >
+                  Start raid — {currentRaidTeam.shortName}
                 </button>
               </div>
               <div className="kbu__side">
-                <h3 style={{ color: match.teamB.primaryColor }}>{match.teamB.shortName}</h3>
-                <PlayerPicker
-                  players={activePlayersFirst(match.teamB.id)}
-                  selectedIds={raiderId ? [raiderId] : []}
-                  onPick={id => setRaiderId(id === raiderId ? '' : id)}
-                  live={live}
-                />
-                <button className="kbu__btn kbu__btn--b" onClick={() => startRaid(match.teamB.id)}>
-                  {match.teamB.shortName} raids
-                </button>
+                <h3 style={{ color: currentDefendTeam.primaryColor }}>{currentDefendTeam.shortName} · defending</h3>
+                <p className="kbu__hint">{onCourtIdsFor(currentDefendTeam.id).length} player(s) on the mat.</p>
               </div>
+            </div>
+            <div className="kbu__advanced">
+              <button type="button" className="kbu__advanced-toggle" onClick={() => setShowAdvancedOptions(value => !value)}>
+                {showAdvancedOptions ? 'Hide' : 'Show'} advanced raid options
+              </button>
+              {showAdvancedOptions && (
+                <div className="kbu__advanced-panel">
+                  <h4 className="kbu__advanced-heading"><IoSwapHorizontal size={14} /> Correct raiding team</h4>
+                  <p className="kbu__hint">Only use this if the toss / turn order was entered wrong.</p>
+                  <div className="kbu__advanced-row">
+                    <button type="button" className={`kbu__btn ${currentRaidTeam.id === match.teamA.id ? 'is-running' : ''}`} onClick={() => void forceRaidingTeam(match.teamA.id)}>{match.teamA.shortName} raids next</button>
+                    <button type="button" className={`kbu__btn ${currentRaidTeam.id === match.teamB.id ? 'is-running' : ''}`} onClick={() => void forceRaidingTeam(match.teamB.id)}>{match.teamB.shortName} raids next</button>
+                  </div>
+                </div>
+              )}
             </div>
           </>
         ) : (
@@ -638,23 +686,53 @@ export default function KabaddiUpdatePage() {
                   <p className="kbu__hint">Use this only when the defender cards do not represent the official touch count.</p>
 
                   <h4 className="kbu__advanced-heading"><IoSwapHorizontal size={14} /> Substitutes</h4>
-                  <p className="kbu__hint">Only the 7 active players are scoreable above. Bring on a bench player here if a substitution is called.</p>
-                  {[match.teamA, match.teamB].map(team => (
-                    <div key={team.id} className="kbu__sub-row">
-                      <span className="kbu__sub-team-name" style={{ color: team.primaryColor }}>{team.shortName}</span>
-                      <select value={subOutId[team.id] ?? ''} onChange={e => setSubOutId(ids => ({ ...ids, [team.id]: e.target.value }))}>
-                        <option value="">Bench (active player)…</option>
-                        {activePlayersFirst(team.id).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                      </select>
-                      <select value={subInId[team.id] ?? ''} onChange={e => setSubInId(ids => ({ ...ids, [team.id]: e.target.value }))}>
-                        <option value="">Bring in…</option>
-                        {benchPlayersFor(team.id).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                      </select>
-                      <button type="button" className="kbu__btn kbu__btn--sm" onClick={() => substitutePlayer(team.id)}>
-                        Substitute
-                      </button>
-                    </div>
-                  ))}
+                  <p className="kbu__hint">Tap an on-mat player, then tap who's coming on — the swap applies instantly.</p>
+                  {[match.teamA, match.teamB].map(team => {
+                    const outId = subOutId[team.id] ?? '';
+                    const bench = benchPlayersFor(team.id);
+                    return (
+                      <div key={team.id} className="kbu__sub-block">
+                        <span className="kbu__sub-team-name" style={{ color: team.primaryColor }}>{team.shortName}</span>
+                        <div className="kbu__picker kbu__picker--sub">
+                          {activePlayersFirst(team.id).map(p => (
+                            <button
+                              key={p.id}
+                              type="button"
+                              className={`kbu__pick kbu__pick--sm ${outId === p.id ? 'is-on' : ''}`}
+                              onClick={() => setSubOutId(ids => ({ ...ids, [team.id]: ids[team.id] === p.id ? '' : p.id }))}
+                              title={p.name}
+                            >
+                              <span className="kbu__pick-photo"><ResolvedImage src={p.photoUrl} size={96} fallback={<span>{p.name.charAt(0)}</span>} /></span>
+                              <span className="kbu__pick-name">{p.name}</span>
+                            </button>
+                          ))}
+                        </div>
+                        {outId && (
+                          <>
+                            <p className="kbu__hint">Bringing on for {activePlayersFirst(team.id).find(p => p.id === outId)?.name}:</p>
+                            {bench.length === 0 ? (
+                              <p className="kbu__hint">No bench players available.</p>
+                            ) : (
+                              <div className="kbu__picker kbu__picker--sub">
+                                {bench.map(p => (
+                                  <button
+                                    key={p.id}
+                                    type="button"
+                                    className="kbu__pick kbu__pick--sm"
+                                    onClick={() => void substitutePlayer(team.id, outId, p.id)}
+                                    title={p.name}
+                                  >
+                                    <span className="kbu__pick-photo"><ResolvedImage src={p.photoUrl} size={96} fallback={<span>{p.name.charAt(0)}</span>} /></span>
+                                    <span className="kbu__pick-name">{p.name}</span>
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -695,18 +773,30 @@ export default function KabaddiUpdatePage() {
   );
 }
 
-function TeamScore({ name, color, score, onCourt, total, raiding }: Readonly<{
+function TeamScore({ name, color, score, onCourt, total, raiding, roster }: Readonly<{
   name: string; color?: string; score: number; onCourt: number; total: number; raiding: boolean;
+  roster: { player: KabaddiPlayer; onCourt: boolean }[];
 }>) {
   return (
     <div className={`kbu__team ${raiding ? 'is-raiding' : ''}`}>
       <span className="kbu__team-name" style={{ color }}>{name}</span>
       <span className="kbu__team-score">{score}</span>
-      <span className="kbu__mat">
-        {Array.from({ length: total }, (_, i) => (
-          <i key={i} className={i < onCourt ? 'is-on' : ''} />
-        ))}
-      </span>
+      {roster.length > 0 ? (
+        <span className="kbu__mat kbu__mat--players" title={`${roster.filter(r => r.onCourt).length} on the mat`}>
+          {roster.map(({ player, onCourt: isOn }) => (
+            <span key={player.id} className={`kbu__mat-player ${isOn ? 'is-on' : 'is-out'}`} title={player.name}>
+              <ResolvedImage src={player.photoUrl} size={96} fallback={<span>{player.name.charAt(0)}</span>} />
+              {!isOn && <span className="kbu__mat-out-icon" aria-hidden="true" />}
+            </span>
+          ))}
+        </span>
+      ) : (
+        <span className="kbu__mat">
+          {Array.from({ length: total }, (_, i) => (
+            <i key={i} className={i < onCourt ? 'is-on' : ''} />
+          ))}
+        </span>
+      )}
     </div>
   );
 }

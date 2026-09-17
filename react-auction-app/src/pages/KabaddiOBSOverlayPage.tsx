@@ -26,6 +26,8 @@ import type {
   KabaddiOverlayControl, KabaddiAnimationConfig, KabaddiRulesConfig, KabaddiTeamState,
   KabaddiTeam, KabaddiTeamRef, KabaddiPlayer,
 } from '../types/kabaddi';
+import type { Team } from '../types';
+import type { SoldPlayerRecord } from '../services/auctionPersistence';
 import './KabaddiOBSOverlayPage.css';
 
 const FB_CONFIG = {
@@ -60,21 +62,66 @@ function celebFor(type: KabaddiOverlayControl['activeOverlay'], config: KabaddiO
   }
 }
 
-function enrichTeam(team: KabaddiTeamRef, teams: KabaddiTeam[]): KabaddiTeamRef {
+/**
+ * Merges the match's saved team ref with the latest kabaddi team record, then
+ * prefers the linked Auction Admin team's logo — that's the single place
+ * teams manage their crest, and the kabaddi copy can otherwise go stale.
+ */
+function enrichTeam(team: KabaddiTeamRef, teams: KabaddiTeam[], auctionTeams: Team[]): KabaddiTeamRef {
   const latest = teams.find(candidate => candidate.id === team.id)
     ?? teams.find(candidate => candidate.name.trim().toLowerCase() === team.name.trim().toLowerCase());
-  if (!latest) return team;
-  return {
+  const merged: KabaddiTeamRef = latest ? {
     ...team,
     name: latest.name || team.name,
     shortName: latest.shortName || team.shortName,
     logoUrl: latest.logoUrl || team.logoUrl,
     animationUrl: latest.animationUrl || team.animationUrl,
     primaryColor: latest.primaryColor || team.primaryColor,
-  };
+  } : team;
+  const auctionMatch = auctionTeams.find(at =>
+    (latest?.sourceTeamId && at.id === latest.sourceTeamId)
+    || at.name.trim().toLowerCase() === merged.name.trim().toLowerCase());
+  const auctionLogo = auctionMatch?.brandLogoUrl || auctionMatch?.logoUrl;
+  return auctionLogo ? { ...merged, logoUrl: auctionLogo } : merged;
 }
 
 interface MatRosterEntry { player: KabaddiPlayer; onCourt: boolean }
+
+/**
+ * Kabaddi Admin's own player list, plus any Auction Admin sold player not
+ * already represented there — teams that only imported the team (and never
+ * ran "Import players" in Kabaddi Admin) still get real photos on the mat
+ * instead of falling back to plain dots.
+ */
+function mergedRosterPlayers(
+  players: KabaddiPlayer[], soldPlayers: SoldPlayerRecord[], match: KabaddiMatchSetup | null,
+): KabaddiPlayer[] {
+  if (!match) return players;
+  const knownIds = new Set(players.flatMap(p => [p.id, p.sourcePlayerId].filter((v): v is string => !!v)));
+  const teamForSoldPlayer = (sp: SoldPlayerRecord): string | null => {
+    const teamName = sp.teamName?.trim().toLowerCase();
+    if (sp.teamId === match.teamA.id || teamName === match.teamA.name.trim().toLowerCase()) return match.teamA.id;
+    if (sp.teamId === match.teamB.id || teamName === match.teamB.name.trim().toLowerCase()) return match.teamB.id;
+    return null;
+  };
+  const extras = soldPlayers.flatMap((sp): KabaddiPlayer[] => {
+    if (knownIds.has(sp.id)) return [];
+    const teamId = teamForSoldPlayer(sp);
+    if (!teamId) return [];
+    return [{
+      id: sp.id,
+      teamId,
+      name: sp.playerName,
+      photoUrl: sp.imageUrl || undefined,
+      position: 'ALL_ROUNDER',
+      isStarter: true,
+      sourcePlayerId: sp.id,
+      createdAt: sp.timestamp || Date.now(),
+      updatedAt: sp.timestamp || Date.now(),
+    }];
+  });
+  return [...players, ...extras];
+}
 
 /** The starting lineup for a team with each player's current on-mat status. */
 function matchRosterFor(
@@ -98,7 +145,9 @@ export default function KabaddiOBSOverlayPage() {
   const [match, setMatch] = useState<KabaddiMatchSetup | null>(null);
   const [live, setLive] = useState<KabaddiLiveState | null>(null);
   const [teams, setTeams] = useState<KabaddiTeam[]>([]);
+  const [auctionTeams, setAuctionTeams] = useState<Team[]>([]);
   const [players, setPlayers] = useState<KabaddiPlayer[]>([]);
+  const [soldPlayers, setSoldPlayers] = useState<SoldPlayerRecord[]>([]);
   const [config, setConfig] = useState<KabaddiOverlayConfig>(DEFAULT_KABADDI_OVERLAY_CONFIG);
   const [rules, setRules] = useState<KabaddiRulesConfig>(DEFAULT_KABADDI_RULES);
   const [control, setControl] = useState<KabaddiOverlayControl | null>(null);
@@ -129,9 +178,17 @@ export default function KabaddiOBSOverlayPage() {
         const val = (s.val() as Record<string, KabaddiTeam>) ?? {};
         setTeams(Object.values(val).filter(t => !!t?.id));
       }),
+      onValue(ref(fbDb, tenantPath('auction/teams')), s => {
+        const val = s.val() as Team[] | Record<string, Team> | null;
+        setAuctionTeams(val ? Object.values(val).filter((t): t is Team => !!t?.id) : []);
+      }),
       onValue(ref(fbDb, `${base}/players`), s => {
         const val = (s.val() as Record<string, KabaddiPlayer>) ?? {};
         setPlayers(Object.values(val).filter(p => !!p?.id));
+      }),
+      onValue(ref(fbDb, tenantPath('auction/soldPlayers')), s => {
+        const val = s.val() as SoldPlayerRecord[] | Record<string, SoldPlayerRecord> | null;
+        setSoldPlayers(val ? Object.values(val).filter((p): p is SoldPlayerRecord => !!p?.id) : []);
       }),
     ];
     return () => unsubs.forEach(u => u());
@@ -160,8 +217,9 @@ export default function KabaddiOBSOverlayPage() {
   const { minute, second } = computeKabaddiClock(live);
   const clock = `${String(minute).padStart(2, '0')}:${String(second).padStart(2, '0')}`;
   const raidLeft = config.showRaidClock ? raidSecondsRemaining(live, rules) : null;
-  const teamA = enrichTeam(match.teamA, teams);
-  const teamB = enrichTeam(match.teamB, teams);
+  const teamA = enrichTeam(match.teamA, teams, auctionTeams);
+  const teamB = enrichTeam(match.teamB, teams, auctionTeams);
+  const rosterPlayers = mergedRosterPlayers(players, soldPlayers, match);
   const raidingA = live.raidingTeamId === teamA.id;
   const raidingB = live.raidingTeamId === teamB.id;
 
@@ -198,7 +256,7 @@ export default function KabaddiOBSOverlayPage() {
             animationUrl={teamA.animationUrl}
             color={teamA.primaryColor}
             state={live.teamA}
-            roster={matchRosterFor(teamA.id, players, live.teamA, rules.playersPerSide)}
+            roster={matchRosterFor(teamA.id, rosterPlayers, live.teamA, rules.playersPerSide)}
             raiding={raidingA}
             playersPerSide={rules.playersPerSide}
           />
@@ -217,7 +275,7 @@ export default function KabaddiOBSOverlayPage() {
             animationUrl={teamB.animationUrl}
             color={teamB.primaryColor}
             state={live.teamB}
-            roster={matchRosterFor(teamB.id, players, live.teamB, rules.playersPerSide)}
+            roster={matchRosterFor(teamB.id, rosterPlayers, live.teamB, rules.playersPerSide)}
             raiding={raidingB}
             playersPerSide={rules.playersPerSide}
           />
@@ -277,7 +335,7 @@ function TeamBlock({ side, name, fullName, logoUrl, animationUrl, color, state, 
         <ResolvedImage className="kbo__team-anim" src={animationUrl} size={240} />
       )}
       <div className="kbo__team-logo" style={{ background: color }}>
-        <ResolvedImage src={logoUrl} size={192} fallback={<span>{name}</span>} />
+        <ResolvedImage src={logoUrl} size={220} fallback={<span>{name}</span>} />
       </div>
     </div>
   );

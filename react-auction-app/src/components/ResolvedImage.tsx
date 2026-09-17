@@ -18,7 +18,10 @@ export function ResolvedImage({
   style,
   size = 256,
   fallback = null,
-  crossOrigin = 'anonymous',
+  // No consumer of this component draws into a <canvas>, so default to no
+  // crossOrigin attribute — Drive/Firebase URLs without CORS headers still
+  // render as a plain <img>, they'd just fail to load if crossOrigin were set.
+  crossOrigin = '',
 }: Readonly<ResolvedImageProps>) {
   const [index, setIndex] = useState(0);
   const [failed, setFailed] = useState(false);

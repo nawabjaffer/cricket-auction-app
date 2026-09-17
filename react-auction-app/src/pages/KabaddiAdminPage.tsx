@@ -44,6 +44,47 @@ function toLocalInput(d: Date): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
+/** Remembers up to 20 previously typed values per field in localStorage. */
+function useFieldHistory(storageKey: string): [string[], (value: string) => void] {
+  const key = `kbaFieldHistory:${storageKey}`;
+  const [history, setHistory] = useState<string[]>(() => {
+    try { return JSON.parse(window.localStorage.getItem(key) ?? '[]'); } catch { return []; }
+  });
+  const remember = useCallback((value: string) => {
+    const v = value.trim();
+    if (!v) return;
+    setHistory(prev => {
+      if (prev[0] === v) return prev;
+      const next = [v, ...prev.filter(x => x !== v)].slice(0, 20);
+      try { window.localStorage.setItem(key, JSON.stringify(next)); } catch { /* ignore */ }
+      return next;
+    });
+  }, [key]);
+  return [history, remember];
+}
+
+/** Text input backed by a datalist of previously typed values — no re-typing the same venue, coach, URL, etc. */
+function HistoryField({ storageKey, value, onChange, placeholder }: Readonly<{
+  storageKey: string; value: string; onChange: (v: string) => void; placeholder?: string;
+}>) {
+  const [history, remember] = useFieldHistory(storageKey);
+  const listId = `kba-dl-${storageKey}`;
+  return (
+    <>
+      <input
+        list={listId}
+        value={value}
+        placeholder={placeholder}
+        onChange={e => onChange(e.target.value)}
+        onBlur={e => remember(e.target.value)}
+      />
+      <datalist id={listId}>
+        {history.map(h => <option key={h} value={h} />)}
+      </datalist>
+    </>
+  );
+}
+
 const ANIMATION_FIELDS = [
   { key: 'superRaidAnimation', flag: 'enableSuperRaidAnimation', label: 'Super Raid', hint: '3+ points in one raid' },
   { key: 'superTackleAnimation', flag: 'enableSuperTackleAnimation', label: 'Super Tackle', hint: 'Tackle with a thin defence' },
@@ -247,6 +288,14 @@ function KabaddiAdminPageContent() {
     } catch { flash('Upload failed'); }
   };
 
+  const uploadTeamLogo = async (file: File) => {
+    try {
+      const url = await uploadFileToStorage(file, `media/kabaddi/teams/logo-${Date.now()}`);
+      setTeamForm(f => ({ ...f, logoUrl: url }));
+      flash('Logo uploaded');
+    } catch { flash('Upload failed'); }
+  };
+
   // ── Players ──
   const [playerForm, setPlayerForm] = useState({
     teamId: '', name: '', number: '', position: 'RAIDER' as KabaddiPosition,
@@ -330,11 +379,25 @@ function KabaddiAdminPageContent() {
       await kabaddiService.saveMatch(setup);
 
       // Seed the live state so the overlay has something to render immediately.
+      // Crucially this must include onCourtIds/startingIds — without them the
+      // scorer can never tell who's actually on the mat, so tackled/touched
+      // players would keep reappearing in the raider/defender pickers.
       const firstRaider = matchForm.tossWonBy
         ? (matchForm.tossElected === 'raid' ? matchForm.tossWonBy : (matchForm.tossWonBy === a.id ? b.id : a.id))
         : a.id;
+      const startersFirst = (p: KabaddiPlayer, q: KabaddiPlayer) => Number(q.isStarter !== false) - Number(p.isStarter !== false);
+      const lineupFor = (teamId: string) => players
+        .filter(p => p.teamId === teamId)
+        .sort(startersFirst)
+        .slice(0, rules.playersPerSide)
+        .map(p => p.id);
+      const teamAIds = lineupFor(a.id);
+      const teamBIds = lineupFor(b.id);
+      const seeded = createEmptyKabaddiLiveState(id, a.id, b.id, rules.playersPerSide);
       await kabaddiService.saveLive({
-        ...createEmptyKabaddiLiveState(id, a.id, b.id, rules.playersPerSide),
+        ...seeded,
+        teamA: { ...seeded.teamA, onCourtIds: teamAIds, startingIds: teamAIds },
+        teamB: { ...seeded.teamB, onCourtIds: teamBIds, startingIds: teamBIds },
         raidingTeamId: firstRaider,
       });
 
@@ -435,9 +498,19 @@ function KabaddiAdminPageContent() {
           <div className="kba__card">
             <h2>{editTeamId ? 'Edit team' : 'Add team'}</h2>
             <div className="kba__grid">
-              <label><span>Name *</span><input value={teamForm.name} onChange={e => setTeamForm(f => ({ ...f, name: e.target.value }))} placeholder="Chennai Chargers" /></label>
-              <label><span>Short code</span><input value={teamForm.shortName} maxLength={4} onChange={e => setTeamForm(f => ({ ...f, shortName: e.target.value }))} placeholder="CHE" /></label>
-              <label><span>Logo URL</span><input value={teamForm.logoUrl} onChange={e => setTeamForm(f => ({ ...f, logoUrl: e.target.value }))} placeholder="https://…" /></label>
+              <label><span>Name *</span><HistoryField storageKey="team-name" value={teamForm.name} onChange={v => setTeamForm(f => ({ ...f, name: v }))} placeholder="Chennai Chargers" /></label>
+              <label><span>Short code</span><HistoryField storageKey="team-shortcode" value={teamForm.shortName} onChange={v => setTeamForm(f => ({ ...f, shortName: v.slice(0, 4) }))} placeholder="CHE" /></label>
+              <label>
+                <span>Logo URL</span>
+                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                  <div style={{ flex: 1 }}><HistoryField storageKey="team-logo-url" value={teamForm.logoUrl} onChange={v => setTeamForm(f => ({ ...f, logoUrl: v }))} placeholder="https://…" /></div>
+                  <label className="kba__btn" style={{ cursor: 'pointer', margin: 0 }}>
+                    Upload
+                    <input type="file" accept="image/*" style={{ display: 'none' }} onChange={e => { if (e.target.files?.[0]) void uploadTeamLogo(e.target.files[0]); }} />
+                  </label>
+                  {teamForm.logoUrl && <ResolvedImage src={teamForm.logoUrl} size={96} style={{ width: 34, height: 34, objectFit: 'contain' }} />}
+                </div>
+              </label>
               <label>
                 <span>Overlay animation (looping GIF/PNG)</span>
                 <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
@@ -449,9 +522,10 @@ function KabaddiAdminPageContent() {
                   {teamForm.animationUrl && <ResolvedImage src={teamForm.animationUrl} size={96} style={{ width: 34, height: 34, objectFit: 'contain' }} />}
                 </div>
               </label>
-              <label><span>Coach</span><input value={teamForm.coach} onChange={e => setTeamForm(f => ({ ...f, coach: e.target.value }))} /></label>
+              <label><span>Coach</span><HistoryField storageKey="team-coach" value={teamForm.coach} onChange={v => setTeamForm(f => ({ ...f, coach: v }))} /></label>
               <label><span>Colour</span><input type="color" value={teamForm.primaryColor} onChange={e => setTeamForm(f => ({ ...f, primaryColor: e.target.value }))} /></label>
             </div>
+            <p className="kba__hint">Prefer the Upload button over pasting a link — uploaded logos are hosted on this project's storage and always render on the OBS overlay, while some external links (e.g. Google Drive) can be blocked by the browser source.</p>
             <div className="kba__actions">
               <button className="kba__btn kba__btn--primary" onClick={saveTeam} disabled={busy}><IoSave size={16} /> {editTeamId ? 'Update' : 'Create'}</button>
               {editTeamId && <button className="kba__btn" onClick={resetTeam}><IoClose size={16} /> Cancel</button>}
@@ -614,8 +688,8 @@ function KabaddiAdminPageContent() {
                   {teams.filter(t => t.id !== matchForm.teamAId).map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
                 </select>
               </label>
-              <label><span>Venue</span><input value={matchForm.venue} onChange={e => setMatchForm(f => ({ ...f, venue: e.target.value }))} /></label>
-              <label><span>Competition</span><input value={matchForm.competition} onChange={e => setMatchForm(f => ({ ...f, competition: e.target.value }))} placeholder="League / Final" /></label>
+              <label><span>Venue</span><HistoryField storageKey="match-venue" value={matchForm.venue} onChange={v => setMatchForm(f => ({ ...f, venue: v }))} /></label>
+              <label><span>Competition</span><HistoryField storageKey="match-competition" value={matchForm.competition} onChange={v => setMatchForm(f => ({ ...f, competition: v }))} placeholder="League / Final" /></label>
               <label><span>Half duration (min)</span><input type="number" min={5} value={matchForm.halfDurationMin} onChange={e => setMatchForm(f => ({ ...f, halfDurationMin: Number(e.target.value) || 20 }))} /></label>
               <label><span>Date &amp; time</span><input type="datetime-local" value={matchForm.date} onChange={e => setMatchForm(f => ({ ...f, date: e.target.value }))} /></label>
               <label>
@@ -675,9 +749,9 @@ function KabaddiAdminPageContent() {
           <div className="kba__card">
             <h2><IoSettings size={15} /> Broadcast look</h2>
             <div className="kba__grid">
-              <label><span>Tournament name</span><input value={overlayConfig.tournamentName ?? ''} onChange={e => setOverlayConfig(c => ({ ...c, tournamentName: e.target.value }))} /></label>
-              <label><span>Tournament logo URL</span><input value={overlayConfig.tournamentLogo ?? ''} onChange={e => setOverlayConfig(c => ({ ...c, tournamentLogo: e.target.value }))} /></label>
-              <label><span>Partner logo URL</span><input value={overlayConfig.broadcastPartnerLogo ?? ''} onChange={e => setOverlayConfig(c => ({ ...c, broadcastPartnerLogo: e.target.value }))} /></label>
+              <label><span>Tournament name</span><HistoryField storageKey="overlay-tournament-name" value={overlayConfig.tournamentName ?? ''} onChange={v => setOverlayConfig(c => ({ ...c, tournamentName: v }))} /></label>
+              <label><span>Tournament logo URL</span><HistoryField storageKey="overlay-tournament-logo" value={overlayConfig.tournamentLogo ?? ''} onChange={v => setOverlayConfig(c => ({ ...c, tournamentLogo: v }))} /></label>
+              <label><span>Partner logo URL</span><HistoryField storageKey="overlay-partner-logo" value={overlayConfig.broadcastPartnerLogo ?? ''} onChange={v => setOverlayConfig(c => ({ ...c, broadcastPartnerLogo: v }))} /></label>
               <label>
                 <span>Scorecard position</span>
                 <select value={overlayConfig.scoreboardPosition} onChange={e => setOverlayConfig(c => ({ ...c, scoreboardPosition: e.target.value as KabaddiOverlayConfig['scoreboardPosition'] }))}>

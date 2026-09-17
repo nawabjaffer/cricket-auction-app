@@ -104,6 +104,53 @@
 
 .kbu__mat i.is-on { background: #f59e0b; }
 
+/* Active/on-mat players shown as big photo circles; benched/out players are
+   greyed out with a "not allowed" ring so the scorer can see status at a glance. */
+.kbu__mat--players { flex-wrap: wrap; max-width: 220px; justify-content: center; }
+
+.kbu__mat-player {
+  position: relative;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  overflow: hidden;
+  background: rgba(0, 0, 0, 0.35);
+  border: 3px solid #f59e0b;
+  flex-shrink: 0;
+  transition: filter 0.2s ease, border-color 0.2s ease, opacity 0.2s ease, transform 0.2s ease;
+}
+
+.kbu__mat-player img { width: 100%; height: 100%; object-fit: cover; }
+
+.kbu__mat-player.is-out {
+  width: 30px;
+  height: 30px;
+  border-color: rgba(255, 255, 255, 0.25);
+  filter: grayscale(1) brightness(0.55);
+  opacity: 0.8;
+}
+
+.kbu__mat-out-icon {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 2px solid #ef4444;
+}
+
+.kbu__mat-out-icon::before,
+.kbu__mat-out-icon::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 8%;
+  width: 84%;
+  height: 2px;
+  background: #ef4444;
+  transform: translateY(-50%) rotate(45deg);
+}
+
+.kbu__mat-out-icon::after { transform: translateY(-50%) rotate(-45deg); }
+
 .kbu__clock-block { display: flex; flex-direction: column; align-items: center; gap: 8px; }
 
 .kbu__clock-label {
@@ -419,11 +466,15 @@
   border-top: 1px solid rgba(255, 255, 255, 0.08);
 }
 
-.kbu__sub-row {
+.kbu__sub-block {
   display: flex;
-  align-items: center;
+  flex-direction: column;
   gap: 8px;
-  flex-wrap: wrap;
+  padding: 10px 0;
+}
+
+.kbu__sub-block + .kbu__sub-block {
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .kbu__sub-team-name {
@@ -432,16 +483,15 @@
   font-weight: 800;
 }
 
-.kbu__sub-row select {
-  flex: 1;
-  min-width: 140px;
-  padding: 8px 10px;
-  border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  background: rgba(0, 0, 0, 0.35);
-  color: #fff;
-  font-size: 12.5px;
+.kbu__picker--sub { grid-template-columns: repeat(auto-fill, minmax(66px, 1fr)); }
+
+.kbu__pick--sm {
+  padding: 6px 4px;
+  gap: 4px;
 }
+
+.kbu__pick--sm .kbu__pick-photo { width: 34px; height: 34px; font-size: 13px; }
+.kbu__pick--sm .kbu__pick-name { font-size: 10px; }
 
 .kbu__btn--sm { padding: 8px 14px; font-size: 12px; }
 

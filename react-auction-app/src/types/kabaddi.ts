@@ -174,6 +174,8 @@ export interface KabaddiTeamState {
   onCourtIds?: string[];
   /** The full starting lineup for this match (revivals return players from here). */
   startingIds?: string[];
+  /** Players sent off the mat, oldest-first — revivals pop from the front (FIFO). */
+  benchQueue?: string[];
   /** Consecutive empty raids — the 3rd raid becomes do-or-die. */
   consecutiveEmptyRaids: number;
   allOutsConceded: number;
@@ -187,6 +189,7 @@ export function createEmptyKabaddiTeamState(playersPerSide: number): KabaddiTeam
   return {
     score: 0,
     playersOnCourt: playersPerSide,
+    benchQueue: [],
     consecutiveEmptyRaids: 0,
     allOutsConceded: 0,
     allOutsInflicted: 0,

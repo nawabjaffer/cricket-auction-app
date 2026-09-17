@@ -315,6 +315,7 @@ class KabaddiService {
         ...emptiedState,
         playersOnCourt: rules.playersPerSide,
         onCourtIds: emptiedState.startingIds ?? emptiedState.onCourtIds,
+        benchQueue: [],
         allOutsConceded: emptiedState.allOutsConceded + 1,
       },
       [otherSide]: {
@@ -326,30 +327,43 @@ class KabaddiService {
     return { live: next, event: this.makeEvent(next, 'all_out', otherTeamId, rules.allOutBonusPoints) };
   }
 
-  /** Removes `count` players from the mat — specific IDs when known, else just the tally. */
+  /**
+   * Removes `count` players from the mat — specific IDs when known, else just
+   * the tally. Removed IDs are appended to `benchQueue` (oldest-first) so the
+   * next revival brings back whoever went out first (FIFO).
+   */
   private sendOut(state: KabaddiTeamState, count: number, playerIds?: string[]): KabaddiTeamState {
     if (count <= 0) return state;
     if (playerIds?.length && state.onCourtIds?.length) {
       const toRemove = playerIds.slice(0, count);
       const onCourtIds = state.onCourtIds.filter(id => !toRemove.includes(id));
-      return { ...state, playersOnCourt: onCourtIds.length, onCourtIds };
+      const existingQueue = (state.benchQueue ?? []).filter(id => !toRemove.includes(id));
+      const benchQueue = [...existingQueue, ...toRemove];
+      return { ...state, playersOnCourt: onCourtIds.length, onCourtIds, benchQueue };
     }
     return { ...state, playersOnCourt: Math.max(0, state.playersOnCourt - count) };
   }
 
-  /** Revives up to `count` players back onto the mat from the starting lineup. */
+  /**
+   * Revives up to `count` players back onto the mat — first-out, first-in —
+   * by popping from the front of `benchQueue`. Falls back to the starting
+   * lineup order for older live states saved before `benchQueue` existed.
+   */
   private revive(state: KabaddiTeamState, count: number, rules: KabaddiRulesConfig): KabaddiTeamState {
     if (count <= 0) return state;
-    if (!state.startingIds?.length) {
+    const onCourtIds = [...(state.onCourtIds ?? [])];
+    const benchQueue = [...(state.benchQueue ?? [])];
+    if (!benchQueue.length && !state.startingIds?.length) {
       return { ...state, playersOnCourt: Math.min(rules.playersPerSide, state.playersOnCourt + count) };
     }
-    const onCourtIds = [...(state.onCourtIds ?? [])];
-    const outPool = state.startingIds.filter(id => !onCourtIds.includes(id));
+    const outPool = benchQueue.length
+      ? benchQueue
+      : (state.startingIds ?? []).filter(id => !onCourtIds.includes(id));
     for (let i = 0; i < count && outPool.length > 0; i++) {
       const revivedId = outPool.shift();
       if (revivedId) onCourtIds.push(revivedId);
     }
-    return { ...state, playersOnCourt: onCourtIds.length, onCourtIds };
+    return { ...state, playersOnCourt: onCourtIds.length, onCourtIds, benchQueue: outPool };
   }
 
   /**
@@ -521,9 +535,10 @@ class KabaddiService {
     const state = live[side];
     const onCourtIds = (state.onCourtIds ?? []).map(id => (id === outPlayerId ? inPlayerId : id));
     const startingIds = (state.startingIds ?? []).map(id => (id === outPlayerId ? inPlayerId : id));
+    const benchQueue = (state.benchQueue ?? []).filter(id => id !== outPlayerId && id !== inPlayerId);
     const next: KabaddiLiveState = {
       ...live,
-      [side]: { ...state, onCourtIds, startingIds },
+      [side]: { ...state, onCourtIds, startingIds, benchQueue },
       lastUpdated: Date.now(),
     };
     const event = this.makeEvent(next, 'substitution', teamId, 0, {
