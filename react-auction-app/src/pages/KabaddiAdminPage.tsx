@@ -98,7 +98,7 @@ function KabaddiAdminPageContent() {
   const tenantSlug = getTenantSlugFromPath(window.location.pathname);
 
   const [ready, setReady] = useState(false);
-  const [tab, setTab] = useState<Tab>('teams');
+  const [tab, setTab] = useState<Tab>('matches');
   const [teams, setTeams] = useState<KabaddiTeam[]>([]);
   const [players, setPlayers] = useState<KabaddiPlayer[]>([]);
   const [matches, setMatches] = useState<KabaddiMatchSetup[]>([]);
@@ -353,11 +353,105 @@ function KabaddiAdminPageContent() {
   );
 
   // ── Matches ──
+  const [showMatchForm, setShowMatchForm] = useState(false);
+  const [editingMatchId, setEditingMatchId] = useState<string | null>(null);
   const [matchForm, setMatchForm] = useState({
     teamAId: '', teamBId: '', venue: '', competition: '',
     date: toLocalInput(new Date()), halfDurationMin: DEFAULT_KABADDI_RULES.halfDurationMin,
     tossWonBy: '', tossElected: 'raid' as 'raid' | 'defend',
+    status: 'scheduled' as KabaddiMatchSetup['status'],
   });
+
+  const resetMatchForm = () => {
+    setMatchForm({
+      teamAId: '', teamBId: '', venue: '', competition: '',
+      date: toLocalInput(new Date()), halfDurationMin: DEFAULT_KABADDI_RULES.halfDurationMin,
+      tossWonBy: '', tossElected: 'raid',
+      status: 'scheduled',
+    });
+    setEditingMatchId(null);
+    setShowMatchForm(false);
+  };
+
+  const editMatch = (m: KabaddiMatchSetup) => {
+    setMatchForm({
+      teamAId: m.teamA.id,
+      teamBId: m.teamB.id,
+      venue: m.venue || '',
+      competition: m.competition || '',
+      date: m.date ? toLocalInput(new Date(m.date)) : toLocalInput(new Date()),
+      halfDurationMin: m.halfDurationMin || DEFAULT_KABADDI_RULES.halfDurationMin,
+      tossWonBy: m.tossWonBy || '',
+      tossElected: m.tossElected || 'raid',
+      status: m.status || 'scheduled',
+    });
+    setEditingMatchId(m.id);
+    setShowMatchForm(true);
+    setTab('matches');
+  };
+
+  const saveMatchChanges = async () => {
+    if (!editingMatchId) return;
+    const a = teams.find(t => t.id === matchForm.teamAId);
+    const b = teams.find(t => t.id === matchForm.teamBId);
+    if (!a || !b || a.id === b.id) { flash('Pick two different teams'); return; }
+    setBusy(true);
+    try {
+      const existing = matches.find(m => m.id === editingMatchId);
+      const setup: KabaddiMatchSetup = {
+        id: editingMatchId,
+        teamA: {
+          id: a.id,
+          name: a.name,
+          shortName: a.shortName,
+          logoUrl: a.logoUrl || existing?.teamA.logoUrl,
+          animationUrl: a.animationUrl || existing?.teamA.animationUrl,
+          primaryColor: a.primaryColor || existing?.teamA.primaryColor,
+        },
+        teamB: {
+          id: b.id,
+          name: b.name,
+          shortName: b.shortName,
+          logoUrl: b.logoUrl || existing?.teamB.logoUrl,
+          animationUrl: b.animationUrl || existing?.teamB.animationUrl,
+          primaryColor: b.primaryColor || existing?.teamB.primaryColor,
+        },
+        venue: matchForm.venue.trim() || 'Indoor Court',
+        date: new Date(matchForm.date).toISOString(),
+        competition: matchForm.competition.trim() || undefined,
+        halfDurationMin: matchForm.halfDurationMin,
+        status: matchForm.status || existing?.status || 'scheduled',
+        tossWonBy: matchForm.tossWonBy || undefined,
+        tossElected: matchForm.tossWonBy ? matchForm.tossElected : undefined,
+        createdAt: existing?.createdAt ?? Date.now(),
+        updatedAt: Date.now(),
+      };
+      await kabaddiService.saveMatch(setup);
+
+      // Also update live match state if present
+      const existingLive = await kabaddiService.getLive(editingMatchId, rules.playersPerSide).catch(() => null);
+      if (existingLive) {
+        await kabaddiService.saveLive({
+          ...existingLive,
+          teamAId: a.id,
+          teamBId: b.id,
+          lastUpdated: Date.now(),
+        });
+      }
+
+      if (matchForm.status === 'live' && singleOverlayMode) {
+        await kabaddiService.setActiveMatch(editingMatchId);
+      }
+
+      await reloadMatches();
+      flash('Match updated successfully');
+      resetMatchForm();
+    } catch (e) {
+      flash(`Failed: ${String(e)}`);
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const createMatch = async (startNow: boolean) => {
     const a = teams.find(t => t.id === matchForm.teamAId);
@@ -411,7 +505,7 @@ function KabaddiAdminPageContent() {
 
       await reloadMatches();
       flash(startNow ? 'Match created and live' : 'Match created');
-      setTab('matches');
+      resetMatchForm();
     } catch (e) { flash(`Failed: ${String(e)}`); } finally { setBusy(false); }
   };
 
@@ -458,9 +552,9 @@ function KabaddiAdminPageContent() {
       </div>
 
       <nav className="kba__tabs">
+        <button className={tab === 'matches' ? 'is-active' : ''} onClick={() => setTab('matches')}>Matches</button>
         <button className={tab === 'teams' ? 'is-active' : ''} onClick={() => setTab('teams')}>Teams</button>
         <button className={tab === 'players' ? 'is-active' : ''} onClick={() => setTab('players')}>Players</button>
-        <button className={tab === 'matches' ? 'is-active' : ''} onClick={() => setTab('matches')}>Matches</button>
         <button className={tab === 'overlay' ? 'is-active' : ''} onClick={() => setTab('overlay')}>Overlay &amp; Animations</button>
       </nav>
 
@@ -679,6 +773,25 @@ function KabaddiAdminPageContent() {
       {/* ── Matches ── */}
       {tab === 'matches' && (
         <section className="kba__body">
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.75rem' }}>
+            <h2 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800, color: '#fff' }}>
+              Matches ({matches.length})
+            </h2>
+            <button
+              className="kba__btn kba__btn--primary"
+              onClick={() => {
+                if (showMatchForm) {
+                  resetMatchForm();
+                } else {
+                  resetMatchForm();
+                  setShowMatchForm(true);
+                }
+              }}
+            >
+              {showMatchForm ? (editingMatchId ? '✕ Cancel Edit' : '✕ Cancel') : <><IoAdd size={16} /> Create Match</>}
+            </button>
+          </div>
+
           {singleOverlayMode && (
             <div className="kba__card" style={{ borderLeft: '4px solid #22c55e', marginBottom: '1rem' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
@@ -717,53 +830,95 @@ function KabaddiAdminPageContent() {
             </div>
           )}
 
-          <div className="kba__card">
-            <h2>Create match</h2>
-            <div className="kba__grid">
-              <label>
-                <span>Team A *</span>
-                <select value={matchForm.teamAId} onChange={e => setMatchForm(f => ({ ...f, teamAId: e.target.value }))}>
-                  <option value="">Select…</option>
-                  {teams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-                </select>
-              </label>
-              <label>
-                <span>Team B *</span>
-                <select value={matchForm.teamBId} onChange={e => setMatchForm(f => ({ ...f, teamBId: e.target.value }))}>
-                  <option value="">Select…</option>
-                  {teams.filter(t => t.id !== matchForm.teamAId).map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-                </select>
-              </label>
-              <label><span>Venue</span><HistoryField storageKey="match-venue" value={matchForm.venue} onChange={v => setMatchForm(f => ({ ...f, venue: v }))} /></label>
-              <label><span>Competition</span><HistoryField storageKey="match-competition" value={matchForm.competition} onChange={v => setMatchForm(f => ({ ...f, competition: v }))} placeholder="League / Final" /></label>
-              <label><span>Half duration (min)</span><input type="number" min={5} value={matchForm.halfDurationMin} onChange={e => setMatchForm(f => ({ ...f, halfDurationMin: Number(e.target.value) || 20 }))} /></label>
-              <label><span>Date &amp; time</span><input type="datetime-local" value={matchForm.date} onChange={e => setMatchForm(f => ({ ...f, date: e.target.value }))} /></label>
-              <label>
-                <span>Toss won by</span>
-                <select value={matchForm.tossWonBy} onChange={e => setMatchForm(f => ({ ...f, tossWonBy: e.target.value }))}>
-                  <option value="">Not decided</option>
-                  {[matchForm.teamAId, matchForm.teamBId].filter(Boolean).map(id => {
-                    const t = teams.find(x => x.id === id);
-                    return t ? <option key={t.id} value={t.id}>{t.name}</option> : null;
-                  })}
-                </select>
-              </label>
-              <label>
-                <span>Elected to</span>
-                <select value={matchForm.tossElected} disabled={!matchForm.tossWonBy} onChange={e => setMatchForm(f => ({ ...f, tossElected: e.target.value as 'raid' | 'defend' }))}>
-                  <option value="raid">Raid first</option>
-                  <option value="defend">Defend first</option>
-                </select>
-              </label>
+          {showMatchForm && (
+            <div className="kba__card" style={{ borderLeft: editingMatchId ? '4px solid #a855f7' : undefined }}>
+              <h2><IoSettings size={15} /> {editingMatchId ? 'Edit Match' : 'Create Match'}</h2>
+              <div className="kba__grid">
+                <label>
+                  <span>Team A *</span>
+                  <select value={matchForm.teamAId} onChange={e => setMatchForm(f => ({ ...f, teamAId: e.target.value }))}>
+                    <option value="">Select…</option>
+                    {teams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                  </select>
+                </label>
+                <label>
+                  <span>Team B *</span>
+                  <select value={matchForm.teamBId} onChange={e => setMatchForm(f => ({ ...f, teamBId: e.target.value }))}>
+                    <option value="">Select…</option>
+                    {teams.filter(t => t.id !== matchForm.teamAId).map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                  </select>
+                </label>
+                <label><span>Venue</span><HistoryField storageKey="match-venue" value={matchForm.venue} onChange={v => setMatchForm(f => ({ ...f, venue: v }))} /></label>
+                <label><span>Competition</span><HistoryField storageKey="match-competition" value={matchForm.competition} onChange={v => setMatchForm(f => ({ ...f, competition: v }))} placeholder="League / Final" /></label>
+                <label><span>Half duration (min)</span><input type="number" min={5} value={matchForm.halfDurationMin} onChange={e => setMatchForm(f => ({ ...f, halfDurationMin: Number(e.target.value) || 20 }))} /></label>
+                <label><span>Date &amp; time</span><input type="datetime-local" value={matchForm.date} onChange={e => setMatchForm(f => ({ ...f, date: e.target.value }))} /></label>
+                <label>
+                  <span>Toss won by</span>
+                  <select value={matchForm.tossWonBy} onChange={e => setMatchForm(f => ({ ...f, tossWonBy: e.target.value }))}>
+                    <option value="">Not decided</option>
+                    {[matchForm.teamAId, matchForm.teamBId].filter(Boolean).map(id => {
+                      const t = teams.find(x => x.id === id);
+                      return t ? <option key={t.id} value={t.id}>{t.name}</option> : null;
+                    })}
+                  </select>
+                </label>
+                <label>
+                  <span>Elected to</span>
+                  <select value={matchForm.tossElected} disabled={!matchForm.tossWonBy} onChange={e => setMatchForm(f => ({ ...f, tossElected: e.target.value as 'raid' | 'defend' }))}>
+                    <option value="raid">Raid first</option>
+                    <option value="defend">Defend first</option>
+                  </select>
+                </label>
+                {editingMatchId && (
+                  <label>
+                    <span>Status</span>
+                    <select value={matchForm.status} onChange={e => setMatchForm(f => ({ ...f, status: e.target.value as KabaddiMatchSetup['status'] }))}>
+                      <option value="scheduled">Scheduled</option>
+                      <option value="live">Live</option>
+                      <option value="completed">Completed</option>
+                      <option value="abandoned">Abandoned</option>
+                    </select>
+                  </label>
+                )}
+              </div>
+              <div className="kba__actions">
+                {editingMatchId ? (
+                  <>
+                    <button className="kba__btn kba__btn--primary" onClick={saveMatchChanges} disabled={busy}>
+                      <IoSave size={16} /> Save Changes
+                    </button>
+                    <button className="kba__btn" onClick={resetMatchForm} disabled={busy}>
+                      <IoClose size={16} /> Cancel
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button className="kba__btn kba__btn--primary" onClick={() => createMatch(true)} disabled={busy}>
+                      <IoPlay size={16} /> Create &amp; go live
+                    </button>
+                    <button className="kba__btn" onClick={() => createMatch(false)} disabled={busy}>
+                      <IoAdd size={16} /> Create only
+                    </button>
+                    <button className="kba__btn" onClick={resetMatchForm} disabled={busy}>
+                      <IoClose size={16} /> Cancel
+                    </button>
+                  </>
+                )}
+              </div>
             </div>
-            <div className="kba__actions">
-              <button className="kba__btn kba__btn--primary" onClick={() => createMatch(true)} disabled={busy}><IoPlay size={16} /> Create &amp; go live</button>
-              <button className="kba__btn" onClick={() => createMatch(false)} disabled={busy}><IoAdd size={16} /> Create only</button>
-            </div>
-          </div>
+          )}
 
           <div className="kba__list">
-            {matches.length === 0 && <p className="kba__empty">No matches yet.</p>}
+            {matches.length === 0 && (
+              <div className="kba__empty" style={{ textAlign: 'center', padding: '2rem 1rem' }}>
+                <p>No matches yet.</p>
+                {!showMatchForm && (
+                  <button className="kba__btn kba__btn--primary" style={{ marginTop: '0.5rem' }} onClick={() => setShowMatchForm(true)}>
+                    <IoAdd size={16} /> Create First Match
+                  </button>
+                )}
+              </div>
+            )}
             {matches.map(m => {
               const isActive = m.id === activeMatchId;
               return (
@@ -785,6 +940,7 @@ function KabaddiAdminPageContent() {
                     </div>
                   </div>
                   <div className="kba__row-actions">
+                    <button onClick={() => editMatch(m)} title="Edit Match"><IoPencil size={15} /> Edit</button>
                     <button onClick={() => openIn('/kabaddi/scorer/update', m.id)}><IoFlash size={15} /> Score</button>
                     <button onClick={() => openIn('/kabaddi/scorer/obs-overlay', m.id)}><IoDesktop size={15} /> Overlay</button>
                     <button onClick={() => openIn('/kabaddi/scorer/camera', m.id)}><IoVideocam size={15} /> Camera</button>

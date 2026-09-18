@@ -12,6 +12,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   IoPlay, IoPause, IoArrowBack, IoFlash, IoShieldCheckmark,
   IoArrowUndo, IoArrowRedo, IoTimer, IoPeople, IoWarning, IoSwapHorizontal, IoPencil,
+  IoSave, IoClose,
 } from 'react-icons/io5';
 import { realtimeSync } from '../services/realtimeSync';
 import { kabaddiService } from '../services/kabaddi';
@@ -27,6 +28,7 @@ import {
 import type {
   KabaddiMatchSetup, KabaddiLiveState, KabaddiPlayer, KabaddiRulesConfig,
   KabaddiHalf, KabaddiOverlayType, KabaddiPosition, KabaddiDefenderRole,
+  KabaddiTeamRef,
 } from '../types/kabaddi';
 import './KabaddiUpdatePage.css';
 
@@ -60,6 +62,13 @@ export default function KabaddiUpdatePage() {
   const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
   const [showCorrections, setShowCorrections] = useState(false);
   const [subOutId, setSubOutId] = useState<Record<string, string>>({});
+
+  // 7 Main Players / Starting Lineup state
+  const [selectedStartersA, setSelectedStartersA] = useState<string[]>([]);
+  const [selectedStartersB, setSelectedStartersB] = useState<string[]>([]);
+  const [showLineupModal, setShowLineupModal] = useState(false);
+  const [tossWinner, setTossWinner] = useState<string>('');
+  const [tossChoice, setTossChoice] = useState<'raid' | 'defend'>('raid');
 
   const undoStack = useRef<KabaddiLiveState[]>([]);
   const redoStack = useRef<KabaddiLiveState[]>([]);
@@ -462,6 +471,188 @@ export default function KabaddiUpdatePage() {
     return side?.onCourtIds?.length ? side.onCourtIds : defaultLineup(teamId);
   }, [live, match, defaultLineup]);
 
+  // Initialize starting 7 selections and toss info
+  useEffect(() => {
+    if (!match) return;
+    const aSquad = scorerPlayers.filter(p => p.teamId === match.teamA.id);
+    const bSquad = scorerPlayers.filter(p => p.teamId === match.teamB.id);
+
+    const startersOrder = (a: KabaddiPlayer, b: KabaddiPlayer) => Number(b.isStarter !== false) - Number(a.isStarter !== false);
+
+    const initialA = live?.teamA.startingIds?.length
+      ? live.teamA.startingIds
+      : aSquad.sort(startersOrder).slice(0, rules.playersPerSide).map(p => p.id);
+    const initialB = live?.teamB.startingIds?.length
+      ? live.teamB.startingIds
+      : bSquad.sort(startersOrder).slice(0, rules.playersPerSide).map(p => p.id);
+
+    setSelectedStartersA(initialA);
+    setSelectedStartersB(initialB);
+    setTossWinner(match.tossWonBy || match.teamA.id);
+    setTossChoice(match.tossElected || 'raid');
+  }, [match?.id, live?.teamA.startingIds, live?.teamB.startingIds, scorerPlayers, rules.playersPerSide]);
+
+  const toggleStarterA = (playerId: string) => {
+    if (!match) return;
+    const aSquad = scorerPlayers.filter(p => p.teamId === match.teamA.id);
+    const targetA = Math.min(rules.playersPerSide, aSquad.length);
+    setSelectedStartersA(prev => {
+      if (prev.includes(playerId)) {
+        return prev.filter(id => id !== playerId);
+      }
+      if (prev.length >= targetA) {
+        flash(`Maximum ${targetA} main players allowed for ${match.teamA.name}. Unselect a player first.`);
+        return prev;
+      }
+      return [...prev, playerId];
+    });
+  };
+
+  const toggleStarterB = (playerId: string) => {
+    if (!match) return;
+    const bSquad = scorerPlayers.filter(p => p.teamId === match.teamB.id);
+    const targetB = Math.min(rules.playersPerSide, bSquad.length);
+    setSelectedStartersB(prev => {
+      if (prev.includes(playerId)) {
+        return prev.filter(id => id !== playerId);
+      }
+      if (prev.length >= targetB) {
+        flash(`Maximum ${targetB} main players allowed for ${match.teamB.name}. Unselect a player first.`);
+        return prev;
+      }
+      return [...prev, playerId];
+    });
+  };
+
+  const handleConfirmStartingLineups = async () => {
+    if (!match || !matchId) return;
+    const aSquad = scorerPlayers.filter(p => p.teamId === match.teamA.id);
+    const bSquad = scorerPlayers.filter(p => p.teamId === match.teamB.id);
+    const targetA = Math.min(rules.playersPerSide, aSquad.length);
+    const targetB = Math.min(rules.playersPerSide, bSquad.length);
+
+    if (selectedStartersA.length < targetA) {
+      flash(`Please select ${targetA} main players for ${match.teamA.name}`);
+      return;
+    }
+    if (selectedStartersB.length < targetB) {
+      flash(`Please select ${targetB} main players for ${match.teamB.name}`);
+      return;
+    }
+
+    setBusy(true);
+    try {
+      const winner = tossWinner || match.tossWonBy || match.teamA.id;
+      const choice = tossChoice || match.tossElected || 'raid';
+      const firstRaider = winner
+        ? (choice === 'raid' ? winner : (winner === match.teamA.id ? match.teamB.id : match.teamA.id))
+        : match.teamA.id;
+
+      await kabaddiService.saveMatch({
+        ...match,
+        status: 'live',
+        tossWonBy: winner,
+        tossElected: choice,
+        updatedAt: Date.now(),
+      });
+
+      const cur = live || createEmptyKabaddiLiveState(matchId, match.teamA.id, match.teamB.id, rules.playersPerSide);
+      const updatedLive: KabaddiLiveState = {
+        ...cur,
+        half: 'first_half',
+        running: true,
+        clockStartedAt: Date.now(),
+        raidingTeamId: firstRaider,
+        teamA: {
+          ...cur.teamA,
+          startingIds: selectedStartersA,
+          onCourtIds: selectedStartersA,
+          playersOnCourt: selectedStartersA.length,
+          benchQueue: [],
+        },
+        teamB: {
+          ...cur.teamB,
+          startingIds: selectedStartersB,
+          onCourtIds: selectedStartersB,
+          playersOnCourt: selectedStartersB.length,
+          benchQueue: [],
+        },
+        lastUpdated: Date.now(),
+      };
+
+      await persist(updatedLive, false);
+      if (singleOverlayMode) {
+        await kabaddiService.setActiveMatch(matchId);
+      }
+      flash('Starting 7 confirmed! Match is now LIVE');
+    } catch (e) {
+      flash(`Failed to start match: ${String(e)}`);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const saveLineupChanges = async () => {
+    if (!live || !match || !matchId) return;
+    const aSquad = scorerPlayers.filter(p => p.teamId === match.teamA.id);
+    const bSquad = scorerPlayers.filter(p => p.teamId === match.teamB.id);
+    const targetA = Math.min(rules.playersPerSide, aSquad.length);
+    const targetB = Math.min(rules.playersPerSide, bSquad.length);
+
+    if (selectedStartersA.length < targetA) {
+      flash(`Please select ${targetA} main players for ${match.teamA.name}`);
+      return;
+    }
+    if (selectedStartersB.length < targetB) {
+      flash(`Please select ${targetB} main players for ${match.teamB.name}`);
+      return;
+    }
+
+    setBusy(true);
+    try {
+      const syncOnCourt = (currentOnCourt: string[] | undefined, newStarting: string[]) => {
+        if (!currentOnCourt || currentOnCourt.length === 0 || live.events.length === 0) {
+          return newStarting;
+        }
+        const kept = currentOnCourt.filter(id => newStarting.includes(id));
+        const needed = newStarting.filter(id => !kept.includes(id));
+        const result = [...kept];
+        while (result.length < Math.min(newStarting.length, currentOnCourt.length) && needed.length > 0) {
+          result.push(needed.shift()!);
+        }
+        return result.length > 0 ? result : newStarting;
+      };
+
+      const newOnCourtA = syncOnCourt(live.teamA.onCourtIds, selectedStartersA);
+      const newOnCourtB = syncOnCourt(live.teamB.onCourtIds, selectedStartersB);
+
+      const updatedLive: KabaddiLiveState = {
+        ...live,
+        teamA: {
+          ...live.teamA,
+          startingIds: selectedStartersA,
+          onCourtIds: newOnCourtA,
+          playersOnCourt: newOnCourtA.length,
+        },
+        teamB: {
+          ...live.teamB,
+          startingIds: selectedStartersB,
+          onCourtIds: newOnCourtB,
+          playersOnCourt: newOnCourtB.length,
+        },
+        lastUpdated: Date.now(),
+      };
+
+      await persist(updatedLive, true);
+      setShowLineupModal(false);
+      flash('7 main players updated successfully');
+    } catch (e) {
+      flash(`Failed to update lineup: ${String(e)}`);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   /** Roster members not currently on the mat — shown only in Advanced options. */
   const benchPlayersFor = useCallback((teamId: string) => {
     const onCourt = new Set(onCourtIdsFor(teamId));
@@ -613,6 +804,87 @@ export default function KabaddiUpdatePage() {
     );
   }
 
+  const isPreMatch = Boolean(match && (!live || live.half === 'not_started'));
+
+  if (isPreMatch) {
+    return (
+      <div className="kbu">
+        <header className="kbu__bar">
+          <button className="kbu__icon-btn" onClick={() => navigate('/kabaddi/scorer/admin')}><IoArrowBack size={20} /></button>
+          <div className="kbu__title">
+            <strong>{match.teamA.name} vs {match.teamB.name}</strong>
+            <small>
+              {match.venue} · Starting 7 Lineup Setup
+              {singleOverlayMode && <span style={{ marginLeft: 8, color: '#22c55e', fontWeight: 600 }}>🔗 Single Overlay</span>}
+            </small>
+          </div>
+        </header>
+
+        {toast && <div className="kbu__toast">{toast}</div>}
+
+        <section className="kbu__lineup-card">
+          <h2><IoPeople size={18} /> Match Lineup: Pick 7 Main Players</h2>
+          <p className="kbu__hint" style={{ marginTop: 0 }}>
+            Select the {rules.playersPerSide} starting players on the mat for each team before beginning live match scoring.
+          </p>
+
+          <div style={{
+            display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+            gap: '12px', padding: '14px', borderRadius: '12px', background: 'rgba(0,0,0,0.25)',
+            border: '1px solid rgba(255,255,255,0.08)', margin: '14px 0',
+          }}>
+            <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <span style={{ fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', color: 'rgba(255,255,255,0.6)' }}>
+                Toss Won By
+              </span>
+              <select value={tossWinner} onChange={e => setTossWinner(e.target.value)}>
+                <option value={match.teamA.id}>{match.teamA.name}</option>
+                <option value={match.teamB.id}>{match.teamB.name}</option>
+              </select>
+            </label>
+            <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <span style={{ fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', color: 'rgba(255,255,255,0.6)' }}>
+                Elected To
+              </span>
+              <select value={tossChoice} onChange={e => setTossChoice(e.target.value as 'raid' | 'defend')}>
+                <option value="raid">Raid first</option>
+                <option value="defend">Defend first</option>
+              </select>
+            </label>
+          </div>
+
+          <div className="kbu__lineup-teams">
+            <Starting7Picker
+              team={match.teamA}
+              players={scorerPlayers.filter(p => p.teamId === match.teamA.id)}
+              selectedIds={selectedStartersA}
+              onToggle={toggleStarterA}
+              maxPlayers={rules.playersPerSide}
+            />
+            <Starting7Picker
+              team={match.teamB}
+              players={scorerPlayers.filter(p => p.teamId === match.teamB.id)}
+              selectedIds={selectedStartersB}
+              onToggle={toggleStarterB}
+              maxPlayers={rules.playersPerSide}
+            />
+          </div>
+
+          <div style={{ marginTop: '20px', display: 'flex', gap: '10px', justifyContent: 'center' }}>
+            <button
+              className="kbu__btn kbu__btn--primary"
+              style={{ padding: '14px 28px', fontSize: '15px' }}
+              disabled={busy}
+              onClick={handleConfirmStartingLineups}
+            >
+              <IoPlay size={20} /> Confirm 7 Main Players &amp; Start Scoring
+            </button>
+          </div>
+        </section>
+      </div>
+    );
+  }
+
   // Raids alternate turn by turn regardless of outcome — always show the
   // team whose turn it is on the left and the defence on the right.
   const currentRaidTeam = raidingTeam ?? match.teamA;
@@ -629,6 +901,18 @@ export default function KabaddiUpdatePage() {
             {singleOverlayMode && <span style={{ marginLeft: 8, color: '#22c55e', fontWeight: 600 }}>🔗 Single Overlay</span>}
           </small>
         </div>
+        <button
+          className="kbu__btn"
+          style={{ padding: '6px 12px', fontSize: '12px', background: 'rgba(255,255,255,0.08)' }}
+          onClick={() => {
+            setSelectedStartersA(live?.teamA.startingIds?.length ? live.teamA.startingIds : defaultLineup(match.teamA.id));
+            setSelectedStartersB(live?.teamB.startingIds?.length ? live.teamB.startingIds : defaultLineup(match.teamB.id));
+            setShowLineupModal(true);
+          }}
+          title="Edit 7 Main Players"
+        >
+          <IoPeople size={14} /> 7 Starters
+        </button>
         <button className="kbu__icon-btn" onClick={undo} title="Undo last raid"><IoArrowUndo size={18} /></button>
         <button className="kbu__icon-btn" onClick={redo} title="Redo"><IoArrowRedo size={18} /></button>
       </header>
@@ -772,6 +1056,21 @@ export default function KabaddiUpdatePage() {
                     <button type="button" className={`kbu__btn ${currentRaidTeam.id === match.teamA.id ? 'is-running' : ''}`} onClick={() => void forceRaidingTeam(match.teamA.id)}>{match.teamA.shortName} raids next</button>
                     <button type="button" className={`kbu__btn ${currentRaidTeam.id === match.teamB.id ? 'is-running' : ''}`} onClick={() => void forceRaidingTeam(match.teamB.id)}>{match.teamB.shortName} raids next</button>
                   </div>
+                  <div style={{ marginTop: '14px', paddingTop: '12px', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+                    <h4 className="kbu__advanced-heading"><IoPeople size={14} /> 7 Main Players (Mat Lineup)</h4>
+                    <p className="kbu__hint">Edit the 7 main starting players on the mat for this match.</p>
+                    <button
+                      type="button"
+                      className="kbu__btn kbu__btn--primary"
+                      onClick={() => {
+                        setSelectedStartersA(live?.teamA.startingIds?.length ? live.teamA.startingIds : defaultLineup(match.teamA.id));
+                        setSelectedStartersB(live?.teamB.startingIds?.length ? live.teamB.startingIds : defaultLineup(match.teamB.id));
+                        setShowLineupModal(true);
+                      }}
+                    >
+                      <IoPeople size={15} /> Edit 7 Main Players
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
@@ -858,6 +1157,22 @@ export default function KabaddiUpdatePage() {
                   </label>
                   <p className="kbu__hint">Use this only when the defender cards do not represent the official touch count.</p>
 
+                  <div style={{ marginTop: '14px', paddingTop: '12px', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+                    <h4 className="kbu__advanced-heading"><IoPeople size={14} /> 7 Main Players (Mat Lineup)</h4>
+                    <p className="kbu__hint">Edit the 7 main starting players on the mat for this match.</p>
+                    <button
+                      type="button"
+                      className="kbu__btn kbu__btn--primary"
+                      onClick={() => {
+                        setSelectedStartersA(live?.teamA.startingIds?.length ? live.teamA.startingIds : defaultLineup(match.teamA.id));
+                        setSelectedStartersB(live?.teamB.startingIds?.length ? live.teamB.startingIds : defaultLineup(match.teamB.id));
+                        setShowLineupModal(true);
+                      }}
+                    >
+                      <IoPeople size={15} /> Edit 7 Main Players
+                    </button>
+                  </div>
+
                   <h4 className="kbu__advanced-heading"><IoSwapHorizontal size={14} /> Substitutes</h4>
                   <p className="kbu__hint">Tap an on-mat player, then tap who's coming on — the swap applies instantly.</p>
                   {[match.teamA, match.teamB].map(team => {
@@ -942,6 +1257,46 @@ export default function KabaddiUpdatePage() {
           </ul>
         )}
       </section>
+
+      {showLineupModal && (
+        <div className="kbu__modal" onClick={e => { if (e.target === e.currentTarget) setShowLineupModal(false); }}>
+          <div className="kbu__modal-card">
+            <div className="kbu__modal-head">
+              <h3><IoPeople size={18} /> Edit 7 Main Players (Mat Lineup)</h3>
+              <button onClick={() => setShowLineupModal(false)}><IoClose size={20} /></button>
+            </div>
+            <div className="kbu__modal-body">
+              <p className="kbu__hint" style={{ marginTop: 0, marginBottom: '14px' }}>
+                Select exactly {rules.playersPerSide} main players per side. Changes will immediately update the starting roster and on-mat status.
+              </p>
+              <div className="kbu__lineup-teams">
+                <Starting7Picker
+                  team={match.teamA}
+                  players={scorerPlayers.filter(p => p.teamId === match.teamA.id)}
+                  selectedIds={selectedStartersA}
+                  onToggle={toggleStarterA}
+                  maxPlayers={rules.playersPerSide}
+                />
+                <Starting7Picker
+                  team={match.teamB}
+                  players={scorerPlayers.filter(p => p.teamId === match.teamB.id)}
+                  selectedIds={selectedStartersB}
+                  onToggle={toggleStarterB}
+                  maxPlayers={rules.playersPerSide}
+                />
+              </div>
+            </div>
+            <div className="kbu__modal-foot">
+              <button className="kbu__btn kbu__btn--primary" onClick={saveLineupChanges} disabled={busy}>
+                <IoSave size={16} /> Save Changes
+              </button>
+              <button className="kbu__btn" onClick={() => setShowLineupModal(false)} disabled={busy}>
+                <IoClose size={16} /> Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1001,6 +1356,98 @@ function PlayerPicker({ players, selectedIds, onPick, live }: Readonly<{
           <span className="kbu__pick-pts">{playerMatchPoints(live, p.id)}</span>
         </button>
       ))}
+    </div>
+  );
+}
+
+/** Pre-match & lineup editor: pick 7 main players for a team. */
+function Starting7Picker({
+  team,
+  players,
+  selectedIds,
+  onToggle,
+  maxPlayers = 7,
+}: Readonly<{
+  team: KabaddiTeamRef;
+  players: KabaddiPlayer[];
+  selectedIds: string[];
+  onToggle: (playerId: string) => void;
+  maxPlayers?: number;
+}>) {
+  const target = Math.min(maxPlayers, players.length);
+  const isReady = selectedIds.length === target;
+
+  const roleCategoryFor = (p: KabaddiPlayer): string => {
+    if (p.position === 'RAIDER') return 'Raider';
+    if (p.position === 'DEFENDER') return 'Defender';
+    if (p.position === 'ALL_ROUNDER') return 'All-Rounder';
+    return getKabaddiRoleCategory(p.position) || 'Player';
+  };
+
+  const roleBadgeClass = (category: string): string => {
+    if (category === 'Raider') return 'kbu__role-badge--raider';
+    if (category === 'Defender') return 'kbu__role-badge--defender';
+    return 'kbu__role-badge--all-rounder';
+  };
+
+  // Sort so selected starters appear first, then alphabetical
+  const sorted = [...players].sort((a, b) => {
+    const aOn = selectedIds.includes(a.id);
+    const bOn = selectedIds.includes(b.id);
+    if (aOn && !bOn) return -1;
+    if (!aOn && bOn) return 1;
+    return a.name.localeCompare(b.name);
+  });
+
+  return (
+    <div className="kbu__lineup-team" style={{ borderTop: `4px solid ${team.primaryColor || '#7c3aed'}` }}>
+      <div className="kbu__lineup-team-head">
+        <div className="kbu__lineup-team-title">
+          {team.logoUrl ? (
+            <ResolvedImage src={team.logoUrl} size={64} style={{ width: 28, height: 28, objectFit: 'contain' }} />
+          ) : (
+            <span style={{ background: team.primaryColor || '#7c3aed', padding: '2px 6px', borderRadius: 4, fontSize: '11px' }}>
+              {team.shortName}
+            </span>
+          )}
+          <span>{team.name}</span>
+        </div>
+        <span className={`kbu__lineup-badge ${isReady ? 'kbu__lineup-badge--ready' : 'kbu__lineup-badge--pending'}`}>
+          {isReady ? '✓ ' : ''}{selectedIds.length} / {target} Selected
+        </span>
+      </div>
+
+      {players.length === 0 ? (
+        <p className="kbu__hint">No players found for this team. Add players in Kabaddi Admin.</p>
+      ) : (
+        <div className="kbu__starter-grid">
+          {sorted.map(p => {
+            const isSelected = selectedIds.includes(p.id);
+            const role = roleCategoryFor(p);
+            return (
+              <button
+                key={p.id}
+                type="button"
+                className={`kbu__starter-card ${isSelected ? 'is-selected' : ''}`}
+                onClick={() => onToggle(p.id)}
+              >
+                <div className="kbu__starter-card-photo">
+                  <ResolvedImage src={p.photoUrl} size={96} fallback={<span>{p.name.charAt(0)}</span>} />
+                </div>
+                <span className="kbu__starter-card-name" title={p.name}>
+                  {p.number ? `#${p.number} ` : ''}{p.name}
+                </span>
+                <span className={`kbu__role-badge ${roleBadgeClass(role)}`}>
+                  {role}
+                </span>
+                <span className={`kbu__starter-status ${isSelected ? 'kbu__starter-status--starter' : 'kbu__starter-status--bench'}`}>
+                  {isSelected ? '✓ Starter' : 'Bench'}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
