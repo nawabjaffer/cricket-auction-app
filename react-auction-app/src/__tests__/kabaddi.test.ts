@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { kabaddiService } from '../services/kabaddi';
 import {
-  createEmptyKabaddiLiveState, DEFAULT_KABADDI_RULES,
+  createEmptyKabaddiLiveState, DEFAULT_KABADDI_RULES, DEFAULT_KABADDI_OVERLAY_CONFIG,
   isSuperTackle, isBonusAvailable, raidSecondsRemaining,
 } from '../types/kabaddi';
 import type { KabaddiLiveState } from '../types/kabaddi';
@@ -275,5 +275,22 @@ describe('kabaddi auction roles', () => {
     // Cricket behaviour is preserved
     expect(getRoleLabel('Batsman')).toBe('Batsman');
     expect(getRoleBadgeClass('Bowler')).toBe('role-bowler');
+  });
+});
+
+describe('kabaddi overlay configuration', () => {
+  it('defaults singleOverlayMode to false', () => {
+    expect(DEFAULT_KABADDI_OVERLAY_CONFIG.singleOverlayMode).toBe(false);
+    expect(DEFAULT_KABADDI_OVERLAY_CONFIG.showLiveBadge).toBe(true);
+    expect(DEFAULT_KABADDI_OVERLAY_CONFIG.showTimer).toBe(true);
+    expect(DEFAULT_KABADDI_OVERLAY_CONFIG.showRaidClock).toBe(true);
+    expect(DEFAULT_KABADDI_OVERLAY_CONFIG.scoreboardPosition).toBe('bottom-center');
+  });
+
+  it('exposes active match management methods on KabaddiService', () => {
+    expect(typeof kabaddiService.setActiveMatch).toBe('function');
+    expect(typeof kabaddiService.getActiveMatch).toBe('function');
+    expect(typeof kabaddiService.subscribeActiveMatch).toBe('function');
+    expect(typeof kabaddiService.startMatchQuick).toBe('function');
   });
 });

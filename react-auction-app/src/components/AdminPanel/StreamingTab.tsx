@@ -12,6 +12,7 @@ import { useLocation } from 'react-router-dom';
 import { useLiveStreamingStore } from '../../store/liveStreamingStore';
 import { obsService } from '../../services/obsService';
 import { scoringService } from '../../services/scoring';
+import { kabaddiService } from '../../services/kabaddi';
 import { realtimeSync } from '../../services/realtimeSync';
 import { tenantPath } from '../../services/tenantPath';
 import { premiumService } from '../../services/premiumService';
@@ -71,31 +72,53 @@ export default function StreamingTab({ onClose }: StreamingTabProps) {
   const [singleOverlayMode, setSingleOverlayMode] = useState(false);
   const [savingSingleOverlay, setSavingSingleOverlay] = useState(false);
 
-  // Load + follow the cricket scoring "Single Overlay Mode" flag (tenant-scoped)
+  // Load + follow the scoring "Single Overlay Mode" flag (tenant-scoped across sports)
   useEffect(() => {
-    let unsub: (() => void) | undefined;
+    let unsubCricket: (() => void) | undefined;
+    let unsubKabaddi: (() => void) | undefined;
     const init = async () => {
       try {
         await realtimeSync.ensureInitialized();
         const db = realtimeSync.getDatabase();
         if (!db) return;
         try { scoringService.initialize(db, tenantPath('scoring')); } catch { /* already initialized */ }
-        const cfg = await scoringService.getOverlayConfig().catch(() => null);
-        setSingleOverlayMode(!!cfg?.singleOverlayMode);
-        unsub = scoringService.subscribeOverlayConfig((liveCfg) => setSingleOverlayMode(!!liveCfg.singleOverlayMode));
+        try { kabaddiService.initialize(db, tenantPath('kabaddi')); } catch { /* already initialized */ }
+
+        const [cricketCfg, kabaddiCfg] = await Promise.all([
+          scoringService.getOverlayConfig().catch(() => null),
+          kabaddiService.getOverlayConfig().catch(() => null),
+        ]);
+        setSingleOverlayMode(Boolean(cricketCfg?.singleOverlayMode || kabaddiCfg?.singleOverlayMode));
+
+        unsubCricket = scoringService.subscribeOverlayConfig((liveCfg) => {
+          if (liveCfg?.singleOverlayMode !== undefined) {
+            setSingleOverlayMode(Boolean(liveCfg.singleOverlayMode));
+          }
+        });
+        unsubKabaddi = kabaddiService.subscribeOverlayConfig((liveCfg) => {
+          if (liveCfg?.singleOverlayMode !== undefined) {
+            setSingleOverlayMode(Boolean(liveCfg.singleOverlayMode));
+          }
+        });
       } catch { /* non-critical */ }
     };
     init();
-    return () => unsub?.();
+    return () => {
+      unsubCricket?.();
+      unsubKabaddi?.();
+    };
   }, []);
 
   const handleToggleSingleOverlay = async (enabled: boolean) => {
     setSingleOverlayMode(enabled);
     setSavingSingleOverlay(true);
     try {
-      const cfg = await scoringService.getOverlayConfig().catch(() => null);
-      const updated: ScoringOverlayConfig = {
-        ...(cfg || {
+      const [cricketCfg, kabaddiCfg] = await Promise.all([
+        scoringService.getOverlayConfig().catch(() => null),
+        kabaddiService.getOverlayConfig().catch(() => null),
+      ]);
+      const updatedCricket: ScoringOverlayConfig = {
+        ...(cricketCfg || {
           showLiveBadge: true,
           enableBoundaryAnimation: true,
           enableWicketAnimation: true,
@@ -109,8 +132,31 @@ export default function StreamingTab({ onClose }: StreamingTabProps) {
         }),
         singleOverlayMode: enabled,
       };
-      await scoringService.saveOverlayConfig(updated);
-      showSaveFeedback(enabled ? 'Single Overlay Mode enabled' : 'Single Overlay Mode disabled');
+      const updatedKabaddi = {
+        ...(kabaddiCfg || {
+          primaryColor: '#0a0a0a',
+          secondaryColor: '#1d4ed8',
+          accentColor: '#f59e0b',
+          textColor: '#ffffff',
+          showLiveBadge: true,
+          showTimer: true,
+          showRaidClock: true,
+          showRaiderInfo: true,
+          showMatDiagram: true,
+          scoreboardPosition: 'bottom-center' as const,
+          enableSuperRaidAnimation: true,
+          enableSuperTackleAnimation: true,
+          enableAllOutAnimation: true,
+          enableBonusAnimation: true,
+          enableDoOrDieAnimation: true,
+        }),
+        singleOverlayMode: enabled,
+      };
+      await Promise.all([
+        scoringService.saveOverlayConfig(updatedCricket).catch(() => {}),
+        kabaddiService.saveOverlayConfig(updatedKabaddi).catch(() => {}),
+      ]);
+      showSaveFeedback(enabled ? 'Single Overlay Mode enabled (All Matches)' : 'Single Overlay Mode disabled');
     } catch {
       showSaveFeedback('Failed to save Single Overlay Mode');
     } finally {
@@ -787,23 +833,41 @@ export default function StreamingTab({ onClose }: StreamingTabProps) {
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-          {/* Scoring Admin */}
-          <button
-            onClick={() => { if (onClose) onClose(); navigate('/scoring/admin'); }}
-            className="admin-panel__btn admin-panel__btn--primary"
-            style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '0.75rem' }}
-          >
-            <GiCricketBat size={16} /> Open Scoring Admin
-          </button>
+          {/* Scoring Admin buttons */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
+            <button
+              onClick={() => { if (onClose) onClose(); navigate('/scoring/admin'); }}
+              className="admin-panel__btn admin-panel__btn--primary"
+              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '0.65rem 0.5rem', fontSize: '0.8rem' }}
+            >
+              <GiCricketBat size={15} /> Cricket Admin
+            </button>
+            <button
+              onClick={() => { if (onClose) onClose(); navigate('/kabaddi/scorer/admin'); }}
+              className="admin-panel__btn admin-panel__btn--primary"
+              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '0.65rem 0.5rem', fontSize: '0.8rem' }}
+            >
+              🤼 Kabaddi Admin
+            </button>
+          </div>
 
-          {/* Score Update Page */}
-          <button
-            onClick={() => { if (onClose) onClose(); navigate('/match/score/update'); }}
-            className="admin-panel__btn admin-panel__btn--secondary"
-            style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
-          >
-            Update Scorecard
-          </button>
+          {/* Quick Score Update Pages */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
+            <button
+              onClick={() => { if (onClose) onClose(); navigate('/match/score/update'); }}
+              className="admin-panel__btn admin-panel__btn--secondary"
+              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontSize: '0.78rem' }}
+            >
+              Cricket Scorer
+            </button>
+            <button
+              onClick={() => { if (onClose) onClose(); navigate('/kabaddi/scorer/update'); }}
+              className="admin-panel__btn admin-panel__btn--secondary"
+              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontSize: '0.78rem' }}
+            >
+              Kabaddi Scorer
+            </button>
+          </div>
         </div>
 
         {/* Scoring URLs reference */}
@@ -814,23 +878,76 @@ export default function StreamingTab({ onClose }: StreamingTabProps) {
           border: '1px solid rgba(255, 255, 255, 0.08)',
           borderRadius: '0.5rem',
         }}>
-          <div style={{ fontWeight: 700, fontSize: '0.78rem', color: '#000', marginBottom: '0.5rem' }}>Scoring URLs</div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', fontSize: '0.75rem' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-              <span style={{ color: 'rgba(0,0,0,0.5)' }}>Scoring admin:</span>
-              <code style={{ color: '#60a5fa', cursor: 'pointer' }} onClick={() => { if (onClose) onClose(); navigate('/scoring/admin'); }}>/scoring/admin</code>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+            <span style={{ fontWeight: 700, fontSize: '0.78rem', color: '#000' }}>Streaming &amp; Scoring URLs</span>
+            {singleOverlayMode ? (
+              <span style={{ fontSize: '0.7rem', color: '#16a34a', fontWeight: 600, background: 'rgba(34,197,94,0.12)', padding: '1px 6px', borderRadius: 4 }}>
+                Single Overlay Active
+              </span>
+            ) : (
+              <span style={{ fontSize: '0.7rem', color: '#64748b' }}>Per-match URLs</span>
+            )}
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', fontSize: '0.75rem' }}>
+            <div style={{ fontWeight: 600, color: '#334155', fontSize: '0.72rem', marginTop: '0.2rem' }}>🤼 KABADDI:</div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ color: 'rgba(0,0,0,0.6)' }}>OBS Overlay (PC / Prism):</span>
+              <code
+                style={{ color: '#a78bfa', cursor: 'pointer' }}
+                onClick={() => window.open(`${baseUrl}/kabaddi/scorer/obs-overlay`, '_blank')}
+                title="Click to open"
+              >
+                /kabaddi/scorer/obs-overlay
+              </code>
             </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-              <span style={{ color: 'rgba(0,0,0,0.5)' }}>Update scorecard:</span>
-              <code style={{ color: '#60a5fa', cursor: 'pointer' }} onClick={() => { if (onClose) onClose(); navigate('/match/score/update'); }}>/match/score/update</code>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ color: 'rgba(0,0,0,0.6)' }}>Update scorecard:</span>
+              <code
+                style={{ color: '#60a5fa', cursor: 'pointer' }}
+                onClick={() => { if (onClose) onClose(); navigate('/kabaddi/scorer/update'); }}
+              >
+                /kabaddi/scorer/update
+              </code>
             </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-              <span style={{ color: 'rgba(0,0,0,0.5)' }}>Score OBS overlay:</span>
-              <code style={{ color: '#a78bfa' }}>/obs-overlay?mode=scoring&amp;matchId=MATCH_ID</code>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ color: 'rgba(0,0,0,0.6)' }}>OBS Control Dock:</span>
+              <code
+                style={{ color: '#34d399', cursor: 'pointer' }}
+                onClick={() => window.open(`${baseUrl}/kabaddi/scorer/obs-dock`, '_blank')}
+                title="Click to open"
+              >
+                /kabaddi/scorer/obs-dock
+              </code>
             </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-              <span style={{ color: 'rgba(0,0,0,0.5)' }}>Bid controller:</span>
-              <code style={{ color: '#60a5fa', cursor: 'pointer' }} onClick={() => { if (onClose) onClose(); navigate('/connect-bidding-admin'); }}>/connect-bidding-admin</code>
+
+            <div style={{ fontWeight: 600, color: '#334155', fontSize: '0.72rem', marginTop: '0.4rem' }}>🏏 CRICKET:</div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ color: 'rgba(0,0,0,0.6)' }}>OBS Overlay:</span>
+              <code
+                style={{ color: '#a78bfa', cursor: 'pointer' }}
+                onClick={() => window.open(`${baseUrl}/cricket/scorer/obs-overlay`, '_blank')}
+              >
+                /cricket/scorer/obs-overlay
+              </code>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ color: 'rgba(0,0,0,0.6)' }}>Update scorecard:</span>
+              <code
+                style={{ color: '#60a5fa', cursor: 'pointer' }}
+                onClick={() => { if (onClose) onClose(); navigate('/cricket/scorer/update'); }}
+              >
+                /cricket/scorer/update
+              </code>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ color: 'rgba(0,0,0,0.6)' }}>OBS Control Dock:</span>
+              <code
+                style={{ color: '#34d399', cursor: 'pointer' }}
+                onClick={() => window.open(`${baseUrl}/cricket/scorer/obs-dock`, '_blank')}
+              >
+                /cricket/scorer/obs-dock
+              </code>
             </div>
           </div>
         </div>

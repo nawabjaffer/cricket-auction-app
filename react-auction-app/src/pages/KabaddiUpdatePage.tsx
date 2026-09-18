@@ -34,6 +34,12 @@ const HALF_FLOW: KabaddiHalf[] = ['not_started', 'first_half', 'half_time', 'sec
 
 export default function KabaddiUpdatePage() {
   const navigate = useNavigate();
+  const [urlMatchId, setUrlMatchId] = useState<string | null>(null);
+  const [urlPinned, setUrlPinned] = useState(false);
+  const [activeMatchId, setActiveMatchId] = useState<string | null>(null);
+  const [allMatches, setAllMatches] = useState<KabaddiMatchSetup[]>([]);
+  const [singleOverlayMode, setSingleOverlayMode] = useState(false);
+
   const [matchId, setMatchId] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
   const [match, setMatch] = useState<KabaddiMatchSetup | null>(null);
@@ -65,7 +71,11 @@ export default function KabaddiUpdatePage() {
   }, []);
 
   useEffect(() => {
-    setMatchId(new URLSearchParams(window.location.search).get('matchId'));
+    const params = new URLSearchParams(window.location.search);
+    const id = params.get('matchId');
+    const pinned = params.get('pin') === '1';
+    setUrlPinned(pinned);
+    if (id) setUrlMatchId(id);
   }, []);
 
   // Init service
@@ -88,16 +98,56 @@ export default function KabaddiUpdatePage() {
     return () => { cancelled = true; if (retry) clearTimeout(retry); };
   }, []);
 
-  // Subscriptions
+  // Tenant-level subscriptions: overlay config, active match pointer, rules, players
   useEffect(() => {
-    if (!ready || !matchId) return;
+    if (!ready) return;
     const unsubs = [
-      kabaddiService.subscribeMatch(matchId, setMatch),
-      kabaddiService.subscribeLive(matchId, setLive),
+      kabaddiService.subscribeOverlayConfig(cfg => setSingleOverlayMode(!!cfg?.singleOverlayMode)),
+      kabaddiService.subscribeActiveMatch(setActiveMatchId),
       kabaddiService.subscribePlayers(setPlayers),
       kabaddiService.subscribeRules(setRules),
     ];
+
+    const fetchMatches = async () => {
+      try {
+        const list = await kabaddiService.getMatches();
+        setAllMatches(list);
+      } catch { /* non-critical */ }
+    };
+    void fetchMatches();
+    const pollTimer = setInterval(fetchMatches, 3000);
     void auctionPersistence.getSoldPlayers().then(setSoldPlayers).catch(() => setSoldPlayers([]));
+
+    return () => {
+      unsubs.forEach(u => u());
+      clearInterval(pollTimer);
+    };
+  }, [ready]);
+
+  // Single Overlay Mode match resolution:
+  // When Single Overlay Mode is ON or when no ?matchId is in the URL,
+  // follow the tenant's active match pointer (or live match).
+  useEffect(() => {
+    const liveMatch = allMatches.find(m => m.status === 'live');
+    const liveFallbackId = liveMatch?.id || (allMatches[0]?.id ?? null);
+    if (singleOverlayMode || !urlMatchId) {
+      setMatchId(urlPinned ? (urlMatchId || activeMatchId || liveFallbackId) : (activeMatchId || liveFallbackId || urlMatchId));
+      return;
+    }
+    setMatchId(urlMatchId);
+  }, [singleOverlayMode, urlMatchId, urlPinned, activeMatchId, allMatches]);
+
+  // Match-specific subscriptions
+  useEffect(() => {
+    if (!ready || !matchId) {
+      setMatch(null);
+      setLive(null);
+      return;
+    }
+    const unsubs = [
+      kabaddiService.subscribeMatch(matchId, setMatch),
+      kabaddiService.subscribeLive(matchId, setLive),
+    ];
     return () => unsubs.forEach(u => u());
   }, [ready, matchId]);
 
@@ -468,17 +518,99 @@ export default function KabaddiUpdatePage() {
 
   const bonusOn = defendingSide ? isBonusAvailable(defendingSide.playersOnCourt, rules) : false;
 
-  if (!matchId) {
-    return (
-      <div className="kbu kbu--empty">
-        <p>Open this page with a <code>?matchId=…</code> from the Kabaddi Admin.</p>
-        <button onClick={() => navigate('/kabaddi/scorer/admin')}>Go to Kabaddi Admin</button>
-      </div>
-    );
+  const handleStartNextMatch = async () => {
+    const next = allMatches
+      .filter(m => m.status === 'scheduled' && m.id !== matchId)
+      .sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0))[0];
+    if (!next) {
+      flash('No upcoming scheduled match to start');
+      return;
+    }
+    try {
+      await kabaddiService.startMatchQuick(next.id);
+      flash(`Started next match: ${next.teamA.name} vs ${next.teamB.name}`);
+    } catch {
+      flash('Failed to start next match');
+    }
+  };
+
+  const handleEndSession = async () => {
+    try {
+      await kabaddiService.setActiveMatch(null);
+      flash('Session ended — active match cleared');
+    } catch {
+      flash('Failed to end session');
+    }
+  };
+
+  if (!ready) {
+    return <div className="kbu kbu--empty"><div className="kbu__spinner" /><p>Connecting to Kabaddi live sync…</p></div>;
   }
 
-  if (!ready || !match) {
-    return <div className="kbu kbu--empty"><div className="kbu__spinner" /><p>Loading match…</p></div>;
+  if (!matchId || !match) {
+    return (
+      <div className="kbu kbu--empty" style={{ maxWidth: 680, margin: '2rem auto', padding: '1.5rem', textAlign: 'center' }}>
+        <h2 style={{ fontSize: '1.4rem', fontWeight: 800, marginBottom: '0.4rem', color: '#fff' }}>🤼 Kabaddi Live Scorer</h2>
+        {singleOverlayMode ? (
+          <p style={{ color: '#22c55e', fontWeight: 600, fontSize: '0.9rem', margin: '0 0 1.25rem' }}>
+            🔗 Single Overlay Mode is ON — universal link follows whichever match is active.
+          </p>
+        ) : (
+          <p style={{ color: 'rgba(255,255,255,0.7)', fontSize: '0.88rem', margin: '0 0 1.25rem' }}>
+            Select a match to start scoring, or launch from Kabaddi Admin:
+          </p>
+        )}
+
+        {allMatches.length > 0 ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', width: '100%', marginBottom: '1.5rem' }}>
+            {allMatches.map(m => (
+              <div
+                key={m.id}
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  padding: '12px 16px',
+                  background: 'rgba(255, 255, 255, 0.05)',
+                  border: m.status === 'live' ? '1px solid #22c55e' : '1px solid rgba(255, 255, 255, 0.1)',
+                  borderRadius: 10,
+                }}
+              >
+                <div style={{ textAlign: 'left' }}>
+                  <div style={{ fontWeight: 700, fontSize: '0.95rem', color: '#fff' }}>
+                    {m.teamA.name} vs {m.teamB.name}
+                  </div>
+                  <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.6)', marginTop: 2 }}>
+                    {m.venue || 'Court 1'} · <span style={{ color: m.status === 'live' ? '#22c55e' : '#f59e0b', fontWeight: 600 }}>{m.status.toUpperCase()}</span>
+                  </div>
+                </div>
+                <button
+                  className="kbu__btn kbu__btn--primary"
+                  style={{ padding: '6px 14px', fontSize: '0.85rem' }}
+                  onClick={async () => {
+                    await kabaddiService.startMatchQuick(m.id);
+                  }}
+                >
+                  <IoPlay size={14} /> {m.status === 'live' ? 'Continue' : 'Start & Score'}
+                </button>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p style={{ color: 'rgba(255,255,255,0.6)', margin: '1rem 0' }}>
+            No matches created yet. Create a match in Kabaddi Admin first.
+          </p>
+        )}
+
+        <button
+          onClick={() => navigate('/kabaddi/scorer/admin')}
+          className="kbu__btn"
+          style={{ width: '100%', padding: '10px' }}
+        >
+          Go to Kabaddi Admin
+        </button>
+      </div>
+    );
   }
 
   // Raids alternate turn by turn regardless of outcome — always show the
@@ -492,13 +624,54 @@ export default function KabaddiUpdatePage() {
         <button className="kbu__icon-btn" onClick={() => navigate('/kabaddi/scorer/admin')}><IoArrowBack size={20} /></button>
         <div className="kbu__title">
           <strong>{match.teamA.name} vs {match.teamB.name}</strong>
-          <small>{match.venue} · {KABADDI_HALF_LABELS[live?.half ?? 'not_started']}</small>
+          <small>
+            {match.venue} · {KABADDI_HALF_LABELS[live?.half ?? 'not_started']}
+            {singleOverlayMode && <span style={{ marginLeft: 8, color: '#22c55e', fontWeight: 600 }}>🔗 Single Overlay</span>}
+          </small>
         </div>
         <button className="kbu__icon-btn" onClick={undo} title="Undo last raid"><IoArrowUndo size={18} /></button>
         <button className="kbu__icon-btn" onClick={redo} title="Redo"><IoArrowRedo size={18} /></button>
       </header>
 
       {toast && <div className="kbu__toast">{toast}</div>}
+
+      {(live?.half === 'full_time' || match.status === 'completed') && (
+        <div style={{
+          margin: '0.75rem 1rem',
+          padding: '0.85rem 1.25rem',
+          background: 'rgba(245, 158, 11, 0.15)',
+          border: '1px solid rgba(245, 158, 11, 0.4)',
+          borderRadius: 10,
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          flexWrap: 'wrap',
+          gap: '0.75rem',
+        }}>
+          <div>
+            <strong style={{ color: '#fbbf24', fontSize: '0.95rem' }}>🏆 Full Time / Match Completed</strong>
+            <p style={{ margin: '0.2rem 0 0', fontSize: '0.8rem', opacity: 0.8 }}>
+              Final score: {match.teamA.name} {live?.teamA.score} : {live?.teamB.score} {match.teamB.name}
+            </p>
+          </div>
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
+            <button
+              className="kbu__btn kbu__btn--primary"
+              style={{ fontSize: '0.8rem', padding: '6px 12px' }}
+              onClick={handleStartNextMatch}
+            >
+              Start Next Match
+            </button>
+            <button
+              className="kbu__btn"
+              style={{ fontSize: '0.8rem', padding: '6px 12px', background: 'rgba(239, 68, 68, 0.2)', borderColor: '#ef4444' }}
+              onClick={handleEndSession}
+            >
+              End Session
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* ── Scoreboard — raiding team always on the left, defence on the right ── */}
       <section className="kbu__scoreboard">

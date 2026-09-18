@@ -14,6 +14,7 @@ import { initializeApp, getApps } from 'firebase/app';
 import { getDatabase, ref, onValue, set as fbSet } from 'firebase/database';
 import { tenantPath } from '../services/tenantPath';
 import { useBroadcastOverlaySurface } from '../hooks/useBroadcastOverlaySurface';
+import { overlayMediaPreload, getPreloadedMediaUrl } from '../services/overlayMediaPreload';
 import type {
   LiveScore, OverlayControlState, OverlayType,
   ScoringOverlayConfig, ScoringAd, MatchSetup, LiveQuestion,
@@ -138,13 +139,13 @@ export default function ScoreOBSOverlayPage() {
   }, [localOverlay]);
 
   // Auto-dismiss overlay after duration
-  const triggerOverlay = useCallback((type: OverlayType, durationMs = 5000) => {
+  const triggerOverlay = useCallback((type: OverlayType, durationMs?: number) => {
     const celebrationTypes: OverlayType[] = ['boundary_four', 'boundary_six', 'wicket', 'duck_out', 'hat_trick'];
     const isCelebration = celebrationTypes.includes(type);
 
     // Never overwrite an active celebration with a stats overlay
     if (!isCelebration && celebrationActiveRef.current) {
-      queuedOverlayRef.current = { type, durationMs };
+      queuedOverlayRef.current = { type, durationMs: durationMs || 5000 };
       return;
     }
 
@@ -152,15 +153,23 @@ export default function ScoreOBSOverlayPage() {
     if (autoDismissRef.current) clearTimeout(autoDismissRef.current);
     if (isCelebration) celebrationActiveRef.current = true;
 
+    const customAnim =
+      type === 'boundary_four' ? config.fourAnimation :
+      type === 'boundary_six' ? config.sixAnimation :
+      type === 'wicket' ? config.wicketAnimation :
+      type === 'duck_out' ? config.duckOutAnimation :
+      type === 'hat_trick' ? config.hatTrickAnimation : undefined;
+    const finalDuration = durationMs || (customAnim?.durationMs && customAnim.durationMs > 0 ? customAnim.durationMs : 8000);
+
     if (type !== 'none' && type !== 'full_scorecard') {
       autoDismissRef.current = setTimeout(() => {
         setLocalOverlay('none');
         if (isCelebration) {
           celebrationActiveRef.current = false;
         }
-      }, durationMs);
+      }, finalDuration);
     }
-  }, []);
+  }, [config]);
 
   // Get matchId from URL params (explicit match always wins over the active-match pointer)
   useEffect(() => {
@@ -245,12 +254,13 @@ export default function ScoreOBSOverlayPage() {
           if (animationTypes.includes(ctrl.activeOverlay)) {
             celebrationActiveRef.current = true;
             const cfg = configRef.current;
-            const duration =
-              ctrl.activeOverlay === 'hat_trick' ? (cfg.hatTrickAnimation?.durationMs || 8000) :
-              ctrl.activeOverlay === 'duck_out' ? (cfg.duckOutAnimation?.durationMs || 5000) :
-              ctrl.activeOverlay === 'boundary_four' ? (cfg.fourAnimation?.durationMs || 3000) :
-              ctrl.activeOverlay === 'boundary_six' ? (cfg.sixAnimation?.durationMs || 4000) :
-              ctrl.activeOverlay === 'wicket' ? (cfg.wicketAnimation?.durationMs || 4000) : 5000;
+            const customAnim =
+              ctrl.activeOverlay === 'boundary_four' ? cfg.fourAnimation :
+              ctrl.activeOverlay === 'boundary_six' ? cfg.sixAnimation :
+              ctrl.activeOverlay === 'wicket' ? cfg.wicketAnimation :
+              ctrl.activeOverlay === 'duck_out' ? cfg.duckOutAnimation :
+              ctrl.activeOverlay === 'hat_trick' ? cfg.hatTrickAnimation : undefined;
+            const duration = customAnim?.durationMs && customAnim.durationMs > 0 ? customAnim.durationMs : 8000;
             console.log('[OBS-Overlay] Celebration active:', ctrl.activeOverlay, 'duration:', duration);
             autoDismissRef.current = setTimeout(() => {
               console.log('[OBS-Overlay] Auto-dismiss firing, clearing overlay');
@@ -425,20 +435,8 @@ export default function ScoreOBSOverlayPage() {
     urls.forEach(url => {
       if (!url || seen.has(url)) return;
       seen.add(url);
-      const ext = url.split('.').pop()?.toLowerCase() || '';
-      if (['mp4', 'webm', 'mov'].includes(ext)) {
-        // Preload video by creating a hidden element and loading metadata+data
-        const vid = document.createElement('video');
-        vid.preload = 'auto';
-        vid.muted = true;
-        vid.src = url;
-        vid.load();
-      } else {
-        // Preload image
-        const img = new Image();
-        img.src = url;
-      }
     });
+    void overlayMediaPreload.preloadBatch(urls);
   }, [config, match, allTeams, playerImages, lineups, matchStats, tournamentStats]);
 
   // Innings start intro sequence — show batsmen then bowler when live first appears
@@ -1476,6 +1474,7 @@ function BoundaryOverlay({ type, animConfig }: { type: 'four' | 'six'; animConfi
   // Custom media — check if mediaUrl is set (regardless of type field, be lenient)
   const hasVideo = animConfig?.mediaUrl && (animConfig.type === 'video' || animConfig.mediaUrl.match(/\.(mp4|webm|mov)(\?|$)/i));
   const hasImage = animConfig?.mediaUrl && (animConfig.type === 'image' || animConfig.mediaUrl.match(/\.(png|gif|jpg|jpeg|webp|svg)(\?|$)/i));
+  const mediaSrc = animConfig?.mediaUrl ? getPreloadedMediaUrl(animConfig.mediaUrl) : '';
 
   if (hasImage && !hasVideo) {
     return (
@@ -1486,7 +1485,7 @@ function BoundaryOverlay({ type, animConfig }: { type: 'four' | 'six'; animConfi
         exit={{ scale: 0, opacity: 0 }}
         transition={{ type: 'spring', stiffness: 300, damping: 20 }}
       >
-        <img src={animConfig!.mediaUrl} alt={text} className="score-obs__celebration-img" />
+        <img src={mediaSrc} alt={text} className="score-obs__celebration-img" />
       </motion.div>
     );
   }
@@ -1503,13 +1502,13 @@ function BoundaryOverlay({ type, animConfig }: { type: 'four' | 'six'; animConfi
       >
         {useChromaKey ? (
           <ChromaKeyVideo
-            src={animConfig!.mediaUrl!}
+            src={mediaSrc}
             chromaColor={animConfig!.chromaKeyColor || '#00ff00'}
             similarity={animConfig!.chromaKeySimilarity || 0.4}
             className="score-obs__celebration-chroma"
           />
         ) : (
-          <AutoPlayVideo src={animConfig!.mediaUrl!} className="score-obs__celebration-video" />
+          <AutoPlayVideo src={mediaSrc} className="score-obs__celebration-video" />
         )}
       </motion.div>
     );
@@ -1538,6 +1537,8 @@ function WicketOverlay({ imageUrl, animConfig }: { imageUrl?: string; animConfig
   // Lenient media type detection
   const hasVideo = animConfig?.mediaUrl && (animConfig.type === 'video' || animConfig.mediaUrl.match(/\.(mp4|webm|mov)(\?|$)/i));
   const hasImage = animConfig?.mediaUrl && (animConfig.type === 'image' || animConfig.mediaUrl.match(/\.(png|gif|jpg|jpeg|webp|svg)(\?|$)/i));
+  const mediaSrc = animConfig?.mediaUrl ? getPreloadedMediaUrl(animConfig.mediaUrl) : '';
+  const imgFallbackSrc = imageUrl ? getPreloadedMediaUrl(imageUrl) : '';
 
   if (hasImage && !hasVideo) {
     return (
@@ -1547,7 +1548,7 @@ function WicketOverlay({ imageUrl, animConfig }: { imageUrl?: string; animConfig
         animate={{ y: 0, opacity: 1, scale }}
         exit={{ y: 50, opacity: 0 }}
       >
-        <img src={animConfig!.mediaUrl} alt={text} className="score-obs__celebration-img" />
+        <img src={mediaSrc} alt={text} className="score-obs__celebration-img" />
       </motion.div>
     );
   }
@@ -1564,13 +1565,13 @@ function WicketOverlay({ imageUrl, animConfig }: { imageUrl?: string; animConfig
       >
         {useChromaKey ? (
           <ChromaKeyVideo
-            src={animConfig!.mediaUrl!}
+            src={mediaSrc}
             chromaColor={animConfig!.chromaKeyColor || '#00ff00'}
             similarity={animConfig!.chromaKeySimilarity || 0.4}
             className="score-obs__celebration-chroma"
           />
         ) : (
-          <AutoPlayVideo src={animConfig!.mediaUrl!} className="score-obs__celebration-video" />
+          <AutoPlayVideo src={mediaSrc} className="score-obs__celebration-video" />
         )}
       </motion.div>
     );
@@ -1585,7 +1586,7 @@ function WicketOverlay({ imageUrl, animConfig }: { imageUrl?: string; animConfig
         animate={{ y: 0, opacity: 1 }}
         exit={{ y: 50, opacity: 0 }}
       >
-        <img src={imageUrl} alt="Wicket" className="score-obs__celebration-img" />
+        <img src={imgFallbackSrc} alt="Wicket" className="score-obs__celebration-img" />
       </motion.div>
     );
   }
@@ -1610,6 +1611,8 @@ function DuckOutOverlay({ imageUrl, animConfig }: { imageUrl?: string; animConfi
 
   const hasVideo = animConfig?.mediaUrl && (animConfig.type === 'video' || animConfig.mediaUrl.match(/\.(mp4|webm|mov)(\?|$)/i));
   const hasImage = animConfig?.mediaUrl && (animConfig.type === 'image' || animConfig.mediaUrl.match(/\.(png|gif|jpg|jpeg|webp|svg)(\?|$)/i));
+  const mediaSrc = animConfig?.mediaUrl ? getPreloadedMediaUrl(animConfig.mediaUrl) : '';
+  const imgFallbackSrc = imageUrl ? getPreloadedMediaUrl(imageUrl) : '';
 
   if (hasVideo) {
     const useChromaKey = !!animConfig!.chromaKeyEnabled;
@@ -1623,13 +1626,13 @@ function DuckOutOverlay({ imageUrl, animConfig }: { imageUrl?: string; animConfi
       >
         {useChromaKey ? (
           <ChromaKeyVideo
-            src={animConfig!.mediaUrl!}
+            src={mediaSrc}
             chromaColor={animConfig!.chromaKeyColor || '#00ff00'}
             similarity={animConfig!.chromaKeySimilarity || 0.4}
             className="score-obs__celebration-chroma"
           />
         ) : (
-          <AutoPlayVideo src={animConfig!.mediaUrl!} className="score-obs__celebration-video" />
+          <AutoPlayVideo src={mediaSrc} className="score-obs__celebration-video" />
         )}
       </motion.div>
     );
@@ -1644,7 +1647,7 @@ function DuckOutOverlay({ imageUrl, animConfig }: { imageUrl?: string; animConfi
         exit={{ scale: 0, opacity: 0 }}
         transition={{ type: 'spring', stiffness: 300, damping: 20 }}
       >
-        <img src={animConfig!.mediaUrl} alt={text} className="score-obs__celebration-img" />
+        <img src={mediaSrc} alt={text} className="score-obs__celebration-img" />
       </motion.div>
     );
   }
@@ -1657,7 +1660,7 @@ function DuckOutOverlay({ imageUrl, animConfig }: { imageUrl?: string; animConfi
       exit={{ scale: 0 }}
     >
       {imageUrl ? (
-        <img src={imageUrl} alt="Duck Out" className="score-obs__celebration-img" />
+        <img src={imgFallbackSrc} alt="Duck Out" className="score-obs__celebration-img" />
       ) : (
         <>
           <span className="score-obs__celebration-emoji">🦆</span>
@@ -1674,6 +1677,8 @@ function HatTrickOverlay({ imageUrl, animConfig }: { imageUrl?: string; animConf
 
   const hasVideo = animConfig?.mediaUrl && (animConfig.type === 'video' || animConfig.mediaUrl.match(/\.(mp4|webm|mov)(\?|$)/i));
   const hasImage = animConfig?.mediaUrl && (animConfig.type === 'image' || animConfig.mediaUrl.match(/\.(png|gif|jpg|jpeg|webp|svg)(\?|$)/i));
+  const mediaSrc = animConfig?.mediaUrl ? getPreloadedMediaUrl(animConfig.mediaUrl) : '';
+  const imgFallbackSrc = imageUrl ? getPreloadedMediaUrl(imageUrl) : '';
 
   if (hasVideo) {
     const useChromaKey = !!animConfig!.chromaKeyEnabled;
@@ -1687,13 +1692,13 @@ function HatTrickOverlay({ imageUrl, animConfig }: { imageUrl?: string; animConf
       >
         {useChromaKey ? (
           <ChromaKeyVideo
-            src={animConfig!.mediaUrl!}
+            src={mediaSrc}
             chromaColor={animConfig!.chromaKeyColor || '#00ff00'}
             similarity={animConfig!.chromaKeySimilarity || 0.4}
             className="score-obs__celebration-chroma"
           />
         ) : (
-          <AutoPlayVideo src={animConfig!.mediaUrl!} className="score-obs__celebration-video" />
+          <AutoPlayVideo src={mediaSrc} className="score-obs__celebration-video" />
         )}
       </motion.div>
     );
@@ -1708,7 +1713,7 @@ function HatTrickOverlay({ imageUrl, animConfig }: { imageUrl?: string; animConf
         exit={{ scale: 0, opacity: 0 }}
         transition={{ duration: 0.6 }}
       >
-        <img src={animConfig!.mediaUrl} alt={text} className="score-obs__celebration-img" />
+        <img src={mediaSrc} alt={text} className="score-obs__celebration-img" />
       </motion.div>
     );
   }
@@ -1722,7 +1727,7 @@ function HatTrickOverlay({ imageUrl, animConfig }: { imageUrl?: string; animConf
       transition={{ duration: 0.6 }}
     >
       {imageUrl ? (
-        <img src={imageUrl} alt="Hat-Trick" className="score-obs__celebration-img" />
+        <img src={imgFallbackSrc} alt="Hat-Trick" className="score-obs__celebration-img" />
       ) : (
         <>
           <span className="score-obs__celebration-emoji">🎩</span>

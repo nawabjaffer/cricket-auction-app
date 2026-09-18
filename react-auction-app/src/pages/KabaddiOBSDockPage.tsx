@@ -9,11 +9,14 @@
 import { useEffect, useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { initializeApp, getApps } from 'firebase/app';
-import { getDatabase, ref, onValue } from 'firebase/database';
+import { getDatabase, ref, onValue, set } from 'firebase/database';
 import { tenantPath } from '../services/tenantPath';
 import { ResolvedImage } from '../components/ResolvedImage';
 import { DEFAULT_KABADDI_OVERLAY_CONFIG } from '../types/kabaddi';
-import type { KabaddiPlayer, KabaddiTeam, KabaddiOverlayConfig, KabaddiTopPerformer } from '../types/kabaddi';
+import type {
+  KabaddiPlayer, KabaddiTeam, KabaddiOverlayConfig, KabaddiTopPerformer,
+  KabaddiMatchSetup, KabaddiLiveState, KabaddiOverlayType,
+} from '../types/kabaddi';
 import './KabaddiOBSDockPage.css';
 
 const FB_CONFIG = {
@@ -36,20 +39,91 @@ const BOARDS: Board[] = [
 ];
 
 export default function KabaddiOBSDockPage() {
+  const [urlMatchId, setUrlMatchId] = useState<string | null>(null);
+  const [urlPinned, setUrlPinned] = useState(false);
+  const [activeMatchId, setActiveMatchId] = useState<string | null>(null);
+  const [liveFallbackMatchId, setLiveFallbackMatchId] = useState<string | null>(null);
+  const [matchId, setMatchId] = useState<string | null>(null);
+
+  const [match, setMatch] = useState<KabaddiMatchSetup | null>(null);
+  const [live, setLive] = useState<KabaddiLiveState | null>(null);
   const [players, setPlayers] = useState<KabaddiPlayer[]>([]);
   const [teams, setTeams] = useState<KabaddiTeam[]>([]);
   const [config, setConfig] = useState<KabaddiOverlayConfig>(DEFAULT_KABADDI_OVERLAY_CONFIG);
   const [boardIdx, setBoardIdx] = useState(0);
 
+  // Parse URL parameters
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const id = params.get('matchId');
+    const pinned = params.get('pin') === '1';
+    setUrlPinned(pinned);
+    if (id) setUrlMatchId(id);
+  }, []);
+
+  // Shared tenant subscriptions: players, teams, overlayConfig, activeMatchId, and all matches
   useEffect(() => {
     const base = tenantPath('kabaddi');
     const unsubs = [
       onValue(ref(fbDb, `${base}/players`), s => setPlayers(s.exists() ? Object.values(s.val() as Record<string, KabaddiPlayer>).filter(p => !!p?.id) : [])),
       onValue(ref(fbDb, `${base}/teams`), s => setTeams(s.exists() ? Object.values(s.val() as Record<string, KabaddiTeam>).filter(t => !!t?.id) : [])),
       onValue(ref(fbDb, `${base}/overlayConfig`), s => setConfig(s.exists() ? { ...DEFAULT_KABADDI_OVERLAY_CONFIG, ...s.val() } : DEFAULT_KABADDI_OVERLAY_CONFIG)),
+      onValue(ref(fbDb, `${base}/activeMatch/matchId`), s => setActiveMatchId(s.exists() ? (s.val() as string) : null)),
+      onValue(ref(fbDb, `${base}/matches`), s => {
+        if (!s.exists()) { setLiveFallbackMatchId(null); return; }
+        const val = s.val() as Record<string, { setup?: KabaddiMatchSetup }>;
+        const setups = Object.values(val).map(m => m.setup).filter((m): m is KabaddiMatchSetup => !!m);
+        const liveMatch = setups.find(m => m.status === 'live');
+        if (liveMatch) {
+          setLiveFallbackMatchId(liveMatch.id);
+        } else if (setups.length > 0) {
+          const sorted = [...setups].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+          setLiveFallbackMatchId(sorted[0].id);
+        } else {
+          setLiveFallbackMatchId(null);
+        }
+      }),
     ];
     return () => unsubs.forEach(u => u());
   }, []);
+
+  // Resolve effective match:
+  // When singleOverlayMode is enabled or no matchId is in URL, follow active match
+  useEffect(() => {
+    if (config.singleOverlayMode || !urlMatchId) {
+      setMatchId(urlPinned ? (urlMatchId || activeMatchId || liveFallbackMatchId || null) : (activeMatchId || liveFallbackMatchId || urlMatchId || null));
+      return;
+    }
+    setMatchId(urlMatchId || null);
+  }, [urlMatchId, urlPinned, activeMatchId, liveFallbackMatchId, config.singleOverlayMode]);
+
+  // Match-specific subscriptions
+  useEffect(() => {
+    if (!matchId) {
+      setMatch(null);
+      setLive(null);
+      return;
+    }
+    const base = tenantPath('kabaddi');
+    const unsubs = [
+      onValue(ref(fbDb, `${base}/matches/${matchId}/setup`), s => {
+        if (s.exists()) setMatch(s.val() as KabaddiMatchSetup);
+      }),
+      onValue(ref(fbDb, `${base}/matches/${matchId}/live`), s => {
+        if (s.exists()) setLive(s.val() as KabaddiLiveState);
+      }),
+    ];
+    return () => unsubs.forEach(u => u());
+  }, [matchId]);
+
+  const triggerOverlay = async (type: KabaddiOverlayType) => {
+    if (!matchId) return;
+    const base = tenantPath('kabaddi');
+    await set(ref(fbDb, `${base}/matches/${matchId}/overlay`), {
+      activeOverlay: type,
+      lastUpdated: Date.now(),
+    });
+  };
 
   useEffect(() => {
     const id = setInterval(() => setBoardIdx(i => (i + 1) % BOARDS.length), 12000);
@@ -102,6 +176,18 @@ export default function KabaddiOBSDockPage() {
           </div>
         </div>
 
+        {match && live && (
+          <div className="kbd__live-bar">
+            <div className="kbd__live-teams">
+              {match.teamA.shortName || match.teamA.name.slice(0, 3).toUpperCase()} <span className="kbd__live-score">{live.teamA.score}</span> : <span className="kbd__live-score">{live.teamB.score}</span> {match.teamB.shortName || match.teamB.name.slice(0, 3).toUpperCase()}
+            </div>
+            <span className="kbd__live-badge">
+              {live.half === 'full_time' ? 'FT' : (live.half === 'not_started' ? 'TOSS' : 'LIVE')}
+              {config.singleOverlayMode && ' · SINGLE OVERLAY'}
+            </span>
+          </div>
+        )}
+
         <AnimatePresence mode="wait">
           <motion.div key={board.key} className="kbd__list"
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.4 }}>
@@ -128,6 +214,29 @@ export default function KabaddiOBSDockPage() {
             ))}
           </motion.div>
         </AnimatePresence>
+
+        {matchId && (
+          <div className="kbd__controls">
+            <button className="kbd__ctrl-btn kbd__ctrl-btn--raid" onClick={() => triggerOverlay('super_raid')} title="Trigger Super Raid celebration">
+              ⚡ Super Raid
+            </button>
+            <button className="kbd__ctrl-btn kbd__ctrl-btn--tackle" onClick={() => triggerOverlay('super_tackle')} title="Trigger Super Tackle celebration">
+              🛡️ Super Tackle
+            </button>
+            <button className="kbd__ctrl-btn kbd__ctrl-btn--allout" onClick={() => triggerOverlay('all_out')} title="Trigger All Out celebration">
+              💥 All Out
+            </button>
+            <button className="kbd__ctrl-btn kbd__ctrl-btn--bonus" onClick={() => triggerOverlay('bonus_point')} title="Trigger Bonus celebration">
+              ⭐ Bonus
+            </button>
+            <button className="kbd__ctrl-btn kbd__ctrl-btn--dod" onClick={() => triggerOverlay('do_or_die')} title="Trigger Do or Die banner">
+              ⚠️ Do or Die
+            </button>
+            <button className="kbd__ctrl-btn kbd__ctrl-btn--clear" onClick={() => triggerOverlay('none')} title="Clear overlay celebration">
+              ✕ Clear
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

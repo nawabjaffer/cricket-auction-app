@@ -102,10 +102,13 @@ function KabaddiAdminPageContent() {
   const [teams, setTeams] = useState<KabaddiTeam[]>([]);
   const [players, setPlayers] = useState<KabaddiPlayer[]>([]);
   const [matches, setMatches] = useState<KabaddiMatchSetup[]>([]);
+  const [activeMatchId, setActiveMatchId] = useState<string | null>(null);
   const [overlayConfig, setOverlayConfig] = useState<KabaddiOverlayConfig>(DEFAULT_KABADDI_OVERLAY_CONFIG);
   const [rules, setRules] = useState<KabaddiRulesConfig>(DEFAULT_KABADDI_RULES);
   const [toast, setToast] = useState('');
   const [busy, setBusy] = useState(false);
+
+  const singleOverlayMode = !!overlayConfig.singleOverlayMode;
 
   const flash = useCallback((m: string) => {
     setToast(m);
@@ -137,6 +140,7 @@ function KabaddiAdminPageContent() {
       kabaddiService.subscribeTeams(setTeams),
       kabaddiService.subscribePlayers(setPlayers),
       kabaddiService.subscribeRules(setRules),
+      kabaddiService.subscribeActiveMatch(setActiveMatchId),
       kabaddiService.subscribeOverlayConfig(c =>
         setOverlayConfig(c ? { ...DEFAULT_KABADDI_OVERLAY_CONFIG, ...c } : DEFAULT_KABADDI_OVERLAY_CONFIG)),
     ];
@@ -400,6 +404,10 @@ function KabaddiAdminPageContent() {
         teamB: { ...seeded.teamB, onCourtIds: teamBIds, startingIds: teamBIds },
         raidingTeamId: firstRaider,
       });
+
+      if (startNow) {
+        await kabaddiService.setActiveMatch(id);
+      }
 
       await reloadMatches();
       flash(startNow ? 'Match created and live' : 'Match created');
@@ -671,6 +679,44 @@ function KabaddiAdminPageContent() {
       {/* ── Matches ── */}
       {tab === 'matches' && (
         <section className="kba__body">
+          {singleOverlayMode && (
+            <div className="kba__card" style={{ borderLeft: '4px solid #22c55e', marginBottom: '1rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
+                <div>
+                  <strong style={{ color: '#22c55e', fontSize: '0.95rem' }}>🔗 Single Overlay Mode is ON</strong>
+                  <p className="kba__hint" style={{ margin: '0.25rem 0 0' }}>
+                    Universal links (Overlay, Dock, Scorer) automatically follow whichever match is active. Toggle this mode from Admin → Streaming tab or below in Overlay tab.
+                  </p>
+                  {activeMatchId ? (
+                    <p style={{ margin: '0.4rem 0 0', fontSize: '0.85rem' }}>
+                      Current active match:{' '}
+                      <strong>
+                        {matches.find(m => m.id === activeMatchId)?.teamA.name ?? 'Team A'} vs{' '}
+                        {matches.find(m => m.id === activeMatchId)?.teamB.name ?? 'Team B'}
+                      </strong>
+                    </p>
+                  ) : (
+                    <p style={{ margin: '0.4rem 0 0', fontSize: '0.85rem', color: '#f59e0b' }}>
+                      No match is currently marked active. Click Play on a match below to make it active.
+                    </p>
+                  )}
+                </div>
+                {activeMatchId && (
+                  <button
+                    className="kba__btn"
+                    style={{ background: '#ef4444', color: '#fff', fontSize: '0.8rem', padding: '6px 12px' }}
+                    onClick={async () => {
+                      await kabaddiService.setActiveMatch(null);
+                      flash('Session ended — cleared active match');
+                    }}
+                  >
+                    End Session (Clear Active Match)
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+
           <div className="kba__card">
             <h2>Create match</h2>
             <div className="kba__grid">
@@ -718,27 +764,48 @@ function KabaddiAdminPageContent() {
 
           <div className="kba__list">
             {matches.length === 0 && <p className="kba__empty">No matches yet.</p>}
-            {matches.map(m => (
-              <div key={m.id} className="kba__row">
-                <div className="kba__row-id">
-                  <div>
-                    <strong>{m.teamA.name} vs {m.teamB.name}</strong>
-                    <small>
-                      <span className={`kba__status kba__status--${m.status}`}>{m.status}</span>
-                      {' '}{m.venue} · {m.halfDurationMin}′ halves{m.competition ? ` · ${m.competition}` : ''}
-                    </small>
+            {matches.map(m => {
+              const isActive = m.id === activeMatchId;
+              return (
+                <div key={m.id} className="kba__row" style={isActive ? { borderLeft: '4px solid #22c55e', background: 'rgba(34, 197, 94, 0.05)' } : undefined}>
+                  <div className="kba__row-id">
+                    <div>
+                      <strong>
+                        {m.teamA.name} vs {m.teamB.name}
+                        {isActive && (
+                          <span style={{ background: '#22c55e', color: '#fff', fontSize: '0.65rem', fontWeight: 800, padding: '2px 6px', borderRadius: 4, marginLeft: 8 }}>
+                            ACTIVE
+                          </span>
+                        )}
+                      </strong>
+                      <small>
+                        <span className={`kba__status kba__status--${m.status}`}>{m.status}</span>
+                        {' '}{m.venue} · {m.halfDurationMin}′ halves{m.competition ? ` · ${m.competition}` : ''}
+                      </small>
+                    </div>
+                  </div>
+                  <div className="kba__row-actions">
+                    <button onClick={() => openIn('/kabaddi/scorer/update', m.id)}><IoFlash size={15} /> Score</button>
+                    <button onClick={() => openIn('/kabaddi/scorer/obs-overlay', m.id)}><IoDesktop size={15} /> Overlay</button>
+                    <button onClick={() => openIn('/kabaddi/scorer/camera', m.id)}><IoVideocam size={15} /> Camera</button>
+                    <button onClick={() => openIn('/kabaddi/scorer/obs-dock', m.id)}><IoStatsChart size={15} /> Dock</button>
+                    <button
+                      title={isActive ? 'Active match' : 'Make Live & Active'}
+                      style={isActive ? { background: '#22c55e', color: '#fff' } : undefined}
+                      onClick={async () => {
+                        await kabaddiService.updateMatchStatus(m.id, 'live');
+                        await kabaddiService.setActiveMatch(m.id);
+                        await reloadMatches();
+                        flash('Match is live and set as active');
+                      }}
+                    >
+                      <IoPlay size={15} />
+                    </button>
+                    <button onClick={async () => { if (window.confirm('Delete match?')) { await kabaddiService.deleteMatch(m.id); await reloadMatches(); flash('Deleted'); } }}><IoTrash size={15} /></button>
                   </div>
                 </div>
-                <div className="kba__row-actions">
-                  <button onClick={() => openIn('/kabaddi/scorer/update', m.id)}><IoFlash size={15} /> Score</button>
-                  <button onClick={() => openIn('/kabaddi/scorer/obs-overlay', m.id)}><IoDesktop size={15} /> Overlay</button>
-                  <button onClick={() => openIn('/kabaddi/scorer/camera', m.id)}><IoVideocam size={15} /> Camera</button>
-                  <button onClick={() => openIn('/kabaddi/scorer/obs-dock', m.id)}><IoStatsChart size={15} /> Dock</button>
-                  <button onClick={async () => { await kabaddiService.updateMatchStatus(m.id, 'live'); await reloadMatches(); flash('Match is live'); }}><IoPlay size={15} /></button>
-                  <button onClick={async () => { if (window.confirm('Delete match?')) { await kabaddiService.deleteMatch(m.id); await reloadMatches(); flash('Deleted'); } }}><IoTrash size={15} /></button>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </section>
       )}
@@ -748,6 +815,28 @@ function KabaddiAdminPageContent() {
         <section className="kba__body">
           <div className="kba__card">
             <h2><IoSettings size={15} /> Broadcast look</h2>
+
+            {/* Single Overlay Mode toggle */}
+            <div style={{
+              padding: '0.75rem 1rem',
+              marginBottom: '1rem',
+              background: overlayConfig.singleOverlayMode ? 'rgba(34, 197, 94, 0.12)' : 'rgba(255, 255, 255, 0.04)',
+              border: `1px solid ${overlayConfig.singleOverlayMode ? 'rgba(34, 197, 94, 0.4)' : 'rgba(255, 255, 255, 0.1)'}`,
+              borderRadius: '0.5rem',
+            }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontWeight: 600 }}>
+                <input
+                  type="checkbox"
+                  checked={!!overlayConfig.singleOverlayMode}
+                  onChange={e => setOverlayConfig(c => ({ ...c, singleOverlayMode: e.target.checked }))}
+                />
+                Single Overlay Mode (All Matches)
+              </label>
+              <p className="kba__hint" style={{ margin: '0.35rem 0 0' }}>
+                When enabled, a single universal OBS overlay, dock, and update-scorecard link automatically follows whichever match is live/active — no per-match links needed in OBS Studio, Prism Live Studio, or mobile streaming apps.
+              </p>
+            </div>
+
             <div className="kba__grid">
               <label><span>Tournament name</span><HistoryField storageKey="overlay-tournament-name" value={overlayConfig.tournamentName ?? ''} onChange={v => setOverlayConfig(c => ({ ...c, tournamentName: v }))} /></label>
               <label><span>Tournament logo URL</span><HistoryField storageKey="overlay-tournament-logo" value={overlayConfig.tournamentLogo ?? ''} onChange={v => setOverlayConfig(c => ({ ...c, tournamentLogo: v }))} /></label>
@@ -796,12 +885,12 @@ function KabaddiAdminPageContent() {
                   <div className="kba__grid">
                     <label><span>Text</span><input value={anim?.text ?? ''} onChange={e => setAnim(field.key, { text: e.target.value })} /></label>
                     <label>
-                      <span>Media URL (image / gif)</span>
+                      <span>Media URL (video / gif / image)</span>
                       <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
                         <input value={anim?.mediaUrl ?? ''} onChange={e => setAnim(field.key, { mediaUrl: e.target.value })} style={{ flex: 1 }} />
                         <label className="kba__btn" style={{ cursor: 'pointer', margin: 0 }}>
                           Upload
-                          <input type="file" accept="image/*" style={{ display: 'none' }} onChange={e => { if (e.target.files?.[0]) void uploadAnimMedia(field.key, e.target.files[0]); }} />
+                          <input type="file" accept="image/*,video/*" style={{ display: 'none' }} onChange={e => { if (e.target.files?.[0]) void uploadAnimMedia(field.key, e.target.files[0]); }} />
                         </label>
                       </div>
                     </label>
@@ -810,13 +899,17 @@ function KabaddiAdminPageContent() {
                   </div>
                   <div style={{ marginTop: '0.75rem', padding: '1rem', background: 'rgba(0,0,0,0.3)', borderRadius: 8, textAlign: 'center' }}>
                     {anim?.mediaUrl ? (
-                      <ResolvedImage src={anim.mediaUrl} alt="preview" size={320} style={{ maxWidth: 200, maxHeight: 120, borderRadius: 8, objectFit: 'contain' }} />
+                      /\.(mp4|webm|mov)(\?|$)/i.test(anim.mediaUrl) ? (
+                        <video src={anim.mediaUrl} autoPlay muted loop playsInline style={{ maxWidth: 200, maxHeight: 120, borderRadius: 8, objectFit: 'contain' }} />
+                      ) : (
+                        <ResolvedImage src={anim.mediaUrl} alt="preview" size={320} style={{ maxWidth: 200, maxHeight: 120, borderRadius: 8, objectFit: 'contain' }} />
+                      )
                     ) : (
                       <span style={{ fontSize: 24, fontWeight: 900, color: anim?.color ?? '#f59e0b', textShadow: `0 0 20px ${anim?.color ?? '#f59e0b'}80` }}>
                         {anim?.text || field.label}
                       </span>
                     )}
-                    <p className="kba__hint" style={{ marginTop: 4 }}>{anim?.mediaUrl ? 'Custom media' : 'Default text'} · {anim?.durationMs ?? 4000}ms</p>
+                    <p className="kba__hint" style={{ marginTop: 4 }}>{anim?.mediaUrl ? (/\.(mp4|webm|mov)(\?|$)/i.test(anim.mediaUrl) ? 'Custom video clip' : 'Custom media') : 'Default text'} · {anim?.durationMs ?? 4000}ms</p>
                   </div>
                 </div>
               );

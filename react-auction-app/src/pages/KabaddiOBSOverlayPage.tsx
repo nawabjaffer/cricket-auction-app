@@ -17,6 +17,7 @@ import { getDatabase, ref, onValue } from 'firebase/database';
 import { tenantPath } from '../services/tenantPath';
 import { useBroadcastOverlaySurface } from '../hooks/useBroadcastOverlaySurface';
 import { ResolvedImage } from '../components/ResolvedImage';
+import { overlayMediaPreload, getPreloadedMediaUrl } from '../services/overlayMediaPreload';
 import {
   computeKabaddiClock, raidSecondsRemaining, KABADDI_HALF_LABELS,
   DEFAULT_KABADDI_OVERLAY_CONFIG, DEFAULT_KABADDI_RULES, playerMatchPoints,
@@ -141,7 +142,12 @@ function matchRosterFor(
 
 export default function KabaddiOBSOverlayPage() {
   useBroadcastOverlaySurface();
+  const [urlMatchId, setUrlMatchId] = useState<string | null>(null);
+  const [urlPinned, setUrlPinned] = useState(false);
+  const [activeMatchId, setActiveMatchId] = useState<string | null>(null);
+  const [liveFallbackMatchId, setLiveFallbackMatchId] = useState<string | null>(null);
   const [matchId, setMatchId] = useState<string | null>(null);
+
   const [match, setMatch] = useState<KabaddiMatchSetup | null>(null);
   const [live, setLive] = useState<KabaddiLiveState | null>(null);
   const [teams, setTeams] = useState<KabaddiTeam[]>([]);
@@ -155,44 +161,127 @@ export default function KabaddiOBSOverlayPage() {
   const [, force] = useState(0);
   const lastCelebTs = useRef(0);
 
+  // Parse URL parameters
   useEffect(() => {
-    const id = new URLSearchParams(window.location.search).get('matchId');
-    if (id) setMatchId(id);
+    const params = new URLSearchParams(window.location.search);
+    const id = params.get('matchId');
+    const pinned = params.get('pin') === '1';
+    setUrlPinned(pinned);
+    if (id) setUrlMatchId(id);
   }, []);
 
+  // Shared tenant listeners: overlay config, rules, active match pointer, teams, players
   useEffect(() => {
-    if (!matchId) return;
     const base = tenantPath('kabaddi');
     const unsubs = [
-      onValue(ref(fbDb, `${base}/matches/${matchId}/setup`), s => s.exists() && setMatch(s.val())),
-      onValue(ref(fbDb, `${base}/matches/${matchId}/live`), s => {
-        if (!s.exists()) return;
-        setLive(s.val() as KabaddiLiveState);
-      }),
+      // Overlay configuration (branding, colors, single overlay mode)
       onValue(ref(fbDb, `${base}/overlayConfig`), s =>
         setConfig(s.exists() ? { ...DEFAULT_KABADDI_OVERLAY_CONFIG, ...s.val() } : DEFAULT_KABADDI_OVERLAY_CONFIG)),
+      // Rules configuration
       onValue(ref(fbDb, `${base}/rules`), s =>
         setRules(s.exists() ? { ...DEFAULT_KABADDI_RULES, ...s.val() } : DEFAULT_KABADDI_RULES)),
-      onValue(ref(fbDb, `${base}/matches/${matchId}/overlay`), s => setControl(s.exists() ? s.val() : null)),
+      // Active match pointer (Single Overlay Mode)
+      onValue(ref(fbDb, `${base}/activeMatch/matchId`), s =>
+        setActiveMatchId(s.exists() ? (s.val() as string) : null)),
+      // Fallback: listen to all matches to find live match if no explicit active match pointer
+      onValue(ref(fbDb, `${base}/matches`), s => {
+        if (!s.exists()) { setLiveFallbackMatchId(null); return; }
+        const val = s.val() as Record<string, { setup?: KabaddiMatchSetup }>;
+        const setups = Object.values(val).map(m => m.setup).filter((m): m is KabaddiMatchSetup => !!m);
+        const liveMatch = setups.find(m => m.status === 'live');
+        if (liveMatch) {
+          setLiveFallbackMatchId(liveMatch.id);
+        } else if (setups.length > 0) {
+          const sorted = [...setups].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+          setLiveFallbackMatchId(sorted[0].id);
+        } else {
+          setLiveFallbackMatchId(null);
+        }
+      }),
+      // Teams
       onValue(ref(fbDb, `${base}/teams`), s => {
         const val = (s.val() as Record<string, KabaddiTeam>) ?? {};
         setTeams(Object.values(val).filter(t => !!t?.id));
       }),
+      // Auction teams (brand crest logos)
       onValue(ref(fbDb, tenantPath('auction/teams')), s => {
         const val = s.val() as Team[] | Record<string, Team> | null;
         setAuctionTeams(val ? Object.values(val).filter((t): t is Team => !!t?.id) : []);
       }),
+      // Players
       onValue(ref(fbDb, `${base}/players`), s => {
         const val = (s.val() as Record<string, KabaddiPlayer>) ?? {};
         setPlayers(Object.values(val).filter(p => !!p?.id));
       }),
+      // Sold players
       onValue(ref(fbDb, tenantPath('auction/soldPlayers')), s => {
         const val = s.val() as SoldPlayerRecord[] | Record<string, SoldPlayerRecord> | null;
         setSoldPlayers(val ? Object.values(val).filter((p): p is SoldPlayerRecord => !!p?.id) : []);
       }),
     ];
     return () => unsubs.forEach(u => u());
+  }, []);
+
+  // Resolve the effective match:
+  // When singleOverlayMode is enabled OR when no matchId is specified in URL,
+  // actively follow the activeMatchId (or live fallback match).
+  // If pin=1 is in URL, explicit matchId takes priority.
+  useEffect(() => {
+    if (config.singleOverlayMode || !urlMatchId) {
+      setMatchId(urlPinned ? (urlMatchId || activeMatchId || liveFallbackMatchId || null) : (activeMatchId || liveFallbackMatchId || urlMatchId || null));
+      return;
+    }
+    setMatchId(urlMatchId || null);
+  }, [urlMatchId, urlPinned, activeMatchId, liveFallbackMatchId, config.singleOverlayMode]);
+
+  // Reset match data when matchId changes to avoid stale scoreboard flashing
+  useEffect(() => {
+    setMatch(null);
+    setLive(null);
+    setControl(null);
+    setCeleb(null);
   }, [matchId]);
+
+  // Match-specific subscriptions: setup, live state, and overlay controls
+  useEffect(() => {
+    if (!matchId) return;
+    const base = tenantPath('kabaddi');
+    const unsubs = [
+      onValue(ref(fbDb, `${base}/matches/${matchId}/setup`), s => {
+        if (s.exists()) setMatch(s.val() as KabaddiMatchSetup);
+      }),
+      onValue(ref(fbDb, `${base}/matches/${matchId}/live`), s => {
+        if (s.exists()) setLive(s.val() as KabaddiLiveState);
+      }),
+      onValue(ref(fbDb, `${base}/matches/${matchId}/overlay`), s => {
+        setControl(s.exists() ? (s.val() as KabaddiOverlayControl) : null);
+      }),
+    ];
+    return () => unsubs.forEach(u => u());
+  }, [matchId]);
+
+  // Preload celebration media (video / gif / images / audio) into local memory
+  useEffect(() => {
+    const urls: (string | undefined)[] = [
+      config.superRaidAnimation?.mediaUrl,
+      config.superRaidAnimation?.soundUrl,
+      config.superTackleAnimation?.mediaUrl,
+      config.superTackleAnimation?.soundUrl,
+      config.allOutAnimation?.mediaUrl,
+      config.allOutAnimation?.soundUrl,
+      config.bonusAnimation?.mediaUrl,
+      config.bonusAnimation?.soundUrl,
+      config.doOrDieAnimation?.mediaUrl,
+      config.doOrDieAnimation?.soundUrl,
+      config.tournamentLogo,
+      config.broadcastPartnerLogo,
+      match?.teamA?.animationUrl,
+      match?.teamB?.animationUrl,
+      match?.teamA?.logoUrl,
+      match?.teamB?.logoUrl,
+    ];
+    void overlayMediaPreload.preloadBatch(urls);
+  }, [config, match]);
 
   // 1 Hz re-render drives both the match clock and the raid countdown.
   useEffect(() => {
@@ -200,6 +289,38 @@ export default function KabaddiOBSOverlayPage() {
     return () => clearInterval(id);
   }, []);
 
+  // Keyboard shortcuts for manual overlay testing and quick director triggers
+  useEffect(() => {
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      const key = e.key.toLowerCase();
+      const trigger = (type: KabaddiOverlayControl['activeOverlay']) => {
+        const { anim, enabled } = celebFor(type, config);
+        if (!enabled) return;
+        if (anim?.soundUrl) {
+          const aud = overlayMediaPreload.getAudio(anim.soundUrl);
+          if (aud) {
+            aud.currentTime = 0;
+            aud.play().catch(() => {});
+          }
+        }
+        setCeleb({ activeOverlay: type, lastUpdated: Date.now() });
+        const duration = anim?.durationMs && anim.durationMs > 0 ? anim.durationMs : 8000;
+        setTimeout(() => setCeleb(null), duration);
+      };
+
+      if (key === 'r') trigger('super_raid');
+      else if (key === 't') trigger('super_tackle');
+      else if (key === 'a') trigger('all_out');
+      else if (key === 'b') trigger('bonus_point');
+      else if (key === 'd') trigger('do_or_die');
+      else if (key === 'escape') setCeleb(null);
+    };
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, [config]);
+
+  // Instant celebration display with preloaded media and sound (<10ms playback)
   useEffect(() => {
     if (!control || control.activeOverlay === 'none') return;
     const ts = control.lastUpdated || 0;
@@ -207,8 +328,27 @@ export default function KabaddiOBSOverlayPage() {
     lastCelebTs.current = ts;
     const { anim, enabled } = celebFor(control.activeOverlay, config);
     if (!enabled) return;
+
+    // Trigger audio immediately from pre-warmed audio cache
+    if (anim?.soundUrl) {
+      const aud = overlayMediaPreload.getAudio(anim.soundUrl);
+      if (aud) {
+        try {
+          aud.currentTime = 0;
+          aud.play().catch(() => {});
+        } catch { /* audio */ }
+      } else {
+        try {
+          const a = new Audio(anim.soundUrl);
+          a.play().catch(() => {});
+        } catch { /* audio */ }
+      }
+    }
+
     setCeleb(control);
-    const t = setTimeout(() => setCeleb(null), anim?.durationMs ?? 3500);
+    // Disappear after configured duration (defaults to 8 seconds / 8000ms for special moments)
+    const duration = anim?.durationMs && anim.durationMs > 0 ? anim.durationMs : 8000;
+    const t = setTimeout(() => setCeleb(null), duration);
     return () => clearTimeout(t);
   }, [control, config]);
 
@@ -369,6 +509,34 @@ function TeamBlock({ side, name, fullName, logoUrl, animationUrl, color, state, 
   );
 }
 
+function AutoPlayKabaddiVideo({ src, className }: { src: string; className?: string }) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    video.muted = true;
+    video.currentTime = 0;
+    const playPromise = video.play();
+    if (playPromise) {
+      playPromise.catch(() => {
+        setTimeout(() => { video.play().catch(() => {}); }, 20);
+      });
+    }
+  }, [src]);
+
+  return (
+    <video
+      ref={videoRef}
+      src={src}
+      autoPlay
+      muted
+      playsInline
+      className={className}
+    />
+  );
+}
+
 // ── Celebrations ─────────────────────────────────────────────────────────────
 
 function KabaddiCelebration({ control, config }: Readonly<{
@@ -380,11 +548,20 @@ function KabaddiCelebration({ control, config }: Readonly<{
   const text = anim?.text || fallback;
 
   if (anim?.mediaUrl) {
+    const isVideo = /\.(mp4|webm|mov)(\?|$)/i.test(anim.mediaUrl);
+    const mediaSrc = getPreloadedMediaUrl(anim.mediaUrl);
     return (
       <motion.div className="kbo__celeb"
         initial={{ opacity: 0, scale: 0.7 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 1.08 }}
         transition={{ type: 'spring', stiffness: 240, damping: 22 }}>
-        <ResolvedImage src={anim.mediaUrl} className="kbo__celeb-media" size={960} />
+        {isVideo ? (
+          <AutoPlayKabaddiVideo
+            src={mediaSrc}
+            className="kbo__celeb-media"
+          />
+        ) : (
+          <img src={mediaSrc} alt={text} className="kbo__celeb-media" />
+        )}
       </motion.div>
     );
   }

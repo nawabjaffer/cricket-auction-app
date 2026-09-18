@@ -298,6 +298,9 @@ export interface KabaddiOverlayConfig {
   bonusAnimation?: KabaddiAnimationConfig;
   doOrDieAnimation?: KabaddiAnimationConfig;
   statsSheetUrl?: string;
+  // Single Overlay Mode: one tenant-wide overlay/dock/scorer link that auto-follows
+  // whichever match is marked active (or live).
+  singleOverlayMode?: boolean;
 }
 
 export const DEFAULT_KABADDI_OVERLAY_CONFIG: KabaddiOverlayConfig = {
@@ -311,16 +314,17 @@ export const DEFAULT_KABADDI_OVERLAY_CONFIG: KabaddiOverlayConfig = {
   showRaiderInfo: true,
   showMatDiagram: true,
   scoreboardPosition: 'bottom-center',
+  singleOverlayMode: false,
   enableSuperRaidAnimation: true,
   enableSuperTackleAnimation: true,
   enableAllOutAnimation: true,
   enableBonusAnimation: true,
   enableDoOrDieAnimation: true,
-  superRaidAnimation: { enabled: true, durationMs: 5000, text: 'SUPER RAID!', color: '#f59e0b' },
-  superTackleAnimation: { enabled: true, durationMs: 4500, text: 'SUPER TACKLE!', color: '#3b82f6' },
-  allOutAnimation: { enabled: true, durationMs: 6000, text: 'ALL OUT!', color: '#ef4444' },
-  bonusAnimation: { enabled: true, durationMs: 2500, text: 'BONUS!', color: '#22c55e' },
-  doOrDieAnimation: { enabled: true, durationMs: 3000, text: 'DO OR DIE RAID', color: '#a855f7' },
+  superRaidAnimation: { enabled: true, durationMs: 8000, text: 'SUPER RAID!', color: '#f59e0b' },
+  superTackleAnimation: { enabled: true, durationMs: 8000, text: 'SUPER TACKLE!', color: '#3b82f6' },
+  allOutAnimation: { enabled: true, durationMs: 8000, text: 'ALL OUT!', color: '#ef4444' },
+  bonusAnimation: { enabled: true, durationMs: 8000, text: 'BONUS!', color: '#22c55e' },
+  doOrDieAnimation: { enabled: true, durationMs: 8000, text: 'DO OR DIE RAID', color: '#a855f7' },
 };
 
 // ── Rules & regulations (per-tournament, configured from Platform Admin) ─────

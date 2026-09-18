@@ -233,6 +233,33 @@ class KabaddiService {
     });
   }
 
+  // ── Active Match Pointer (Single Overlay Mode) ─────────────────────────────
+  // Tenant-wide "currently active" match id consumed by the universal overlay/
+  // dock/scorer link so a single link can follow whichever match is started.
+
+  async setActiveMatch(matchId: string | null): Promise<void> {
+    const db = this.ensureDb();
+    await set(ref(db, `${this.basePath}/activeMatch`), { matchId, updatedAt: Date.now() });
+  }
+
+  async getActiveMatch(): Promise<string | null> {
+    const db = this.ensureDb();
+    const snapshot = await get(ref(db, `${this.basePath}/activeMatch/matchId`));
+    return snapshot.exists() ? (snapshot.val() as string) : null;
+  }
+
+  subscribeActiveMatch(callback: (matchId: string | null) => void): () => void {
+    const db = this.ensureDb();
+    return onValue(ref(db, `${this.basePath}/activeMatch/matchId`), (snapshot) => {
+      callback(snapshot.exists() ? (snapshot.val() as string) : null);
+    });
+  }
+
+  async startMatchQuick(matchId: string): Promise<void> {
+    await this.updateMatchStatus(matchId, 'live');
+    await this.setActiveMatch(matchId);
+  }
+
   // ── Overlay config ─────────────────────────────────────────────────────────
 
   async getOverlayConfig(): Promise<KabaddiOverlayConfig | null> {
