@@ -15,6 +15,10 @@ import { getDatabase, ref, onValue, set as fbSet } from 'firebase/database';
 import { tenantPath } from '../services/tenantPath';
 import { useBroadcastOverlaySurface } from '../hooks/useBroadcastOverlaySurface';
 import { overlayMediaPreload, getPreloadedMediaUrl } from '../services/overlayMediaPreload';
+import { ScorecardLayoutView } from '../components/ScorecardCanvas';
+import { scorecardLayoutService } from '../services/scorecardLayoutService';
+import type { ScorecardLayout } from '../types/scorecardDesigner';
+import type { ScorecardDataContext } from '../utils/scorecardDataBinding';
 import type {
   LiveScore, OverlayControlState, OverlayType,
   ScoringOverlayConfig, ScoringAd, MatchSetup, LiveQuestion,
@@ -124,6 +128,19 @@ export default function ScoreOBSOverlayPage() {
   const [sponsorCountdown, setSponsorCountdown] = useState(3);
   const sponsorIntroKeyRef = useRef<string | null>(null);
   const preloadedUrlsRef = useRef(new Set<string>());
+  const [customLayoutId, setCustomLayoutId] = useState<string | null>(null);
+  const [customLayout, setCustomLayout] = useState<ScorecardLayout | null>(null);
+
+  // Custom Scorecard Designer — same layout the Camera Recorder burns into video
+  useEffect(() => {
+    scorecardLayoutService.initialize(obsDb);
+    return scorecardLayoutService.subscribeActiveLayoutId('cricket', setCustomLayoutId);
+  }, []);
+
+  useEffect(() => {
+    if (!customLayoutId) { setCustomLayout(null); return; }
+    return scorecardLayoutService.subscribeLayout('cricket', customLayoutId, setCustomLayout);
+  }, [customLayoutId]);
 
   useEffect(() => {
     document.documentElement.classList.add('obs-overlay-host');
@@ -528,6 +545,29 @@ export default function ScoreOBSOverlayPage() {
   }, [ads]);
 
   if (!matchId) return null;
+
+  // Custom Scorecard Designer template takes over the entire scoreboard region
+  // (pre-match, intro & live states) when one has been set Active.
+  if (customLayout && customLayout.widgets.length > 0) {
+    const dataCtx: ScorecardDataContext = {
+      sport: 'cricket', match, live,
+      branding: { tournamentLogo: config.tournamentLogo, partnerLogo: config.broadcastPartnerLogo },
+    };
+    return (
+      <div className="score-obs score-obs--custom">
+        <div style={{ position: 'absolute', inset: 0 }}>
+          <ScorecardLayoutView layout={customLayout} ctx={dataCtx} />
+        </div>
+        <AnimatePresence>
+          {localOverlay === 'boundary_four' && <BoundaryOverlay key="overlay-four" type="four" animConfig={config.fourAnimation} />}
+          {localOverlay === 'boundary_six' && <BoundaryOverlay key="overlay-six" type="six" animConfig={config.sixAnimation} />}
+          {localOverlay === 'wicket' && <WicketOverlay key="overlay-wicket" imageUrl={config.wicketImageUrl} animConfig={config.wicketAnimation} />}
+          {localOverlay === 'duck_out' && <DuckOutOverlay key="overlay-duck" imageUrl={config.duckOutImageUrl} animConfig={config.duckOutAnimation} />}
+          {localOverlay === 'hat_trick' && <HatTrickOverlay key="overlay-hattrick" imageUrl={config.hatTrickImageUrl} animConfig={config.hatTrickAnimation} />}
+        </AnimatePresence>
+      </div>
+    );
+  }
 
   // Pre-match overlay (show ceremony phases regardless of live score)
   // Only skip pre-match when phase is idle or match_ready (ceremony done)

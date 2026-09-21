@@ -1,0 +1,27 @@
+/* ============================================================================
+   SCORECARD CANVAS — shared styles for the widget designer + live renderer
+   ============================================================================ */
+
+.sc-canvas {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+.sc-canvas__bg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  z-index: 0;
+}
+
+.sc-widget {
+  transition: outline-color 0.1s ease;
+}
+
+.sc-widget span {
+  display: block;
+}

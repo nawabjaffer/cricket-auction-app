@@ -17,7 +17,11 @@ import { getDatabase, ref, onValue } from 'firebase/database';
 import { tenantPath } from '../services/tenantPath';
 import { useBroadcastOverlaySurface } from '../hooks/useBroadcastOverlaySurface';
 import { ResolvedImage } from '../components/ResolvedImage';
+import { ScorecardLayoutView } from '../components/ScorecardCanvas';
 import { overlayMediaPreload, getPreloadedMediaUrl } from '../services/overlayMediaPreload';
+import { scorecardLayoutService } from '../services/scorecardLayoutService';
+import type { ScorecardLayout } from '../types/scorecardDesigner';
+import type { ScorecardDataContext } from '../utils/scorecardDataBinding';
 import {
   computeKabaddiClock, raidSecondsRemaining, KABADDI_HALF_LABELS,
   DEFAULT_KABADDI_OVERLAY_CONFIG, DEFAULT_KABADDI_RULES, playerMatchPoints,
@@ -160,6 +164,19 @@ export default function KabaddiOBSOverlayPage() {
   const [celeb, setCeleb] = useState<KabaddiOverlayControl | null>(null);
   const [, force] = useState(0);
   const lastCelebTs = useRef(0);
+  const [customLayoutId, setCustomLayoutId] = useState<string | null>(null);
+  const [customLayout, setCustomLayout] = useState<ScorecardLayout | null>(null);
+
+  // Custom Scorecard Designer — same layout the Camera Recorder burns into video
+  useEffect(() => {
+    scorecardLayoutService.initialize(fbDb);
+    return scorecardLayoutService.subscribeActiveLayoutId('kabaddi', setCustomLayoutId);
+  }, []);
+
+  useEffect(() => {
+    if (!customLayoutId) { setCustomLayout(null); return; }
+    return scorecardLayoutService.subscribeLayout('kabaddi', customLayoutId, setCustomLayout);
+  }, [customLayoutId]);
 
   // Parse URL parameters
   useEffect(() => {
@@ -370,6 +387,25 @@ export default function KabaddiOBSOverlayPage() {
     '--kb-text': config.textColor,
   } as React.CSSProperties;
 
+  // Custom Scorecard Designer template takes over the scoreboard region when
+  // one has been set Active — celebrations keep working underneath/above it.
+  if (customLayout && customLayout.widgets.length > 0) {
+    const dataCtx: ScorecardDataContext = {
+      sport: 'kabaddi', match, live, rules,
+      branding: { tournamentLogo: config.tournamentLogo, partnerLogo: config.broadcastPartnerLogo },
+    };
+    return (
+      <div className={`kbo kbo--custom`} style={theme}>
+        <div style={{ position: 'absolute', inset: 0 }}>
+          <ScorecardLayoutView layout={customLayout} ctx={dataCtx} />
+        </div>
+        <AnimatePresence>
+          {celeb && <KabaddiCelebration control={celeb} config={config} />}
+        </AnimatePresence>
+      </div>
+    );
+  }
+
   return (
     <div className={`kbo kbo--${config.scoreboardPosition}`} style={theme}>
       <div className="kbo__scoreboard">
@@ -474,7 +510,7 @@ function TeamBlock({ side, name, fullName, logoUrl, animationUrl, color, state, 
       {animationUrl && (
         <ResolvedImage className="kbo__team-anim" src={animationUrl} size={240} />
       )}
-      <div className="kbo__team-logo" style={{ background: color }}>
+      <div className="kbo__team-logo" style={{ color: color }}>
         <ResolvedImage src={logoUrl} size={220} fallback={<span>{name}</span>} />
       </div>
     </div>

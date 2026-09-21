@@ -428,7 +428,7 @@
   text-align: center;
 }
 
-.kbo__celeb-media { max-width: 62%; max-height: 66%; object-fit: contain; }
+.kbo__celeb-media { max-width: 90%; max-height: 90%; object-fit: contain; }
 
 .kbo__celeb-big {
   font-size: 132px;

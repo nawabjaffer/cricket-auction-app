@@ -8,7 +8,7 @@
 
 import type { ComponentType } from 'react';
 import { useLocation } from 'react-router-dom';
-import { IoClose, IoPencil, IoDesktop, IoVideocam, IoGameController, IoSettings } from 'react-icons/io5';
+import { IoClose, IoPencil, IoDesktop, IoVideocam, IoGameController, IoSettings, IoColorPalette } from 'react-icons/io5';
 import { useTenantNavigate as useNavigate, getTenantSlugFromPath } from '../hooks/useTenantNavigate';
 import { gameTypeIcon, gameTypeLabel, SUPPORTED_GAME_TYPES, type SupportedGameType } from './scorerPages';
 import './withScorerAdminChrome.css';
@@ -56,6 +56,9 @@ export function withScorerAdminChrome<P extends object>(
           </button>
           <button className="scorer-chrome__quick-btn" onClick={() => window.open(`${baseUrl}/${gameType}/scorer/obs-dock`, '_blank')}>
             <IoGameController size={14} /> OBS Control Dock
+          </button>
+          <button className="scorer-chrome__quick-btn" onClick={() => navigate(`/${gameType}/scorer/designer`)}>
+            <IoColorPalette size={14} /> Scorecard Designer
           </button>
           {SUPPORTED_GAME_TYPES.filter(sport => sport !== gameType).map(sport => (
             <button key={sport} className="scorer-chrome__quick-btn" onClick={() => navigate(`/${sport}/scorer/admin`)}>

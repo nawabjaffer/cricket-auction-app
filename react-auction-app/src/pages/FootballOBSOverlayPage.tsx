@@ -16,6 +16,10 @@ import { initializeApp, getApps } from 'firebase/app';
 import { getDatabase, ref, onValue } from 'firebase/database';
 import { tenantPath } from '../services/tenantPath';
 import { useBroadcastOverlaySurface } from '../hooks/useBroadcastOverlaySurface';
+import { ScorecardLayoutView } from '../components/ScorecardCanvas';
+import { scorecardLayoutService } from '../services/scorecardLayoutService';
+import type { ScorecardLayout } from '../types/scorecardDesigner';
+import type { ScorecardDataContext } from '../utils/scorecardDataBinding';
 import {
   computeMatchMinute, FOOTBALL_HALF_LABELS, DEFAULT_FOOTBALL_OVERLAY_CONFIG,
 } from '../types/football';
@@ -47,6 +51,19 @@ export default function FootballOBSOverlayPage() {
   const [, force] = useState(0); // 1 Hz clock re-render
   const lastCelebTs = useRef<number>(0);
   const [celeb, setCeleb] = useState<FootballOverlayControl | null>(null);
+  const [customLayoutId, setCustomLayoutId] = useState<string | null>(null);
+  const [customLayout, setCustomLayout] = useState<ScorecardLayout | null>(null);
+
+  // Custom Scorecard Designer — same layout the Camera Recorder burns into video
+  useEffect(() => {
+    scorecardLayoutService.initialize(fbDb);
+    return scorecardLayoutService.subscribeActiveLayoutId('football', setCustomLayoutId);
+  }, []);
+
+  useEffect(() => {
+    if (!customLayoutId) { setCustomLayout(null); return; }
+    return scorecardLayoutService.subscribeLayout('football', customLayoutId, setCustomLayout);
+  }, [customLayoutId]);
 
   // matchId from URL
   useEffect(() => {
@@ -108,6 +125,25 @@ export default function FootballOBSOverlayPage() {
     '--fb-accent': config.accentColor,
     '--fb-text': config.textColor,
   } as React.CSSProperties;
+
+  // Custom Scorecard Designer template takes over the scoreboard region when
+  // one has been set Active — celebrations keep working underneath/above it.
+  if (customLayout && customLayout.widgets.length > 0) {
+    const dataCtx: ScorecardDataContext = {
+      sport: 'football', match, live,
+      branding: { tournamentLogo: config.tournamentLogo, partnerLogo: config.broadcastPartnerLogo },
+    };
+    return (
+      <div className="fbo fbo--custom" style={theme}>
+        <div style={{ position: 'absolute', inset: 0 }}>
+          <ScorecardLayoutView layout={customLayout} ctx={dataCtx} />
+        </div>
+        <AnimatePresence>
+          {celeb && <Celebration control={celeb} config={config} match={match} />}
+        </AnimatePresence>
+      </div>
+    );
+  }
 
   return (
     <div className={`fbo fbo--${config.scoreboardPosition}`} style={theme}>

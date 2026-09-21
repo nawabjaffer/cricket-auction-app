@@ -32,6 +32,10 @@ import { multiCamService } from '../services/camera/multiCamService';
 import type { SportKey } from '../services/tenantService';
 import type { TeamBroadcastState } from '../utils/teamScoreboard';
 import { drawTeamScoreTicker } from '../utils/teamBroadcastCanvas';
+import { drawScorecardLayout, preloadScorecardLayoutImages } from '../utils/customScorecardCanvas';
+import { scorecardLayoutService } from '../services/scorecardLayoutService';
+import type { ScorecardLayout } from '../types/scorecardDesigner';
+import type { ScorecardDataContext } from '../utils/scorecardDataBinding';
 import { DEFAULT_FOOTBALL_OVERLAY_CONFIG } from '../types/football';
 import { DEFAULT_KABADDI_OVERLAY_CONFIG, DEFAULT_KABADDI_RULES } from '../types/kabaddi';
 import type { LiveScore, MatchSetup, ScoringOverlayConfig, OverlayControlState, MatchLineup, TickerDesign } from '../types/scoring';
@@ -114,6 +118,7 @@ export default function ScoreCameraPage({ gameType = 'cricket' }: Readonly<{ gam
   const tickerDesignRef = useRef<TickerDesign | undefined>(undefined);
   const animRef = useRef<{ type: CelebType; start: number; durationMs: number } | null>(null);
   const lastAnimTsRef = useRef<number>(0);
+  const customLayoutRef = useRef<ScorecardLayout | null>(null);
 
   // Timer refs
   const startTimeRef = useRef(0);
@@ -270,6 +275,19 @@ export default function ScoreCameraPage({ gameType = 'cricket' }: Readonly<{ gam
     return () => { unsubs.forEach(u => u()); };
   }, [matchId, gameType, namespace]);
 
+  // Custom Scorecard Designer — same layout the OBS Overlay renders, so the
+  // burned-in video ticker and the browser-source overlay never drift apart.
+  useEffect(() => {
+    scorecardLayoutService.initialize(camDb);
+    const unsubActive = scorecardLayoutService.subscribeActiveLayoutId(gameType, (id) => {
+      if (!id) { customLayoutRef.current = null; return; }
+      scorecardLayoutService.getLayout(gameType, id).then(layout => {
+        customLayoutRef.current = layout;
+      }).catch(() => { customLayoutRef.current = null; });
+    });
+    return unsubActive;
+  }, [gameType]);
+
   // ── Draw loop ──────────────────────────────────────────────────────────────
   const drawFrame = useCallback(() => {
     const canvas = canvasRef.current;
@@ -291,7 +309,20 @@ export default function ScoreCameraPage({ gameType = 'cricket' }: Readonly<{ gam
           ctx.fillStyle = '#000000';
           ctx.fillRect(0, 0, W, H);
         }
-        if (showTickerRef.current && teamBroadcastRef.current) {
+        if (showTickerRef.current && customLayoutRef.current && customLayoutRef.current.widgets.length > 0) {
+          const layout = customLayoutRef.current;
+          const broadcast = teamBroadcastRef.current;
+          let dataCtx: ScorecardDataContext;
+          if (broadcast?.sport === 'football') {
+            dataCtx = { sport: 'football', match: broadcast.match, live: broadcast.live, branding: { tournamentLogo: broadcast.config.tournamentLogo, partnerLogo: broadcast.config.broadcastPartnerLogo } };
+          } else if (broadcast?.sport === 'kabaddi') {
+            dataCtx = { sport: 'kabaddi', match: broadcast.match, live: broadcast.live, rules: broadcast.rules, branding: { tournamentLogo: broadcast.config.tournamentLogo, partnerLogo: broadcast.config.broadcastPartnerLogo } };
+          } else {
+            dataCtx = { sport: 'cricket', match: matchRef.current, live: liveRef.current, branding: { tournamentLogo: overlayConfigRef.current?.tournamentLogo, partnerLogo: overlayConfigRef.current?.broadcastPartnerLogo } };
+          }
+          preloadScorecardLayoutImages(layout, dataCtx);
+          drawScorecardLayout(ctx, W, H, layout, dataCtx);
+        } else if (showTickerRef.current && teamBroadcastRef.current) {
           drawTeamScoreTicker(ctx, W, H, teamBroadcastRef.current, tickerPosRef.current);
         } else if (showTickerRef.current) {
           drawScoreTicker(ctx, W, H, {

@@ -125,6 +125,7 @@ createRoot(document.getElementById('root')!).render(
             <Route path="/:tenantSlug/:gameType/scorer/camera/host" element={<TenantGate><GameScorerPage route="camera-host" /></TenantGate>} />
             <Route path="/:tenantSlug/:gameType/scorer/obs-dock" element={<TenantGate><GameScorerPage route="obs-dock" /></TenantGate>} />
             <Route path="/:tenantSlug/:gameType/scorer/live-question" element={<TenantGate><GameScorerPage route="live-question" /></TenantGate>} />
+            <Route path="/:tenantSlug/:gameType/scorer/designer" element={<TenantGate><GameScorerPage route="designer" /></TenantGate>} />
             {/* Legacy scorer routes */}
             <Route path="/:tenantSlug/scoring/admin" element={<TenantGate><TenantScoringRouterPage route="admin" /></TenantGate>} />
             <Route path="/:tenantSlug/match/score/update" element={<TenantGate><TenantScoringRouterPage route="update" /></TenantGate>} />

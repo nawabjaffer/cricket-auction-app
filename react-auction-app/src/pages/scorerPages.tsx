@@ -26,9 +26,11 @@ import KabaddiUpdatePage from './KabaddiUpdatePage';
 import KabaddiOBSOverlayPage from './KabaddiOBSOverlayPage';
 import KabaddiOBSDockPage from './KabaddiOBSDockPage';
 
+import ScorecardDesignerPage from './ScorecardDesignerPage';
+
 export type ScorerRouteKey =
   | 'admin' | 'update' | 'overlay' | 'obs-dock'
-  | 'camera' | 'camera-admin' | 'camera-host' | 'live-question';
+  | 'camera' | 'camera-admin' | 'camera-host' | 'live-question' | 'designer';
 
 /** Sports that currently have an implemented scorer workspace. */
 export type SupportedGameType = Extract<SportKey, 'cricket' | 'football' | 'kabaddi'>;
@@ -61,6 +63,7 @@ export function buildScorerPages(): Record<SupportedGameType, Partial<Record<Sco
       'camera-host': <ScoreCameraHostPage />,
       'obs-dock': <ScoreOBSControlDock />,
       'live-question': <LiveQuestionPage />,
+      designer: <ScorecardDesignerPage gameType="cricket" />,
     },
     football: {
       admin: <FootballAdminPage />,
@@ -69,6 +72,7 @@ export function buildScorerPages(): Record<SupportedGameType, Partial<Record<Sco
       camera: <ScoreCameraPage key="football-camera" gameType="football" />,
       'camera-host': <ScoreCameraHostPage key="football-camera-host" gameType="football" />,
       'obs-dock': <FootballOBSDockPage />,
+      designer: <ScorecardDesignerPage key="football-designer" gameType="football" />,
     },
     kabaddi: {
       admin: <KabaddiAdminPage />,
@@ -77,6 +81,7 @@ export function buildScorerPages(): Record<SupportedGameType, Partial<Record<Sco
       camera: <ScoreCameraPage key="kabaddi-camera" gameType="kabaddi" />,
       'camera-host': <ScoreCameraHostPage key="kabaddi-camera-host" gameType="kabaddi" />,
       'obs-dock': <KabaddiOBSDockPage />,
+      designer: <ScorecardDesignerPage key="kabaddi-designer" gameType="kabaddi" />,
     },
   };
 }
