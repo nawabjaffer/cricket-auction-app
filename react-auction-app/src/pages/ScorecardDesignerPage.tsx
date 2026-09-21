@@ -162,11 +162,14 @@ function widgetFromCustomDef(def: CustomWidgetDef, xPct: number, yPct: number): 
 type DragMode = 'move' | 'resize';
 interface DragState {
   id: string;
+  target: 'widget' | 'background';
   mode: DragMode;
   startClientX: number;
   startClientY: number;
-  startGeom: ScorecardWidgetInstance['geometry'];
+  startGeom: ScorecardWidgetInstance['geometry'] | NonNullable<ScorecardLayout['backgroundGeometry']>;
 }
+
+const BACKGROUND_ID = '__scorecard_background__';
 
 export default function ScorecardDesignerPage({ gameType = 'cricket' }: Readonly<{ gameType?: SupportedGameType }>) {
   const navigate = useNavigate();
@@ -288,7 +291,36 @@ export default function ScorecardDesignerPage({ gameType = 'cricket' }: Readonly
     if (widget.locked) return;
     e.stopPropagation();
     setSelectedId(widget.id);
-    dragRef.current = { id: widget.id, mode, startClientX: e.clientX, startClientY: e.clientY, startGeom: widget.geometry };
+    dragRef.current = { id: widget.id, target: 'widget', mode, startClientX: e.clientX, startClientY: e.clientY, startGeom: widget.geometry };
+  }, []);
+
+  const beginBackgroundDrag = useCallback((e: React.PointerEvent) => {
+    if (!layout.backgroundImageUrl) return;
+    e.stopPropagation();
+    setSelectedId(BACKGROUND_ID);
+    const geometry = layout.backgroundGeometry ?? { xPct: 0, yPct: 0, wPct: 100, hPct: 100, rotationDeg: 0, zoom: 1 };
+    dragRef.current = { id: BACKGROUND_ID, target: 'background', mode: 'move', startClientX: e.clientX, startClientY: e.clientY, startGeom: geometry };
+  }, [layout.backgroundGeometry, layout.backgroundImageUrl]);
+
+  const beginBackgroundResize = useCallback((e: React.PointerEvent) => {
+    if (!layout.backgroundImageUrl) return;
+    e.stopPropagation();
+    setSelectedId(BACKGROUND_ID);
+    const geometry = layout.backgroundGeometry ?? { xPct: 0, yPct: 0, wPct: 100, hPct: 100, rotationDeg: 0, zoom: 1 };
+    dragRef.current = { id: BACKGROUND_ID, target: 'background', mode: 'resize', startClientX: e.clientX, startClientY: e.clientY, startGeom: geometry };
+  }, [layout.backgroundGeometry, layout.backgroundImageUrl]);
+
+  const updateBackgroundGeometry = useCallback((patch: Partial<NonNullable<ScorecardLayout['backgroundGeometry']>>) => {
+    setLayout(l => {
+      const current = l.backgroundGeometry ?? { xPct: 0, yPct: 0, wPct: 100, hPct: 100, rotationDeg: 0, zoom: 1 };
+      const next = { ...current, ...patch };
+      next.wPct = Math.max(1, Math.min(100, next.wPct));
+      next.hPct = Math.max(1, Math.min(100, next.hPct));
+      next.xPct = Math.max(0, Math.min(100 - next.wPct, next.xPct));
+      next.yPct = Math.max(0, Math.min(100 - next.hPct, next.yPct));
+      next.zoom = Math.max(0.1, Math.min(3, next.zoom));
+      return { ...l, backgroundGeometry: next };
+    });
   }, []);
 
   useEffect(() => {
@@ -298,6 +330,16 @@ export default function ScorecardDesignerPage({ gameType = 'cricket' }: Readonly
       if (!drag || !rect) return;
       const dxPct = ((e.clientX - drag.startClientX) / rect.width) * 100;
       const dyPct = ((e.clientY - drag.startClientY) / rect.height) * 100;
+      if (drag.target === 'background') {
+        updateBackgroundGeometry(drag.mode === 'move' ? {
+          xPct: Math.max(0, Math.min(100 - drag.startGeom.wPct, drag.startGeom.xPct + dxPct)),
+          yPct: Math.max(0, Math.min(100 - drag.startGeom.hPct, drag.startGeom.yPct + dyPct)),
+        } : {
+          wPct: Math.max(1, Math.min(100 - drag.startGeom.xPct, drag.startGeom.wPct + dxPct)),
+          hPct: Math.max(1, Math.min(100 - drag.startGeom.yPct, drag.startGeom.hPct + dyPct)),
+        });
+        return;
+      }
       if (drag.mode === 'move') {
         updateGeometry(drag.id, {
           xPct: Math.max(0, Math.min(100 - drag.startGeom.wPct, drag.startGeom.xPct + dxPct)),
@@ -317,7 +359,7 @@ export default function ScorecardDesignerPage({ gameType = 'cricket' }: Readonly
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);
     };
-  }, [updateGeometry]);
+  }, [updateBackgroundGeometry, updateGeometry]);
 
   // ── Layout persistence ──
   const handleSave = async () => {
@@ -371,6 +413,7 @@ export default function ScorecardDesignerPage({ gameType = 'cricket' }: Readonly
     try {
       const url = await uploadFileToStorage(file, `media/scorecardDesigner/${sport}/${surface}/backgrounds/${Date.now()}`);
       setLayout(l => ({ ...l, backgroundImageUrl: url }));
+      setSelectedId(BACKGROUND_ID);
       flash('Background uploaded');
     } catch { flash('Upload failed'); }
   };
@@ -532,7 +575,22 @@ export default function ScorecardDesignerPage({ gameType = 'cricket' }: Readonly
                 ctx={mockCtx}
                 selectedWidgetId={selectedId}
                 interactive
+                onPointerDownBackground={beginBackgroundDrag}
                 onPointerDownWidget={(w, e) => beginDrag(w, 'move', e)}
+                renderBackgroundOverlay={selectedId === BACKGROUND_ID && layout.backgroundImageUrl ? (
+                  <div
+                    className="scd__background-selection"
+                    style={{
+                      left: `${(layout.backgroundGeometry ?? { xPct: 0 }).xPct}%`,
+                      top: `${(layout.backgroundGeometry ?? { yPct: 0 }).yPct}%`,
+                      width: `${(layout.backgroundGeometry ?? { wPct: 100 }).wPct}%`,
+                      height: `${(layout.backgroundGeometry ?? { hPct: 100 }).hPct}%`,
+                      transform: `rotate(${(layout.backgroundGeometry ?? { rotationDeg: 0 }).rotationDeg}deg) scale(${(layout.backgroundGeometry ?? { zoom: 1 }).zoom})`,
+                    }}
+                  >
+                    <span className="scd__resize-handle" onPointerDown={beginBackgroundResize} />
+                  </div>
+                ) : null}
                 renderWidgetOverlay={(w) => (selectedId === w.id ? (
                   <span
                     className="scd__resize-handle"
@@ -567,7 +625,12 @@ export default function ScorecardDesignerPage({ gameType = 'cricket' }: Readonly
         {/* ── Properties ── */}
         <aside className="scd__props">
           <h3>Properties</h3>
-          {!selectedWidget ? (
+          {selectedId === BACKGROUND_ID && layout.backgroundImageUrl ? (
+            <BackgroundPropertiesPanel
+              geometry={layout.backgroundGeometry}
+              onChange={updateBackgroundGeometry}
+            />
+          ) : !selectedWidget ? (
             <p className="scd__hint">Select a widget on the canvas to edit its style.</p>
           ) : (
             <PropertiesPanel
@@ -640,6 +703,30 @@ export default function ScorecardDesignerPage({ gameType = 'cricket' }: Readonly
 }
 
 // ── Properties Panel ─────────────────────────────────────────────────────────
+
+function BackgroundPropertiesPanel({ geometry, onChange }: Readonly<{
+  geometry: ScorecardLayout['backgroundGeometry'];
+  onChange: (patch: Partial<NonNullable<ScorecardLayout['backgroundGeometry']>>) => void;
+}>) {
+  const current = geometry ?? { xPct: 0, yPct: 0, wPct: 100, hPct: 100, rotationDeg: 0, zoom: 1 };
+  return (
+    <div className="scd__props-body">
+      <div className="scd__props-head"><strong>Background Image</strong></div>
+      <p className="scd__hint">Drag the image on the canvas or edit its percentage placement. These values are used by the live overlay and camera output.</p>
+      <div className="scd__prop-grid">
+        <label className="scd__field scd__field--sm"><span>X %</span><input type="number" min={0} max={100} value={Math.round(current.xPct)} onChange={e => onChange({ xPct: Number(e.target.value) || 0 })} /></label>
+        <label className="scd__field scd__field--sm"><span>Y %</span><input type="number" min={0} max={100} value={Math.round(current.yPct)} onChange={e => onChange({ yPct: Number(e.target.value) || 0 })} /></label>
+        <label className="scd__field scd__field--sm"><span>Width %</span><input type="number" min={1} max={100} value={Math.round(current.wPct)} onChange={e => onChange({ wPct: Number(e.target.value) || 1 })} /></label>
+        <label className="scd__field scd__field--sm"><span>Height %</span><input type="number" min={1} max={100} value={Math.round(current.hPct)} onChange={e => onChange({ hPct: Number(e.target.value) || 1 })} /></label>
+        <label className="scd__field scd__field--sm"><span>Rotate°</span><input type="number" value={current.rotationDeg} onChange={e => onChange({ rotationDeg: Number(e.target.value) || 0 })} /></label>
+      </div>
+      <label className="scd__field">
+        <span>Zoom ({current.zoom.toFixed(2)}×)</span>
+        <input type="range" min={0.1} max={3} step={0.05} value={current.zoom} onChange={e => onChange({ zoom: Number(e.target.value) })} />
+      </label>
+    </div>
+  );
+}
 
 function PropertiesPanel({ widget, onGeometryChange, onStyleChange, onFieldChange, onRemove, onImageUpload, onPreviewAnimation }: Readonly<{
   widget: ScorecardWidgetInstance;

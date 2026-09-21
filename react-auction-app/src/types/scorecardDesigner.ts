@@ -145,6 +145,15 @@ export interface ScorecardWidgetInstance {
   locked: boolean;
 }
 
+export interface ScorecardBackgroundGeometry {
+  xPct: number;
+  yPct: number;
+  wPct: number;
+  hPct: number;
+  rotationDeg: number;
+  zoom: number;
+}
+
 export interface ScorecardLayout {
   id: string;
   sport: SportKey;
@@ -152,6 +161,8 @@ export interface ScorecardLayout {
   surface: ScorecardSurface;
   name: string;
   backgroundImageUrl?: string;
+  /** Percentage-based placement so the preview, OBS, and camera output match. */
+  backgroundGeometry?: ScorecardBackgroundGeometry;
   backgroundColor?: string;
   widgets: ScorecardWidgetInstance[];
   createdAt: number;
@@ -307,6 +318,7 @@ export function createEmptyLayout(sport: SportKey, surface: ScorecardSurface = '
     surface,
     name,
     widgets: [],
+    backgroundGeometry: { xPct: 0, yPct: 0, wPct: 100, hPct: 100, rotationDeg: 0, zoom: 1 },
     backgroundColor: 'transparent',
     createdAt: now,
     updatedAt: now,

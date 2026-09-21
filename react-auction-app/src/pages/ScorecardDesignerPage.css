@@ -134,6 +134,12 @@
   background: #7c3aed; border: 2px solid #fff; cursor: nwse-resize; z-index: 999;
 }
 
+.scd__background-selection {
+  position: absolute; pointer-events: none; border: 2px dashed rgba(255,255,255,0.9);
+  transform-origin: center center; z-index: 998;
+}
+.scd__background-selection .scd__resize-handle { pointer-events: auto; }
+
 .scd__stage-actions { display: flex; gap: 8px; }
 
 /* ── Properties ── */

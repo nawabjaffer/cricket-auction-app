@@ -9,6 +9,35 @@ import { getImg, roundRectPath } from './broadcastCanvas';
 import { resolveWidgetContent, type ScorecardDataContext } from './scorecardDataBinding';
 import type { ScorecardLayout, ScorecardWidgetInstance } from '../types/scorecardDesigner';
 
+function drawBackground(ctx: CanvasRenderingContext2D, W: number, H: number, layout: ScorecardLayout): void {
+  if (!layout.backgroundImageUrl) return;
+  const img = getImg(layout.backgroundImageUrl);
+  if (!img) return;
+  const geometry = layout.backgroundGeometry ?? { xPct: 0, yPct: 0, wPct: 100, hPct: 100, rotationDeg: 0, zoom: 1 };
+  const x = (geometry.xPct / 100) * W;
+  const y = (geometry.yPct / 100) * H;
+  const w = (geometry.wPct / 100) * W;
+  const h = (geometry.hPct / 100) * H;
+  const cx = x + w / 2;
+  const cy = y + h / 2;
+  const imageRatio = (img.naturalWidth || 1) / (img.naturalHeight || 1);
+  const boxRatio = w / Math.max(h, 1);
+  let drawW = w;
+  let drawH = h;
+  if (imageRatio > boxRatio) drawW = h * imageRatio;
+  else drawH = w / imageRatio;
+
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.rotate((geometry.rotationDeg * Math.PI) / 180);
+  ctx.scale(geometry.zoom, geometry.zoom);
+  ctx.beginPath();
+  ctx.rect(-w / 2, -h / 2, w, h);
+  ctx.clip();
+  ctx.drawImage(img, -drawW / 2, -drawH / 2, drawW, drawH);
+  ctx.restore();
+}
+
 function fontString(weight: number | undefined, size: number | undefined): string {
   return `${weight ?? 700} ${size ?? 22}px 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif`;
 }
@@ -119,6 +148,7 @@ function drawWidget(
 export function drawScorecardLayout(
   ctx: CanvasRenderingContext2D, W: number, H: number, layout: ScorecardLayout, dataCtx: ScorecardDataContext,
 ): void {
+  drawBackground(ctx, W, H, layout);
   const sorted = [...layout.widgets].sort((a, b) => a.geometry.zIndex - b.geometry.zIndex);
   for (const widget of sorted) drawWidget(ctx, W, H, widget, dataCtx);
 }
