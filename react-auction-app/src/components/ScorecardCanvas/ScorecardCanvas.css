@@ -12,7 +12,7 @@
 .sc-canvas__bg {
   position: absolute;
   display: block;
-  object-fit: cover;
+  object-fit: contain;
   z-index: 0;
   transform-origin: center center;
 }
