@@ -19,12 +19,12 @@ import { scorecardLayoutService } from '../services/scorecardLayoutService';
 import { uploadFileToStorage } from '../services/firebaseStorageService';
 import { ScorecardLayoutView } from '../components/ScorecardCanvas';
 import {
-  SPORT_WIDGET_CATALOG, createWidgetInstance, createEmptyLayout, makeWidgetId,
-  DEFAULT_WIDGET_STYLE,
+  getWidgetCatalog, createWidgetInstance, createEmptyLayout, makeWidgetId,
+  DEFAULT_WIDGET_STYLE, SURFACE_LABELS, SURFACE_HINTS, ANIMATION_PRESETS,
 } from '../types/scorecardDesigner';
 import type {
   ScorecardLayout, ScorecardWidgetInstance, WidgetCatalogEntry, WidgetKind,
-  CustomWidgetDef, CustomWidgetBaseKind,
+  CustomWidgetDef, CustomWidgetBaseKind, ScorecardSurface, WidgetEntranceAnimation,
 } from '../types/scorecardDesigner';
 import type { ScorecardDataContext } from '../utils/scorecardDataBinding';
 import type { SupportedGameType } from './scorerPages';
@@ -48,6 +48,11 @@ function mockContextFor(sport: SupportedGameType): ScorecardDataContext {
         running: true, clockStartedAt: now, baseElapsedSec: 3120, addedTimeMin: 2, events: [], lastUpdated: now,
       },
       branding: {},
+      players: [
+        { id: 'p1', teamId: 'a', name: 'Sample Striker', photoUrl: undefined, position: 'FWD', isCaptain: true, isStarter: true, goals: 12, assists: 4, createdAt: now, updatedAt: now },
+        { id: 'p2', teamId: 'a', name: 'Sample Winger', photoUrl: undefined, position: 'MID', isStarter: true, goals: 3, assists: 9, createdAt: now, updatedAt: now },
+        { id: 'p3', teamId: 'b', name: 'Sample Defender', photoUrl: undefined, position: 'DEF', isStarter: true, goals: 1, assists: 1, createdAt: now, updatedAt: now },
+      ],
     };
   }
   if (sport === 'kabaddi') {
@@ -66,6 +71,11 @@ function mockContextFor(sport: SupportedGameType): ScorecardDataContext {
         raidClockStartedAt: now, isDoOrDie: false, events: [], lastUpdated: now,
       },
       branding: {},
+      players: [
+        { id: 'p1', teamId: 'a', name: 'Sample Raider', photoUrl: undefined, position: 'RAIDER', isCaptain: true, isStarter: true, raidPoints: 22, createdAt: now, updatedAt: now },
+        { id: 'p2', teamId: 'a', name: 'Sample All-Rounder', photoUrl: undefined, position: 'ALL_ROUNDER', isStarter: true, raidPoints: 8, tacklePoints: 5, createdAt: now, updatedAt: now },
+        { id: 'p3', teamId: 'b', name: 'Sample Defender', photoUrl: undefined, position: 'DEFENDER', isStarter: true, tacklePoints: 11, createdAt: now, updatedAt: now },
+      ],
     };
   }
   return {
@@ -73,6 +83,7 @@ function mockContextFor(sport: SupportedGameType): ScorecardDataContext {
     match: {
       id: 'mock', teamA: { id: 'a', name: 'Team A' }, teamB: { id: 'b', name: 'Team B' },
       venue: 'Sample Ground', date: new Date().toISOString(), maxOvers: 20, status: 'live', createdAt: now, updatedAt: now,
+      tossWonBy: 'a', tossElected: 'bat',
     },
     live: {
       matchId: 'mock', currentInnings: 1, battingTeamId: 'a', bowlingTeamId: 'b',
@@ -87,6 +98,45 @@ function mockContextFor(sport: SupportedGameType): ScorecardDataContext {
       isPowerplay: false, powerplayOvers: 6, isFreehit: false,
     },
     branding: {},
+    lineups: {
+      teamA: {
+        matchId: 'mock', teamId: 'a',
+        players: [
+          { playerId: 'p1', playerName: 'Sample Striker', role: 'Batter', isCaptain: true },
+          { playerId: 'p2', playerName: 'Sample Partner', role: 'Batter' },
+          { playerId: 'p4', playerName: 'Sample Allrounder', role: 'All-rounder' },
+        ],
+      },
+      teamB: {
+        matchId: 'mock', teamId: 'b',
+        players: [
+          { playerId: 'p3', playerName: 'Sample Bowler', role: 'Bowler', isCaptain: true },
+          { playerId: 'p5', playerName: 'Sample Keeper', role: 'Wicket-keeper', isWicketKeeper: true },
+        ],
+      },
+    },
+    matchStats: {
+      matchId: 'mock',
+      highestDotBallBowler: null, highestFourScorer: null, highestSixScorer: null, highestStrikeRate: null,
+      mvpLeaderboard: [
+        { playerId: 'p1', playerName: 'Sample Striker', teamId: 'a', batting: 42, bowling: 0, fielding: 2, bonus: 0, total: 44 },
+        { playerId: 'p3', playerName: 'Sample Bowler', teamId: 'b', batting: 0, bowling: 30, fielding: 0, bonus: 0, total: 30 },
+      ],
+      topRunScorers: [{ playerId: 'p1', playerName: 'Sample Striker', teamId: 'a', runs: 42, balls: 30, fours: 4, sixes: 1, strikeRate: 140 }],
+      topWicketTakers: [{ playerId: 'p3', playerName: 'Sample Bowler', teamId: 'b', wickets: 1, runs: 28, overs: 3.4, economy: 7.6, dots: 8 }],
+      topFours: [], topSixes: [], topStrikeRates: [], topDotBowlers: [], mvpPoints: [], lastUpdated: now,
+    },
+    tournamentStats: {
+      orangeCap: { playerId: 'p1', playerName: 'Sample Striker', teamId: 'a', teamName: 'Team A', runs: 312, matches: 6 },
+      purpleCap: { playerId: 'p3', playerName: 'Sample Bowler', teamId: 'b', teamName: 'Team B', wickets: 14, matches: 6 },
+      mostSixes: null, mostFours: null, bestEconomy: null, bestStrikeRate: null, mostDotBalls: null,
+      mvpLeaderboard: [
+        { playerId: 'p1', playerName: 'Sample Striker', teamId: 'a', batting: 312, bowling: 0, fielding: 12, bonus: 0, total: 324 },
+        { playerId: 'p3', playerName: 'Sample Bowler', teamId: 'b', batting: 0, bowling: 210, fielding: 4, bonus: 0, total: 214 },
+      ],
+      topRunScorers: [], topWicketTakers: [], topSixHitters: [], topFourHitters: [], topStrikeRates: [],
+      lastUpdated: now,
+    },
   };
 }
 
@@ -122,7 +172,8 @@ export default function ScorecardDesignerPage({ gameType = 'cricket' }: Readonly
   const navigate = useNavigate();
   const sport = gameType;
   const [ready, setReady] = useState(false);
-  const [layout, setLayout] = useState<ScorecardLayout>(() => createEmptyLayout(sport));
+  const [surface, setSurface] = useState<ScorecardSurface>('scoreboard');
+  const [layout, setLayout] = useState<ScorecardLayout>(() => createEmptyLayout(sport, 'scoreboard'));
   const [layouts, setLayouts] = useState<ScorecardLayout[]>([]);
   const [activeLayoutId, setActiveLayoutId] = useState<string | null>(null);
   const [customWidgets, setCustomWidgets] = useState<CustomWidgetDef[]>([]);
@@ -132,6 +183,7 @@ export default function ScorecardDesignerPage({ gameType = 'cricket' }: Readonly
   const [customForm, setCustomForm] = useState<{ label: string; baseKind: CustomWidgetBaseKind; defaultText: string; defaultImageUrl: string; statBindingKey: WidgetKind | '' }>({
     label: '', baseKind: 'text', defaultText: '', defaultImageUrl: '', statBindingKey: '',
   });
+  const [previewToken, setPreviewToken] = useState(0);
 
   const canvasRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<DragState | null>(null);
@@ -159,18 +211,25 @@ export default function ScorecardDesignerPage({ gameType = 'cricket' }: Readonly
     return () => { cancelled = true; if (retry) clearTimeout(retry); };
   }, []);
 
+  // Switching surfaces starts from a clean canvas for that surface — its own
+  // saved templates load via the "Load saved layout" dropdown below.
+  useEffect(() => {
+    setLayout(createEmptyLayout(sport, surface));
+    setSelectedId(null);
+  }, [sport, surface]);
+
   useEffect(() => {
     if (!ready) return;
     const unsubs = [
-      scorecardLayoutService.subscribeLayouts(sport, setLayouts),
-      scorecardLayoutService.subscribeActiveLayoutId(sport, setActiveLayoutId),
+      scorecardLayoutService.subscribeLayouts(sport, setLayouts, surface),
+      scorecardLayoutService.subscribeActiveLayoutId(sport, setActiveLayoutId, surface),
       scorecardLayoutService.subscribeCustomWidgets(sport, setCustomWidgets),
     ];
     return () => unsubs.forEach(u => u());
-  }, [ready, sport]);
+  }, [ready, sport, surface]);
 
   const mockCtx = useMemo(() => mockContextFor(sport), [sport]);
-  const catalog = SPORT_WIDGET_CATALOG[sport];
+  const catalog = getWidgetCatalog(sport, surface);
   const selectedWidget = layout.widgets.find(w => w.id === selectedId) ?? null;
 
   // ── Widget CRUD ──
@@ -271,20 +330,20 @@ export default function ScorecardDesignerPage({ gameType = 'cricket' }: Readonly
   const handleSetActive = async () => {
     try {
       await scorecardLayoutService.saveLayout(sport, layout);
-      await scorecardLayoutService.setActiveLayout(sport, layout.id);
+      await scorecardLayoutService.setActiveLayout(sport, layout.id, surface);
       flash('Set as active — now live in OBS Overlay & Camera Recorder');
     } catch { flash('Failed to activate layout'); }
   };
 
   const handleClearActive = async () => {
     try {
-      await scorecardLayoutService.setActiveLayout(sport, null);
-      flash('Cleared active layout — sports fall back to the built-in scoreboard');
+      await scorecardLayoutService.setActiveLayout(sport, null, surface);
+      flash('Cleared active layout — sports fall back to the built-in design');
     } catch { flash('Failed to clear'); }
   };
 
   const handleNew = () => {
-    setLayout(createEmptyLayout(sport));
+    setLayout(createEmptyLayout(sport, surface));
     setSelectedId(null);
   };
 
@@ -302,7 +361,7 @@ export default function ScorecardDesignerPage({ gameType = 'cricket' }: Readonly
   const handleDelete = async (id: string) => {
     if (!window.confirm('Delete this layout?')) return;
     try {
-      await scorecardLayoutService.deleteLayout(sport, id);
+      await scorecardLayoutService.deleteLayout(sport, id, surface);
       if (layout.id === id) handleNew();
       flash('Deleted');
     } catch { flash('Failed to delete'); }
@@ -310,7 +369,7 @@ export default function ScorecardDesignerPage({ gameType = 'cricket' }: Readonly
 
   const handleBackgroundUpload = async (file: File) => {
     try {
-      const url = await uploadFileToStorage(file, `media/scorecardDesigner/${sport}/backgrounds/${Date.now()}`);
+      const url = await uploadFileToStorage(file, `media/scorecardDesigner/${sport}/${surface}/backgrounds/${Date.now()}`);
       setLayout(l => ({ ...l, backgroundImageUrl: url }));
       flash('Background uploaded');
     } catch { flash('Upload failed'); }
@@ -318,7 +377,7 @@ export default function ScorecardDesignerPage({ gameType = 'cricket' }: Readonly
 
   const handleWidgetImageUpload = async (widgetId: string, file: File) => {
     try {
-      const url = await uploadFileToStorage(file, `media/scorecardDesigner/${sport}/widgets/${widgetId}-${Date.now()}`);
+      const url = await uploadFileToStorage(file, `media/scorecardDesigner/${sport}/${surface}/widgets/${widgetId}-${Date.now()}`);
       updateWidget(widgetId, { staticImageUrl: url });
       flash('Image uploaded');
     } catch { flash('Upload failed'); }
@@ -380,6 +439,18 @@ export default function ScorecardDesignerPage({ gameType = 'cricket' }: Readonly
           <button className="scd__btn scd__btn--danger" onClick={() => handleDelete(layout.id)}><IoTrash size={15} /></button>
         </div>
       </header>
+
+      <nav className="scd__surface-tabs">
+        {(Object.keys(SURFACE_LABELS) as ScorecardSurface[]).map(s => (
+          <button
+            key={s}
+            className={`scd__surface-tab ${surface === s ? 'is-active' : ''}`}
+            onClick={() => setSurface(s)}
+          >
+            {SURFACE_LABELS[s]}
+          </button>
+        ))}
+      </nav>
 
       {toast && <div className="scd__toast">{toast}</div>}
 
@@ -444,8 +515,7 @@ export default function ScorecardDesignerPage({ gameType = 'cricket' }: Readonly
         {/* ── Canvas ── */}
         <main className="scd__stage">
           <p className="scd__guideline-text">
-            Background should be a 1920×1080 (16:9) image. This canvas represents the full OBS overlay frame — for a
-            clean broadcast look, keep your scorecard widgets within the highlighted band (recommended 10–20% of height).
+            {SURFACE_HINTS[surface]}{' '}
             Preview shows sample data; live values populate automatically once this template is set Active.
           </p>
           <div className="scd__stage-frame">
@@ -457,6 +527,7 @@ export default function ScorecardDesignerPage({ gameType = 'cricket' }: Readonly
               onPointerDown={() => setSelectedId(null)}
             >
               <ScorecardLayoutView
+                key={previewToken}
                 layout={layout}
                 ctx={mockCtx}
                 selectedWidgetId={selectedId}
@@ -469,9 +540,15 @@ export default function ScorecardDesignerPage({ gameType = 'cricket' }: Readonly
                   />
                 ) : null)}
               />
-              <div className="scd__guideline-band" style={{ top: '80%', height: '20%' }}>
-                <span>Recommended scorecard band (10–20% height)</span>
-              </div>
+              {surface === 'scoreboard' ? (
+                <div className="scd__guideline-band" style={{ top: '80%', height: '20%' }}>
+                  <span>Recommended scorecard band (10–20% height)</span>
+                </div>
+              ) : (
+                <div className="scd__guideline-fullscreen">
+                  <span>Full-screen (100% width × 100% height), centered overlay</span>
+                </div>
+              )}
             </div>
           </div>
           <div className="scd__stage-actions">
@@ -500,6 +577,7 @@ export default function ScorecardDesignerPage({ gameType = 'cricket' }: Readonly
               onFieldChange={patch => updateWidget(selectedWidget.id, patch)}
               onRemove={() => removeWidget(selectedWidget.id)}
               onImageUpload={file => void handleWidgetImageUpload(selectedWidget.id, file)}
+              onPreviewAnimation={() => setPreviewToken(t => t + 1)}
             />
           )}
         </aside>
@@ -563,13 +641,14 @@ export default function ScorecardDesignerPage({ gameType = 'cricket' }: Readonly
 
 // ── Properties Panel ─────────────────────────────────────────────────────────
 
-function PropertiesPanel({ widget, onGeometryChange, onStyleChange, onFieldChange, onRemove, onImageUpload }: Readonly<{
+function PropertiesPanel({ widget, onGeometryChange, onStyleChange, onFieldChange, onRemove, onImageUpload, onPreviewAnimation }: Readonly<{
   widget: ScorecardWidgetInstance;
   onGeometryChange: (patch: Partial<ScorecardWidgetInstance['geometry']>) => void;
   onStyleChange: (patch: Partial<ScorecardWidgetInstance['style']>) => void;
   onFieldChange: (patch: Partial<ScorecardWidgetInstance>) => void;
   onRemove: () => void;
   onImageUpload: (file: File) => void;
+  onPreviewAnimation: () => void;
 }>) {
   const { geometry, style } = widget;
   const isImageKind = widget.kind === 'team_a_logo' || widget.kind === 'team_b_logo'
@@ -690,6 +769,38 @@ function PropertiesPanel({ widget, onGeometryChange, onStyleChange, onFieldChang
           <input type="number" value={style.boxShadowBlur ?? 12} onChange={e => onStyleChange({ boxShadowBlur: Number(e.target.value) || 0 })} disabled={!style.boxShadowEnabled} style={{ width: 60 }} />
         </div>
       </label>
+
+      <div className="scd__props-section-head">
+        <span>Zoom &amp; Animation</span>
+        <button className="scd__btn scd__btn--sm" onClick={onPreviewAnimation} title="Replay the entrance animation for this template">
+          ▶ Preview
+        </button>
+      </div>
+
+      <label className="scd__field">
+        <span>Zoom ({(style.zoom ?? 1).toFixed(2)}×)</span>
+        <input type="range" min={0.1} max={3} step={0.05} value={style.zoom ?? 1} onChange={e => onStyleChange({ zoom: Number(e.target.value) })} />
+      </label>
+
+      <div className="scd__prop-grid">
+        <label className="scd__field scd__field--sm">
+          <span>Entrance</span>
+          <select
+            value={style.entranceAnimation ?? 'none'}
+            onChange={e => onStyleChange({ entranceAnimation: e.target.value as WidgetEntranceAnimation })}
+          >
+            {ANIMATION_PRESETS.map(a => <option key={a.value} value={a.value}>{a.label}</option>)}
+          </select>
+        </label>
+        <label className="scd__field scd__field--sm">
+          <span>Duration ms</span>
+          <input type="number" min={0} step={50} value={style.animationDurationMs ?? 500} onChange={e => onStyleChange({ animationDurationMs: Number(e.target.value) || 0 })} />
+        </label>
+        <label className="scd__field scd__field--sm">
+          <span>Delay ms</span>
+          <input type="number" min={0} step={50} value={style.animationDelayMs ?? 0} onChange={e => onStyleChange({ animationDelayMs: Number(e.target.value) || 0 })} />
+        </label>
+      </div>
     </div>
   );
 }

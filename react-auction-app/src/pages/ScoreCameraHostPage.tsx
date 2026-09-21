@@ -174,13 +174,9 @@ export default function ScoreCameraHostPage({ gameType = 'cricket' }: Readonly<{
   // Custom Scorecard Designer — same layout the OBS Overlay + Camera Recorder use.
   useEffect(() => {
     scorecardLayoutService.initialize(broadcastDb);
-    const unsubActive = scorecardLayoutService.subscribeActiveLayoutId(gameType, (id) => {
-      if (!id) { customLayoutRef.current = null; return; }
-      scorecardLayoutService.getLayout(gameType, id).then(layout => {
-        customLayoutRef.current = layout;
-      }).catch(() => { customLayoutRef.current = null; });
+    return scorecardLayoutService.subscribeEffectiveLayout(gameType, layout => {
+      customLayoutRef.current = layout;
     });
-    return unsubActive;
   }, [gameType]);
 
   // ── Camera sources + program selection ──

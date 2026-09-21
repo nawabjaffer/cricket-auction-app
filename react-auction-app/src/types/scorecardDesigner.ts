@@ -8,6 +8,21 @@
 
 import type { SportKey } from '../services/tenantService';
 
+/** A layout's placement surface — each renders on a different screen area/moment. */
+export type ScorecardSurface = 'scoreboard' | 'team_squad' | 'match_stats';
+
+export const SURFACE_LABELS: Record<ScorecardSurface, string> = {
+  scoreboard: 'Scoreboard',
+  team_squad: 'Team Squad',
+  match_stats: 'Match Stats',
+};
+
+export const SURFACE_HINTS: Record<ScorecardSurface, string> = {
+  scoreboard: 'Bottom-band ticker shown throughout the match — keep widgets within the recommended 10–20% height band.',
+  team_squad: 'Full-screen (100% width & height), centered overlay shown during lineup / squad reveal.',
+  match_stats: 'Full-screen (100% width & height), centered overlay for top scorers, MVPs, and tournament stats.',
+};
+
 /** Every placeable element the designer can drop onto a layout. */
 export type WidgetKind =
   // Universal (any sport)
@@ -23,7 +38,16 @@ export type WidgetKind =
   | 'football_score' | 'football_half_label' | 'football_added_time'
   // Kabaddi
   | 'kabaddi_score' | 'kabaddi_half_label' | 'kabaddi_raid_clock'
-  | 'kabaddi_players_on_mat' | 'kabaddi_raider_name' | 'kabaddi_do_or_die_flag';
+  | 'kabaddi_players_on_mat' | 'kabaddi_raider_name' | 'kabaddi_do_or_die_flag'
+  // Team Squad surface (universal)
+  | 'squad_team_a_players' | 'squad_team_b_players' | 'squad_toss_result'
+  // Match Stats surface — cricket
+  | 'stats_top_run_scorer' | 'stats_top_wicket_taker' | 'stats_orange_cap'
+  | 'stats_purple_cap' | 'stats_mvp_leaderboard'
+  // Match Stats surface — football
+  | 'stats_top_goal_scorer' | 'stats_top_assist'
+  // Match Stats surface — kabaddi
+  | 'stats_top_raider' | 'stats_top_defender';
 
 export interface WidgetGeometry {
   /** All position/size values are percentages of the canvas, so the layout is resolution independent. */
@@ -34,6 +58,20 @@ export interface WidgetGeometry {
   rotationDeg: number;
   zIndex: number;
 }
+
+export type WidgetEntranceAnimation =
+  | 'none' | 'fade' | 'slide-up' | 'slide-down' | 'slide-left' | 'slide-right' | 'zoom-in' | 'bounce';
+
+export const ANIMATION_PRESETS: { value: WidgetEntranceAnimation; label: string }[] = [
+  { value: 'none', label: 'None' },
+  { value: 'fade', label: 'Fade In' },
+  { value: 'slide-up', label: 'Slide Up' },
+  { value: 'slide-down', label: 'Slide Down' },
+  { value: 'slide-left', label: 'Slide In (Left)' },
+  { value: 'slide-right', label: 'Slide In (Right)' },
+  { value: 'zoom-in', label: 'Zoom In' },
+  { value: 'bounce', label: 'Bounce In' },
+];
 
 export interface WidgetStyle {
   backgroundColor?: string;
@@ -56,6 +94,12 @@ export interface WidgetStyle {
   boxShadowColor?: string;
   boxShadowBlur?: number;
   objectFit?: 'cover' | 'contain';
+  /** Uniform scale applied on top of width/height — lets a widget "pop" without resizing its box. */
+  zoom?: number;
+  /** How the widget animates in on the live overlay (designer canvas can replay it via the Preview button). */
+  entranceAnimation?: WidgetEntranceAnimation;
+  animationDurationMs?: number;
+  animationDelayMs?: number;
 }
 
 export const DEFAULT_WIDGET_STYLE: WidgetStyle = {
@@ -79,6 +123,10 @@ export const DEFAULT_WIDGET_STYLE: WidgetStyle = {
   boxShadowColor: 'rgba(0,0,0,0.5)',
   boxShadowBlur: 12,
   objectFit: 'contain',
+  zoom: 1,
+  entranceAnimation: 'fade',
+  animationDurationMs: 600,
+  animationDelayMs: 0,
 };
 
 export interface ScorecardWidgetInstance {
@@ -100,6 +148,8 @@ export interface ScorecardWidgetInstance {
 export interface ScorecardLayout {
   id: string;
   sport: SportKey;
+  /** Which screen area/moment this layout renders on. Defaults to 'scoreboard' for layouts saved before this field existed. */
+  surface: ScorecardSurface;
   name: string;
   backgroundImageUrl?: string;
   backgroundColor?: string;
@@ -130,7 +180,7 @@ export interface WidgetCatalogEntry {
   icon: string;
   defaultW: number;
   defaultH: number;
-  category: 'team' | 'score' | 'timer' | 'branding' | 'player' | 'flag';
+  category: 'team' | 'score' | 'timer' | 'branding' | 'player' | 'flag' | 'squad' | 'stats';
   description: string;
 }
 
@@ -176,12 +226,61 @@ const KABADDI_WIDGETS: WidgetCatalogEntry[] = [
   { kind: 'kabaddi_do_or_die_flag', label: 'Do-or-Die Flag', icon: '⚠️', defaultW: 12, defaultH: 5, category: 'flag', description: 'Do-or-die raid warning banner' },
 ];
 
+const SQUAD_WIDGETS: WidgetCatalogEntry[] = [
+  { kind: 'squad_team_a_players', label: 'Team A Squad List', icon: '📋', defaultW: 36, defaultH: 70, category: 'squad', description: 'Full player roster grid for Team A' },
+  { kind: 'squad_team_b_players', label: 'Team B Squad List', icon: '📋', defaultW: 36, defaultH: 70, category: 'squad', description: 'Full player roster grid for Team B' },
+  { kind: 'squad_toss_result', label: 'Toss Result', icon: '🪙', defaultW: 30, defaultH: 6, category: 'squad', description: 'Who won the toss and what they elected' },
+];
+
+const CRICKET_STATS_WIDGETS: WidgetCatalogEntry[] = [
+  { kind: 'stats_top_run_scorer', label: 'Top Run Scorer', icon: '🏏', defaultW: 28, defaultH: 10, category: 'stats', description: 'Leading run scorer this match' },
+  { kind: 'stats_top_wicket_taker', label: 'Top Wicket Taker', icon: '🎯', defaultW: 28, defaultH: 10, category: 'stats', description: 'Leading wicket taker this match' },
+  { kind: 'stats_orange_cap', label: 'Orange Cap', icon: '🧡', defaultW: 28, defaultH: 10, category: 'stats', description: 'Tournament-wide top run scorer' },
+  { kind: 'stats_purple_cap', label: 'Purple Cap', icon: '💜', defaultW: 28, defaultH: 10, category: 'stats', description: 'Tournament-wide top wicket taker' },
+  { kind: 'stats_mvp_leaderboard', label: 'MVP Leaderboard', icon: '🏆', defaultW: 34, defaultH: 40, category: 'stats', description: 'Top 3 MVP point leaders' },
+];
+
+const FOOTBALL_STATS_WIDGETS: WidgetCatalogEntry[] = [
+  { kind: 'stats_top_goal_scorer', label: 'Top Goal Scorer', icon: '⚽', defaultW: 28, defaultH: 10, category: 'stats', description: 'Leading goal scorer' },
+  { kind: 'stats_top_assist', label: 'Top Assist', icon: '🎯', defaultW: 28, defaultH: 10, category: 'stats', description: 'Leading assist provider' },
+];
+
+const KABADDI_STATS_WIDGETS: WidgetCatalogEntry[] = [
+  { kind: 'stats_top_raider', label: 'Top Raider', icon: '🏃', defaultW: 28, defaultH: 10, category: 'stats', description: 'Leading raid point scorer' },
+  { kind: 'stats_top_defender', label: 'Top Defender', icon: '🛡️', defaultW: 28, defaultH: 10, category: 'stats', description: 'Leading tackle point scorer' },
+];
+
 /** Only widgets relevant to a given sport are ever shown in that sport's palette. */
 export const SPORT_WIDGET_CATALOG: Record<Extract<SportKey, 'cricket' | 'football' | 'kabaddi'>, WidgetCatalogEntry[]> = {
   cricket: [...UNIVERSAL_WIDGETS, ...CRICKET_WIDGETS],
   football: [...UNIVERSAL_WIDGETS, ...FOOTBALL_WIDGETS],
   kabaddi: [...UNIVERSAL_WIDGETS, ...KABADDI_WIDGETS],
 };
+
+const BRANDING_ONLY_WIDGETS = UNIVERSAL_WIDGETS.filter(w => w.kind !== 'live_badge' && w.kind !== 'match_clock');
+
+/** Per-sport, per-surface widget palette — Team Squad and Match Stats get their own relevant widgets. */
+export const SPORT_SURFACE_WIDGET_CATALOG: Record<Extract<SportKey, 'cricket' | 'football' | 'kabaddi'>, Record<ScorecardSurface, WidgetCatalogEntry[]>> = {
+  cricket: {
+    scoreboard: SPORT_WIDGET_CATALOG.cricket,
+    team_squad: [...BRANDING_ONLY_WIDGETS, ...SQUAD_WIDGETS],
+    match_stats: [...BRANDING_ONLY_WIDGETS, ...CRICKET_STATS_WIDGETS],
+  },
+  football: {
+    scoreboard: SPORT_WIDGET_CATALOG.football,
+    team_squad: [...BRANDING_ONLY_WIDGETS, ...SQUAD_WIDGETS],
+    match_stats: [...BRANDING_ONLY_WIDGETS, ...FOOTBALL_STATS_WIDGETS],
+  },
+  kabaddi: {
+    scoreboard: SPORT_WIDGET_CATALOG.kabaddi,
+    team_squad: [...BRANDING_ONLY_WIDGETS, ...SQUAD_WIDGETS],
+    match_stats: [...BRANDING_ONLY_WIDGETS, ...KABADDI_STATS_WIDGETS],
+  },
+};
+
+export function getWidgetCatalog(sport: Extract<SportKey, 'cricket' | 'football' | 'kabaddi'>, surface: ScorecardSurface): WidgetCatalogEntry[] {
+  return SPORT_SURFACE_WIDGET_CATALOG[sport][surface];
+}
 
 export function makeWidgetId(): string {
   return `sw_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
@@ -200,11 +299,12 @@ export function createWidgetInstance(entry: WidgetCatalogEntry, xPct = 40, yPct 
   };
 }
 
-export function createEmptyLayout(sport: SportKey, name = 'Untitled Layout'): ScorecardLayout {
+export function createEmptyLayout(sport: SportKey, surface: ScorecardSurface = 'scoreboard', name = 'Untitled Layout'): ScorecardLayout {
   const now = Date.now();
   return {
     id: `layout_${now}_${Math.random().toString(36).slice(2, 8)}`,
     sport,
+    surface,
     name,
     widgets: [],
     backgroundColor: 'transparent',

@@ -9,11 +9,11 @@
 import { useEffect, useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { initializeApp, getApps } from 'firebase/app';
-import { getDatabase, ref, onValue } from 'firebase/database';
+import { getDatabase, ref, onValue, set } from 'firebase/database';
 import { tenantPath } from '../services/tenantPath';
 import { DEFAULT_FOOTBALL_OVERLAY_CONFIG } from '../types/football';
 import type {
-  FootballPlayer, FootballTeam, FootballOverlayConfig, FootballTopScorer,
+  FootballPlayer, FootballTeam, FootballOverlayConfig, FootballTopScorer, FootballOverlayType,
 } from '../types/football';
 import './FootballOBSDockPage.css';
 
@@ -37,10 +37,16 @@ const BOARDS: Board[] = [
 ];
 
 export default function FootballOBSDockPage() {
+  const [matchId, setMatchId] = useState<string | null>(null);
   const [players, setPlayers] = useState<FootballPlayer[]>([]);
   const [teams, setTeams] = useState<FootballTeam[]>([]);
   const [config, setConfig] = useState<FootballOverlayConfig>(DEFAULT_FOOTBALL_OVERLAY_CONFIG);
   const [boardIdx, setBoardIdx] = useState(0);
+
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get('matchId');
+    if (id) setMatchId(id);
+  }, []);
 
   useEffect(() => {
     const base = tenantPath('football');
@@ -51,6 +57,12 @@ export default function FootballOBSDockPage() {
     ];
     return () => unsubs.forEach((u) => u());
   }, []);
+
+  const triggerOverlay = async (type: FootballOverlayType) => {
+    if (!matchId) return;
+    const base = tenantPath('football');
+    await set(ref(fbDb, `${base}/matches/${matchId}/overlay`), { activeOverlay: type, lastUpdated: Date.now() });
+  };
 
   // Rotate boards every 12s
   useEffect(() => {
@@ -131,6 +143,20 @@ export default function FootballOBSDockPage() {
         <div className="fbd__dots">
           {BOARDS.map((b, i) => <span key={b.key} className={`fbd__dot ${i === boardIdx ? 'fbd__dot--active' : ''}`} />)}
         </div>
+
+        {matchId && (
+          <div className="fbd__controls">
+            <button className="fbd__ctrl-btn fbd__ctrl-btn--squad" onClick={() => triggerOverlay('lineup')} title="Show custom Team Squad overlay">
+              📋 Squad
+            </button>
+            <button className="fbd__ctrl-btn fbd__ctrl-btn--stats" onClick={() => triggerOverlay('match_stats')} title="Show custom Match Stats overlay">
+              📊 Match Stats
+            </button>
+            <button className="fbd__ctrl-btn fbd__ctrl-btn--clear" onClick={() => triggerOverlay('none')} title="Clear overlay">
+              ✕ Clear
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

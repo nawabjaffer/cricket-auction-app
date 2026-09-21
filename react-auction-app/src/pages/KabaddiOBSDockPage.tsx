@@ -232,6 +232,12 @@ export default function KabaddiOBSDockPage() {
             <button className="kbd__ctrl-btn kbd__ctrl-btn--dod" onClick={() => triggerOverlay('do_or_die')} title="Trigger Do or Die banner">
               ⚠️ Do or Die
             </button>
+            <button className="kbd__ctrl-btn kbd__ctrl-btn--squad" onClick={() => triggerOverlay('lineup')} title="Show custom Team Squad overlay">
+              📋 Squad
+            </button>
+            <button className="kbd__ctrl-btn kbd__ctrl-btn--stats" onClick={() => triggerOverlay('match_stats')} title="Show custom Match Stats overlay">
+              📊 Match Stats
+            </button>
             <button className="kbd__ctrl-btn kbd__ctrl-btn--clear" onClick={() => triggerOverlay('none')} title="Clear overlay celebration">
               ✕ Clear
             </button>

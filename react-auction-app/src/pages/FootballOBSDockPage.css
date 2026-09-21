@@ -136,6 +136,32 @@
 }
 .fbd__dot--active { background: var(--fb-accent); width: 20px; border-radius: 4px; }
 
+/* ── Manual overlay controls ─────────────────────────────────────────────── */
+.fbd__controls {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  padding: 10px 14px;
+  background: rgba(0, 0, 0, 0.3);
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+.fbd__ctrl-btn {
+  padding: 7px 4px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.06);
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  pointer-events: auto;
+}
+.fbd__ctrl-btn:hover { background: rgba(255, 255, 255, 0.15); transform: translateY(-1px); }
+.fbd__ctrl-btn--squad { border-color: #06b6d4; color: #22d3ee; }
+.fbd__ctrl-btn--stats { border-color: #eab308; color: #facc15; }
+.fbd__ctrl-btn--clear { border-color: #64748b; color: #94a3b8; }
+
 @media (max-width: 720px) {
   .fbd { padding: 16px; }
   .fbd__panel { width: 100%; }

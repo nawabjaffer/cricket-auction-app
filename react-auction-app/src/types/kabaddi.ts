@@ -250,7 +250,7 @@ export function createEmptyKabaddiLiveState(
 
 export type KabaddiOverlayType =
   | 'none' | 'super_raid' | 'super_tackle' | 'all_out' | 'bonus_point'
-  | 'do_or_die' | 'toss' | 'half_time' | 'full_time' | 'lineup';
+  | 'do_or_die' | 'toss' | 'half_time' | 'full_time' | 'lineup' | 'match_stats';
 
 export interface KabaddiOverlayControl {
   activeOverlay: KabaddiOverlayType;

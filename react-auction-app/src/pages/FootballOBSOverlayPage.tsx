@@ -24,7 +24,7 @@ import {
   computeMatchMinute, FOOTBALL_HALF_LABELS, DEFAULT_FOOTBALL_OVERLAY_CONFIG,
 } from '../types/football';
 import type {
-  FootballMatchSetup, FootballLiveState, FootballOverlayConfig, FootballOverlayControl,
+  FootballMatchSetup, FootballLiveState, FootballOverlayConfig, FootballOverlayControl, FootballPlayer,
 } from '../types/football';
 import './FootballOBSOverlayPage.css';
 
@@ -51,19 +51,21 @@ export default function FootballOBSOverlayPage() {
   const [, force] = useState(0); // 1 Hz clock re-render
   const lastCelebTs = useRef<number>(0);
   const [celeb, setCeleb] = useState<FootballOverlayControl | null>(null);
-  const [customLayoutId, setCustomLayoutId] = useState<string | null>(null);
   const [customLayout, setCustomLayout] = useState<ScorecardLayout | null>(null);
+  const [squadLayout, setSquadLayout] = useState<ScorecardLayout | null>(null);
+  const [statsLayout, setStatsLayout] = useState<ScorecardLayout | null>(null);
+  const [players, setPlayers] = useState<FootballPlayer[]>([]);
 
   // Custom Scorecard Designer — same layout the Camera Recorder burns into video
   useEffect(() => {
     scorecardLayoutService.initialize(fbDb);
-    return scorecardLayoutService.subscribeActiveLayoutId('football', setCustomLayoutId);
+    const unsubs = [
+      scorecardLayoutService.subscribeEffectiveLayout('football', setCustomLayout),
+      scorecardLayoutService.subscribeEffectiveLayout('football', setSquadLayout, 'team_squad'),
+      scorecardLayoutService.subscribeEffectiveLayout('football', setStatsLayout, 'match_stats'),
+    ];
+    return () => unsubs.forEach(u => u());
   }, []);
-
-  useEffect(() => {
-    if (!customLayoutId) { setCustomLayout(null); return; }
-    return scorecardLayoutService.subscribeLayout('football', customLayoutId, setCustomLayout);
-  }, [customLayoutId]);
 
   // matchId from URL
   useEffect(() => {
@@ -84,6 +86,10 @@ export default function FootballOBSOverlayPage() {
       }),
       onValue(ref(fbDb, `${base}/overlayConfig`), (s) => setConfig(s.exists() ? { ...DEFAULT_FOOTBALL_OVERLAY_CONFIG, ...s.val() } : DEFAULT_FOOTBALL_OVERLAY_CONFIG)),
       onValue(ref(fbDb, `${base}/matches/${matchId}/overlay`), (s) => setControl(s.exists() ? s.val() : null)),
+      onValue(ref(fbDb, `${base}/players`), (s) => {
+        const val = (s.val() as Record<string, FootballPlayer>) ?? {};
+        setPlayers(Object.values(val).filter(p => !!p?.id));
+      }),
     ];
     return () => unsubs.forEach((u) => u());
   }, [matchId]);
@@ -128,6 +134,22 @@ export default function FootballOBSOverlayPage() {
 
   // Custom Scorecard Designer template takes over the scoreboard region when
   // one has been set Active — celebrations keep working underneath/above it.
+  if (control?.activeOverlay === 'lineup' && squadLayout && squadLayout.widgets.length > 0) {
+    return (
+      <div className="fbo fbo--custom" style={theme}>
+        <ScorecardLayoutView layout={squadLayout} ctx={{ sport: 'football', match, live, players }} />
+      </div>
+    );
+  }
+
+  if (control?.activeOverlay === 'match_stats' && statsLayout && statsLayout.widgets.length > 0) {
+    return (
+      <div className="fbo fbo--custom" style={theme}>
+        <ScorecardLayoutView layout={statsLayout} ctx={{ sport: 'football', match, live, players }} />
+      </div>
+    );
+  }
+
   if (customLayout && customLayout.widgets.length > 0) {
     const dataCtx: ScorecardDataContext = {
       sport: 'football', match, live,

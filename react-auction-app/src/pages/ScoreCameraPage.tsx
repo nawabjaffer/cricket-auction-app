@@ -279,13 +279,9 @@ export default function ScoreCameraPage({ gameType = 'cricket' }: Readonly<{ gam
   // burned-in video ticker and the browser-source overlay never drift apart.
   useEffect(() => {
     scorecardLayoutService.initialize(camDb);
-    const unsubActive = scorecardLayoutService.subscribeActiveLayoutId(gameType, (id) => {
-      if (!id) { customLayoutRef.current = null; return; }
-      scorecardLayoutService.getLayout(gameType, id).then(layout => {
-        customLayoutRef.current = layout;
-      }).catch(() => { customLayoutRef.current = null; });
+    return scorecardLayoutService.subscribeEffectiveLayout(gameType, layout => {
+      customLayoutRef.current = layout;
     });
-    return unsubActive;
   }, [gameType]);
 
   // ── Draw loop ──────────────────────────────────────────────────────────────

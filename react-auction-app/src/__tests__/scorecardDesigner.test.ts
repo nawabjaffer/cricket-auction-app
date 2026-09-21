@@ -46,8 +46,9 @@ describe('scorecard widget catalog', () => {
   });
 
   it('creates an empty layout scoped to a sport', () => {
-    const layout = createEmptyLayout('kabaddi', 'My Layout');
+    const layout = createEmptyLayout('kabaddi', 'scoreboard', 'My Layout');
     expect(layout.sport).toBe('kabaddi');
+    expect(layout.surface).toBe('scoreboard');
     expect(layout.widgets).toEqual([]);
     expect(layout.name).toBe('My Layout');
   });

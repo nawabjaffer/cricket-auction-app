@@ -164,19 +164,20 @@ export default function KabaddiOBSOverlayPage() {
   const [celeb, setCeleb] = useState<KabaddiOverlayControl | null>(null);
   const [, force] = useState(0);
   const lastCelebTs = useRef(0);
-  const [customLayoutId, setCustomLayoutId] = useState<string | null>(null);
   const [customLayout, setCustomLayout] = useState<ScorecardLayout | null>(null);
+  const [squadLayout, setSquadLayout] = useState<ScorecardLayout | null>(null);
+  const [statsLayout, setStatsLayout] = useState<ScorecardLayout | null>(null);
 
   // Custom Scorecard Designer — same layout the Camera Recorder burns into video
   useEffect(() => {
     scorecardLayoutService.initialize(fbDb);
-    return scorecardLayoutService.subscribeActiveLayoutId('kabaddi', setCustomLayoutId);
+    const unsubs = [
+      scorecardLayoutService.subscribeEffectiveLayout('kabaddi', setCustomLayout),
+      scorecardLayoutService.subscribeEffectiveLayout('kabaddi', setSquadLayout, 'team_squad'),
+      scorecardLayoutService.subscribeEffectiveLayout('kabaddi', setStatsLayout, 'match_stats'),
+    ];
+    return () => unsubs.forEach(u => u());
   }, []);
-
-  useEffect(() => {
-    if (!customLayoutId) { setCustomLayout(null); return; }
-    return scorecardLayoutService.subscribeLayout('kabaddi', customLayoutId, setCustomLayout);
-  }, [customLayoutId]);
 
   // Parse URL parameters
   useEffect(() => {
@@ -389,6 +390,22 @@ export default function KabaddiOBSOverlayPage() {
 
   // Custom Scorecard Designer template takes over the scoreboard region when
   // one has been set Active — celebrations keep working underneath/above it.
+  if (control?.activeOverlay === 'lineup' && squadLayout && squadLayout.widgets.length > 0) {
+    return (
+      <div className="kbo kbo--custom" style={theme}>
+        <ScorecardLayoutView layout={squadLayout} ctx={{ sport: 'kabaddi', match, live, rules, players: rosterPlayers }} />
+      </div>
+    );
+  }
+
+  if (control?.activeOverlay === 'match_stats' && statsLayout && statsLayout.widgets.length > 0) {
+    return (
+      <div className="kbo kbo--custom" style={theme}>
+        <ScorecardLayoutView layout={statsLayout} ctx={{ sport: 'kabaddi', match, live, rules, players: rosterPlayers }} />
+      </div>
+    );
+  }
+
   if (customLayout && customLayout.widgets.length > 0) {
     const dataCtx: ScorecardDataContext = {
       sport: 'kabaddi', match, live, rules,

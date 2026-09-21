@@ -30,10 +30,17 @@ function drawWidget(
 
   ctx.save();
   ctx.globalAlpha = style.opacity ?? 1;
+  const cx = x + w / 2, cy = y + h / 2;
   if (geometry.rotationDeg) {
-    ctx.translate(x + w / 2, y + h / 2);
+    ctx.translate(cx, cy);
     ctx.rotate((geometry.rotationDeg * Math.PI) / 180);
-    ctx.translate(-(x + w / 2), -(y + h / 2));
+    ctx.translate(-cx, -cy);
+  }
+  const zoom = style.zoom ?? 1;
+  if (zoom !== 1) {
+    ctx.translate(cx, cy);
+    ctx.scale(zoom, zoom);
+    ctx.translate(-cx, -cy);
   }
 
   if (style.boxShadowEnabled) {
@@ -57,7 +64,26 @@ function drawWidget(
 
   const pad = style.padding ?? 0;
 
-  if (content.imageUrl) {
+  if (content.items?.length) {
+    ctx.font = fontString(style.fontWeight, style.fontSize);
+    ctx.textBaseline = 'middle';
+    ctx.textAlign = (style.textAlign as CanvasTextAlign) || 'left';
+    if (style.textShadowEnabled) {
+      ctx.shadowColor = style.textShadowColor || 'rgba(0,0,0,0.65)';
+      ctx.shadowBlur = style.textShadowBlur ?? 6;
+    }
+    ctx.fillStyle = style.color || '#ffffff';
+    const rowH = Math.max(20, (style.fontSize ?? 22) * 1.5);
+    const textX = style.textAlign === 'right' ? x + w - pad : x + pad;
+    let rowY = y + pad + rowH / 2;
+    for (const item of content.items) {
+      if (rowY > y + h - pad) break;
+      const text = style.textTransform === 'uppercase' ? item.text.toUpperCase() : item.text;
+      ctx.fillText(text, textX, rowY, w - pad * 2);
+      rowY += rowH;
+    }
+    ctx.shadowBlur = 0;
+  } else if (content.imageUrl) {
     const img = getImg(content.imageUrl);
     if (img) {
       const boxW = w - pad * 2, boxH = h - pad * 2;
@@ -102,6 +128,7 @@ export function preloadScorecardLayoutImages(layout: ScorecardLayout, dataCtx: S
   for (const widget of layout.widgets) {
     const content = resolveWidgetContent(widget, dataCtx);
     if (content.imageUrl) getImg(content.imageUrl);
+    content.items?.forEach(item => { if (item.imageUrl) getImg(item.imageUrl); });
   }
   if (layout.backgroundImageUrl) getImg(layout.backgroundImageUrl);
 }

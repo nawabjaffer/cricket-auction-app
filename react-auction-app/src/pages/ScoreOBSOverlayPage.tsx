@@ -128,19 +128,20 @@ export default function ScoreOBSOverlayPage() {
   const [sponsorCountdown, setSponsorCountdown] = useState(3);
   const sponsorIntroKeyRef = useRef<string | null>(null);
   const preloadedUrlsRef = useRef(new Set<string>());
-  const [customLayoutId, setCustomLayoutId] = useState<string | null>(null);
   const [customLayout, setCustomLayout] = useState<ScorecardLayout | null>(null);
+  const [squadLayout, setSquadLayout] = useState<ScorecardLayout | null>(null);
+  const [statsLayout, setStatsLayout] = useState<ScorecardLayout | null>(null);
 
   // Custom Scorecard Designer — same layout the Camera Recorder burns into video
   useEffect(() => {
     scorecardLayoutService.initialize(obsDb);
-    return scorecardLayoutService.subscribeActiveLayoutId('cricket', setCustomLayoutId);
+    const unsubs = [
+      scorecardLayoutService.subscribeEffectiveLayout('cricket', setCustomLayout),
+      scorecardLayoutService.subscribeEffectiveLayout('cricket', setSquadLayout, 'team_squad'),
+      scorecardLayoutService.subscribeEffectiveLayout('cricket', setStatsLayout, 'match_stats'),
+    ];
+    return () => unsubs.forEach(u => u());
   }, []);
-
-  useEffect(() => {
-    if (!customLayoutId) { setCustomLayout(null); return; }
-    return scorecardLayoutService.subscribeLayout('cricket', customLayoutId, setCustomLayout);
-  }, [customLayoutId]);
 
   useEffect(() => {
     document.documentElement.classList.add('obs-overlay-host');
@@ -572,6 +573,36 @@ export default function ScoreOBSOverlayPage() {
   // Pre-match overlay (show ceremony phases regardless of live score)
   // Only skip pre-match when phase is idle or match_ready (ceremony done)
   const isPreMatch = preMatch && preMatch.phase !== 'idle' && preMatch.phase !== 'match_ready';
+
+  // Custom Team Squad surface replaces the built-in squad ceremony during the
+  // squad_display / squad_reveal phases, once a squad template is Active.
+  const isSquadPhase = preMatch?.phase === 'squad_display' || preMatch?.phase === 'squad_reveal_teamA' || preMatch?.phase === 'squad_reveal_teamB';
+  if (isSquadPhase && match && squadLayout && squadLayout.widgets.length > 0) {
+    const dataCtx: ScorecardDataContext = { sport: 'cricket', match, live, lineups };
+    return (
+      <div className="score-obs score-obs--custom">
+        <ScorecardLayoutView layout={squadLayout} ctx={dataCtx} />
+      </div>
+    );
+  }
+
+  // Custom Match Stats surface replaces the built-in stats/points-table/award
+  // overlays whenever the scorer triggers one of those overlay types.
+  const STATS_TRIGGER_TYPES: OverlayType[] = [
+    'stats_fours', 'stats_sixes', 'stats_sr', 'stats_mvp',
+    'tournament_fours', 'tournament_sixes', 'tournament_sr', 'tournament_mvp',
+    'match_summary', 'points_table', 'award_orange_cap', 'award_purple_cap',
+    'award_orange_cap_match', 'award_purple_cap_match',
+  ];
+  if (match && STATS_TRIGGER_TYPES.includes(localOverlay) && statsLayout && statsLayout.widgets.length > 0) {
+    const dataCtx: ScorecardDataContext = { sport: 'cricket', match, live, matchStats, tournamentStats };
+    return (
+      <div className="score-obs score-obs--custom">
+        <ScorecardLayoutView layout={statsLayout} ctx={dataCtx} />
+      </div>
+    );
+  }
+
   if (isPreMatch && match) {
     return (
       <div className="score-obs">

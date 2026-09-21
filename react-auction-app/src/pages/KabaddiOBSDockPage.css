@@ -181,6 +181,8 @@
 .kbd__ctrl-btn--allout { border-color: #ef4444; color: #f87171; }
 .kbd__ctrl-btn--bonus { border-color: #22c55e; color: #4ade80; }
 .kbd__ctrl-btn--dod { border-color: #a855f7; color: #c084fc; }
+.kbd__ctrl-btn--squad { border-color: #06b6d4; color: #22d3ee; }
+.kbd__ctrl-btn--stats { border-color: #eab308; color: #facc15; }
 .kbd__ctrl-btn--clear { border-color: #64748b; color: #94a3b8; }
 
 @media (max-width: 720px) {

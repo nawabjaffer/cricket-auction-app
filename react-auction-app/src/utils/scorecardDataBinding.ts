@@ -6,10 +6,10 @@
 // ============================================================================
 
 import { computeMatchMinute, FOOTBALL_HALF_LABELS } from '../types/football';
-import type { FootballLiveState, FootballMatchSetup } from '../types/football';
+import type { FootballLiveState, FootballMatchSetup, FootballPlayer } from '../types/football';
 import { computeKabaddiClock, KABADDI_HALF_LABELS, raidSecondsRemaining, DEFAULT_KABADDI_RULES } from '../types/kabaddi';
-import type { KabaddiLiveState, KabaddiMatchSetup, KabaddiRulesConfig } from '../types/kabaddi';
-import type { LiveScore, MatchSetup } from '../types/scoring';
+import type { KabaddiLiveState, KabaddiMatchSetup, KabaddiRulesConfig, KabaddiPlayer } from '../types/kabaddi';
+import type { LiveScore, MatchSetup, MatchLineup, MatchStatsSnapshot, TournamentStats } from '../types/scoring';
 import type { ScorecardWidgetInstance, WidgetKind } from '../types/scorecardDesigner';
 
 export interface ScorecardBranding {
@@ -17,14 +17,32 @@ export interface ScorecardBranding {
   partnerLogo?: string;
 }
 
+export interface ScorecardListItem {
+  text: string;
+  imageUrl?: string;
+}
+
 export type ScorecardDataContext =
-  | { sport: 'cricket'; match: MatchSetup | null; live: LiveScore | null; branding?: ScorecardBranding }
-  | { sport: 'football'; match: FootballMatchSetup | null; live: FootballLiveState | null; branding?: ScorecardBranding }
-  | { sport: 'kabaddi'; match: KabaddiMatchSetup | null; live: KabaddiLiveState | null; rules?: KabaddiRulesConfig; branding?: ScorecardBranding };
+  | {
+      sport: 'cricket'; match: MatchSetup | null; live: LiveScore | null; branding?: ScorecardBranding;
+      lineups?: { teamA: MatchLineup | null; teamB: MatchLineup | null };
+      matchStats?: MatchStatsSnapshot | null;
+      tournamentStats?: TournamentStats | null;
+    }
+  | {
+      sport: 'football'; match: FootballMatchSetup | null; live: FootballLiveState | null; branding?: ScorecardBranding;
+      players?: FootballPlayer[];
+    }
+  | {
+      sport: 'kabaddi'; match: KabaddiMatchSetup | null; live: KabaddiLiveState | null; rules?: KabaddiRulesConfig; branding?: ScorecardBranding;
+      players?: KabaddiPlayer[];
+    };
 
 export interface ResolvedWidgetContent {
   text?: string;
   imageUrl?: string;
+  /** List-type content (squad rosters, MVP leaderboards) — rendered as a stacked list of rows. */
+  items?: ScorecardListItem[];
   /** Widgets that have nothing to show right now (e.g. LIVE badge pre-match) should be hidden, not blank. */
   hidden?: boolean;
 }
@@ -58,14 +76,42 @@ export function resolveWidgetKind(kind: WidgetKind, ctx: ScorecardDataContext): 
       return ctx.branding?.partnerLogo ? { imageUrl: ctx.branding.partnerLogo } : EMPTY;
     case 'match_clock':
       return resolveClock(ctx);
+    case 'squad_team_a_players':
+    case 'squad_team_b_players':
+      return resolveSquadList(kind, ctx);
+    case 'squad_toss_result':
+      return resolveTossResult(ctx);
     default:
       break;
   }
 
-  if (ctx.sport === 'cricket') return resolveCricket(kind, ctx.live);
-  if (ctx.sport === 'football') return resolveFootball(kind, ctx.live);
-  if (ctx.sport === 'kabaddi') return resolveKabaddi(kind, ctx.live, ctx.rules ?? DEFAULT_KABADDI_RULES);
+  if (ctx.sport === 'cricket') return resolveCricket(kind, ctx.live, ctx.matchStats, ctx.tournamentStats);
+  if (ctx.sport === 'football') return resolveFootball(kind, ctx.live, ctx.players);
+  if (ctx.sport === 'kabaddi') return resolveKabaddi(kind, ctx.live, ctx.rules ?? DEFAULT_KABADDI_RULES, ctx.players);
   return EMPTY;
+}
+
+function resolveSquadList(kind: 'squad_team_a_players' | 'squad_team_b_players', ctx: ScorecardDataContext): ResolvedWidgetContent {
+  const side = kind === 'squad_team_a_players' ? 'teamA' : 'teamB';
+  if (ctx.sport === 'cricket') {
+    const players = ctx.lineups?.[side]?.players ?? [];
+    if (!players.length) return EMPTY;
+    return { items: players.map(p => ({ text: p.playerName, imageUrl: p.imageUrl })) };
+  }
+  if (!ctx.match) return EMPTY;
+  const teamId = side === 'teamA' ? ctx.match.teamA.id : ctx.match.teamB.id;
+  const players = (ctx.players ?? []).filter(p => p.teamId === teamId);
+  if (!players.length) return EMPTY;
+  return { items: players.map(p => ({ text: p.name, imageUrl: p.photoUrl })) };
+}
+
+function resolveTossResult(ctx: ScorecardDataContext): ResolvedWidgetContent {
+  if (ctx.sport === 'football' || !ctx.match) return EMPTY;
+  const { tossWonBy, tossElected } = ctx.match;
+  if (!tossWonBy || !tossElected) return EMPTY;
+  const winner = tossWonBy === ctx.match.teamA.id ? ctx.match.teamA.name : ctx.match.teamB.name;
+  const action = ctx.sport === 'cricket' ? (tossElected === 'bat' ? 'bat' : 'bowl') : (tossElected === 'raid' ? 'raid' : 'defend');
+  return { text: `${winner} won the toss, elected to ${action} first` };
 }
 
 function resolveClock(ctx: ScorecardDataContext): ResolvedWidgetContent {
@@ -83,7 +129,34 @@ function resolveClock(ctx: ScorecardDataContext): ResolvedWidgetContent {
   return EMPTY;
 }
 
-function resolveCricket(kind: WidgetKind, live: LiveScore | null): ResolvedWidgetContent {
+function resolveCricket(
+  kind: WidgetKind, live: LiveScore | null,
+  matchStats?: MatchStatsSnapshot | null, tournamentStats?: TournamentStats | null,
+): ResolvedWidgetContent {
+  switch (kind) {
+    case 'stats_top_run_scorer': {
+      const s = matchStats?.topRunScorers?.[0];
+      return s ? { text: `${s.playerName} — ${s.runs} runs`, imageUrl: s.imageUrl } : EMPTY;
+    }
+    case 'stats_top_wicket_taker': {
+      const b = matchStats?.topWicketTakers?.[0];
+      return b ? { text: `${b.playerName} — ${b.wickets} wkts`, imageUrl: b.imageUrl } : EMPTY;
+    }
+    case 'stats_orange_cap': {
+      const s = tournamentStats?.orangeCap;
+      return s ? { text: `${s.playerName} — ${s.runs} runs`, imageUrl: s.imageUrl } : EMPTY;
+    }
+    case 'stats_purple_cap': {
+      const b = tournamentStats?.purpleCap;
+      return b ? { text: `${b.playerName} — ${b.wickets} wkts`, imageUrl: b.imageUrl } : EMPTY;
+    }
+    case 'stats_mvp_leaderboard': {
+      const top = (matchStats?.mvpLeaderboard ?? []).slice(0, 3);
+      return top.length ? { items: top.map(p => ({ text: `${p.playerName} — ${p.total.toFixed(0)} pts` })) } : EMPTY;
+    }
+    default:
+      break;
+  }
   if (!live) return EMPTY;
   switch (kind) {
     case 'cricket_score':
@@ -115,7 +188,15 @@ function resolveCricket(kind: WidgetKind, live: LiveScore | null): ResolvedWidge
   }
 }
 
-function resolveFootball(kind: WidgetKind, live: FootballLiveState | null): ResolvedWidgetContent {
+function resolveFootball(kind: WidgetKind, live: FootballLiveState | null, players?: FootballPlayer[]): ResolvedWidgetContent {
+  if (kind === 'stats_top_goal_scorer') {
+    const top = [...(players ?? [])].sort((a, b) => (b.goals ?? 0) - (a.goals ?? 0))[0];
+    return top && (top.goals ?? 0) > 0 ? { text: `${top.name} — ${top.goals} goals`, imageUrl: top.photoUrl } : EMPTY;
+  }
+  if (kind === 'stats_top_assist') {
+    const top = [...(players ?? [])].sort((a, b) => (b.assists ?? 0) - (a.assists ?? 0))[0];
+    return top && (top.assists ?? 0) > 0 ? { text: `${top.name} — ${top.assists} assists`, imageUrl: top.photoUrl } : EMPTY;
+  }
   if (!live) return EMPTY;
   switch (kind) {
     case 'football_score':
@@ -129,7 +210,15 @@ function resolveFootball(kind: WidgetKind, live: FootballLiveState | null): Reso
   }
 }
 
-function resolveKabaddi(kind: WidgetKind, live: KabaddiLiveState | null, rules: KabaddiRulesConfig): ResolvedWidgetContent {
+function resolveKabaddi(kind: WidgetKind, live: KabaddiLiveState | null, rules: KabaddiRulesConfig, players?: KabaddiPlayer[]): ResolvedWidgetContent {
+  if (kind === 'stats_top_raider') {
+    const top = [...(players ?? [])].sort((a, b) => (b.raidPoints ?? 0) - (a.raidPoints ?? 0))[0];
+    return top && (top.raidPoints ?? 0) > 0 ? { text: `${top.name} — ${top.raidPoints} raid pts`, imageUrl: top.photoUrl } : EMPTY;
+  }
+  if (kind === 'stats_top_defender') {
+    const top = [...(players ?? [])].sort((a, b) => (b.tacklePoints ?? 0) - (a.tacklePoints ?? 0))[0];
+    return top && (top.tacklePoints ?? 0) > 0 ? { text: `${top.name} — ${top.tacklePoints} tackle pts`, imageUrl: top.photoUrl } : EMPTY;
+  }
   if (!live) return EMPTY;
   switch (kind) {
     case 'kabaddi_score':

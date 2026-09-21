@@ -94,6 +94,7 @@ createRoot(document.getElementById('root')!).render(
             <Route path="/:gameType/scorer/camera/host" element={<GameScorerPage route="camera-host" />} />
             <Route path="/:gameType/scorer/obs-dock" element={<GameScorerPage route="obs-dock" />} />
             <Route path="/:gameType/scorer/live-question" element={<GameScorerPage route="live-question" />} />
+            <Route path="/:gameType/scorer/designer" element={<GameScorerPage route="designer" />} />
             {/* Legacy scorer routes (redirects) */}
             <Route path="/scoring/admin" element={<ScoringAdminPage />} />
             <Route path="/match/score/update" element={<ScoreUpdatePage />} />

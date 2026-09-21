@@ -67,6 +67,20 @@
   border: 1px solid rgba(124,58,237,0.5); color: #d8b4fe; font-size: 13px; font-weight: 600; z-index: 300;
 }
 
+/* ── Surface tabs ── */
+.scd__surface-tabs {
+  display: flex; gap: 6px; padding: 8px 16px; border-bottom: 1px solid rgba(255,255,255,0.08);
+}
+.scd__surface-tab {
+  padding: 7px 14px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(255,255,255,0.04); color: rgba(255,255,255,0.65); font-size: 12px; font-weight: 700;
+  cursor: pointer; letter-spacing: 0.2px;
+}
+.scd__surface-tab:hover { background: rgba(255,255,255,0.09); color: #fff; }
+.scd__surface-tab.is-active {
+  background: linear-gradient(135deg, #7c3aed, #4c1d95); border-color: transparent; color: #fff;
+}
+
 .scd__body { display: grid; grid-template-columns: 260px 1fr 300px; gap: 0; flex: 1; min-height: 0; }
 
 /* ── Palette ── */
@@ -108,6 +122,13 @@
 }
 .scd__guideline-band span { font-size: 10px; font-weight: 700; color: rgba(216,180,254,0.85); letter-spacing: 0.3px; }
 
+.scd__guideline-fullscreen {
+  position: absolute; inset: 6px; border: 1px dashed rgba(124,58,237,0.6); border-radius: 8px;
+  background: rgba(124,58,237,0.04); pointer-events: none; display: flex; align-items: flex-end;
+  justify-content: center; padding-bottom: 8px;
+}
+.scd__guideline-fullscreen span { font-size: 10px; font-weight: 700; color: rgba(216,180,254,0.85); letter-spacing: 0.3px; }
+
 .scd__resize-handle {
   position: absolute; bottom: -4px; right: -4px; width: 12px; height: 12px; border-radius: 3px;
   background: #7c3aed; border: 2px solid #fff; cursor: nwse-resize; z-index: 999;
@@ -118,6 +139,11 @@
 /* ── Properties ── */
 .scd__props { padding: 16px; border-left: 1px solid rgba(255,255,255,0.08); overflow-y: auto; }
 .scd__props h3 { margin: 0 0 10px; font-size: 12.5px; text-transform: uppercase; letter-spacing: 0.6px; color: rgba(255,255,255,0.6); }
+
+.scd__props-section-head {
+  display: flex; align-items: center; justify-content: space-between; margin: 14px 0 4px;
+  font-size: 11.5px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; color: rgba(255,255,255,0.55);
+}
 
 .scd__props-body { display: flex; flex-direction: column; gap: 10px; }
 .scd__props-head { display: flex; align-items: center; justify-content: space-between; padding-bottom: 8px; border-bottom: 1px solid rgba(255,255,255,0.08); }

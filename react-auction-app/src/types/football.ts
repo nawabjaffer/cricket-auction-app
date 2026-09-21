@@ -157,7 +157,7 @@ export interface FootballLiveState {
 
 export type FootballOverlayType =
   | 'none' | 'goal' | 'penalty' | 'red_card' | 'yellow_card'
-  | 'substitution' | 'kickoff' | 'half_time' | 'full_time' | 'lineup';
+  | 'substitution' | 'kickoff' | 'half_time' | 'full_time' | 'lineup' | 'match_stats';
 
 export interface FootballOverlayControl {
   activeOverlay: FootballOverlayType;
