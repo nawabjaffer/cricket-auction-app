@@ -7,6 +7,8 @@
 
 import type { CSSProperties, ReactNode } from 'react';
 import { motion, type Variants } from 'framer-motion';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { faBolt, faBullseye, faCircleUser, faDragon, faHandBackFist, faPerson, faPeopleGroup, faPersonRunning, faShieldHalved } from '@fortawesome/free-solid-svg-icons';
 import { ResolvedImage } from '../ResolvedImage';
 import type { ScorecardWidgetInstance, WidgetEntranceAnimation } from '../../types/scorecardDesigner';
 import type { ResolvedWidgetContent } from '../../utils/scorecardDataBinding';
@@ -35,13 +37,30 @@ function entranceOffset(anim: WidgetEntranceAnimation): { x?: number; y?: number
   }
 }
 
+function playerIconDefinition(value: string) {
+  switch (value) {
+    case 'person': case '👤': return faPerson;
+    case 'people': case '👥': return faPeopleGroup;
+    case 'kabaddi': case 'kabaddi-mascot': case '🤼': return faDragon;
+    case 'standing': case '🧍': return faCircleUser;
+    case 'running': case 'raider': case '🏃': return faPersonRunning;
+    case 'defender': return faShieldHalved;
+    case 'tackle': return faHandBackFist;
+    case 'raid-target': return faBullseye;
+    case 'red-marker': case '🔴': return faBolt;
+    case 'blue-marker': case '🔵': return faCircleUser;
+    default: return faPeopleGroup;
+  }
+}
+
 export function ScorecardWidgetView({ widget, content, selected, interactive, overlay, onPointerDownBody }: Readonly<ScorecardWidgetViewProps>) {
-  if (!widget.visible) return null;
+  // The eye toggle is a designer preview aid. Saved layers remain part of the
+  // live OBS/camera composition so hiding one while arranging the canvas cannot
+  // make its runtime overlay disappear.
+  if (!widget.visible && interactive) return null;
   if (content.hidden && !interactive) return null;
 
   const { geometry, style } = widget;
-  const isImageKind = widget.kind === 'team_a_logo' || widget.kind === 'team_b_logo'
-    || widget.kind === 'custom_image' || widget.kind === 'tournament_logo' || widget.kind === 'partner_logo';
   const zoom = style.zoom ?? 1;
   const anim = style.entranceAnimation ?? 'none';
 
@@ -51,10 +70,8 @@ export function ScorecardWidgetView({ widget, content, selected, interactive, ov
     top: `${geometry.yPct}%`,
     width: `${geometry.wPct}%`,
     height: `${geometry.hPct}%`,
-    transform: `rotate(${geometry.rotationDeg}deg) scale(${zoom})`,
     zIndex: geometry.zIndex,
-    opacity: style.opacity ?? 1,
-    backgroundColor: isImageKind ? 'transparent' : style.backgroundColor,
+    backgroundColor: style.backgroundColor,
     borderRadius: style.borderRadius,
     borderWidth: style.borderWidth,
     borderColor: style.borderColor,
@@ -75,10 +92,10 @@ export function ScorecardWidgetView({ widget, content, selected, interactive, ov
   };
 
   const textStyle: CSSProperties = {
-    color: style.color,
+    color: content.urgent ? '#ef4444' : style.color,
     fontFamily: style.fontFamily,
-    fontSize: style.fontSize,
-    fontWeight: style.fontWeight,
+    fontSize: `${((style.fontSize ?? 22) / 1080) * 100}cqh`,
+    fontWeight: content.urgent ? Math.max(800, style.fontWeight ?? 700) : style.fontWeight,
     letterSpacing: style.letterSpacing,
     textTransform: style.textTransform,
     textShadow: style.textShadowEnabled ? `0 2px ${style.textShadowBlur ?? 6}px ${style.textShadowColor}` : undefined,
@@ -92,16 +109,24 @@ export function ScorecardWidgetView({ widget, content, selected, interactive, ov
   // Designer edit mode never animates (would fight with dragging); the live overlay always plays the preset.
   const offset = entranceOffset(anim);
   const variants: Variants = {
-    hidden: { opacity: anim === 'none' ? 1 : 0, x: offset.x, y: offset.y, scale: offset.scale },
+    hidden: { opacity: anim === 'none' ? (style.opacity ?? 1) : 0, x: offset.x, y: offset.y, scale: offset.scale },
     shown: {
-      opacity: 1, x: 0, y: 0, scale: 1,
+      opacity: style.opacity ?? 1, x: 0, y: 0, scale: 1,
       transition: anim === 'bounce'
         ? { type: 'spring', bounce: 0.55, duration: (style.animationDurationMs ?? 600) / 1000, delay: (style.animationDelayMs ?? 0) / 1000 }
         : { duration: (style.animationDurationMs ?? 600) / 1000, delay: (style.animationDelayMs ?? 0) / 1000, ease: 'easeOut' },
     },
   };
 
-  const body = content.items ? (
+  const bodyContent = content.playerSlots ? (
+    <span className="sc-player-slots" style={{ gap: Math.max(0, style.iconGap ?? 6) }} aria-label={`${content.playerSlots.filter(slot => slot.active).length} active players`}>
+      {content.playerSlots.map((slot, index) => (
+        <span key={`${slot.icon}-${index}`} className={`sc-player-slot ${slot.active ? 'is-active' : 'is-inactive'}`} style={{ color: slot.active ? style.color : 'rgba(148,163,184,0.38)', fontSize: `${((style.iconSize ?? style.fontSize ?? 28) / 1080) * 100}cqh`, marginLeft: index > 0 ? `${((Math.min(0, style.iconGap ?? 6)) / 1920) * 100}cqw` : 0 }}>
+          <FontAwesomeIcon icon={playerIconDefinition(slot.icon)} />
+        </span>
+      ))}
+    </span>
+  ) : content.items ? (
     content.items.map((item, i) => (
       <span key={`${item.text}-${i}`} style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
         {item.imageUrl && (
@@ -123,17 +148,31 @@ export function ScorecardWidgetView({ widget, content, selected, interactive, ov
     <span style={textStyle}>{content.text ?? widget.label}</span>
   );
 
+  const contentStyle: CSSProperties = {
+    width: '100%',
+    height: '100%',
+    display: 'flex',
+    flexDirection: content.items ? 'column' : 'row',
+    alignItems: content.items ? 'stretch' : 'center',
+    justifyContent: style.textAlign === 'left' ? 'flex-start' : style.textAlign === 'right' ? 'flex-end' : 'center',
+    transform: `scaleX(${style.flipX ? -1 : 1}) scaleY(${style.flipY ? -1 : 1}) scale(${style.contentScale ?? 1})`,
+    transformOrigin: 'center center',
+    boxSizing: 'border-box',
+  };
+
   return (
     <motion.div
       className="sc-widget"
+      data-widget-kind={widget.kind}
       style={containerStyle}
       data-widget-id={widget.id}
       onPointerDown={interactive ? onPointerDownBody : undefined}
-      initial={interactive ? 'shown' : 'hidden'}
+      initial="hidden"
       animate="shown"
       variants={variants}
+      transformTemplate={(latest) => `rotate(${geometry.rotationDeg}deg) scale(${zoom}) ${latest}`}
     >
-      {body}
+      <div className={`sc-widget__content ${content.urgent ? 'is-urgent' : ''}`} style={{ ...contentStyle, transform: `${contentStyle.transform} scale(${content.urgent ? 1.12 : 1})` }}>{bodyContent}</div>
       {overlay}
     </motion.div>
   );

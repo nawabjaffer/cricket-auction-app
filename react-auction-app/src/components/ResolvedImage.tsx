@@ -51,6 +51,7 @@ export function ResolvedImage({
     <img
       src={urls[index]}
       alt={alt}
+      draggable={false}
       className={className}
       style={style}
       crossOrigin={crossOrigin || undefined}

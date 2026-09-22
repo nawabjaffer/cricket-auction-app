@@ -8,15 +8,23 @@
 // ============================================================================
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { onValue, ref } from 'firebase/database';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { faPerson, faPeopleGroup, faPersonRunning, faShieldHalved, faCircleUser, faBolt, faDragon, faHandBackFist, faBullseye } from '@fortawesome/free-solid-svg-icons';
+import type { IconDefinition } from '@fortawesome/fontawesome-svg-core';
 import {
   IoAdd, IoSave, IoTrash, IoClose, IoCopyOutline, IoEyeOutline, IoEyeOffOutline,
   IoLockClosedOutline, IoLockOpenOutline, IoCloudUploadOutline, IoCheckmarkCircle,
-  IoArrowBack, IoText, IoImageOutline, IoTimerOutline, IoStatsChartOutline,
+  IoArrowBack, IoText, IoImageOutline, IoTimerOutline, IoStatsChartOutline, IoColorWandOutline,
+  IoArrowUpOutline, IoArrowDownOutline, IoChevronUpOutline, IoChevronDownOutline,
+  IoLayersOutline,
 } from 'react-icons/io5';
 import { useTenantNavigate as useNavigate } from '../hooks/useTenantNavigate';
+import { useTheme } from '../hooks/useTheme';
 import { realtimeSync } from '../services/realtimeSync';
 import { scorecardLayoutService } from '../services/scorecardLayoutService';
 import { uploadFileToStorage } from '../services/firebaseStorageService';
+import { tenantPath } from '../services/tenantPath';
 import { ScorecardLayoutView } from '../components/ScorecardCanvas';
 import {
   getWidgetCatalog, createWidgetInstance, createEmptyLayout, makeWidgetId,
@@ -25,12 +33,50 @@ import {
 import type {
   ScorecardLayout, ScorecardWidgetInstance, WidgetCatalogEntry, WidgetKind,
   CustomWidgetDef, CustomWidgetBaseKind, ScorecardSurface, WidgetEntranceAnimation,
+  ScorecardAsset, ScorecardWidgetVariant,
 } from '../types/scorecardDesigner';
 import type { ScorecardDataContext } from '../utils/scorecardDataBinding';
 import type { SupportedGameType } from './scorerPages';
+import type { Team } from '../types';
 import './ScorecardDesignerPage.css';
 
-const FONT_OPTIONS = ['Inter', 'Arial', 'Georgia', 'Poppins', 'Oswald', 'Montserrat', 'Roboto Slab'];
+const FONT_OPTIONS = [
+  'Inter', 'Roboto', 'Open Sans', 'Lato', 'Montserrat', 'Poppins', 'Nunito', 'Raleway',
+  'Oswald', 'Roboto Condensed', 'Barlow Condensed', 'Bebas Neue', 'Playfair Display',
+  'Merriweather', 'Source Serif 4', 'Roboto Slab', 'Space Grotesk', 'DM Sans',
+  'Plus Jakarta Sans', 'Manrope', 'Arial', 'Georgia',
+];
+
+const DESIGN_VIEWPORTS = [
+  { id: 'desktop-hd', label: 'Desktop HD', width: 1920, height: 1080 },
+  { id: 'desktop-small', label: 'Desktop Small', width: 1600, height: 900 },
+  { id: 'tablet-landscape', label: 'Tablet Landscape', width: 1280, height: 800 },
+  { id: 'mobile-landscape', label: 'Mobile Landscape', width: 1280, height: 720 },
+  { id: 'mobile-portrait', label: 'Mobile Portrait', width: 1080, height: 1920 },
+] as const;
+
+const PLAYER_ICON_OPTIONS = [
+  { value: 'person', label: 'Person', icon: faPerson },
+  { value: 'people', label: 'People', icon: faPeopleGroup },
+  { value: 'kabaddi-mascot', label: 'Kabaddi mascot', icon: faDragon },
+  { value: 'raider', label: 'Raider', icon: faPersonRunning },
+  { value: 'defender', label: 'Defender', icon: faShieldHalved },
+  { value: 'tackle', label: 'Tackle', icon: faHandBackFist },
+  { value: 'raid-target', label: 'Raid target', icon: faBullseye },
+  { value: 'blue-marker', label: 'Blue marker', icon: faCircleUser },
+  { value: 'red-marker', label: 'Red marker', icon: faBolt },
+] satisfies Array<{ value: string; label: string; icon: IconDefinition }>;
+
+function previewPlayerItems(value: string): Array<{ text: string; imageUrl: string }> {
+  return value.split(',').map(name => name.trim()).filter(Boolean).map(name => ({
+    text: name,
+    imageUrl: `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=334155&color=ffffff&size=96`,
+  }));
+}
+
+function widgetHasLiveBinding(kind: WidgetKind): boolean {
+  return !kind.startsWith('custom_') && kind !== 'team_a_score' && kind !== 'team_b_score';
+}
 
 function mockContextFor(sport: SupportedGameType): ScorecardDataContext {
   const now = Date.now();
@@ -173,27 +219,82 @@ const BACKGROUND_ID = '__scorecard_background__';
 
 export default function ScorecardDesignerPage({ gameType = 'cricket' }: Readonly<{ gameType?: SupportedGameType }>) {
   const navigate = useNavigate();
+  const { currentTheme } = useTheme();
   const sport = gameType;
   const [ready, setReady] = useState(false);
   const [surface, setSurface] = useState<ScorecardSurface>('scoreboard');
-  const [layout, setLayout] = useState<ScorecardLayout>(() => createEmptyLayout(sport, 'scoreboard'));
+  const [layout, setLayoutState] = useState<ScorecardLayout>(() => createEmptyLayout(sport, 'scoreboard'));
   const [layouts, setLayouts] = useState<ScorecardLayout[]>([]);
   const [activeLayoutId, setActiveLayoutId] = useState<string | null>(null);
   const [customWidgets, setCustomWidgets] = useState<CustomWidgetDef[]>([]);
+  const [assets, setAssets] = useState<ScorecardAsset[]>([]);
+  const [auctionTeams, setAuctionTeams] = useState<Team[]>([]);
+  const [branding, setBranding] = useState<{ tournamentLogo?: string; partnerLogo?: string; doOrDieFlagUrl?: string; superRaidFlagUrl?: string; superTackleFlagUrl?: string; allOutFlagUrl?: string; bonusPointFlagUrl?: string }>({});
+  const [tenantTournamentLogo, setTenantTournamentLogo] = useState<string | undefined>();
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [propertyPickerSourceId, setPropertyPickerSourceId] = useState<string | null>(null);
+  const [showLayersPanel, setShowLayersPanel] = useState(false);
+  const [propertyTeamSide, setPropertyTeamSide] = useState<'common' | 'team_a' | 'team_b'>('common');
   const [toast, setToast] = useState('');
   const [showCustomModal, setShowCustomModal] = useState(false);
   const [customForm, setCustomForm] = useState<{ label: string; baseKind: CustomWidgetBaseKind; defaultText: string; defaultImageUrl: string; statBindingKey: WidgetKind | '' }>({
     label: '', baseKind: 'text', defaultText: '', defaultImageUrl: '', statBindingKey: '',
   });
   const [previewToken, setPreviewToken] = useState(0);
+  const [designViewportId, setDesignViewportId] = useState<(typeof DESIGN_VIEWPORTS)[number]['id']>('desktop-hd');
 
   const canvasRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<DragState | null>(null);
   const layoutRef = useRef(layout);
+  const historyRef = useRef<{ past: ScorecardLayout[]; future: ScorecardLayout[] }>({ past: [], future: [] });
+  const setLayout = useCallback((update: ScorecardLayout | ((current: ScorecardLayout) => ScorecardLayout)) => {
+    setLayoutState(current => {
+      const next = typeof update === 'function' ? update(current) : update;
+      if (next === current) return current;
+      historyRef.current.past = [...historyRef.current.past, current].slice(-100);
+      historyRef.current.future = [];
+      return next;
+    });
+  }, []);
   useEffect(() => { layoutRef.current = layout; }, [layout]);
 
+  const undoLayout = useCallback(() => {
+    setLayoutState(current => {
+      const previous = historyRef.current.past.pop();
+      if (!previous) return current;
+      historyRef.current.future.push(current);
+      return previous;
+    });
+  }, []);
+
+  const redoLayout = useCallback(() => {
+    setLayoutState(current => {
+      const next = historyRef.current.future.pop();
+      if (!next) return current;
+      historyRef.current.past.push(current);
+      return next;
+    });
+  }, []);
+
   const flash = useCallback((m: string) => { setToast(m); setTimeout(() => setToast(''), 2400); }, []);
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLSelectElement) return;
+      const modifier = e.metaKey || e.ctrlKey;
+      if (!modifier) return;
+      if (e.key.toLowerCase() === 'z') {
+        e.preventDefault();
+        if (e.shiftKey) redoLayout();
+        else undoLayout();
+      } else if (e.key.toLowerCase() === 'y') {
+        e.preventDefault();
+        redoLayout();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [redoLayout, undoLayout]);
 
   // ── Init ──
   useEffect(() => {
@@ -227,13 +328,123 @@ export default function ScorecardDesignerPage({ gameType = 'cricket' }: Readonly
       scorecardLayoutService.subscribeLayouts(sport, setLayouts, surface),
       scorecardLayoutService.subscribeActiveLayoutId(sport, setActiveLayoutId, surface),
       scorecardLayoutService.subscribeCustomWidgets(sport, setCustomWidgets),
+      scorecardLayoutService.subscribeAssets(sport, setAssets),
     ];
+    const db = realtimeSync.getDatabase();
+    if (db) {
+      unsubs.push(onValue(ref(db, tenantPath('auction/teams')), snapshot => {
+        const value = snapshot.val() as Team[] | Record<string, Team> | null;
+        setAuctionTeams(value ? Object.values(value).filter((team): team is Team => !!team?.id) : []);
+      }));
+      unsubs.push(onValue(ref(db, tenantPath('auction/adminSettings')), snapshot => {
+        const settings = snapshot.val() as { organizerLogo?: string } | null;
+        setTenantTournamentLogo(settings?.organizerLogo || undefined);
+      }));
+      const brandingPaths = ['scoring/overlayConfig', 'football/overlayConfig', 'kabaddi/overlayConfig'];
+      brandingPaths.forEach(path => unsubs.push(onValue(ref(db, tenantPath(path)), snapshot => {
+        const value = snapshot.val() as { tournamentLogo?: string; broadcastPartnerLogo?: string; doOrDieAnimation?: { mediaUrl?: string }; superRaidAnimation?: { mediaUrl?: string }; superTackleAnimation?: { mediaUrl?: string }; allOutAnimation?: { mediaUrl?: string }; bonusAnimation?: { mediaUrl?: string } } | null;
+        if (!value) return;
+        setBranding(current => path === 'kabaddi/overlayConfig' ? {
+          ...current,
+          doOrDieFlagUrl: value.doOrDieAnimation?.mediaUrl,
+          superRaidFlagUrl: value.superRaidAnimation?.mediaUrl,
+          superTackleFlagUrl: value.superTackleAnimation?.mediaUrl,
+          allOutFlagUrl: value.allOutAnimation?.mediaUrl,
+          bonusPointFlagUrl: value.bonusAnimation?.mediaUrl,
+          tournamentLogo: value.tournamentLogo || current.tournamentLogo,
+          partnerLogo: value.broadcastPartnerLogo || current.partnerLogo,
+        } : {
+          tournamentLogo: current.tournamentLogo || value.tournamentLogo,
+          partnerLogo: current.partnerLogo || value.broadcastPartnerLogo,
+          doOrDieFlagUrl: current.doOrDieFlagUrl,
+          superRaidFlagUrl: current.superRaidFlagUrl,
+          superTackleFlagUrl: current.superTackleFlagUrl,
+          allOutFlagUrl: current.allOutFlagUrl,
+          bonusPointFlagUrl: current.bonusPointFlagUrl,
+        });
+      })));
+    }
     return () => unsubs.forEach(u => u());
   }, [ready, sport, surface]);
 
   const mockCtx = useMemo(() => mockContextFor(sport), [sport]);
+  const previewBranding = useMemo(() => ({
+    tournamentLogo: tenantTournamentLogo || branding.tournamentLogo || currentTheme.seasonLogo,
+    partnerLogo: branding.partnerLogo,
+    doOrDieFlagUrl: branding.doOrDieFlagUrl,
+    superRaidFlagUrl: branding.superRaidFlagUrl,
+    superTackleFlagUrl: branding.superTackleFlagUrl,
+    allOutFlagUrl: branding.allOutFlagUrl,
+    bonusPointFlagUrl: branding.bonusPointFlagUrl,
+  }), [branding, currentTheme.seasonLogo, tenantTournamentLogo]);
+  const previewCtx = useMemo(() => ({ ...mockCtx, branding: { ...mockCtx.branding, ...previewBranding } }), [mockCtx, previewBranding]);
   const catalog = getWidgetCatalog(sport, surface);
   const selectedWidget = layout.widgets.find(w => w.id === selectedId) ?? null;
+  const designViewport = DESIGN_VIEWPORTS.find(viewport => viewport.id === designViewportId) ?? DESIGN_VIEWPORTS[0];
+
+  const snapshotWidgetVariant = (widget: ScorecardWidgetInstance): ScorecardWidgetVariant => ({
+    geometry: { ...widget.geometry },
+    style: { ...widget.style },
+    staticText: widget.staticText,
+    staticImageUrl: widget.staticImageUrl,
+    timerLabel: widget.timerLabel,
+    previewText: widget.previewText,
+    previewImageUrl: widget.previewImageUrl,
+    previewIcon: widget.previewIcon,
+    previewItems: widget.previewItems,
+  });
+
+  const switchPropertyTeamSide = useCallback((side: 'common' | 'team_a' | 'team_b') => {
+    if (!selectedWidget || !['kabaddi_do_or_die_flag', 'kabaddi_super_raid_flag', 'kabaddi_super_tackle_flag', 'kabaddi_all_out_flag', 'kabaddi_bonus_point_flag'].includes(selectedWidget.kind)) {
+      setPropertyTeamSide(side);
+      return;
+    }
+    setLayout(currentLayout => {
+      const current = currentLayout.widgets.find(widget => widget.id === selectedWidget.id);
+      if (!current) return currentLayout;
+      const variants = { ...(current.teamVariants ?? {}) };
+      const currentVariant = snapshotWidgetVariant(current);
+      if (propertyTeamSide !== 'common') variants[propertyTeamSide] = currentVariant;
+      if (!variants.common) variants.common = currentVariant;
+      const target = variants[side] ?? variants.common ?? currentVariant;
+      return {
+        ...currentLayout,
+        widgets: currentLayout.widgets.map(widget => widget.id === current.id ? {
+          ...widget,
+          ...(target ?? {}),
+          previewTeamSide: side,
+          teamVariants: variants,
+        } : widget),
+      };
+    });
+    setPropertyTeamSide(side);
+  }, [propertyTeamSide, selectedWidget]);
+
+  const savePropertyTeamSide = useCallback(() => {
+    if (!selectedWidget) return;
+    setLayout(currentLayout => ({
+      ...currentLayout,
+      widgets: currentLayout.widgets.map(widget => widget.id === selectedWidget.id ? {
+        ...widget,
+        teamVariants: { ...(widget.teamVariants ?? {}), [propertyTeamSide]: snapshotWidgetVariant(widget) },
+      } : widget),
+    }));
+    flash(`${propertyTeamSide === 'common' ? 'Common' : propertyTeamSide === 'team_a' ? 'Team A' : 'Team B'} overlay position saved`);
+  }, [flash, propertyTeamSide, selectedWidget]);
+
+  const copyWidgetProperties = useCallback((source: ScorecardWidgetInstance, target: ScorecardWidgetInstance) => {
+    if (source.id === target.id || target.locked) return;
+    setLayout(l => ({
+      ...l,
+      widgets: l.widgets.map(widget => widget.id === target.id ? {
+        ...widget,
+        style: { ...source.style },
+      } : widget),
+    }));
+    setPropertyPickerSourceId(null);
+    setSelectedId(target.id);
+    flash(`Properties copied from ${source.label}`);
+  }, [flash]);
 
   // ── Widget CRUD ──
   const addWidgetFromCatalog = useCallback((entry: WidgetCatalogEntry, xPct: number, yPct: number) => {
@@ -256,6 +467,47 @@ export default function ScorecardDesignerPage({ gameType = 'cricket' }: Readonly
     setLayout(l => ({ ...l, widgets: l.widgets.map(w => (w.id === id ? { ...w, geometry: { ...w.geometry, ...patch } } : w)) }));
   }, []);
 
+  const updateLayer = useCallback((id: string, mode: 'front' | 'back' | 'forward' | 'backward') => {
+    setLayout(l => {
+      const target = l.widgets.find(widget => widget.id === id);
+      if (!target) return l;
+      const layers = l.widgets.map(widget => widget.geometry.zIndex);
+      const maxLayer = Math.max(...layers, 0);
+      const minLayer = Math.min(...layers, 0);
+      const delta = mode === 'front' ? maxLayer + 1 : mode === 'back' ? minLayer - 1 : mode === 'forward' ? 1 : -1;
+      return {
+        ...l,
+        widgets: l.widgets.map(widget => widget.id === id
+          ? { ...widget, geometry: { ...widget.geometry, zIndex: mode === 'front' || mode === 'back' ? delta : widget.geometry.zIndex + delta } }
+          : widget),
+      };
+    });
+  }, []);
+
+  // Nudge the selected widget with the arrow keys. Values stay in percentages
+  // so keyboard placement matches pointer dragging and live overlay output.
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (!selectedWidget || selectedWidget.locked) return;
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLSelectElement) return;
+      const step = e.shiftKey ? 1 : 0.25;
+      const delta = e.key === 'ArrowLeft' ? { xPct: -step }
+        : e.key === 'ArrowRight' ? { xPct: step }
+        : e.key === 'ArrowUp' ? { yPct: -step }
+        : e.key === 'ArrowDown' ? { yPct: step }
+        : null;
+      if (!delta) return;
+      e.preventDefault();
+      const geometry = selectedWidget.geometry;
+      updateGeometry(selectedWidget.id, {
+        xPct: delta.xPct ? Math.max(0, Math.min(100 - geometry.wPct, geometry.xPct + delta.xPct)) : geometry.xPct,
+        yPct: delta.yPct ? Math.max(0, Math.min(100 - geometry.hPct, geometry.yPct + delta.yPct)) : geometry.yPct,
+      });
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [selectedWidget, updateGeometry]);
+
   const updateStyle = useCallback((id: string, patch: Partial<ScorecardWidgetInstance['style']>) => {
     setLayout(l => ({ ...l, widgets: l.widgets.map(w => (w.id === id ? { ...w, style: { ...w.style, ...patch } } : w)) }));
   }, []);
@@ -264,6 +516,61 @@ export default function ScorecardDesignerPage({ gameType = 'cricket' }: Readonly
     setLayout(l => ({ ...l, widgets: l.widgets.filter(w => w.id !== id) }));
     setSelectedId(cur => (cur === id ? null : cur));
   }, []);
+
+  const duplicateWidget = useCallback((source: ScorecardWidgetInstance) => {
+    const oppositeKind: Partial<Record<WidgetKind, WidgetKind>> = {
+      team_a_logo: 'team_b_logo', team_b_logo: 'team_a_logo',
+      team_a_name: 'team_b_name', team_b_name: 'team_a_name',
+      team_a_score: 'team_b_score', team_b_score: 'team_a_score',
+      kabaddi_team_a_players_on_mat: 'kabaddi_team_b_players_on_mat',
+      kabaddi_team_b_players_on_mat: 'kabaddi_team_a_players_on_mat',
+      kabaddi_team_a_players: 'kabaddi_team_b_players',
+      kabaddi_team_b_players: 'kabaddi_team_a_players',
+    };
+    const copy: ScorecardWidgetInstance = {
+      ...source,
+      id: makeWidgetId(),
+      kind: oppositeKind[source.kind] ?? source.kind,
+      label: oppositeKind[source.kind] ? source.label.replace(/Team A|Team B/g, match => match === 'Team A' ? 'Team B' : 'Team A') : `${source.label} Copy`,
+      geometry: {
+        ...source.geometry,
+        xPct: Math.min(100 - source.geometry.wPct, source.geometry.xPct + 4),
+        yPct: Math.min(100 - source.geometry.hPct, source.geometry.yPct + 4),
+      },
+      style: { ...source.style },
+      teamVariants: source.teamVariants ? {
+        team_a: source.teamVariants.team_a ? { ...source.teamVariants.team_a, geometry: { ...source.teamVariants.team_a.geometry }, style: { ...source.teamVariants.team_a.style } } : undefined,
+        team_b: source.teamVariants.team_b ? { ...source.teamVariants.team_b, geometry: { ...source.teamVariants.team_b.geometry }, style: { ...source.teamVariants.team_b.style } } : undefined,
+      } : undefined,
+    };
+    setLayout(l => ({ ...l, widgets: [...l.widgets, copy] }));
+    setSelectedId(copy.id);
+    flash(`Duplicated ${source.label}`);
+  }, [flash]);
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (!selectedWidget || selectedWidget.locked) return;
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLSelectElement) return;
+      if (e.key !== 'Backspace' && e.key !== 'Delete') return;
+      e.preventDefault();
+      removeWidget(selectedWidget.id);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [removeWidget, selectedWidget]);
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (!selectedWidget || selectedWidget.locked) return;
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLSelectElement) return;
+      if (!(e.metaKey || e.ctrlKey) || e.key.toLowerCase() !== 'd') return;
+      e.preventDefault();
+      duplicateWidget(selectedWidget);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [duplicateWidget, selectedWidget]);
 
   // ── Drag & drop from palette ──
   const handleCanvasDrop = useCallback((e: React.DragEvent) => {
@@ -289,13 +596,26 @@ export default function ScorecardDesignerPage({ gameType = 'cricket' }: Readonly
   // ── Drag existing widget to move/resize ──
   const beginDrag = useCallback((widget: ScorecardWidgetInstance, mode: DragMode, e: React.PointerEvent) => {
     if (widget.locked) return;
+    e.preventDefault();
     e.stopPropagation();
     setSelectedId(widget.id);
+    setPropertyTeamSide(widget.previewTeamSide ?? 'common');
     dragRef.current = { id: widget.id, target: 'widget', mode, startClientX: e.clientX, startClientY: e.clientY, startGeom: widget.geometry };
   }, []);
 
+  const handleWidgetPointerDown = useCallback((widget: ScorecardWidgetInstance, e: React.PointerEvent) => {
+    if (propertyPickerSourceId) {
+      e.stopPropagation();
+      const source = layout.widgets.find(candidate => candidate.id === propertyPickerSourceId);
+      if (source) copyWidgetProperties(source, widget);
+      return;
+    }
+    beginDrag(widget, 'move', e);
+  }, [beginDrag, copyWidgetProperties, layout.widgets, propertyPickerSourceId]);
+
   const beginBackgroundDrag = useCallback((e: React.PointerEvent) => {
     if (!layout.backgroundImageUrl) return;
+    e.preventDefault();
     e.stopPropagation();
     setSelectedId(BACKGROUND_ID);
     const geometry = layout.backgroundGeometry ?? { xPct: 0, yPct: 0, wPct: 100, hPct: 100, rotationDeg: 0, zoom: 1 };
@@ -304,6 +624,7 @@ export default function ScorecardDesignerPage({ gameType = 'cricket' }: Readonly
 
   const beginBackgroundResize = useCallback((e: React.PointerEvent) => {
     if (!layout.backgroundImageUrl) return;
+    e.preventDefault();
     e.stopPropagation();
     setSelectedId(BACKGROUND_ID);
     const geometry = layout.backgroundGeometry ?? { xPct: 0, yPct: 0, wPct: 100, hPct: 100, rotationDeg: 0, zoom: 1 };
@@ -364,14 +685,20 @@ export default function ScorecardDesignerPage({ gameType = 'cricket' }: Readonly
   // ── Layout persistence ──
   const handleSave = async () => {
     try {
-      await scorecardLayoutService.saveLayout(sport, layout);
+      const persistLayout = selectedWidget
+        ? { ...layout, widgets: layout.widgets.map(widget => widget.id === selectedWidget.id ? { ...widget, teamVariants: { ...(widget.teamVariants ?? {}), [propertyTeamSide]: snapshotWidgetVariant(widget) } } : widget) }
+        : layout;
+      await scorecardLayoutService.saveLayout(sport, persistLayout);
       flash('Layout saved');
     } catch { flash('Failed to save layout'); }
   };
 
   const handleSetActive = async () => {
     try {
-      await scorecardLayoutService.saveLayout(sport, layout);
+      const persistLayout = selectedWidget
+        ? { ...layout, widgets: layout.widgets.map(widget => widget.id === selectedWidget.id ? { ...widget, teamVariants: { ...(widget.teamVariants ?? {}), [propertyTeamSide]: snapshotWidgetVariant(widget) } } : widget) }
+        : layout;
+      await scorecardLayoutService.saveLayout(sport, persistLayout);
       await scorecardLayoutService.setActiveLayout(sport, layout.id, surface);
       flash('Set as active — now live in OBS Overlay & Camera Recorder');
     } catch { flash('Failed to activate layout'); }
@@ -387,12 +714,23 @@ export default function ScorecardDesignerPage({ gameType = 'cricket' }: Readonly
   const handleNew = () => {
     setLayout(createEmptyLayout(sport, surface));
     setSelectedId(null);
+    setPropertyTeamSide('common');
   };
 
   const handleLoad = (l: ScorecardLayout) => {
     setLayout(l);
     setSelectedId(null);
+    setPropertyPickerSourceId(null);
+    setPropertyTeamSide('common');
   };
+
+  // Keep the designer canvas aligned when the active layout changes from this
+  // page, another browser tab, or an overlay control surface.
+  useEffect(() => {
+    if (!activeLayoutId) return;
+    const activeLayout = layouts.find(saved => saved.id === activeLayoutId);
+    if (activeLayout && activeLayout.id !== layout.id) handleLoad(activeLayout);
+  }, [activeLayoutId, layouts]);
 
   const handleDuplicate = () => {
     const now = Date.now();
@@ -411,7 +749,9 @@ export default function ScorecardDesignerPage({ gameType = 'cricket' }: Readonly
 
   const handleBackgroundUpload = async (file: File) => {
     try {
-      const url = await uploadFileToStorage(file, `media/scorecardDesigner/${sport}/${surface}/backgrounds/${Date.now()}`);
+      const storagePath = `media/scorecardDesigner/${sport}/${surface}/backgrounds/${Date.now()}-${makeWidgetId()}`;
+      const url = await uploadFileToStorage(file, storagePath);
+      await scorecardLayoutService.saveAsset(sport, { id: makeWidgetId(), name: file.name, url, storagePath, kind: 'background', createdAt: Date.now() });
       setLayout(l => ({ ...l, backgroundImageUrl: url }));
       setSelectedId(BACKGROUND_ID);
       flash('Background uploaded');
@@ -420,7 +760,9 @@ export default function ScorecardDesignerPage({ gameType = 'cricket' }: Readonly
 
   const handleWidgetImageUpload = async (widgetId: string, file: File) => {
     try {
-      const url = await uploadFileToStorage(file, `media/scorecardDesigner/${sport}/${surface}/widgets/${widgetId}-${Date.now()}`);
+      const storagePath = `media/scorecardDesigner/${sport}/${surface}/widgets/${widgetId}-${Date.now()}-${makeWidgetId()}`;
+      const url = await uploadFileToStorage(file, storagePath);
+      await scorecardLayoutService.saveAsset(sport, { id: makeWidgetId(), name: file.name, url, storagePath, kind: file.type === 'image/gif' ? 'gif' : 'image', createdAt: Date.now() });
       updateWidget(widgetId, { staticImageUrl: url });
       flash('Image uploaded');
     } catch { flash('Upload failed'); }
@@ -446,6 +788,16 @@ export default function ScorecardDesignerPage({ gameType = 'cricket' }: Readonly
     } catch { flash('Failed to create widget'); }
   };
 
+  const applyAssetToWidget = (asset: ScorecardAsset) => {
+    if (selectedWidget && (selectedWidget.kind === 'custom_image' || selectedWidget.kind === 'team_a_logo' || selectedWidget.kind === 'team_b_logo')) {
+      updateWidget(selectedWidget.id, { staticImageUrl: asset.url });
+      return;
+    }
+    const instance = createWidgetInstance({ kind: 'custom_image', label: asset.name, icon: '🖼️', defaultW: 18, defaultH: 18, category: 'branding', description: 'Reusable uploaded asset' }, 40, 40);
+    setLayout(l => ({ ...l, widgets: [...l.widgets, { ...instance, staticImageUrl: asset.url }] }));
+    setSelectedId(instance.id);
+  };
+
   if (!ready) {
     return <div className="scd scd--loading"><div className="scd__spinner" /><p>Connecting…</p></div>;
   }
@@ -465,12 +817,24 @@ export default function ScorecardDesignerPage({ gameType = 'cricket' }: Readonly
         {isActive && <span className="scd__active-badge"><IoCheckmarkCircle size={13} /> ACTIVE</span>}
         <select
           className="scd__load-select"
-          value=""
+          value={layouts.some(saved => saved.id === layout.id) ? layout.id : ''}
           onChange={e => { const found = layouts.find(l => l.id === e.target.value); if (found) handleLoad(found); }}
         >
           <option value="">Load saved layout…</option>
           {layouts.map(l => <option key={l.id} value={l.id}>{l.name}{l.id === activeLayoutId ? ' (active)' : ''}</option>)}
         </select>
+        <div className="scd__saved-layouts">
+          {layouts.map(saved => (
+            <div key={saved.id} className={`scd__saved-layout ${saved.id === layout.id ? 'is-current' : ''}`}>
+              <button className="scd__saved-layout-name" onClick={() => handleLoad(saved)} title="Open layout">{saved.name}</button>
+              <button className="scd__saved-layout-action" onClick={() => {
+                const name = window.prompt('Rename layout', saved.name)?.trim();
+                if (name && name !== saved.name) void scorecardLayoutService.saveLayout(sport, { ...saved, name });
+              }} title="Rename layout">Rename</button>
+              <button className="scd__saved-layout-action scd__saved-layout-action--danger" onClick={() => void handleDelete(saved.id)} title="Delete layout">Delete</button>
+            </div>
+          ))}
+        </div>
         <div className="scd__bar-actions">
           <button className="scd__btn" onClick={handleNew}><IoAdd size={15} /> New</button>
           <button className="scd__btn" onClick={handleDuplicate}><IoCopyOutline size={15} /> Duplicate</button>
@@ -553,6 +917,23 @@ export default function ScorecardDesignerPage({ gameType = 'cricket' }: Readonly
               ))}
             </div>
           )}
+
+          <div className="scd__palette-custom-head"><h3>Saved Assets</h3></div>
+          <p className="scd__hint">Reusable backgrounds, images, and GIFs.</p>
+          <div className="scd__asset-list">
+            {assets.map(asset => (
+              <div key={asset.id} className="scd__asset-item">
+                <button className="scd__asset-preview" title={`Use ${asset.name}`} onClick={() => {
+                  if (asset.kind === 'background') { setLayout(l => ({ ...l, backgroundImageUrl: asset.url })); setSelectedId(BACKGROUND_ID); }
+                  else applyAssetToWidget(asset);
+                }}>
+                  <img src={asset.url} alt="" />
+                </button>
+                <span title={asset.name}>{asset.name}</span>
+                <button className="scd__palette-del" onClick={() => void scorecardLayoutService.deleteAsset(sport, asset.id)} title="Delete saved asset"><IoClose size={12} /></button>
+              </div>
+            ))}
+          </div>
         </aside>
 
         {/* ── Canvas ── */}
@@ -561,10 +942,32 @@ export default function ScorecardDesignerPage({ gameType = 'cricket' }: Readonly
             {SURFACE_HINTS[surface]}{' '}
             Preview shows sample data; live values populate automatically once this template is set Active.
           </p>
+          <div className="scd__viewport-toolbar">
+            <span>Preview screen</span>
+            <select value={designViewportId} onChange={e => setDesignViewportId(e.target.value as typeof designViewportId)}>
+              {DESIGN_VIEWPORTS.map(viewport => <option key={viewport.id} value={viewport.id}>{viewport.label} ({viewport.width}×{viewport.height})</option>)}
+            </select>
+            <div className="scd__layers-toggle-wrap">
+              <button type="button" className={`scd__layers-toggle ${showLayersPanel ? 'is-active' : ''}`} onClick={() => setShowLayersPanel(value => !value)} title="Show layers">
+                <IoLayersOutline size={14} /> Layers <span>{layout.widgets.length}</span>
+              </button>
+              {showLayersPanel && (
+                <LayersPanel
+                  layout={layout}
+                  selectedId={selectedId}
+                  onSelect={id => { setSelectedId(id); setShowLayersPanel(false); }}
+                  onLayerChange={updateLayer}
+                  onVisibilityChange={(id, visible) => updateWidget(id, { visible })}
+                />
+              )}
+            </div>
+            <small>Adjust positions here for the selected screen frame. Saved geometry remains responsive.</small>
+          </div>
           <div className="scd__stage-frame">
             <div
               ref={canvasRef}
-              className="scd__stage-canvas"
+              className={`scd__stage-canvas ${designViewport.height > designViewport.width ? 'is-portrait' : ''}`}
+              style={{ aspectRatio: `${designViewport.width} / ${designViewport.height}` }}
               onDragOver={e => e.preventDefault()}
               onDrop={handleCanvasDrop}
               onPointerDown={() => setSelectedId(null)}
@@ -572,11 +975,11 @@ export default function ScorecardDesignerPage({ gameType = 'cricket' }: Readonly
               <ScorecardLayoutView
                 key={previewToken}
                 layout={layout}
-                ctx={mockCtx}
+                ctx={previewCtx}
                 selectedWidgetId={selectedId}
                 interactive
                 onPointerDownBackground={beginBackgroundDrag}
-                onPointerDownWidget={(w, e) => beginDrag(w, 'move', e)}
+                onPointerDownWidget={handleWidgetPointerDown}
                 renderBackgroundOverlay={selectedId === BACKGROUND_ID && layout.backgroundImageUrl ? (
                   <div
                     className="scd__background-selection"
@@ -635,9 +1038,22 @@ export default function ScorecardDesignerPage({ gameType = 'cricket' }: Readonly
           ) : (
             <PropertiesPanel
               widget={selectedWidget}
+              assets={assets}
+              auctionTeams={auctionTeams}
+              branding={previewBranding}
+              layout={layout}
+              onDuplicate={duplicateWidget}
               onGeometryChange={patch => updateGeometry(selectedWidget.id, patch)}
               onStyleChange={patch => updateStyle(selectedWidget.id, patch)}
+              onLayerChange={mode => updateLayer(selectedWidget.id, mode)}
               onFieldChange={patch => updateWidget(selectedWidget.id, patch)}
+              onLayoutChange={patch => setLayout(l => ({ ...l, ...patch }))}
+              propertyTeamSide={propertyTeamSide}
+              onTeamSideChange={switchPropertyTeamSide}
+              onSaveTeamSide={savePropertyTeamSide}
+              propertyPickerActive={propertyPickerSourceId !== null}
+              onStartPropertyPicker={() => setPropertyPickerSourceId(selectedWidget.id)}
+              onCancelPropertyPicker={() => setPropertyPickerSourceId(null)}
               onRemove={() => removeWidget(selectedWidget.id)}
               onImageUpload={file => void handleWidgetImageUpload(selectedWidget.id, file)}
               onPreviewAnimation={() => setPreviewToken(t => t + 1)}
@@ -704,6 +1120,49 @@ export default function ScorecardDesignerPage({ gameType = 'cricket' }: Readonly
 
 // ── Properties Panel ─────────────────────────────────────────────────────────
 
+function LayersPanel({ layout, selectedId, onSelect, onLayerChange, onVisibilityChange }: Readonly<{
+  layout: ScorecardLayout;
+  selectedId: string | null;
+  onSelect: (id: string) => void;
+  onLayerChange: (id: string, mode: 'front' | 'back' | 'forward' | 'backward') => void;
+  onVisibilityChange: (id: string, visible: boolean) => void;
+}>) {
+  return (
+    <div className="scd__layers-panel">
+      <div className="scd__layers-head">
+        <div><h3>Layers</h3><p>Live widgets and design order</p></div>
+        <span>{layout.widgets.length}</span>
+      </div>
+      {layout.backgroundImageUrl && (
+        <button type="button" className={`scd__layer-row ${selectedId === BACKGROUND_ID ? 'is-selected' : ''}`} onClick={() => onSelect(BACKGROUND_ID)}>
+          <span className="scd__layer-index">BG</span><span className="scd__layer-name">Background image</span><span className="scd__layer-meta">Canvas</span>
+        </button>
+      )}
+      {[...layout.widgets].sort((a, b) => b.geometry.zIndex - a.geometry.zIndex).map((widget, index) => (
+        <div key={widget.id} className={`scd__layer-row ${selectedId === widget.id ? 'is-selected' : ''}`}>
+          <button type="button" className="scd__layer-main" onClick={() => onSelect(widget.id)}>
+            <span className="scd__layer-index">{index + 1}</span>
+            <span className="scd__layer-name">{widget.label}</span>
+            <span className={`scd__layer-meta ${widgetHasLiveBinding(widget.kind) ? 'is-live' : ''}`}>
+              {widgetHasLiveBinding(widget.kind) ? 'LIVE' : 'DESIGN'}{widget.locked ? ' · LOCKED' : ''}
+            </span>
+          </button>
+          <div className="scd__layer-row-actions">
+            <button type="button" title={widget.visible ? 'Hide widget' : 'Show widget'} onClick={() => onVisibilityChange(widget.id, !widget.visible)}>
+              {widget.visible ? <IoEyeOutline size={11} /> : <IoEyeOffOutline size={11} />}
+            </button>
+            <button type="button" title="Bring to front" onClick={() => onLayerChange(widget.id, 'front')}><IoArrowUpOutline size={11} /></button>
+            <button type="button" title="Bring forward" onClick={() => onLayerChange(widget.id, 'forward')}><IoChevronUpOutline size={11} /></button>
+            <button type="button" title="Send backward" onClick={() => onLayerChange(widget.id, 'backward')}><IoChevronDownOutline size={11} /></button>
+            <button type="button" title="Send to back" onClick={() => onLayerChange(widget.id, 'back')}><IoArrowDownOutline size={11} /></button>
+          </div>
+        </div>
+      ))}
+      {layout.widgets.length === 0 && !layout.backgroundImageUrl && <p className="scd__hint">No layers yet.</p>}
+    </div>
+  );
+}
+
 function BackgroundPropertiesPanel({ geometry, onChange }: Readonly<{
   geometry: ScorecardLayout['backgroundGeometry'];
   onChange: (patch: Partial<NonNullable<ScorecardLayout['backgroundGeometry']>>) => void;
@@ -728,24 +1187,45 @@ function BackgroundPropertiesPanel({ geometry, onChange }: Readonly<{
   );
 }
 
-function PropertiesPanel({ widget, onGeometryChange, onStyleChange, onFieldChange, onRemove, onImageUpload, onPreviewAnimation }: Readonly<{
+function PropertiesPanel({ widget, assets, auctionTeams, branding, layout, propertyPickerActive, propertyTeamSide, onStartPropertyPicker, onCancelPropertyPicker, onTeamSideChange, onSaveTeamSide, onGeometryChange, onStyleChange, onLayerChange, onFieldChange, onLayoutChange, onDuplicate, onRemove, onImageUpload, onPreviewAnimation }: Readonly<{
   widget: ScorecardWidgetInstance;
+  assets: ScorecardAsset[];
+  auctionTeams: Team[];
+  branding: { tournamentLogo?: string; partnerLogo?: string; doOrDieFlagUrl?: string; superRaidFlagUrl?: string; superTackleFlagUrl?: string; allOutFlagUrl?: string; bonusPointFlagUrl?: string };
+  layout: ScorecardLayout;
+  propertyPickerActive: boolean;
+  propertyTeamSide: 'common' | 'team_a' | 'team_b';
+  onStartPropertyPicker: () => void;
+  onCancelPropertyPicker: () => void;
+  onTeamSideChange: (side: 'common' | 'team_a' | 'team_b') => void;
+  onSaveTeamSide: () => void;
   onGeometryChange: (patch: Partial<ScorecardWidgetInstance['geometry']>) => void;
   onStyleChange: (patch: Partial<ScorecardWidgetInstance['style']>) => void;
+  onLayerChange: (mode: 'front' | 'back' | 'forward' | 'backward') => void;
   onFieldChange: (patch: Partial<ScorecardWidgetInstance>) => void;
+  onLayoutChange: (patch: Partial<ScorecardLayout>) => void;
+  onDuplicate: (widget: ScorecardWidgetInstance) => void;
   onRemove: () => void;
   onImageUpload: (file: File) => void;
   onPreviewAnimation: () => void;
 }>) {
   const { geometry, style } = widget;
   const isImageKind = widget.kind === 'team_a_logo' || widget.kind === 'team_b_logo'
-    || widget.kind === 'custom_image' || widget.kind === 'tournament_logo' || widget.kind === 'partner_logo';
+    || widget.kind === 'custom_image' || widget.kind === 'tournament_logo' || widget.kind === 'partner_logo' || widget.kind === 'live_badge';
 
   return (
     <div className="scd__props-body">
       <div className="scd__props-head">
         <strong>{widget.label}</strong>
         <div className="scd__props-toggles">
+          <button title="Duplicate widget (Cmd/Ctrl+D)" onClick={() => onDuplicate(widget)}><IoCopyOutline size={15} /></button>
+          <button
+            title={propertyPickerActive ? 'Cancel property picker' : 'Pick properties from this widget'}
+            className={propertyPickerActive ? 'is-active' : undefined}
+            onClick={propertyPickerActive ? onCancelPropertyPicker : onStartPropertyPicker}
+          >
+            <IoColorWandOutline size={15} />
+          </button>
           <button title={widget.visible ? 'Hide' : 'Show'} onClick={() => onFieldChange({ visible: !widget.visible })}>
             {widget.visible ? <IoEyeOutline size={15} /> : <IoEyeOffOutline size={15} />}
           </button>
@@ -764,6 +1244,156 @@ function PropertiesPanel({ widget, onGeometryChange, onStyleChange, onFieldChang
         <label className="scd__field scd__field--sm"><span>Rotate°</span><input type="number" value={geometry.rotationDeg} onChange={e => onGeometryChange({ rotationDeg: Number(e.target.value) || 0 })} /></label>
         <label className="scd__field scd__field--sm"><span>Layer</span><input type="number" value={geometry.zIndex} onChange={e => onGeometryChange({ zIndex: Number(e.target.value) || 0 })} /></label>
       </div>
+      <div className="scd__layer-controls" aria-label="Layer order">
+        <span>Layer order</span>
+        <button type="button" title="Bring to front" onClick={() => onLayerChange('front')}><IoArrowUpOutline size={14} /></button>
+        <button type="button" title="Bring forward" onClick={() => onLayerChange('forward')}><IoChevronUpOutline size={14} /></button>
+        <button type="button" title="Send backward" onClick={() => onLayerChange('backward')}><IoChevronDownOutline size={14} /></button>
+        <button type="button" title="Send to back" onClick={() => onLayerChange('back')}><IoArrowDownOutline size={14} /></button>
+      </div>
+
+      {(widget.kind === 'team_a_name' || widget.kind === 'team_b_name') && (
+        <label className="scd__field">
+          <span>{widget.kind === 'team_a_name' ? 'Team A preview name' : 'Team B preview name'}</span>
+          <select value={widget.previewText ?? ''} onChange={e => onFieldChange({ previewText: e.target.value || undefined })}>
+            <option value="">Use sample/live name</option>
+            {auctionTeams.map(team => <option key={team.id} value={team.name}>{team.name}</option>)}
+          </select>
+        </label>
+      )}
+
+      {widget.kind === 'match_venue' && (
+        <label className="scd__field">
+          <span>Venue preview</span>
+          <input value={widget.previewText ?? ''} onChange={e => onFieldChange({ previewText: e.target.value || undefined })} placeholder="Sample Stadium" />
+        </label>
+      )}
+
+      {(widget.kind === 'team_a_score' || widget.kind === 'team_b_score' || widget.kind === 'cricket_score'
+        || widget.kind === 'football_score' || widget.kind === 'kabaddi_score' || widget.kind === 'kabaddi_players_on_mat'
+        || widget.kind === 'kabaddi_team_a_players_on_mat' || widget.kind === 'kabaddi_team_b_players_on_mat') && (
+        <label className="scd__field">
+          <span>Score preview</span>
+          <input
+            value={widget.previewText ?? ''}
+            onChange={e => onFieldChange({ previewText: e.target.value || undefined })}
+            placeholder={widget.kind === 'cricket_score' ? '0/0' : '0 - 0'}
+          />
+        </label>
+      )}
+
+      {(widget.kind === 'kabaddi_players_on_mat' || widget.kind === 'kabaddi_team_a_players_on_mat' || widget.kind === 'kabaddi_team_b_players_on_mat') && (
+        <div className="scd__field">
+          <span>Player count icon</span>
+          <div className="scd__fa-icon-picker">
+            <button type="button" className={!widget.previewIcon ? 'is-selected' : ''} onClick={() => onFieldChange({ previewIcon: undefined })} title="No icon">-</button>
+            {PLAYER_ICON_OPTIONS.map(icon => (
+              <button
+                key={icon.value}
+                type="button"
+                className={widget.previewIcon === icon.value ? 'is-selected' : ''}
+                onClick={() => onFieldChange({ previewIcon: icon.value, previewText: widget.previewText || '5' })}
+                title={icon.label}
+                aria-label={icon.label}
+              >
+                <FontAwesomeIcon icon={icon.icon} />
+              </button>
+            ))}
+          </div>
+          <label className="scd__field">
+            <span>Icon size ({Math.round(style.iconSize ?? style.fontSize ?? 28)} px)</span>
+            <input type="range" min={10} max={96} step={1} value={style.iconSize ?? style.fontSize ?? 28} onChange={e => onStyleChange({ iconSize: Number(e.target.value) })} />
+          </label>
+          <label className="scd__field">
+            <span>Icon gap ({style.iconGap ?? 6} px)</span>
+            <input type="range" min={-32} max={48} step={1} value={style.iconGap ?? 6} onChange={e => onStyleChange({ iconGap: Number(e.target.value) })} />
+          </label>
+        </div>
+      )}
+
+      {(isImageKind
+        || widget.kind === 'kabaddi_players_on_mat'
+        || widget.kind === 'kabaddi_team_a_players_on_mat'
+        || widget.kind === 'kabaddi_team_b_players_on_mat'
+        || widget.kind === 'kabaddi_do_or_die_flag'
+        || widget.kind === 'kabaddi_super_raid_flag'
+        || widget.kind === 'kabaddi_super_tackle_flag'
+        || widget.kind === 'kabaddi_all_out_flag'
+        || widget.kind === 'kabaddi_bonus_point_flag') && (
+        <div className="scd__field">
+          <span>Flip icon / image</span>
+          <div className="scd__flip-controls">
+            <label><input type="checkbox" checked={!!style.flipX} onChange={e => onStyleChange({ flipX: e.target.checked })} /> Horizontal</label>
+            <label><input type="checkbox" checked={!!style.flipY} onChange={e => onStyleChange({ flipY: e.target.checked })} /> Vertical</label>
+          </div>
+        </div>
+      )}
+
+      {(widget.kind === 'kabaddi_team_a_players' || widget.kind === 'kabaddi_team_b_players') && (
+        <div className="scd__field">
+          <span>Preview player list</span>
+          <input
+            value={(widget.previewItems ?? []).map(item => item.text).join(', ')}
+            onChange={e => onFieldChange({ previewItems: previewPlayerItems(e.target.value) })}
+            placeholder="Arjun, Ravi, Sameer"
+          />
+          <small className="scd__hint">Comma-separated dummy names with sample player images.</small>
+        </div>
+      )}
+
+      {(widget.kind === 'tournament_logo' || widget.kind === 'partner_logo') && (
+        <label className="scd__field">
+          <span>{widget.kind === 'tournament_logo' ? 'Tournament logo preview' : 'Partner logo preview'}</span>
+          <select value={widget.previewImageUrl ?? (widget.kind === 'tournament_logo' ? branding.tournamentLogo ?? '' : branding.partnerLogo ?? '')} onChange={e => onFieldChange({ previewImageUrl: e.target.value || undefined })}>
+            <option value="">Use live branding</option>
+            {widget.kind === 'tournament_logo' && branding.tournamentLogo && <option value={branding.tournamentLogo}>Firebase tournament logo</option>}
+            {widget.kind === 'partner_logo' && branding.partnerLogo && <option value={branding.partnerLogo}>Firebase broadcasting logo</option>}
+            {assets.filter(asset => asset.kind === 'image' || asset.kind === 'gif').map(asset => (
+              <option key={asset.id} value={asset.url}>{asset.name}</option>
+            ))}
+          </select>
+          {widget.kind === 'partner_logo' && (
+            <label className="scd__checkbox-field">
+              <input type="checkbox" checked={!!layout.freezePartnerLogo} onChange={e => onLayoutChange({ freezePartnerLogo: e.target.checked, frozenPartnerLogoUrl: e.target.checked ? (widget.previewImageUrl || branding.partnerLogo) : undefined })} />
+              Freeze this broadcasting logo for every overlay using this layout
+            </label>
+          )}
+        </label>
+      )}
+
+      {(widget.kind === 'kabaddi_do_or_die_flag' || widget.kind === 'kabaddi_super_raid_flag' || widget.kind === 'kabaddi_super_tackle_flag' || widget.kind === 'kabaddi_all_out_flag' || widget.kind === 'kabaddi_bonus_point_flag') && (() => {
+        const flagConfig = widget.kind === 'kabaddi_do_or_die_flag'
+          ? { label: 'Do-or-Die', url: branding.doOrDieFlagUrl }
+          : widget.kind === 'kabaddi_super_raid_flag'
+            ? { label: 'Super Raid', url: branding.superRaidFlagUrl }
+            : widget.kind === 'kabaddi_super_tackle_flag'
+              ? { label: 'Super Tackle', url: branding.superTackleFlagUrl }
+              : widget.kind === 'kabaddi_all_out_flag'
+                ? { label: 'All Out', url: branding.allOutFlagUrl }
+                : { label: 'Bonus Point', url: branding.bonusPointFlagUrl };
+        return (
+          <label className="scd__field">
+            <span>Team overlay position</span>
+            <select value={propertyTeamSide} onChange={e => onTeamSideChange(e.target.value as 'common' | 'team_a' | 'team_b')}>
+              <option value="common">Common</option>
+              <option value="team_a">Team A</option>
+              <option value="team_b">Team B</option>
+            </select>
+            <button type="button" className="scd__btn scd__btn--sm" onClick={onSaveTeamSide}>Save Team Position</button>
+            <span>{flagConfig.label} overlay preview</span>
+            <select value={widget.previewTeamSide ?? 'common'} onChange={e => onFieldChange({ previewTeamSide: e.target.value as 'common' | 'team_a' | 'team_b' })}>
+              <option value="common">Common overlay position</option>
+              <option value="team_a">Team A overlay position</option>
+              <option value="team_b">Team B overlay position</option>
+            </select>
+            <select value={widget.previewImageUrl ?? flagConfig.url ?? ''} onChange={e => onFieldChange({ previewImageUrl: e.target.value || undefined })}>
+              <option value="">Use scorer-admin flag</option>
+              {flagConfig.url && <option value={flagConfig.url}>Firebase scorer-admin {flagConfig.label} media</option>}
+              {assets.filter(asset => asset.kind === 'image' || asset.kind === 'gif').map(asset => <option key={asset.id} value={asset.url}>{asset.name}</option>)}
+            </select>
+          </label>
+        );
+      })()}
 
       {widget.kind === 'custom_text' && (
         <label className="scd__field"><span>Text</span><input value={widget.staticText ?? ''} onChange={e => onFieldChange({ staticText: e.target.value })} /></label>
@@ -771,16 +1401,54 @@ function PropertiesPanel({ widget, onGeometryChange, onStyleChange, onFieldChang
       {widget.kind === 'custom_timer' && (
         <label className="scd__field"><span>Label prefix</span><input value={widget.timerLabel ?? ''} onChange={e => onFieldChange({ timerLabel: e.target.value })} /></label>
       )}
-      {widget.kind === 'custom_image' && (
+      {(widget.kind === 'custom_image' || widget.kind === 'team_a_logo' || widget.kind === 'team_b_logo' || widget.kind === 'live_badge') && (
         <div className="scd__field">
-          <span>Image</span>
+          <span>{widget.kind === 'team_a_logo' ? 'Team A Logo' : widget.kind === 'team_b_logo' ? 'Team B Logo' : widget.kind === 'live_badge' ? 'Live Badge GIF / Image' : 'Image'}</span>
+          {(widget.kind === 'team_a_logo' || widget.kind === 'team_b_logo') && (
+            <select
+              value={widget.staticImageUrl ?? ''}
+              onChange={e => onFieldChange({ staticImageUrl: e.target.value || undefined })}
+            >
+              <option value="">Use live team logo</option>
+              {auctionTeams.map(team => {
+                const logoUrl = team.brandLogoUrl || team.logoUrl;
+                return logoUrl ? <option key={team.id} value={logoUrl}>{team.name}</option> : null;
+              })}
+            </select>
+          )}
+          {widget.kind === 'live_badge' && (
+            <select value={widget.staticImageUrl ?? ''} onChange={e => onFieldChange({ staticImageUrl: e.target.value || undefined })}>
+              <option value="">Blinking LIVE text</option>
+              {assets.filter(asset => asset.kind === 'gif' || asset.kind === 'image').map(asset => <option key={asset.id} value={asset.url}>{asset.name}</option>)}
+            </select>
+          )}
+          {assets.filter(asset => asset.kind === 'image' || asset.kind === 'gif').length > 0 && (
+            <div className="scd__logo-picker">
+              {assets.filter(asset => asset.kind === 'image' || asset.kind === 'gif').map(asset => (
+                <button
+                  key={asset.id}
+                  type="button"
+                  className={`scd__logo-choice ${widget.staticImageUrl === asset.url ? 'is-selected' : ''}`}
+                  title={`Use ${asset.name}`}
+                  onClick={() => onFieldChange({ staticImageUrl: asset.url })}
+                >
+                  <img src={asset.url} alt={asset.name} />
+                </button>
+              ))}
+            </div>
+          )}
           <div style={{ display: 'flex', gap: 6 }}>
             <input value={widget.staticImageUrl ?? ''} onChange={e => onFieldChange({ staticImageUrl: e.target.value })} placeholder="https://…" style={{ flex: 1 }} />
             <label className="scd__btn scd__btn--sm" style={{ margin: 0, cursor: 'pointer' }}>
-              Upload
+              {widget.kind === 'live_badge' ? 'Upload GIF' : 'Upload logo'}
               <input type="file" accept="image/*" style={{ display: 'none' }} onChange={e => { if (e.target.files?.[0]) onImageUpload(e.target.files[0]); }} />
             </label>
           </div>
+          {widget.staticImageUrl && (
+            <button type="button" className="scd__btn scd__btn--sm" onClick={() => onFieldChange({ staticImageUrl: undefined })}>
+              {widget.kind === 'live_badge' ? 'Use blinking LIVE text' : 'Use live team logo'}
+            </button>
+          )}
         </div>
       )}
 
@@ -867,6 +1535,11 @@ function PropertiesPanel({ widget, onGeometryChange, onStyleChange, onFieldChang
       <label className="scd__field">
         <span>Zoom ({(style.zoom ?? 1).toFixed(2)}×)</span>
         <input type="range" min={0.1} max={3} step={0.05} value={style.zoom ?? 1} onChange={e => onStyleChange({ zoom: Number(e.target.value) })} />
+      </label>
+
+      <label className="scd__field">
+        <span>Content scale ({(style.contentScale ?? 1).toFixed(2)}×)</span>
+        <input type="range" min={0.25} max={3} step={0.05} value={style.contentScale ?? 1} onChange={e => onStyleChange({ contentScale: Number(e.target.value) })} />
       </label>
 
       <div className="scd__prop-grid">

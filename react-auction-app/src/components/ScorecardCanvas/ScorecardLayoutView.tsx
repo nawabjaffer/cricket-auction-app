@@ -4,11 +4,11 @@
 // Designer preview canvas and the live OBS overlay renderer.
 // ============================================================================
 
-import type { ReactNode } from 'react';
+import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { ResolvedImage } from '../ResolvedImage';
 import { ScorecardWidgetView } from './ScorecardWidgetView';
 import type { ScorecardLayout, ScorecardWidgetInstance } from '../../types/scorecardDesigner';
-import { resolveWidgetContent, type ScorecardDataContext } from '../../utils/scorecardDataBinding';
+import { resolveWidgetContent, resolveWidgetVariant, type ScorecardDataContext } from '../../utils/scorecardDataBinding';
 import './ScorecardCanvas.css';
 
 interface ScorecardLayoutViewProps {
@@ -27,11 +27,63 @@ export function ScorecardLayoutView({
   layout, ctx, selectedWidgetId, interactive, className, onPointerDownWidget, onPointerDownBackground,
   renderWidgetOverlay, renderBackgroundOverlay,
 }: Readonly<ScorecardLayoutViewProps>) {
+  const broadcastHostRef = useRef<HTMLDivElement>(null);
+  const [broadcastScale, setBroadcastScale] = useState(1);
+  const [broadcastZoom, setBroadcastZoom] = useState(1);
+  const isBroadcast = !interactive;
+
+  useLayoutEffect(() => {
+    if (!isBroadcast) return;
+    const host = broadcastHostRef.current?.parentElement;
+    if (!host) return;
+    const updateScale = () => {
+      const width = host.clientWidth || window.innerWidth;
+      const height = host.clientHeight || window.innerHeight;
+      setBroadcastScale(Math.min(width / 1920, height / 1080));
+    };
+    updateScale();
+    const observer = new ResizeObserver(updateScale);
+    observer.observe(host);
+    window.addEventListener('resize', updateScale);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', updateScale);
+    };
+  }, [isBroadcast]);
+
+  useLayoutEffect(() => {
+    if (!isBroadcast) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return;
+      if (event.key === '+' || event.key === '=') {
+        event.preventDefault();
+        setBroadcastZoom(value => Math.min(1.5, Number((value + 0.05).toFixed(2))));
+      } else if (event.key === '-' || event.key === '_') {
+        event.preventDefault();
+        setBroadcastZoom(value => Math.max(0.75, Number((value - 0.05).toFixed(2))));
+      } else if (event.key === '0') {
+        setBroadcastZoom(1);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [isBroadcast]);
+
   const sorted = [...layout.widgets].sort((a, b) => a.geometry.zIndex - b.geometry.zIndex);
   const backgroundGeometry = layout.backgroundGeometry ?? { xPct: 0, yPct: 0, wPct: 100, hPct: 100, rotationDeg: 0, zoom: 1 };
+  const renderCtx = layout.freezePartnerLogo && layout.frozenPartnerLogoUrl
+    ? { ...ctx, branding: { ...ctx.branding, partnerLogo: layout.frozenPartnerLogoUrl } }
+    : ctx;
 
-  return (
-    <div className={`sc-canvas ${className ?? ''}`} style={{ backgroundColor: layout.backgroundColor || 'transparent' }}>
+  const canvas = (
+    <div
+      ref={broadcastHostRef}
+      className={`sc-canvas ${isBroadcast ? 'sc-canvas--broadcast' : ''} ${className ?? ''}`}
+      style={isBroadcast ? {
+        backgroundColor: layout.backgroundColor || 'transparent',
+        transform: `translate(-50%, -50%) scale(${broadcastScale * broadcastZoom})`,
+      } : { backgroundColor: layout.backgroundColor || 'transparent' }}
+    >
       {layout.backgroundImageUrl && (
         <div
           className="sc-canvas__bg"
@@ -50,22 +102,37 @@ export function ScorecardLayoutView({
             src={layout.backgroundImageUrl}
             alt=""
             size={1920}
-            style={{ width: '100%', height: '100%', objectFit: 'cover', pointerEvents: 'none' }}
+            style={{ width: '100%', height: '100%', objectFit: 'contain', pointerEvents: 'none' }}
           />
         </div>
       )}
       {renderBackgroundOverlay}
       {sorted.map(widget => (
-        <ScorecardWidgetView
+        (() => {
+          const effectiveWidget = resolveWidgetVariant(widget, renderCtx, !!interactive);
+          return <ScorecardWidgetView
           key={widget.id}
-          widget={widget}
-          content={resolveWidgetContent(widget, ctx)}
+          widget={effectiveWidget}
+          content={resolveWidgetContent(effectiveWidget, renderCtx, !!interactive)}
           selected={selectedWidgetId === widget.id}
           interactive={interactive}
-          onPointerDownBody={interactive ? (e) => onPointerDownWidget?.(widget, e) : undefined}
-          overlay={renderWidgetOverlay?.(widget)}
-        />
+          onPointerDownBody={interactive ? (e) => onPointerDownWidget?.(effectiveWidget, e) : undefined}
+          overlay={renderWidgetOverlay?.(effectiveWidget)}
+        />;
+        })()
       ))}
     </div>
+  );
+
+  if (!isBroadcast) return canvas;
+  return (
+    <>
+      {canvas}
+      <div className="sc-canvas__zoom-control" title="Final overlay zoom: use + and - keys">
+        <button type="button" onClick={() => setBroadcastZoom(value => Math.max(0.75, Number((value - 0.05).toFixed(2))))} aria-label="Zoom out">−</button>
+        <button type="button" onClick={() => setBroadcastZoom(1)} aria-label="Reset overlay zoom">{Math.round(broadcastZoom * 100)}%</button>
+        <button type="button" onClick={() => setBroadcastZoom(value => Math.min(1.5, Number((value + 0.05).toFixed(2))))} aria-label="Zoom in">+</button>
+      </div>
+    </>
   );
 }

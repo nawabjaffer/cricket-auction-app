@@ -10,7 +10,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   IoAdd, IoTrash, IoSave, IoClose, IoPeople, IoShirt, IoSettings,
-  IoDesktop, IoFlash, IoPlay, IoPencil, IoTrophy, IoVideocam, IoStatsChart,
+  IoDesktop, IoFlash, IoPlay, IoPencil, IoTrophy, IoVideocam, IoStatsChart, IoRefresh,
 } from 'react-icons/io5';
 import { realtimeSync } from '../services/realtimeSync';
 import { kabaddiService } from '../services/kabaddi';
@@ -934,7 +934,7 @@ function KabaddiAdminPageContent() {
                         )}
                       </strong>
                       <small>
-                        <span className={`kba__status kba__status--${m.status}`}>{m.status}</span>
+                        <span className={`kba__status kba__status--${m.status}`}>{m.status === 'live' ? 'STARTED' : m.status === 'scheduled' ? 'NOT STARTED' : m.status}</span>
                         {' '}{m.venue} · {m.halfDurationMin}′ halves{m.competition ? ` · ${m.competition}` : ''}
                       </small>
                     </div>
@@ -956,6 +956,27 @@ function KabaddiAdminPageContent() {
                       }}
                     >
                       <IoPlay size={15} />
+                    </button>
+                    <button
+                      title="Reset match results and return to Not Started"
+                      disabled={!ready || busy}
+                      onClick={async () => {
+                        if (!window.confirm('Reset this match result? Scores, clock, raids, events, and overlay state will be cleared.')) return;
+                        if (!ready || !kabaddiService.isReady) {
+                          flash('Kabaddi service is still connecting — try again in a moment');
+                          return;
+                        }
+                        try {
+                          await kabaddiService.resetMatchResults(m.id);
+                          await reloadMatches();
+                          flash('Match reset — NOT STARTED');
+                        } catch (error) {
+                          console.error('[KabaddiAdmin] Failed to reset match', error);
+                          flash(`Failed to reset match: ${error instanceof Error ? error.message : String(error)}`);
+                        }
+                      }}
+                    >
+                      <IoRefresh size={15} /> Reset
                     </button>
                     <button onClick={async () => { if (window.confirm('Delete match?')) { await kabaddiService.deleteMatch(m.id); await reloadMatches(); flash('Deleted'); } }}><IoTrash size={15} /></button>
                   </div>

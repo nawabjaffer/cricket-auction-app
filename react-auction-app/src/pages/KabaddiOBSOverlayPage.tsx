@@ -20,7 +20,7 @@ import { ResolvedImage } from '../components/ResolvedImage';
 import { ScorecardLayoutView } from '../components/ScorecardCanvas';
 import { overlayMediaPreload, getPreloadedMediaUrl } from '../services/overlayMediaPreload';
 import { scorecardLayoutService } from '../services/scorecardLayoutService';
-import type { ScorecardLayout } from '../types/scorecardDesigner';
+import type { ScorecardLayout, WidgetKind } from '../types/scorecardDesigner';
 import type { ScorecardDataContext } from '../utils/scorecardDataBinding';
 import {
   computeKabaddiClock, raidSecondsRemaining, KABADDI_HALF_LABELS,
@@ -47,6 +47,27 @@ const FB_APP = 'kabaddi-obs';
 const fbApp = getApps().find(a => a.name === FB_APP) ?? initializeApp(FB_CONFIG, FB_APP);
 const fbDb = getDatabase(fbApp);
 
+function mergeKabaddiOverlayConfig(raw: Partial<KabaddiOverlayConfig> | null): KabaddiOverlayConfig {
+  const value = raw ?? {};
+  const mergeAnimation = (fallback: KabaddiAnimationConfig | undefined, override: KabaddiAnimationConfig | undefined): KabaddiAnimationConfig => ({
+    enabled: override?.enabled ?? fallback?.enabled ?? true,
+    durationMs: override?.durationMs ?? fallback?.durationMs ?? 8000,
+    mediaUrl: override?.mediaUrl ?? fallback?.mediaUrl,
+    soundUrl: override?.soundUrl ?? fallback?.soundUrl,
+    text: override?.text ?? fallback?.text,
+    color: override?.color ?? fallback?.color,
+  });
+  return {
+    ...DEFAULT_KABADDI_OVERLAY_CONFIG,
+    ...value,
+    superRaidAnimation: mergeAnimation(DEFAULT_KABADDI_OVERLAY_CONFIG.superRaidAnimation, value.superRaidAnimation),
+    superTackleAnimation: mergeAnimation(DEFAULT_KABADDI_OVERLAY_CONFIG.superTackleAnimation, value.superTackleAnimation),
+    allOutAnimation: mergeAnimation(DEFAULT_KABADDI_OVERLAY_CONFIG.allOutAnimation, value.allOutAnimation),
+    bonusAnimation: mergeAnimation(DEFAULT_KABADDI_OVERLAY_CONFIG.bonusAnimation, value.bonusAnimation),
+    doOrDieAnimation: mergeAnimation(DEFAULT_KABADDI_OVERLAY_CONFIG.doOrDieAnimation, value.doOrDieAnimation),
+  };
+}
+
 /** Animation config + enable flag for each celebration type. */
 function celebFor(type: KabaddiOverlayControl['activeOverlay'], config: KabaddiOverlayConfig): {
   anim?: KabaddiAnimationConfig; enabled: boolean; fallback: string; color: string;
@@ -65,6 +86,33 @@ function celebFor(type: KabaddiOverlayControl['activeOverlay'], config: KabaddiO
     default:
       return { enabled: true, fallback: '', color: config.accentColor };
   }
+}
+
+function celebrationWidgetKind(type: KabaddiOverlayControl['activeOverlay']): WidgetKind | null {
+  switch (type) {
+    case 'do_or_die': return 'kabaddi_do_or_die_flag';
+    case 'super_raid': return 'kabaddi_super_raid_flag';
+    case 'super_tackle': return 'kabaddi_super_tackle_flag';
+    case 'all_out': return 'kabaddi_all_out_flag';
+    case 'bonus_point': return 'kabaddi_bonus_point_flag';
+    default: return null;
+  }
+}
+
+function layoutHandlesCelebration(layout: ScorecardLayout | null, control: KabaddiOverlayControl | null, match: KabaddiMatchSetup, live: KabaddiLiveState): boolean {
+  const kind = control ? celebrationWidgetKind(control.activeOverlay) : null;
+  if (!kind) return false;
+  const eventTeamId = control?.activeEvent?.teamId || live.raidingTeamId;
+  return !!layout?.widgets.some(widget => {
+    // Presence in the saved canvas owns this overlay, including when the
+    // widget is hidden. Deleting the layer is the explicit default fallback.
+    if (widget.kind !== kind) return false;
+    if (!widget.previewTeamSide || widget.previewTeamSide === 'common') return true;
+    if (!eventTeamId) return false;
+    return widget.previewTeamSide === 'team_a'
+      ? eventTeamId === match.teamA.id || eventTeamId === live.teamAId
+      : eventTeamId === match.teamB.id || eventTeamId === live.teamBId;
+  });
 }
 
 /**
@@ -159,11 +207,13 @@ export default function KabaddiOBSOverlayPage() {
   const [players, setPlayers] = useState<KabaddiPlayer[]>([]);
   const [soldPlayers, setSoldPlayers] = useState<SoldPlayerRecord[]>([]);
   const [config, setConfig] = useState<KabaddiOverlayConfig>(DEFAULT_KABADDI_OVERLAY_CONFIG);
+  const [tenantTournamentLogo, setTenantTournamentLogo] = useState<string | undefined>();
   const [rules, setRules] = useState<KabaddiRulesConfig>(DEFAULT_KABADDI_RULES);
   const [control, setControl] = useState<KabaddiOverlayControl | null>(null);
   const [celeb, setCeleb] = useState<KabaddiOverlayControl | null>(null);
   const [, force] = useState(0);
-  const lastCelebTs = useRef(0);
+  const lastCelebKey = useRef('');
+  const celebTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [customLayout, setCustomLayout] = useState<ScorecardLayout | null>(null);
   const [squadLayout, setSquadLayout] = useState<ScorecardLayout | null>(null);
   const [statsLayout, setStatsLayout] = useState<ScorecardLayout | null>(null);
@@ -194,7 +244,11 @@ export default function KabaddiOBSOverlayPage() {
     const unsubs = [
       // Overlay configuration (branding, colors, single overlay mode)
       onValue(ref(fbDb, `${base}/overlayConfig`), s =>
-        setConfig(s.exists() ? { ...DEFAULT_KABADDI_OVERLAY_CONFIG, ...s.val() } : DEFAULT_KABADDI_OVERLAY_CONFIG)),
+        setConfig(mergeKabaddiOverlayConfig(s.exists() ? s.val() as Partial<KabaddiOverlayConfig> : null))),
+      onValue(ref(fbDb, tenantPath('auction/adminSettings')), s => {
+        const settings = s.val() as { organizerLogo?: string } | null;
+        setTenantTournamentLogo(settings?.organizerLogo || undefined);
+      }),
       // Rules configuration
       onValue(ref(fbDb, `${base}/rules`), s =>
         setRules(s.exists() ? { ...DEFAULT_KABADDI_RULES, ...s.val() } : DEFAULT_KABADDI_RULES)),
@@ -340,10 +394,21 @@ export default function KabaddiOBSOverlayPage() {
 
   // Instant celebration display with preloaded media and sound (<10ms playback)
   useEffect(() => {
-    if (!control || control.activeOverlay === 'none') return;
-    const ts = control.lastUpdated || 0;
-    if (ts === lastCelebTs.current || Date.now() - ts > 15000) { lastCelebTs.current = ts; return; }
-    lastCelebTs.current = ts;
+    if (!control || control.activeOverlay === 'none') {
+      if (celebTimerRef.current) clearTimeout(celebTimerRef.current);
+      celebTimerRef.current = null;
+      setCeleb(null);
+      return;
+    }
+    const rawTimestamp = control.lastUpdated || 0;
+    const timestamp = rawTimestamp > 0 && rawTimestamp < 100000000000 ? rawTimestamp * 1000 : rawTimestamp;
+    const eventKey = control.activeEvent?.id || `${control.activeEvent?.type || ''}:${control.activeEvent?.teamId || ''}:${control.activeEvent?.timestamp || ''}`;
+    const celebKey = `${control.activeOverlay}:${timestamp}:${eventKey}`;
+    if (celebKey === lastCelebKey.current) return;
+    if (celebTimerRef.current) clearTimeout(celebTimerRef.current);
+    celebTimerRef.current = null;
+    lastCelebKey.current = celebKey;
+    if (timestamp > 0 && Date.now() - timestamp > 15000) return;
     const { anim, enabled } = celebFor(control.activeOverlay, config);
     if (!enabled) return;
 
@@ -366,8 +431,16 @@ export default function KabaddiOBSOverlayPage() {
     setCeleb(control);
     // Disappear after configured duration (defaults to 8 seconds / 8000ms for special moments)
     const duration = anim?.durationMs && anim.durationMs > 0 ? anim.durationMs : 8000;
-    const t = setTimeout(() => setCeleb(null), duration);
-    return () => clearTimeout(t);
+    celebTimerRef.current = setTimeout(() => {
+      setCeleb(null);
+      celebTimerRef.current = null;
+    }, duration);
+    return () => {
+      if (celebTimerRef.current) {
+        clearTimeout(celebTimerRef.current);
+        celebTimerRef.current = null;
+      }
+    };
   }, [control, config]);
 
   if (!matchId || !match || !live) return <div className="kbo" data-empty="true" />;
@@ -394,6 +467,9 @@ export default function KabaddiOBSOverlayPage() {
     return (
       <div className="kbo kbo--custom" style={theme}>
         <ScorecardLayoutView layout={squadLayout} ctx={{ sport: 'kabaddi', match, live, rules, players: rosterPlayers }} />
+        <AnimatePresence>
+          {celeb && !layoutHandlesCelebration(squadLayout, control, match, live) && <KabaddiCelebration control={celeb} config={config} />}
+        </AnimatePresence>
       </div>
     );
   }
@@ -402,6 +478,9 @@ export default function KabaddiOBSOverlayPage() {
     return (
       <div className="kbo kbo--custom" style={theme}>
         <ScorecardLayoutView layout={statsLayout} ctx={{ sport: 'kabaddi', match, live, rules, players: rosterPlayers }} />
+        <AnimatePresence>
+          {celeb && !layoutHandlesCelebration(statsLayout, control, match, live) && <KabaddiCelebration control={celeb} config={config} />}
+        </AnimatePresence>
       </div>
     );
   }
@@ -409,7 +488,17 @@ export default function KabaddiOBSOverlayPage() {
   if (customLayout && customLayout.widgets.length > 0) {
     const dataCtx: ScorecardDataContext = {
       sport: 'kabaddi', match, live, rules,
-      branding: { tournamentLogo: config.tournamentLogo, partnerLogo: config.broadcastPartnerLogo },
+      players: rosterPlayers,
+      branding: {
+        tournamentLogo: config.tournamentLogo || tenantTournamentLogo,
+        partnerLogo: config.broadcastPartnerLogo,
+        doOrDieFlagUrl: config.doOrDieAnimation?.mediaUrl,
+        superRaidFlagUrl: config.superRaidAnimation?.mediaUrl,
+        superTackleFlagUrl: config.superTackleAnimation?.mediaUrl,
+        allOutFlagUrl: config.allOutAnimation?.mediaUrl,
+        bonusPointFlagUrl: config.bonusAnimation?.mediaUrl,
+      },
+      overlay: control,
     };
     return (
       <div className={`kbo kbo--custom`} style={theme}>
@@ -417,7 +506,7 @@ export default function KabaddiOBSOverlayPage() {
           <ScorecardLayoutView layout={customLayout} ctx={dataCtx} />
         </div>
         <AnimatePresence>
-          {celeb && <KabaddiCelebration control={celeb} config={config} />}
+          {celeb && !layoutHandlesCelebration(customLayout, control, match, live) && <KabaddiCelebration control={celeb} config={config} />}
         </AnimatePresence>
       </div>
     );

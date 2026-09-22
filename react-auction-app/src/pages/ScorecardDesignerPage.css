@@ -2,6 +2,8 @@
    SCORECARD DESIGNER — Canva-style layout builder admin page
    ============================================================================ */
 
+@import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;500;600;700&family=Bebas+Neue&family=DM+Sans:wght@400;500;700&family=Inter:wght@400;500;600;700;800&family=Manrope:wght@400;500;600;700;800&family=Merriweather:wght@400;700&family=Montserrat:wght@400;500;600;700;800&family=Nunito:wght@400;600;700;800&family=Open+Sans:wght@400;600;700&family=Oswald:wght@400;500;600;700&family=Playfair+Display:wght@400;600;700&family=Poppins:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Roboto+Condensed:wght@400;500;600;700&family=Roboto+Slab:wght@400;500;700&family=Roboto:wght@400;500;700;900&family=Space+Grotesk:wght@400;500;600;700&family=Source+Serif+4:wght@400;600;700&display=swap');
+
 .scd {
   min-height: 100vh;
   background: radial-gradient(circle at 18% 0%, #1c1a3a 0%, #0b0a18 55%, #08080f 100%);
@@ -48,6 +50,14 @@
   padding: 8px 10px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.14);
   background: rgba(0,0,0,0.35); color: #d4d4d8; font-size: 12.5px; max-width: 220px;
 }
+
+.scd__saved-layouts { display: flex; gap: 5px; max-width: min(42vw, 520px); overflow-x: auto; }
+.scd__saved-layout { display: inline-flex; align-items: center; gap: 3px; flex: 0 0 auto; padding: 2px; border: 1px solid rgba(255,255,255,0.1); border-radius: 7px; background: rgba(255,255,255,0.03); }
+.scd__saved-layout.is-current { border-color: rgba(167,139,250,0.7); }
+.scd__saved-layout button { border: 0; background: transparent; color: rgba(255,255,255,0.7); cursor: pointer; font-size: 10px; }
+.scd__saved-layout-name { max-width: 130px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.scd__saved-layout-action--danger { color: #fca5a5 !important; }
+.scd__checkbox-field { display: flex; gap: 7px; align-items: flex-start; font-size: 11px; color: rgba(255,255,255,0.65); }
 
 .scd__bar-actions { display: flex; gap: 6px; margin-left: auto; flex-wrap: wrap; }
 
@@ -105,15 +115,36 @@
 
 .scd__palette-custom-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
 
+.scd__asset-list { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; margin-bottom: 16px; }
+.scd__asset-item { position: relative; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.scd__asset-item > span { overflow: hidden; color: rgba(255,255,255,0.6); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+.scd__asset-preview { aspect-ratio: 1; overflow: hidden; padding: 0; border: 1px solid rgba(255,255,255,0.14); border-radius: 7px; background: transparent; cursor: pointer; }
+.scd__asset-preview img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.scd__asset-item .scd__palette-del { z-index: 1; }
+
 /* ── Stage ── */
 .scd__stage { padding: 16px; display: flex; flex-direction: column; gap: 10px; overflow-y: auto; }
 .scd__guideline-text { font-size: 11.5px; color: rgba(255,255,255,0.5); margin: 0; line-height: 1.5; }
+
+.scd__viewport-toolbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.scd__viewport-toolbar > span { color: rgba(255,255,255,0.7); font-size: 10.5px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.4px; }
+.scd__viewport-toolbar select { min-width: 205px; padding: 6px 8px; border: 1px solid rgba(255,255,255,0.14); border-radius: 7px; background: rgba(0,0,0,0.35); color: #f4f4f5; font-size: 11px; }
+.scd__layers-toggle-wrap { position: relative; }
+.scd__layers-toggle { display: inline-flex; align-items: center; gap: 5px; height: 28px; padding: 0 9px; border: 1px solid rgba(255,255,255,0.14); border-radius: 7px; background: rgba(255,255,255,0.06); color: #e4e4e7; font-size: 11px; cursor: pointer; }
+.scd__layers-toggle span { min-width: 16px; padding: 1px 4px; border-radius: 999px; background: rgba(124,58,237,0.3); font-size: 9px; text-align: center; }
+.scd__layers-toggle.is-active, .scd__layers-toggle:hover { background: rgba(124,58,237,0.25); border-color: rgba(167,139,250,0.7); }
+.scd__layers-toggle-wrap > .scd__layers-panel { position: absolute; top: calc(100% + 6px); left: 0; width: 390px; max-width: min(390px, 80vw); max-height: 360px; overflow-y: auto; z-index: 50; margin: 0; box-shadow: 0 12px 30px rgba(0,0,0,0.35); }
+.scd__toolbar-layer-actions { display: inline-flex; gap: 3px; }
+.scd__toolbar-layer-actions button { width: 27px; height: 27px; display: grid; place-items: center; padding: 0; border: 1px solid rgba(255,255,255,0.14); border-radius: 6px; background: rgba(255,255,255,0.06); color: #e4e4e7; cursor: pointer; }
+.scd__toolbar-layer-actions button:hover { background: rgba(124,58,237,0.3); border-color: rgba(167,139,250,0.7); }
+.scd__viewport-toolbar small { color: rgba(255,255,255,0.42); font-size: 10px; }
 
 .scd__stage-frame { width: 100%; }
 .scd__stage-canvas {
   position: relative; width: 100%; aspect-ratio: 16 / 9; background: #050507;
   border-radius: 10px; overflow: hidden; border: 1px solid rgba(255,255,255,0.12);
 }
+.scd__stage-canvas.is-portrait { max-width: 58%; margin: 0 auto; }
 
 .scd__guideline-band {
   position: absolute; left: 0; right: 0; border-top: 1px dashed rgba(124,58,237,0.6);
@@ -132,6 +163,7 @@
 .scd__resize-handle {
   position: absolute; bottom: -4px; right: -4px; width: 12px; height: 12px; border-radius: 3px;
   background: #7c3aed; border: 2px solid #fff; cursor: nwse-resize; z-index: 999;
+  touch-action: none; user-select: none; -webkit-user-drag: none;
 }
 
 .scd__background-selection {
@@ -146,6 +178,23 @@
 .scd__props { padding: 16px; border-left: 1px solid rgba(255,255,255,0.08); overflow-y: auto; }
 .scd__props h3 { margin: 0 0 10px; font-size: 12.5px; text-transform: uppercase; letter-spacing: 0.6px; color: rgba(255,255,255,0.6); }
 
+.scd__layers-panel { margin: -4px -4px 16px; padding: 10px; border: 1px solid rgba(255,255,255,0.1); border-radius: 9px; background: rgba(0,0,0,0.18); }
+.scd__layers-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 7px; }
+.scd__layers-head h3 { margin: 0; color: #f4f4f5; font-size: 12px; }
+.scd__layers-head p { margin: 2px 0 0; color: rgba(255,255,255,0.42); font-size: 9.5px; }
+.scd__layers-head > span { min-width: 22px; padding: 3px 6px; border-radius: 999px; background: rgba(124,58,237,0.25); color: #ddd6fe; font-size: 10px; text-align: center; }
+.scd__layer-row { width: 100%; display: flex; align-items: center; gap: 4px; min-height: 30px; padding: 3px 4px; border: 1px solid transparent; border-radius: 6px; background: transparent; color: rgba(255,255,255,0.72); }
+.scd__layer-row:hover { background: rgba(255,255,255,0.06); }
+.scd__layer-row.is-selected { background: rgba(124,58,237,0.22); border-color: rgba(167,139,250,0.55); color: #fff; }
+.scd__layer-main { min-width: 0; flex: 1; display: flex; align-items: center; gap: 7px; padding: 2px; border: 0; background: transparent; color: inherit; cursor: pointer; text-align: left; }
+.scd__layer-index { width: 20px; color: rgba(255,255,255,0.38); font-size: 9px; text-align: center; }
+.scd__layer-name { min-width: 0; flex: 1; overflow: hidden; font-size: 11px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
+.scd__layer-meta { color: rgba(255,255,255,0.36); font-size: 8px; font-weight: 800; letter-spacing: 0.35px; }
+.scd__layer-meta.is-live { color: #86efac; }
+.scd__layer-row-actions { display: inline-flex; flex: 0 0 auto; gap: 3px; }
+.scd__layer-row-actions button { width: 24px; height: 24px; display: grid; place-items: center; padding: 0; border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; background: rgba(255,255,255,0.04); color: rgba(255,255,255,0.64); cursor: pointer; }
+.scd__layer-row-actions button:hover { background: rgba(124,58,237,0.3); border-color: rgba(167,139,250,0.7); color: #fff; }
+
 .scd__props-section-head {
   display: flex; align-items: center; justify-content: space-between; margin: 14px 0 4px;
   font-size: 11.5px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; color: rgba(255,255,255,0.55);
@@ -158,6 +207,7 @@
   width: 26px; height: 26px; border-radius: 7px; border: 1px solid rgba(255,255,255,0.14);
   background: rgba(255,255,255,0.06); color: #e4e4e7; display: grid; place-items: center; cursor: pointer;
 }
+.scd__props-toggles button.is-active { background: rgba(124,58,237,0.35); border-color: rgba(167,139,250,0.8); color: #fff; }
 
 .scd__field { display: flex; flex-direction: column; gap: 4px; }
 .scd__field span { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px; color: rgba(255,255,255,0.5); }
@@ -170,6 +220,29 @@
 .scd__field--sm input, .scd__field--sm select { width: 100%; }
 
 .scd__prop-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.scd__layer-controls { display: flex; align-items: center; gap: 5px; }
+.scd__layer-controls > span { margin-right: auto; font-size: 10.5px; font-weight: 700; text-transform: uppercase; color: rgba(255,255,255,0.5); }
+.scd__layer-controls button { width: 28px; height: 28px; display: grid; place-items: center; border: 1px solid rgba(255,255,255,0.14); border-radius: 7px; background: rgba(255,255,255,0.06); color: #e4e4e7; cursor: pointer; }
+.scd__layer-controls button:hover { background: rgba(124,58,237,0.3); border-color: rgba(167,139,250,0.7); }
+
+.scd__fa-icon-picker { display: flex; flex-wrap: wrap; gap: 6px; }
+.scd__fa-icon-picker button {
+  width: 32px; height: 32px; border: 1px solid rgba(255,255,255,0.14); border-radius: 7px;
+  background: rgba(255,255,255,0.04); color: rgba(255,255,255,0.72); cursor: pointer;
+}
+.scd__fa-icon-picker button:hover, .scd__fa-icon-picker button.is-selected {
+  border-color: #a78bfa; background: rgba(124,58,237,0.28); color: #fff;
+}
+.scd__flip-controls { display: flex; gap: 10px; flex-wrap: wrap; color: rgba(255,255,255,0.72); font-size: 11px; }
+.scd__flip-controls label { display: inline-flex; align-items: center; gap: 5px; cursor: pointer; }
+
+.scd__logo-picker { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.scd__logo-choice {
+  aspect-ratio: 1; padding: 3px; border: 1px solid rgba(255,255,255,0.14); border-radius: 7px;
+  background: rgba(255,255,255,0.04); cursor: pointer; overflow: hidden;
+}
+.scd__logo-choice:hover, .scd__logo-choice.is-selected { border-color: #a78bfa; background: rgba(124,58,237,0.25); }
+.scd__logo-choice img { display: block; width: 100%; height: 100%; object-fit: contain; }
 
 /* ── Modal ── */
 .scd__modal {

@@ -191,6 +191,24 @@ class KabaddiService {
     await remove(ref(db, `${this.basePath}/matches/${matchId}`));
   }
 
+  /** Remove every persisted result child and retain only a scheduled setup. */
+  async resetMatchResults(matchId: string): Promise<void> {
+    const db = this.ensureDb();
+    const match = await this.getMatch(matchId);
+    if (!match) throw new Error('Match not found');
+    const now = Date.now();
+    const active = await this.getActiveMatch();
+    await set(ref(db, `${this.basePath}/matches/${matchId}`), {
+      setup: this.clean({ ...match, status: 'scheduled', updatedAt: now }),
+    });
+    try {
+      if (active === matchId) await this.setActiveMatch(null);
+    } catch {
+      // The match itself is already reset; an old active pointer is harmless
+      // and can be cleared by the next match activation.
+    }
+  }
+
   // ── Live state ─────────────────────────────────────────────────────────────
 
   async getLive(matchId: string, playersPerSide = 7): Promise<KabaddiLiveState> {
@@ -256,6 +274,10 @@ class KabaddiService {
   }
 
   async startMatchQuick(matchId: string): Promise<void> {
+    const match = await this.getMatch(matchId);
+    if (match) {
+      await this.saveLive(createEmptyKabaddiLiveState(matchId, match.teamA.id, match.teamB.id, 7));
+    }
     await this.updateMatchStatus(matchId, 'live');
     await this.setActiveMatch(matchId);
   }

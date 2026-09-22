@@ -11,8 +11,9 @@
 
 import { ref, get, set, remove, onValue, type Database } from 'firebase/database';
 import { tenantPath } from './tenantPath';
+import { deleteStorageObject } from './firebaseStorageService';
 import type { SportKey } from './tenantService';
-import type { ScorecardLayout, CustomWidgetDef, ScorecardSurface } from '../types/scorecardDesigner';
+import type { ScorecardLayout, CustomWidgetDef, ScorecardSurface, ScorecardAsset } from '../types/scorecardDesigner';
 
 class ScorecardLayoutService {
   private db: Database | null = null;
@@ -123,9 +124,24 @@ class ScorecardLayoutService {
     const db = this.ensureDb();
     let activeId: string | null = null;
     let layouts: ScorecardLayout[] = [];
+    let requestVersion = 0;
     const emit = () => {
-      const active = activeId ? layouts.find(layout => layout.id === activeId) : null;
-      cb(active ?? layouts[0] ?? null);
+      const version = ++requestVersion;
+      if (!activeId) {
+        cb(layouts[0] ?? null);
+        return;
+      }
+      void get(ref(db, `${this.base(sport, surface)}/layouts/${activeId}`)).then(snapshot => {
+        if (version !== requestVersion) return;
+        if (snapshot.exists()) {
+          const active = snapshot.val() as ScorecardLayout;
+          cb(active.id === activeId && active.sport === sport ? active : layouts[0] ?? null);
+        } else {
+          cb(layouts.find(layout => layout.id === activeId) ?? layouts[0] ?? null);
+        }
+      }).catch(() => {
+        if (version === requestVersion) cb(layouts.find(layout => layout.id === activeId) ?? layouts[0] ?? null);
+      });
     };
     const unsubActive = onValue(ref(db, `${this.base(sport, surface)}/activeLayoutId`), snap => {
       activeId = snap.exists() ? (snap.val() as string) : null;
@@ -169,6 +185,34 @@ class ScorecardLayoutService {
   async deleteCustomWidget(sport: SportKey, widgetId: string): Promise<void> {
     const db = this.ensureDb();
     await remove(ref(db, `${this.base(sport)}/customWidgets/${widgetId}`));
+  }
+
+  async saveAsset(sport: SportKey, asset: ScorecardAsset): Promise<void> {
+    const db = this.ensureDb();
+    await set(ref(db, `${this.base(sport)}/assets/${asset.id}`), this.clean(asset));
+  }
+
+  subscribeAssets(sport: SportKey, cb: (assets: ScorecardAsset[]) => void): () => void {
+    const db = this.ensureDb();
+    return onValue(ref(db, `${this.base(sport)}/assets`), snap => {
+      const value = (snap.val() as Record<string, ScorecardAsset>) ?? {};
+      cb(Object.values(value).filter((asset): asset is ScorecardAsset => !!asset?.id && !!asset.url).sort((a, b) => b.createdAt - a.createdAt));
+    });
+  }
+
+  async deleteAsset(sport: SportKey, assetId: string): Promise<void> {
+    const db = this.ensureDb();
+    const assetSnap = await get(ref(db, `${this.base(sport)}/assets/${assetId}`));
+    const asset = assetSnap.exists() ? assetSnap.val() as ScorecardAsset : null;
+    if (asset?.storagePath) {
+      try { await deleteStorageObject(asset.storagePath); } catch { /* already removed or inaccessible */ }
+    } else if (asset?.url?.includes('firebasestorage')) {
+      const encodedPath = asset.url.split('/o/')[1]?.split('?')[0];
+      if (encodedPath) {
+        try { await deleteStorageObject(decodeURIComponent(encodedPath)); } catch { /* already removed */ }
+      }
+    }
+    await remove(ref(db, `${this.base(sport)}/assets/${assetId}`));
   }
 }
 

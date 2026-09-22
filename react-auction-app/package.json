@@ -16,6 +16,9 @@
     "deploy:all": "npm run build && firebase deploy"
   },
   "dependencies": {
+    "@fortawesome/fontawesome-svg-core": "^7.3.1",
+    "@fortawesome/free-solid-svg-icons": "^7.3.1",
+    "@fortawesome/react-fontawesome": "^3.5.0",
     "@tailwindcss/postcss": "^4.1.18",
     "@tanstack/react-query": "^5.90.16",
     "clsx": "^2.1.1",

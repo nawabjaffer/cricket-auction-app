@@ -257,7 +257,13 @@ export default function KabaddiUpdatePage() {
       const elapsed = cur.baseElapsedSec + Math.floor((Date.now() - cur.clockStartedAt) / 1000);
       await persist({ ...cur, running: false, clockStartedAt: 0, baseElapsedSec: elapsed }, false);
     } else {
-      await persist({ ...cur, running: true, clockStartedAt: Date.now() }, false);
+      const firstStartReset = cur.half === 'not_started' && cur.baseElapsedSec > 0;
+      await persist({
+        ...cur,
+        running: true,
+        clockStartedAt: Date.now(),
+        baseElapsedSec: firstStartReset ? 0 : cur.baseElapsedSec,
+      }, false);
     }
   };
 
@@ -268,12 +274,15 @@ export default function KabaddiUpdatePage() {
     const elapsed = cur.running && cur.clockStartedAt
       ? cur.baseElapsedSec + Math.floor((Date.now() - cur.clockStartedAt) / 1000)
       : cur.baseElapsedSec;
+    const halfBaseSec = rules.halfDurationMin * 60;
+    const isHalftime = half === 'half_time';
+    const isSecondHalf = half === 'second_half';
     await persist({
       ...cur,
       half,
       running: false,
       clockStartedAt: 0,
-      baseElapsedSec: half === 'second_half' ? rules.halfDurationMin * 60 : elapsed,
+      baseElapsedSec: isHalftime || isSecondHalf ? halfBaseSec : elapsed,
       raidClockStartedAt: 0,
     }, false);
     if (isBreak) await triggerOverlay(half === 'full_time' ? 'full_time' : 'half_time');
@@ -284,6 +293,7 @@ export default function KabaddiUpdatePage() {
     const cur = await ensureLive();
     if (!cur) return;
     const player = scorerPlayers.find(p => p.id === raiderId);
+    const startsSecondHalfClock = cur.half === 'second_half' && cur.raidNumber === 0 && !cur.running;
     const next: KabaddiLiveState = {
       ...cur,
       raidingTeamId: teamId,
@@ -291,6 +301,9 @@ export default function KabaddiUpdatePage() {
       raiderName: player?.name,
       raiderPhotoUrl: player?.photoUrl,
       raidClockStartedAt: Date.now(),
+      running: startsSecondHalfClock ? true : cur.running,
+      clockStartedAt: startsSecondHalfClock ? Date.now() : cur.clockStartedAt,
+      baseElapsedSec: startsSecondHalfClock ? rules.halfDurationMin * 60 : cur.baseElapsedSec,
     };
     await persist(next, false);
     setTouchedDefenderIds([]);

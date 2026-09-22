@@ -30,6 +30,7 @@ export type WidgetKind =
   | 'match_venue' | 'live_badge' | 'match_clock'
   | 'tournament_logo' | 'partner_logo'
   | 'custom_text' | 'custom_image' | 'custom_timer'
+  | 'team_a_score' | 'team_b_score'
   // Cricket
   | 'cricket_score' | 'cricket_overs' | 'cricket_run_rate' | 'cricket_striker'
   | 'cricket_non_striker' | 'cricket_bowler' | 'cricket_current_over'
@@ -38,7 +39,10 @@ export type WidgetKind =
   | 'football_score' | 'football_half_label' | 'football_added_time'
   // Kabaddi
   | 'kabaddi_score' | 'kabaddi_half_label' | 'kabaddi_raid_clock'
-  | 'kabaddi_players_on_mat' | 'kabaddi_raider_name' | 'kabaddi_do_or_die_flag'
+  | 'kabaddi_players_on_mat' | 'kabaddi_team_a_players_on_mat' | 'kabaddi_team_b_players_on_mat'
+  | 'kabaddi_team_a_players' | 'kabaddi_team_b_players'
+  | 'kabaddi_raider_name' | 'kabaddi_do_or_die_flag' | 'kabaddi_super_raid_flag'
+  | 'kabaddi_super_tackle_flag' | 'kabaddi_all_out_flag' | 'kabaddi_bonus_point_flag'
   // Team Squad surface (universal)
   | 'squad_team_a_players' | 'squad_team_b_players' | 'squad_toss_result'
   // Match Stats surface — cricket
@@ -96,6 +100,13 @@ export interface WidgetStyle {
   objectFit?: 'cover' | 'contain';
   /** Uniform scale applied on top of width/height — lets a widget "pop" without resizing its box. */
   zoom?: number;
+  /** Scales only the text/image/icon content inside the widget frame. */
+  contentScale?: number;
+  /** Dedicated controls for Font Awesome player-count slots. */
+  iconSize?: number;
+  iconGap?: number;
+  flipX?: boolean;
+  flipY?: boolean;
   /** How the widget animates in on the live overlay (designer canvas can replay it via the Preview button). */
   entranceAnimation?: WidgetEntranceAnimation;
   animationDurationMs?: number;
@@ -103,7 +114,7 @@ export interface WidgetStyle {
 }
 
 export const DEFAULT_WIDGET_STYLE: WidgetStyle = {
-  backgroundColor: 'rgba(10,10,10,0.55)',
+  backgroundColor: 'transparent',
   color: '#ffffff',
   fontFamily: 'Inter, system-ui, sans-serif',
   fontSize: 22,
@@ -124,6 +135,11 @@ export const DEFAULT_WIDGET_STYLE: WidgetStyle = {
   boxShadowBlur: 12,
   objectFit: 'contain',
   zoom: 1,
+  contentScale: 1,
+  iconSize: 28,
+  iconGap: 6,
+  flipX: false,
+  flipY: false,
   entranceAnimation: 'fade',
   animationDurationMs: 600,
   animationDelayMs: 0,
@@ -141,8 +157,28 @@ export interface ScorecardWidgetInstance {
   staticImageUrl?: string;
   /** For custom_timer — optional label prefix shown before the mm:ss clock. */
   timerLabel?: string;
+  /** Designer-only sample overrides; live overlays continue using live match data. */
+  previewText?: string;
+  previewImageUrl?: string;
+  previewIcon?: string;
+  previewItems?: Array<{ text: string; imageUrl?: string }>;
+  /** Celebration target: common, or a specific team side. */
+  previewTeamSide?: 'common' | 'team_a' | 'team_b';
+  teamVariants?: Partial<Record<'common' | 'team_a' | 'team_b', ScorecardWidgetVariant>>;
   visible: boolean;
   locked: boolean;
+}
+
+export interface ScorecardWidgetVariant {
+  geometry: WidgetGeometry;
+  style: WidgetStyle;
+  staticText?: string;
+  staticImageUrl?: string;
+  timerLabel?: string;
+  previewText?: string;
+  previewImageUrl?: string;
+  previewIcon?: string;
+  previewItems?: Array<{ text: string; imageUrl?: string }>;
 }
 
 export interface ScorecardBackgroundGeometry {
@@ -164,6 +200,9 @@ export interface ScorecardLayout {
   /** Percentage-based placement so the preview, OBS, and camera output match. */
   backgroundGeometry?: ScorecardBackgroundGeometry;
   backgroundColor?: string;
+  /** Optional partner mark captured for this design and reused in every overlay using it. */
+  freezePartnerLogo?: boolean;
+  frozenPartnerLogoUrl?: string;
   widgets: ScorecardWidgetInstance[];
   createdAt: number;
   updatedAt: number;
@@ -182,6 +221,16 @@ export interface CustomWidgetDef {
   defaultImageUrl?: string;
   /** For baseKind === 'stat' — reuses an existing built-in WidgetKind's live data binding. */
   statBindingKey?: WidgetKind;
+  createdAt: number;
+}
+
+export interface ScorecardAsset {
+  id: string;
+  name: string;
+  url: string;
+  /** Exact Firebase Storage object path, used when the asset is deleted. */
+  storagePath?: string;
+  kind: 'background' | 'image' | 'gif';
   createdAt: number;
 }
 
@@ -207,6 +256,8 @@ const UNIVERSAL_WIDGETS: WidgetCatalogEntry[] = [
   { kind: 'partner_logo', label: 'Partner Logo', icon: '🤝', defaultW: 8, defaultH: 10, category: 'branding', description: 'Broadcast partner logo' },
   { kind: 'custom_text', label: 'Text Box', icon: '📝', defaultW: 16, defaultH: 6, category: 'branding', description: 'Freeform static text' },
   { kind: 'custom_image', label: 'Image', icon: '🖼️', defaultW: 12, defaultH: 12, category: 'branding', description: 'Freeform static image/logo' },
+  { kind: 'team_a_score', label: 'Team A Score', icon: '🔵', defaultW: 12, defaultH: 8, category: 'score', description: 'Team A score, independently placeable' },
+  { kind: 'team_b_score', label: 'Team B Score', icon: '🔴', defaultW: 12, defaultH: 8, category: 'score', description: 'Team B score, independently placeable' },
   { kind: 'custom_timer', label: 'Custom Timer', icon: '⏲️', defaultW: 10, defaultH: 6, category: 'timer', description: 'Labeled countdown/clock widget' },
 ];
 
@@ -233,8 +284,16 @@ const KABADDI_WIDGETS: WidgetCatalogEntry[] = [
   { kind: 'kabaddi_half_label', label: 'Half Label', icon: '🕑', defaultW: 12, defaultH: 5, category: 'timer', description: 'Half / toss / full time' },
   { kind: 'kabaddi_raid_clock', label: 'Raid Clock', icon: '⏱️', defaultW: 8, defaultH: 6, category: 'timer', description: '30-second raid countdown' },
   { kind: 'kabaddi_players_on_mat', label: 'Players on Mat', icon: '👥', defaultW: 14, defaultH: 5, category: 'score', description: 'On-court player counts' },
+  { kind: 'kabaddi_team_a_players_on_mat', label: 'Team A Players Count', icon: '🔵', defaultW: 12, defaultH: 6, category: 'score', description: 'Team A on-mat count' },
+  { kind: 'kabaddi_team_b_players_on_mat', label: 'Team B Players Count', icon: '🔴', defaultW: 12, defaultH: 6, category: 'score', description: 'Team B on-mat count' },
+  { kind: 'kabaddi_team_a_players', label: 'Team A Active Players', icon: '🔵', defaultW: 24, defaultH: 22, category: 'player', description: 'Team A active players with photos and status' },
+  { kind: 'kabaddi_team_b_players', label: 'Team B Active Players', icon: '🔴', defaultW: 24, defaultH: 22, category: 'player', description: 'Team B active players with photos and status' },
   { kind: 'kabaddi_raider_name', label: 'Raider Name', icon: '🏃', defaultW: 16, defaultH: 5, category: 'player', description: 'Active raider name' },
   { kind: 'kabaddi_do_or_die_flag', label: 'Do-or-Die Flag', icon: '⚠️', defaultW: 12, defaultH: 5, category: 'flag', description: 'Do-or-die raid warning banner' },
+  { kind: 'kabaddi_super_raid_flag', label: 'Super Raid Overlay', icon: '⚡', defaultW: 24, defaultH: 14, category: 'flag', description: 'Super raid celebration media/text' },
+  { kind: 'kabaddi_super_tackle_flag', label: 'Super Tackle Overlay', icon: '🛡️', defaultW: 24, defaultH: 14, category: 'flag', description: 'Super tackle celebration media/text' },
+  { kind: 'kabaddi_all_out_flag', label: 'All Out Overlay', icon: '🔥', defaultW: 24, defaultH: 14, category: 'flag', description: 'All-out celebration media/text' },
+  { kind: 'kabaddi_bonus_point_flag', label: 'Bonus Point Overlay', icon: '⭐', defaultW: 24, defaultH: 14, category: 'flag', description: 'Bonus point celebration media/text' },
 ];
 
 const SQUAD_WIDGETS: WidgetCatalogEntry[] = [

@@ -6,7 +6,7 @@
 // ============================================================================
 
 import { getImg, roundRectPath } from './broadcastCanvas';
-import { resolveWidgetContent, type ScorecardDataContext } from './scorecardDataBinding';
+import { resolveWidgetContent, resolveWidgetVariant, type ScorecardDataContext } from './scorecardDataBinding';
 import type { ScorecardLayout, ScorecardWidgetInstance } from '../types/scorecardDesigner';
 
 function drawBackground(ctx: CanvasRenderingContext2D, W: number, H: number, layout: ScorecardLayout): void {
@@ -38,8 +38,23 @@ function drawBackground(ctx: CanvasRenderingContext2D, W: number, H: number, lay
   ctx.restore();
 }
 
-function fontString(weight: number | undefined, size: number | undefined): string {
-  return `${weight ?? 700} ${size ?? 22}px 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif`;
+function fontString(weight: number | undefined, size: number | undefined, family?: string): string {
+  return `${weight ?? 700} ${size ?? 22}px '${family || 'Inter'}', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif`;
+}
+
+function playerSlotGlyph(value: string): string {
+  switch (value) {
+    case 'person': case '👤': return '👤';
+    case 'people': case '👥': return '👥';
+    case 'kabaddi': case 'kabaddi-mascot': case '🤼': return '🤼';
+    case 'raider': case 'running': case '🏃': return '🏃';
+    case 'defender': return '🛡';
+    case 'tackle': return '✊';
+    case 'raid-target': return '◎';
+    case 'red-marker': case '🔴': return '●';
+    case 'blue-marker': case '🔵': return '●';
+    default: return '👥';
+  }
 }
 
 function drawWidget(
@@ -54,9 +69,6 @@ function drawWidget(
   const y = (geometry.yPct / 100) * H;
   const w = (geometry.wPct / 100) * W;
   const h = (geometry.hPct / 100) * H;
-  const isImageKind = widget.kind === 'team_a_logo' || widget.kind === 'team_b_logo'
-    || widget.kind === 'custom_image' || widget.kind === 'tournament_logo' || widget.kind === 'partner_logo';
-
   ctx.save();
   ctx.globalAlpha = style.opacity ?? 1;
   const cx = x + w / 2, cy = y + h / 2;
@@ -71,13 +83,18 @@ function drawWidget(
     ctx.scale(zoom, zoom);
     ctx.translate(-cx, -cy);
   }
+  if (style.flipX || style.flipY) {
+    ctx.translate(cx, cy);
+    ctx.scale(style.flipX ? -1 : 1, style.flipY ? -1 : 1);
+    ctx.translate(-cx, -cy);
+  }
 
   if (style.boxShadowEnabled) {
     ctx.shadowColor = style.boxShadowColor || 'rgba(0,0,0,0.5)';
     ctx.shadowBlur = style.boxShadowBlur ?? 12;
   }
 
-  if (!isImageKind && style.backgroundColor && style.backgroundColor !== 'transparent') {
+  if (style.backgroundColor && style.backgroundColor !== 'transparent') {
     roundRectPath(ctx, x, y, w, h, style.borderRadius ?? 0);
     ctx.fillStyle = style.backgroundColor;
     ctx.fill();
@@ -92,9 +109,27 @@ function drawWidget(
   }
 
   const pad = style.padding ?? 0;
+  const contentScale = style.contentScale ?? 1;
+  if (contentScale !== 1) {
+    ctx.translate(cx, cy);
+    ctx.scale(contentScale, contentScale);
+    ctx.translate(-cx, -cy);
+  }
 
-  if (content.items?.length) {
-    ctx.font = fontString(style.fontWeight, style.fontSize);
+  if (content.playerSlots?.length) {
+    ctx.font = fontString(style.fontWeight, style.fontSize, style.fontFamily);
+    ctx.textBaseline = 'middle';
+    ctx.textAlign = 'left';
+    const slotSize = Math.max(12, style.iconSize ?? style.fontSize ?? 28);
+    const slotGap = style.iconGap ?? 6;
+    content.playerSlots.forEach((slot, index) => {
+      ctx.globalAlpha = (style.opacity ?? 1) * (slot.active ? 1 : 0.28);
+      ctx.fillStyle = slot.active ? (style.color || '#ffffff') : '#94a3b8';
+      ctx.fillText(playerSlotGlyph(slot.icon), x + pad + index * (slotSize + slotGap), y + h / 2);
+    });
+    ctx.globalAlpha = style.opacity ?? 1;
+  } else if (content.items?.length) {
+    ctx.font = fontString(style.fontWeight, style.fontSize, style.fontFamily);
     ctx.textBaseline = 'middle';
     ctx.textAlign = (style.textAlign as CanvasTextAlign) || 'left';
     if (style.textShadowEnabled) {
@@ -127,14 +162,14 @@ function drawWidget(
       ctx.drawImage(img, x + pad + (boxW - dw) / 2, y + pad + (boxH - dh) / 2, dw, dh);
     }
   } else if (content.text) {
-    ctx.font = fontString(style.fontWeight, style.fontSize);
+    ctx.font = fontString(content.urgent ? Math.max(800, style.fontWeight ?? 700) : style.fontWeight, content.urgent ? (style.fontSize ?? 22) * 1.12 : style.fontSize, style.fontFamily);
     ctx.textBaseline = 'middle';
     ctx.textAlign = (style.textAlign as CanvasTextAlign) || 'center';
     if (style.textShadowEnabled) {
       ctx.shadowColor = style.textShadowColor || 'rgba(0,0,0,0.65)';
       ctx.shadowBlur = style.textShadowBlur ?? 6;
     }
-    ctx.fillStyle = style.color || '#ffffff';
+    ctx.fillStyle = content.urgent ? '#ef4444' : (style.color || '#ffffff');
     const textX = style.textAlign === 'left' ? x + pad : style.textAlign === 'right' ? x + w - pad : x + w / 2;
     const text = style.textTransform === 'uppercase' ? content.text.toUpperCase() : content.text;
     ctx.fillText(text, textX, y + h / 2, w - pad * 2);
@@ -150,7 +185,10 @@ export function drawScorecardLayout(
 ): void {
   drawBackground(ctx, W, H, layout);
   const sorted = [...layout.widgets].sort((a, b) => a.geometry.zIndex - b.geometry.zIndex);
-  for (const widget of sorted) drawWidget(ctx, W, H, widget, dataCtx);
+  const renderCtx = layout.freezePartnerLogo && layout.frozenPartnerLogoUrl
+    ? { ...dataCtx, branding: { ...dataCtx.branding, partnerLogo: layout.frozenPartnerLogoUrl } }
+    : dataCtx;
+  for (const widget of sorted) drawWidget(ctx, W, H, resolveWidgetVariant(widget, renderCtx), renderCtx);
 }
 
 /** Pre-warms the image cache for every image-bearing widget so the first drawn frame isn't blank. */
