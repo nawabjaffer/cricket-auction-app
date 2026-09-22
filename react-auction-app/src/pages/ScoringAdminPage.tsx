@@ -15,11 +15,13 @@ import { useTeams, useSoldPlayers } from '../store';
 import { tenantPath } from '../services/tenantPath';
 import { realtimeSync } from '../services/realtimeSync';
 import { scoringService } from '../services/scoring';
+import { initializeSharedOBSProfileService, sharedOBSProfileService } from '../services/sharedOBSProfileService';
+import { getActiveTenant } from '../services/tenantPath';
 import { cricHeroesReader, isValidCricHeroesUrl } from '../services/scoring/cricHeroesReader';
 import type { CricHeroesSnapshot } from '../services/scoring/cricHeroesReader';
 import { uploadFileToStorage } from '../services';
 import { DEFAULT_MVP_WEIGHTS, MATCH_STAGE_LABELS } from '../types/scoring';
-import type { MatchSetup, MatchStage, ScoringAd, ScoringOverlayConfig, LiveQuestion, MatchScoringConfig, PreMatchState, PreMatchPhase, ImpactPlayer, TossConfig, MatchLineup, TickerConfig, OBSWebSocketConfig, MVPWeights, AnimationConfig, OBSReplayButton, OBSButtonSeriesStep, OBSReplayConfig, TickerStatWidget } from '../types/scoring';
+import type { MatchSetup, MatchStage, ScoringAd, ScoringOverlayConfig, LiveQuestion, MatchScoringConfig, PreMatchState, PreMatchPhase, ImpactPlayer, TossConfig, MatchLineup, TickerConfig, OBSWebSocketConfig, MVPWeights, AnimationConfig, OBSReplayButton, OBSButtonSeriesStep, OBSReplayConfig, TickerStatWidget, SharedOBSProfile } from '../types/scoring';
 import type { SoldPlayer } from '../types';
 import { withScorerAdminChrome } from './withScorerAdminChrome';
 import './ScoringAdminPage.css';
@@ -2837,6 +2839,18 @@ function OBSWebSocketTab({ config, setConfig, onFeedback, baseUrl }: {
   const [availableHotkeys, setAvailableHotkeys] = useState<string[]>([]);
   const [discoveringHotkeys, setDiscoveringHotkeys] = useState(false);
   const [editingButtonIdx, setEditingButtonIdx] = useState<number | null>(null);
+  const [sharedProfiles, setSharedProfiles] = useState<SharedOBSProfile[]>([]);
+  const [sharedProfileName, setSharedProfileName] = useState('');
+  const [sharedBusy, setSharedBusy] = useState(false);
+  const activeTenantId = getActiveTenant();
+
+  useEffect(() => {
+    let unsubscribe = () => {};
+    void initializeSharedOBSProfileService().then(() => {
+      unsubscribe = sharedOBSProfileService.subscribe(setSharedProfiles);
+    }).catch(() => { /* shared profiles are optional */ });
+    return () => unsubscribe();
+  }, []);
 
   const groupedHotkeys = useMemo(() => {
     const grouped = new Map<string, HotkeyDescriptor[]>();
@@ -2870,6 +2884,42 @@ function OBSWebSocketTab({ config, setConfig, onFeedback, baseUrl }: {
 
   const updateReplayConfig = (updates: Partial<OBSReplayConfig>) => {
     setConfig({ ...config, obsReplayConfig: { ...replayConfig, ...updates } });
+  };
+
+  const applySharedProfile = async (profile: SharedOBSProfile) => {
+    const nextConfig = {
+      ...config,
+      obsSharedProfileId: profile.id,
+      obsSharingEnabled: true,
+      obsWebSocketConfig: { ...profile.obsWebSocketConfig },
+      obsReplayConfig: { ...profile.obsReplayConfig, buttons: [...profile.obsReplayConfig.buttons] },
+    };
+    setConfig(nextConfig);
+    await scoringService.saveOverlayConfig(nextConfig);
+    onFeedback(`Shared OBS profile applied: ${profile.name}`);
+  };
+
+  const saveSharedProfile = async () => {
+    const name = sharedProfileName.trim();
+    if (!name) { onFeedback('Enter a shared OBS profile name'); return; }
+    setSharedBusy(true);
+    try {
+      await initializeSharedOBSProfileService();
+      const profile = await sharedOBSProfileService.save({
+        id: config.obsSharedProfileId,
+        name,
+        ownerTenantId: activeTenantId,
+        obsWebSocketConfig: obsConfig,
+        obsReplayConfig: replayConfig,
+      });
+      const nextConfig = { ...config, obsSharedProfileId: profile.id, obsSharingEnabled: true };
+      setConfig(nextConfig);
+      await scoringService.saveOverlayConfig(nextConfig);
+      setSharedProfileName(profile.name);
+      onFeedback('Shared OBS profile saved for reuse across tenants');
+    } catch (error) {
+      onFeedback(`Failed to save shared OBS profile: ${String(error)}`);
+    } finally { setSharedBusy(false); }
   };
 
   const updateButton = (idx: number, updates: Partial<OBSReplayButton>) => {
@@ -2995,6 +3045,42 @@ function OBSWebSocketTab({ config, setConfig, onFeedback, baseUrl }: {
         Connect to OBS Studio (WebSocket 5.x) for replay buffer control and Replay Source plugin integration.
         Works over WiFi — enter the OBS computer's LAN IP from any device on the same network.
       </p>
+
+      <div className="scoring-admin__form-card">
+        <h3 className="scoring-admin__subsection-title">Shared OBS Settings</h3>
+        <p className="scoring-admin__hint">Store common WebSocket and replay settings once under the platform profile, then reuse them from any tenant slug.</p>
+        <div className="scoring-admin__form-grid">
+          <div className="scoring-admin__field">
+            <label>Shared profile</label>
+            <select
+              className="scoring-admin__select"
+              value={config.obsSharedProfileId || ''}
+              onChange={e => {
+                const profile = sharedProfiles.find(item => item.id === e.target.value);
+                if (profile) void applySharedProfile(profile).catch(error => onFeedback(`Failed to apply shared OBS profile: ${String(error)}`));
+                else {
+                  const nextConfig = { ...config, obsSharedProfileId: undefined, obsSharingEnabled: false };
+                  setConfig(nextConfig);
+                  void scoringService.saveOverlayConfig(nextConfig).catch(error => onFeedback(`Failed to disable shared OBS profile: ${String(error)}`));
+                }
+              }}
+            >
+              <option value="">Use tenant-local OBS settings</option>
+              {sharedProfiles.map(profile => <option key={profile.id} value={profile.id}>{profile.name} · {profile.ownerTenantId}</option>)}
+            </select>
+          </div>
+          <div className="scoring-admin__field">
+            <label>Profile name</label>
+            <input className="scoring-admin__input" value={sharedProfileName} onChange={e => setSharedProfileName(e.target.value)} placeholder="e.g. Main Broadcast OBS" />
+          </div>
+        </div>
+        <div className="scoring-admin__actions">
+          <button className="scoring-admin__btn scoring-admin__btn--primary" onClick={saveSharedProfile} disabled={sharedBusy}>
+            <IoSave size={16} /> {sharedBusy ? 'Saving…' : 'Save Shared OBS Profile'}
+          </button>
+          {config.obsSharingEnabled && <span className="scoring-admin__hint">Shared profile active for this tenant.</span>}
+        </div>
+      </div>
 
       {/* ── Add to OBS Dock ── */}
       <div className="obs-dock-url-card">

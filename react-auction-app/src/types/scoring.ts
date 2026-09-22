@@ -444,6 +444,9 @@ export interface ScoringOverlayConfig {
   obsWebSocketConfig?: OBSWebSocketConfig;
   // OBS Replay Source button configuration
   obsReplayConfig?: OBSReplayConfig;
+  /** Optional platform-scoped OBS settings shared by multiple tenant slugs. */
+  obsSharedProfileId?: string;
+  obsSharingEnabled?: boolean;
   // Single Overlay Mode: one tenant-wide overlay/dock/scorer link that auto-follows
   // whichever match is marked active (see ScoringService.setActiveMatch). When false
   // (default), each match keeps its own per-match links — existing behavior is unchanged.
@@ -777,6 +780,15 @@ export interface OBSWebSocketConfig {
   autoReplay: boolean;
   replayDelaySeconds: number;
   replayDurationSeconds: number;
+}
+
+export interface SharedOBSProfile {
+  id: string;
+  name: string;
+  ownerTenantId: string;
+  obsWebSocketConfig: OBSWebSocketConfig;
+  obsReplayConfig: OBSReplayConfig;
+  updatedAt: number;
 }
 
 // ── OBS Replay Source Button configuration ──

@@ -7,6 +7,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { scoringService } from '../services/scoring';
+import { initializeSharedOBSProfileService, sharedOBSProfileService } from '../services/sharedOBSProfileService';
 import { realtimeSync } from '../services/realtimeSync';
 import { tenantPath } from '../services/tenantPath';
 import { obsService } from '../services/obsService';
@@ -144,7 +145,21 @@ export default function ScoreOBSControlDock() {
         setMatches(all);
 
         // Load OBS config here, after scoringService is initialized
-        const cfg = await scoringService.getOverlayConfig().catch(() => null);
+        const localCfg = await scoringService.getOverlayConfig().catch(() => null);
+        let cfg = localCfg;
+        if (localCfg?.obsSharingEnabled && localCfg.obsSharedProfileId) {
+          try {
+            await initializeSharedOBSProfileService();
+            const shared = await sharedOBSProfileService.get(localCfg.obsSharedProfileId);
+            if (shared) {
+              cfg = {
+                ...localCfg,
+                obsWebSocketConfig: shared.obsWebSocketConfig,
+                obsReplayConfig: shared.obsReplayConfig,
+              };
+            }
+          } catch { /* fall back to tenant-local settings */ }
+        }
         const singleMode = !!cfg?.singleOverlayMode;
         setSingleOverlayMode(singleMode);
 
