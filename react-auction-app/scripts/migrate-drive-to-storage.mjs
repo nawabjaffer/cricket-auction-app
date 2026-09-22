@@ -1,6 +1,9 @@
 import { initializeApp, getApps } from 'firebase/app';
 import { getDatabase, ref, get, update } from 'firebase/database';
 import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { startScriptTimer } from './scriptTiming.mjs';
+
+startScriptTimer('migrate-drive-to-storage');
 
 const FB_CONFIG = {
   apiKey: 'AIzaSyBazxXTsWddS3r_i-0VhUaC2QqknheEzpQ',

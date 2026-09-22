@@ -1,6 +1,9 @@
 import { initializeApp, getApps } from 'firebase/app';
 import { getDatabase, ref, get, update } from 'firebase/database';
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { startScriptTimer } from './scriptTiming.mjs';
+
+startScriptTimer('fix-failed-migrations');
 
 const cfg = {
   apiKey: 'AIzaSyBazxXTsWddS3r_i-0VhUaC2QqknheEzpQ',

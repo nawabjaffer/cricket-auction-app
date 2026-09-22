@@ -27,6 +27,9 @@ import { initializeApp, cert } from 'firebase-admin/app';
 import { getDatabase } from 'firebase-admin/database';
 import { readFileSync, existsSync } from 'fs';
 import { resolve } from 'path';
+import { startScriptTimer } from './scriptTiming.mjs';
+
+startScriptTimer('cricheroes-sync');
 
 // ── Parse CLI args ──
 

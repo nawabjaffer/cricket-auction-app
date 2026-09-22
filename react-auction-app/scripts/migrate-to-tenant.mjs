@@ -13,6 +13,9 @@
 
 import { initializeApp, getApps } from 'firebase/app';
 import { getDatabase, ref, get, set } from 'firebase/database';
+import { startScriptTimer } from './scriptTiming.mjs';
+
+startScriptTimer('migrate-to-tenant');
 
 const FB_CONFIG = {
   apiKey: 'AIzaSyBazxXTsWddS3r_i-0VhUaC2QqknheEzpQ',

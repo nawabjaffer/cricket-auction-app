@@ -1,5 +1,8 @@
 import { initializeApp, getApps } from 'firebase/app';
 import { getDatabase, ref, get } from 'firebase/database';
+import { startScriptTimer } from './scriptTiming.mjs';
+
+startScriptTimer('verify-drive-migration');
 
 const FB_CONFIG = {
   apiKey: 'AIzaSyBazxXTsWddS3r_i-0VhUaC2QqknheEzpQ',
