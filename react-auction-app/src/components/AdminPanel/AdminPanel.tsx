@@ -15,7 +15,8 @@ import { ThemeSettingsExtended } from './ThemeSettingsExtended';
 import '../../components/AdminPanel/ThemeSettingsExtended.css';
 import { useAuctionStore } from '../../store/auctionStore';
 import { activeConfig } from '../../config';
-import { exportSoldPlayers, exportUnsoldPlayers, downloadPlayersTemplate, downloadScoresTemplate } from '../../utils/exportData';
+import { exportSoldPlayers, exportUnsoldPlayers, downloadCSV, downloadPlayersTemplate, downloadScoresTemplate } from '../../utils/exportData';
+import { playerDuplicateMatch, uniqueImportedPlayerId } from '../../utils/playerDuplicateReview';
 import FeatureFlagsTab from './FeatureFlagsTab';
 import StreamingTab from './StreamingTab';
 import { StorageManager } from './StorageManager';
@@ -86,6 +87,86 @@ function CompactPlayerAvatar({ imageUrl, playerName }: { readonly imageUrl?: str
       )}
       {showError && <span className="admin-compact-avatar-error">✕</span>}
     </div>
+  );
+}
+
+function PlayerImportReviewModal({ incoming, index, existingPlayers, onDecision, onCancel }: Readonly<{
+  incoming: Player[];
+  index: number;
+  existingPlayers: Player[];
+  onDecision: (decision: 'same' | 'different' | 'skip') => void;
+  onCancel: () => void;
+}>) {
+  const player = incoming[index];
+  const match = playerDuplicateMatch(player, existingPlayers);
+  const progress = `${index + 1} / ${incoming.length}`;
+  return (
+    <motion.div className="stats-review-overlay" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+      <motion.div className="stats-review-panel" initial={{ y: 40, opacity: 0 }} animate={{ y: 0, opacity: 1 }}>
+        <div className="stats-review-header">
+          <div><h2>Player Import Review</h2><p style={{ margin: 0, opacity: 0.65 }}>Inspect each imported row before saving · {progress}</p></div>
+          <button className="stats-review-close" onClick={onCancel}><IoClose size={22} /></button>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginTop: 18 }}>
+          <div className="stats-review-section">
+            <h3 className="stats-section-title">Incoming CSV player</h3>
+            <p><strong>{player.name}</strong></p>
+            <p>Phone: {player.phone || player.whatsappNumber || 'Not provided'}</p>
+            <p>Place: {player.place || 'Not provided'}</p>
+            <p>Role: {player.role || 'Not provided'}</p>
+            <p>DOB: {player.dateOfBirth || 'Not provided'}</p>
+          </div>
+          <div className={`stats-review-section ${match ? 'stats-section-error' : 'stats-section-success'}`}>
+            <h3 className="stats-section-title">{match ? 'Possible existing player' : 'No duplicate found'}</h3>
+            {match ? (
+              <>
+                <p><strong>{match.existing.name}</strong></p>
+                <p>Phone: {match.existing.phone || match.existing.whatsappNumber || 'Not provided'}</p>
+                <p>Place: {match.existing.place || 'Not provided'}</p>
+                <p>Role: {match.existing.role || 'Not provided'}</p>
+                <p>DOB: {match.existing.dateOfBirth || 'Not provided'}</p>
+                <p className="stats-mismatch-reason">{match.confidence === 'high' ? 'Strong match' : 'Needs manual inspection'}: {match.reasons.join(', ')}</p>
+              </>
+            ) : <p>This row will be added as a new player.</p>}
+          </div>
+        </div>
+        <div className="stats-review-actions">
+          <button className="admin-btn admin-btn-primary" onClick={() => onDecision('same')} disabled={!match}>Same — link existing</button>
+          <button className="admin-btn admin-btn-secondary" onClick={() => onDecision('different')}>Different — add new</button>
+          <button className="admin-btn admin-btn-secondary" onClick={() => onDecision('skip')}>Skip for now</button>
+        </div>
+      </motion.div>
+    </motion.div>
+  );
+}
+
+function AssignedPlayerReviewModal({ rows, index, existingPlayers, onDecision, onCancel }: Readonly<{
+  rows: Array<{ player: Player; team: Team }>;
+  index: number;
+  existingPlayers: Player[];
+  onDecision: (decision: 'add' | 'skip' | 'remove') => void;
+  onCancel: () => void;
+}>) {
+  const row = rows[index];
+  const match = playerDuplicateMatch(row.player, existingPlayers);
+  return (
+    <motion.div className="stats-review-overlay" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+      <motion.div className="stats-review-panel" initial={{ y: 40, opacity: 0 }} animate={{ y: 0, opacity: 1 }}>
+        <div className="stats-review-header">
+          <div><h2>Direct Team Assignment Review</h2><p style={{ margin: 0, opacity: 0.65 }}>{index + 1} / {rows.length} · Team: {row.team.name}</p></div>
+          <button className="stats-review-close" onClick={onCancel}><IoClose size={22} /></button>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginTop: 18 }}>
+          <div className="stats-review-section"><h3 className="stats-section-title">Incoming player</h3><p><strong>{row.player.name}</strong></p><p>Phone: {row.player.phone || 'Not provided'}</p><p>Place: {row.player.place || 'Not provided'}</p><p>Role: {row.player.role}</p><p>DOB: {row.player.dateOfBirth || 'Not provided'}</p></div>
+          <div className={`stats-review-section ${match ? 'stats-section-error' : 'stats-section-success'}`}><h3 className="stats-section-title">{match ? 'Existing player found' : 'New player'}</h3>{match ? <><p><strong>{match.existing.name}</strong></p><p>Phone: {match.existing.phone || 'Not provided'}</p><p>{match.confidence === 'high' ? 'Strong identity match' : 'Manual inspection recommended'}</p><p className="stats-mismatch-reason">{match.reasons.join(', ')}</p></> : <p>Add this player to the player list and assign to {row.team.name}.</p>}</div>
+        </div>
+        <div className="stats-review-actions">
+          <button className="admin-btn admin-btn-primary" onClick={() => onDecision('add')}>{match ? 'Add / use existing' : 'Add player to list'}</button>
+          <button className="admin-btn admin-btn-secondary" onClick={() => onDecision('skip')}>Skip</button>
+          <button className="admin-btn admin-btn-secondary" onClick={() => onDecision('remove')}>Remove row</button>
+        </div>
+      </motion.div>
+    </motion.div>
   );
 }
 
@@ -310,6 +391,17 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
   const [editingPlayerId, setEditingPlayerId] = useState<string | null>(null);
   const [playerDraft, setPlayerDraft] = useState<Player | null>(null);
   const [isBulkUploadOpen, setIsBulkUploadOpen] = useState(false);
+  const [playerImportReview, setPlayerImportReview] = useState<{
+    incoming: Player[];
+    index: number;
+    decisions: Record<string, 'same' | 'different' | 'skip'>;
+    skipped: Player[];
+  } | null>(null);
+  const [assignedImportReview, setAssignedImportReview] = useState<{
+    rows: Array<{ player: Player; team: Team }>;
+    index: number;
+    decisions: Record<string, 'add' | 'skip' | 'remove'>;
+  } | null>(null);
   // Icon player state for the player editor
   const [isIconPlayer, setIsIconPlayer] = useState(false);
   const [iconTeamId, setIconTeamId] = useState<string>('');
@@ -1794,6 +1886,39 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
     await auctionPersistence.saveAdminPlayers(migrated);
   };
 
+  const finishPlayerImportReview = async (review: NonNullable<typeof playerImportReview>) => {
+    const existingPlayers = [...editingPlayers];
+    const usedIds = new Set(existingPlayers.map(player => player.id));
+    const mergedPlayers = [...existingPlayers];
+    const knownPlayers = [...existingPlayers];
+    let additions = 0;
+    let linked = 0;
+
+    review.incoming.forEach((incoming) => {
+      const match = playerDuplicateMatch(incoming, knownPlayers);
+      const decision = review.decisions[incoming.id];
+      if (match && decision === 'same') {
+        const existingIndex = mergedPlayers.findIndex(player => player.id === match.existing.id);
+        if (existingIndex >= 0) {
+          mergedPlayers[existingIndex] = { ...match.existing, ...incoming, id: match.existing.id, imageUrl: incoming.imageUrl || match.existing.imageUrl };
+        }
+        linked += 1;
+        return;
+      }
+      if (match && decision !== 'different') return;
+      const id = uniqueImportedPlayerId(incoming.id, usedIds);
+      usedIds.add(id);
+      const added = { ...incoming, id };
+      mergedPlayers.push(added);
+      knownPlayers.push(added);
+      additions += 1;
+    });
+
+    await applyImportedPlayers(mergedPlayers);
+    setPlayerImportReview(null);
+    showUploadFeedback(`Imported ${additions} new players; linked ${linked} existing players.`);
+  };
+
   const handleImportPlayersFromCsv = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     event.target.value = '';
@@ -1803,9 +1928,7 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
     try {
       const text = await file.text();
       const csvPlayers = parseCsvPlayers(text);
-      await applyImportedPlayers(csvPlayers);
-      setSaveStatus('success');
-      setTimeout(() => setSaveStatus('idle'), 2000);
+      setPlayerImportReview({ incoming: csvPlayers, index: 0, decisions: {}, skipped: [] });
     } catch (error) {
       console.error('[AdminPanel] Failed importing CSV players:', error);
       setSaveStatus('error');
@@ -1813,6 +1936,75 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
     } finally {
       setIsSaving(false);
     }
+  };
+
+  const downloadAssignedPlayersTemplate = () => {
+    const header = ['ID', 'Name', 'Team Name', 'Phone', 'WhatsApp Number', 'Role', 'Place', 'Date of Birth', 'Age', 'Image URL'];
+    const sample = ['PLAYER001', 'Alex Player', editingTeams[0]?.name || 'Select an existing team', '', '', 'Player', '', '', '', ''];
+    downloadCSV([header, sample].map(row => row.map(value => `"${String(value).replace(/"/g, '""')}"`).join(',')).join('\n'), 'direct-team-players-template.csv');
+  };
+
+  const importAssignedPlayersCsv = async (file: File) => {
+    const text = await file.text();
+    const lines = text.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+    if (lines.length < 2) throw new Error('CSV has no player rows');
+    const headers = parseCsvLine(lines[0]).map(header => header.toLowerCase().trim());
+    const at = (...names: string[]) => headers.findIndex(header => names.includes(header));
+    const get = (cells: string[], index: number) => index >= 0 ? (cells[index] || '').trim() : '';
+    const nameIndex = at('name', 'player name', 'playername');
+    const teamIndex = at('team', 'team name', 'teamname');
+    if (nameIndex < 0 || teamIndex < 0) throw new Error('CSV requires Name and Team Name columns');
+    const rows: Array<{ player: Player; team: Team }> = [];
+    lines.slice(1).forEach((line, rowIndex) => {
+      const cells = parseCsvLine(line);
+      const name = get(cells, nameIndex);
+      const teamName = get(cells, teamIndex).toLowerCase();
+      const team = editingTeams.find(item => item.name.trim().toLowerCase() === teamName || item.id.toLowerCase() === teamName);
+      if (!name || !team) return;
+      const age = Number.parseInt(get(cells, at('age')), 10);
+      rows.push({
+        team,
+        player: {
+          id: get(cells, at('id')) || `direct_${Date.now()}_${rowIndex}`,
+          name,
+          imageUrl: get(cells, at('image url', 'image_url', 'image')),
+          role: (get(cells, at('role')) || 'Player') as Player['role'],
+          place: get(cells, at('place', 'location')) || undefined,
+          phone: get(cells, at('phone', 'mobile')) || undefined,
+          whatsappNumber: get(cells, at('whatsapp number', 'whatsapp')) || undefined,
+          dateOfBirth: get(cells, at('date of birth', 'dob')) || undefined,
+          age: Number.isFinite(age) ? age : null,
+          matches: '0', runs: '0', wickets: '0', battingBestFigures: 'N/A', bowlingBestFigures: 'N/A', basePrice: 0,
+        },
+      });
+    });
+    if (!rows.length) throw new Error('No rows matched existing teams');
+    setAssignedImportReview({ rows, index: 0, decisions: {} });
+  };
+
+  const finishAssignedImport = async (review: NonNullable<typeof assignedImportReview>) => {
+    let added = 0; let skipped = 0; let removed = 0;
+    const nextPlayers = [...editingPlayers];
+    for (const { player, team } of review.rows) {
+      const decision = review.decisions[player.id] || 'skip';
+      if (decision === 'remove') { removed += 1; continue; }
+      if (decision === 'skip') { skipped += 1; continue; }
+      let canonical = nextPlayers.find(existing => existing.id === player.id) || playerDuplicateMatch(player, nextPlayers)?.existing;
+      if (!canonical) {
+        canonical = { ...player, id: uniqueImportedPlayerId(player.id, new Set(nextPlayers.map(item => item.id))) };
+        nextPlayers.push(canonical);
+        added += 1;
+      }
+      await auctionPersistence.saveDirectAssignedPlayer(canonical, team);
+    }
+    if (added > 0) {
+      await auctionPersistence.saveAdminPlayers(nextPlayers);
+      setEditingPlayers(nextPlayers);
+      setAdminPlayerOverrides(nextPlayers);
+      reconcilePlayerPools();
+    }
+    setAssignedImportReview(null);
+    showUploadFeedback(`Assigned ${added} new player(s); skipped ${skipped}; removed ${removed}.`);
   };
 
   // @ts-expect-error - Function defined for future use
@@ -3745,6 +3937,17 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
                     >
                       <IoDownload size={18} /> Import CSV
                     </button>
+                    {editingTeams.length > 0 && (
+                      <>
+                        <button className="admin-btn admin-btn-secondary" onClick={downloadAssignedPlayersTemplate} title="Template includes existing team names for direct assignment">
+                          <IoDownload size={18} /> Team Assignment Template
+                        </button>
+                        <label className="admin-btn admin-btn-secondary" style={{ cursor: 'pointer' }}>
+                          <IoCloudUpload size={18} /> Import Team Players
+                          <input type="file" accept=".csv,text/csv" hidden onChange={e => { const file = e.target.files?.[0]; e.target.value = ''; if (file) void importAssignedPlayersCsv(file).catch(error => showUploadFeedback(String(error), 'error')); }} />
+                        </label>
+                      </>
+                    )}
                     <button
                       className="admin-btn admin-btn-info"
                       onClick={() => downloadPlayersTemplate(editingPlayers, selectedSport)}
@@ -4868,6 +5071,49 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
     </motion.div>
   ) : null;
 
+  const playerReviewContent = playerImportReview ? (
+    <PlayerImportReviewModal
+      incoming={playerImportReview.incoming}
+      index={playerImportReview.index}
+      existingPlayers={editingPlayers}
+      onDecision={(decision) => {
+        const currentIndex = playerImportReview.index;
+        const currentPlayer = playerImportReview.incoming[currentIndex];
+        const nextDecisions = { ...playerImportReview.decisions, [currentPlayer.id]: decision };
+        if (decision === 'skip' && currentIndex < playerImportReview.incoming.length - 1) {
+          const reordered = [...playerImportReview.incoming];
+          const [deferred] = reordered.splice(currentIndex, 1);
+          reordered.push(deferred);
+          setPlayerImportReview({ ...playerImportReview, incoming: reordered, decisions: nextDecisions });
+          return;
+        }
+        const nextIndex = currentIndex + 1;
+        if (nextIndex >= playerImportReview.incoming.length) {
+          void finishPlayerImportReview({ ...playerImportReview, decisions: nextDecisions });
+        } else {
+          setPlayerImportReview({ ...playerImportReview, index: nextIndex, decisions: nextDecisions });
+        }
+      }}
+      onCancel={() => setPlayerImportReview(null)}
+    />
+  ) : null;
+
+  const assignedReviewContent = assignedImportReview ? (
+    <AssignedPlayerReviewModal
+      rows={assignedImportReview.rows}
+      index={assignedImportReview.index}
+      existingPlayers={editingPlayers}
+      onDecision={(decision) => {
+        const current = assignedImportReview.rows[assignedImportReview.index];
+        const nextDecisions = { ...assignedImportReview.decisions, [current.player.id]: decision };
+        const nextIndex = assignedImportReview.index + 1;
+        if (nextIndex >= assignedImportReview.rows.length) void finishAssignedImport({ ...assignedImportReview, decisions: nextDecisions });
+        else setAssignedImportReview({ ...assignedImportReview, index: nextIndex, decisions: nextDecisions });
+      }}
+      onCancel={() => setAssignedImportReview(null)}
+    />
+  ) : null;
+
   if (!isOpen) return null;
 
   if (mode === 'page') {
@@ -4886,6 +5132,8 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
               {statsReviewContent}
             </motion.div>
           )}
+          {playerReviewContent}
+          {assignedReviewContent}
         </AnimatePresence>
       </>
     );
@@ -4926,6 +5174,8 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
             {statsReviewContent}
           </motion.div>
         )}
+        {playerReviewContent}
+        {assignedReviewContent}
       </AnimatePresence>
     </>
   );

@@ -6,7 +6,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useTenantNavigate as useNavigate } from '../../hooks/useTenantNavigate';
 import { getTenantSlugFromPath } from '../../hooks/useTenantNavigate';
-import { IoVideocam, IoRadio, IoSettings, IoPlay, IoStop } from 'react-icons/io5';
+import { IoVideocam, IoRadio, IoSettings, IoPlay, IoStop, IoDesktop, IoFlash } from 'react-icons/io5';
 import { GiCricketBat } from 'react-icons/gi';
 import { useLocation } from 'react-router-dom';
 import { useLiveStreamingStore } from '../../store/liveStreamingStore';
@@ -15,6 +15,8 @@ import { scoringService } from '../../services/scoring';
 import { kabaddiService } from '../../services/kabaddi';
 import { realtimeSync } from '../../services/realtimeSync';
 import { tenantPath } from '../../services/tenantPath';
+import { getActiveTenant } from '../../services/tenantPath';
+import { tenantService, type SportKey } from '../../services/tenantService';
 import { premiumService } from '../../services/premiumService';
 import { featureFlagsService } from '../../services/featureFlagsService';
 import { useFeatureFlags } from '../../hooks/useFeatureFlags';
@@ -71,6 +73,29 @@ export default function StreamingTab({ onClose }: StreamingTabProps) {
   const [isConnecting, setIsConnecting] = useState(false);
   const [singleOverlayMode, setSingleOverlayMode] = useState(false);
   const [savingSingleOverlay, setSavingSingleOverlay] = useState(false);
+  const [enabledSports, setEnabledSports] = useState<SportKey[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void tenantService.getTenant(getActiveTenant()).then(tenant => {
+      if (!cancelled) setEnabledSports(tenant?.sports ?? []);
+    }).catch(() => {
+      if (!cancelled) setEnabledSports([]);
+    });
+    return () => { cancelled = true; };
+  }, []);
+
+  const sportMeta: Record<SportKey, { label: string; icon: React.ReactNode; color: string }> = {
+    cricket: { label: 'Cricket', icon: <GiCricketBat size={17} />, color: '#2563eb' },
+    football: { label: 'Football', icon: <span aria-hidden="true">⚽</span>, color: '#dc2626' },
+    kabaddi: { label: 'Kabaddi', icon: <span aria-hidden="true">🤼</span>, color: '#7c3aed' },
+  };
+
+  const sportRoutes: Record<SportKey, { admin: string; scorer: string; overlay: string; dock: string }> = {
+    cricket: { admin: '/cricket/scorer/admin', scorer: '/cricket/scorer/update', overlay: '/cricket/scorer/obs-overlay', dock: '/cricket/scorer/obs-dock' },
+    football: { admin: '/football/scorer/admin', scorer: '/football/scorer/update', overlay: '/football/scorer/obs-overlay', dock: '/football/scorer/obs-dock' },
+    kabaddi: { admin: '/kabaddi/scorer/admin', scorer: '/kabaddi/scorer/update', overlay: '/kabaddi/scorer/obs-overlay', dock: '/kabaddi/scorer/obs-dock' },
+  };
 
   // Load + follow the scoring "Single Overlay Mode" flag (tenant-scoped across sports)
   useEffect(() => {
@@ -832,43 +857,31 @@ export default function StreamingTab({ onClose }: StreamingTabProps) {
           </p>
         </div>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-          {/* Scoring Admin buttons */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
-            <button
-              onClick={() => { if (onClose) onClose(); navigate('/scoring/admin'); }}
-              className="admin-panel__btn admin-panel__btn--primary"
-              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '0.65rem 0.5rem', fontSize: '0.8rem' }}
-            >
-              <GiCricketBat size={15} /> Cricket Admin
-            </button>
-            <button
-              onClick={() => { if (onClose) onClose(); navigate('/kabaddi/scorer/admin'); }}
-              className="admin-panel__btn admin-panel__btn--primary"
-              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '0.65rem 0.5rem', fontSize: '0.8rem' }}
-            >
-              🤼 Kabaddi Admin
-            </button>
+        {enabledSports.length === 0 ? (
+          <div style={{ padding: '0.9rem', borderRadius: '0.6rem', background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.25)', color: '#78350f', fontSize: '0.8rem' }}>
+            No sports are enabled for this tournament. Enable a sport in Platform Admin to show its scoring controls here.
           </div>
-
-          {/* Quick Score Update Pages */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
-            <button
-              onClick={() => { if (onClose) onClose(); navigate('/match/score/update'); }}
-              className="admin-panel__btn admin-panel__btn--secondary"
-              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontSize: '0.78rem' }}
-            >
-              Cricket Scorer
-            </button>
-            <button
-              onClick={() => { if (onClose) onClose(); navigate('/kabaddi/scorer/update'); }}
-              className="admin-panel__btn admin-panel__btn--secondary"
-              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontSize: '0.78rem' }}
-            >
-              Kabaddi Scorer
-            </button>
+        ) : (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.75rem' }}>
+            {enabledSports.map(sport => {
+              const meta = sportMeta[sport];
+              const routes = sportRoutes[sport];
+              return (
+                <div key={sport} style={{ padding: '0.8rem', borderRadius: '0.7rem', border: `1px solid ${meta.color}35`, background: `${meta.color}0d` }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, color: meta.color, fontWeight: 800 }}>
+                    {meta.icon}<span>{meta.label}</span><span style={{ marginLeft: 'auto', fontSize: 10, opacity: 0.65 }}>ENABLED</span>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+                    <button onClick={() => { onClose?.(); navigate(routes.admin); }} className="admin-panel__btn admin-panel__btn--primary" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, padding: '0.55rem 0.35rem', fontSize: '0.75rem' }}><IoSettings size={13} /> Admin</button>
+                    <button onClick={() => { onClose?.(); navigate(routes.scorer); }} className="admin-panel__btn admin-panel__btn--secondary" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, padding: '0.55rem 0.35rem', fontSize: '0.75rem' }}><IoFlash size={13} /> Scorer</button>
+                    <button onClick={() => window.open(`${baseUrl}${routes.overlay}`, '_blank')} className="admin-panel__btn admin-panel__btn--secondary" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, padding: '0.55rem 0.35rem', fontSize: '0.75rem' }}><IoDesktop size={13} /> Overlay</button>
+                    <button onClick={() => window.open(`${baseUrl}${routes.dock}`, '_blank')} className="admin-panel__btn admin-panel__btn--secondary" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, padding: '0.55rem 0.35rem', fontSize: '0.75rem' }}><IoRadio size={13} /> OBS Dock</button>
+                  </div>
+                </div>
+              );
+            })}
           </div>
-        </div>
+        )}
 
         {/* Scoring URLs reference */}
         <div style={{
@@ -889,66 +902,33 @@ export default function StreamingTab({ onClose }: StreamingTabProps) {
             )}
           </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', fontSize: '0.75rem' }}>
-            <div style={{ fontWeight: 600, color: '#334155', fontSize: '0.72rem', marginTop: '0.2rem' }}>🤼 KABADDI:</div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ color: 'rgba(0,0,0,0.6)' }}>OBS Overlay (PC / Prism):</span>
-              <code
-                style={{ color: '#a78bfa', cursor: 'pointer' }}
-                onClick={() => window.open(`${baseUrl}/kabaddi/scorer/obs-overlay`, '_blank')}
-                title="Click to open"
-              >
-                /kabaddi/scorer/obs-overlay
-              </code>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ color: 'rgba(0,0,0,0.6)' }}>Update scorecard:</span>
-              <code
-                style={{ color: '#60a5fa', cursor: 'pointer' }}
-                onClick={() => { if (onClose) onClose(); navigate('/kabaddi/scorer/update'); }}
-              >
-                /kabaddi/scorer/update
-              </code>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ color: 'rgba(0,0,0,0.6)' }}>OBS Control Dock:</span>
-              <code
-                style={{ color: '#34d399', cursor: 'pointer' }}
-                onClick={() => window.open(`${baseUrl}/kabaddi/scorer/obs-dock`, '_blank')}
-                title="Click to open"
-              >
-                /kabaddi/scorer/obs-dock
-              </code>
-            </div>
-
-            <div style={{ fontWeight: 600, color: '#334155', fontSize: '0.72rem', marginTop: '0.4rem' }}>🏏 CRICKET:</div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ color: 'rgba(0,0,0,0.6)' }}>OBS Overlay:</span>
-              <code
-                style={{ color: '#a78bfa', cursor: 'pointer' }}
-                onClick={() => window.open(`${baseUrl}/cricket/scorer/obs-overlay`, '_blank')}
-              >
-                /cricket/scorer/obs-overlay
-              </code>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ color: 'rgba(0,0,0,0.6)' }}>Update scorecard:</span>
-              <code
-                style={{ color: '#60a5fa', cursor: 'pointer' }}
-                onClick={() => { if (onClose) onClose(); navigate('/cricket/scorer/update'); }}
-              >
-                /cricket/scorer/update
-              </code>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ color: 'rgba(0,0,0,0.6)' }}>OBS Control Dock:</span>
-              <code
-                style={{ color: '#34d399', cursor: 'pointer' }}
-                onClick={() => window.open(`${baseUrl}/cricket/scorer/obs-dock`, '_blank')}
-              >
-                /cricket/scorer/obs-dock
-              </code>
-            </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', fontSize: '0.75rem' }}>
+            {enabledSports.map(sport => {
+              const meta = sportMeta[sport];
+              const routes = sportRoutes[sport];
+              return (
+                <div key={sport} style={{ paddingBottom: '0.55rem', borderBottom: '1px solid rgba(0,0,0,0.08)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 700, color: meta.color, fontSize: '0.72rem', marginBottom: '0.35rem' }}>
+                    {meta.icon} {meta.label.toUpperCase()}
+                  </div>
+                  {[
+                    { label: 'OBS Overlay (PC / Prism)', path: routes.overlay, color: '#a78bfa', external: true },
+                    { label: 'Update scorecard', path: routes.scorer, color: '#60a5fa', external: false },
+                    { label: 'OBS Control Dock', path: routes.dock, color: '#34d399', external: true },
+                  ].map(link => (
+                    <div key={link.path} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginTop: 4 }}>
+                      <span style={{ color: 'rgba(0,0,0,0.6)' }}>{link.label}:</span>
+                      <code
+                        style={{ color: link.color, cursor: 'pointer', wordBreak: 'break-all', textAlign: 'right' }}
+                        onClick={() => link.external ? window.open(`${baseUrl}${link.path}`, '_blank') : (onClose?.(), navigate(link.path))}
+                        title="Click to open"
+                      >{link.path}</code>
+                    </div>
+                  ))}
+                </div>
+              );
+            })}
+            {enabledSports.length === 0 && <span style={{ color: 'rgba(0,0,0,0.55)' }}>Enable a sport in Platform Admin to show scoring URLs.</span>}
           </div>
         </div>
       </div>

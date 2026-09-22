@@ -70,6 +70,8 @@ export interface Player {
   dateOfBirth?: string;
   phone?: string;
   whatsappNumber?: string;
+  /** When imported as a duplicate, points to the canonical existing player. */
+  referencePlayerId?: string;
   /** Optional batting style label (e.g. "Right-Hand Bat") shown on broadcast overlay. */
   battingStyle?: string;
   /** Optional bowling style label (e.g. "Right-arm Off-break") shown on broadcast overlay. */

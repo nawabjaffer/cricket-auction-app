@@ -405,6 +405,25 @@ class AuctionPersistenceService {
     await set(soldPlayerRef, record);
   }
 
+  async saveDirectAssignedPlayer(player: Player, team: Team): Promise<void> {
+    if (!this.db) throw new Error('Database not initialized');
+    const record: SoldPlayerRecord = {
+      id: player.id,
+      playerName: player.name,
+      role: player.role,
+      age: player.age ?? null,
+      matches: player.matches ?? '',
+      bestFigures: player.bowlingBestFigures || player.battingBestFigures || 'N/A',
+      teamName: team.name,
+      teamId: team.id,
+      soldAmount: 0,
+      basePrice: player.basePrice ?? 0,
+      imageUrl: player.imageUrl ?? '',
+      timestamp: Date.now(),
+    };
+    await set(ref(this.db, `${DB_PATHS.SOLD_PLAYERS}/${player.id}`), record);
+  }
+
   /**
    * Get all sold players from Firebase
    */
@@ -683,6 +702,7 @@ class AuctionPersistenceService {
       };
       if (p.phone) record.phone = p.phone;
       if (p.whatsappNumber) record.whatsappNumber = p.whatsappNumber;
+      if (p.referencePlayerId) record.referencePlayerId = p.referencePlayerId;
       if (p.dateOfBirth) record.dateOfBirth = p.dateOfBirth;
       if (p.battingStats) record.battingStats = p.battingStats;
       if (p.bowlingStats) record.bowlingStats = p.bowlingStats;
