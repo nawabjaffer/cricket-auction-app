@@ -33,7 +33,7 @@ import {
 import type {
   ScorecardLayout, ScorecardWidgetInstance, WidgetCatalogEntry, WidgetKind,
   CustomWidgetDef, CustomWidgetBaseKind, ScorecardSurface, WidgetEntranceAnimation,
-  ScorecardAsset, ScorecardWidgetVariant,
+  ScorecardAsset, ScorecardWidgetVariant, ScorecardViewportVariant, WidgetGeometry,
 } from '../types/scorecardDesigner';
 import type { ScorecardDataContext } from '../utils/scorecardDataBinding';
 import type { SupportedGameType } from './scorerPages';
@@ -381,6 +381,29 @@ export default function ScorecardDesignerPage({ gameType = 'cricket' }: Readonly
   const catalog = getWidgetCatalog(sport, surface);
   const selectedWidget = layout.widgets.find(w => w.id === selectedId) ?? null;
   const designViewport = DESIGN_VIEWPORTS.find(viewport => viewport.id === designViewportId) ?? DESIGN_VIEWPORTS[0];
+
+  const viewportSnapshot = (current: ScorecardLayout): ScorecardViewportVariant => ({
+    widgets: Object.fromEntries(current.widgets.map(widget => [widget.id, { ...widget.geometry }])) as Record<string, WidgetGeometry>,
+    backgroundGeometry: current.backgroundGeometry ? { ...current.backgroundGeometry } : undefined,
+  });
+
+  const switchDesignViewport = (nextId: typeof designViewportId) => {
+    if (nextId === designViewportId) return;
+    setLayout(current => {
+      const variants = { ...(current.viewportVariants ?? {}), [designViewportId]: viewportSnapshot(current) };
+      const target = variants[nextId];
+      return {
+        ...current,
+        viewportVariants: variants,
+        widgets: target ? current.widgets.map(widget => ({
+          ...widget,
+          geometry: target.widgets[widget.id] ? { ...widget.geometry, ...target.widgets[widget.id] } : widget.geometry,
+        })) : current.widgets,
+        backgroundGeometry: target?.backgroundGeometry ?? current.backgroundGeometry,
+      };
+    });
+    setDesignViewportId(nextId);
+  };
 
   const snapshotWidgetVariant = (widget: ScorecardWidgetInstance): ScorecardWidgetVariant => ({
     geometry: { ...widget.geometry },
@@ -944,7 +967,7 @@ export default function ScorecardDesignerPage({ gameType = 'cricket' }: Readonly
           </p>
           <div className="scd__viewport-toolbar">
             <span>Preview screen</span>
-            <select value={designViewportId} onChange={e => setDesignViewportId(e.target.value as typeof designViewportId)}>
+            <select value={designViewportId} onChange={e => switchDesignViewport(e.target.value as typeof designViewportId)}>
               {DESIGN_VIEWPORTS.map(viewport => <option key={viewport.id} value={viewport.id}>{viewport.label} ({viewport.width}×{viewport.height})</option>)}
             </select>
             <div className="scd__layers-toggle-wrap">

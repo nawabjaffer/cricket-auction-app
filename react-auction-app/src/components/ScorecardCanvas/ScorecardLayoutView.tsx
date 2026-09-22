@@ -30,6 +30,7 @@ export function ScorecardLayoutView({
   const broadcastHostRef = useRef<HTMLDivElement>(null);
   const [broadcastScale, setBroadcastScale] = useState(1);
   const [broadcastZoom, setBroadcastZoom] = useState(1);
+  const [broadcastViewportId, setBroadcastViewportId] = useState('desktop-hd');
   const isBroadcast = !interactive;
 
   useLayoutEffect(() => {
@@ -40,6 +41,8 @@ export function ScorecardLayoutView({
       const width = host.clientWidth || window.innerWidth;
       const height = host.clientHeight || window.innerHeight;
       setBroadcastScale(Math.min(width / 1920, height / 1080));
+      const portrait = height > width;
+      setBroadcastViewportId(portrait ? 'mobile-portrait' : width < 900 ? 'mobile-landscape' : width < 1400 ? 'tablet-landscape' : width < 1750 ? 'desktop-small' : 'desktop-hd');
     };
     updateScale();
     const observer = new ResizeObserver(updateScale);
@@ -69,8 +72,17 @@ export function ScorecardLayoutView({
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [isBroadcast]);
 
-  const sorted = [...layout.widgets].sort((a, b) => a.geometry.zIndex - b.geometry.zIndex);
-  const backgroundGeometry = layout.backgroundGeometry ?? { xPct: 0, yPct: 0, wPct: 100, hPct: 100, rotationDeg: 0, zoom: 1 };
+  const viewportVariant = isBroadcast ? layout.viewportVariants?.[broadcastViewportId] : undefined;
+  const effectiveLayout = viewportVariant ? {
+    ...layout,
+    backgroundGeometry: viewportVariant.backgroundGeometry ?? layout.backgroundGeometry,
+    widgets: layout.widgets.map(widget => ({
+      ...widget,
+      geometry: viewportVariant.widgets[widget.id] ? { ...widget.geometry, ...viewportVariant.widgets[widget.id] } : widget.geometry,
+    })),
+  } : layout;
+  const sorted = [...effectiveLayout.widgets].sort((a, b) => a.geometry.zIndex - b.geometry.zIndex);
+  const backgroundGeometry = effectiveLayout.backgroundGeometry ?? { xPct: 0, yPct: 0, wPct: 100, hPct: 100, rotationDeg: 0, zoom: 1 };
   const renderCtx = layout.freezePartnerLogo && layout.frozenPartnerLogoUrl
     ? { ...ctx, branding: { ...ctx.branding, partnerLogo: layout.frozenPartnerLogoUrl } }
     : ctx;

@@ -183,9 +183,19 @@ function drawWidget(
 export function drawScorecardLayout(
   ctx: CanvasRenderingContext2D, W: number, H: number, layout: ScorecardLayout, dataCtx: ScorecardDataContext,
 ): void {
-  drawBackground(ctx, W, H, layout);
-  const sorted = [...layout.widgets].sort((a, b) => a.geometry.zIndex - b.geometry.zIndex);
-  const renderCtx = layout.freezePartnerLogo && layout.frozenPartnerLogoUrl
+  const viewportId = H > W ? 'mobile-portrait' : W < 900 ? 'mobile-landscape' : W < 1400 ? 'tablet-landscape' : W < 1750 ? 'desktop-small' : 'desktop-hd';
+  const variant = layout.viewportVariants?.[viewportId];
+  const effectiveLayout = variant ? {
+    ...layout,
+    backgroundGeometry: variant.backgroundGeometry ?? layout.backgroundGeometry,
+    widgets: layout.widgets.map(widget => ({
+      ...widget,
+      geometry: variant.widgets[widget.id] ? { ...widget.geometry, ...variant.widgets[widget.id] } : widget.geometry,
+    })),
+  } : layout;
+  drawBackground(ctx, W, H, effectiveLayout);
+  const sorted = [...effectiveLayout.widgets].sort((a, b) => a.geometry.zIndex - b.geometry.zIndex);
+  const renderCtx = effectiveLayout.freezePartnerLogo && effectiveLayout.frozenPartnerLogoUrl
     ? { ...dataCtx, branding: { ...dataCtx.branding, partnerLogo: layout.frozenPartnerLogoUrl } }
     : dataCtx;
   for (const widget of sorted) drawWidget(ctx, W, H, resolveWidgetVariant(widget, renderCtx), renderCtx);

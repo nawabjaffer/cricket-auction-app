@@ -190,6 +190,11 @@ export interface ScorecardBackgroundGeometry {
   zoom: number;
 }
 
+export interface ScorecardViewportVariant {
+  widgets: Record<string, WidgetGeometry>;
+  backgroundGeometry?: ScorecardBackgroundGeometry;
+}
+
 export interface ScorecardLayout {
   id: string;
   sport: SportKey;
@@ -203,6 +208,8 @@ export interface ScorecardLayout {
   /** Optional partner mark captured for this design and reused in every overlay using it. */
   freezePartnerLogo?: boolean;
   frozenPartnerLogoUrl?: string;
+  /** Optional per-screen geometry snapshots keyed by designer viewport id. */
+  viewportVariants?: Record<string, ScorecardViewportVariant>;
   widgets: ScorecardWidgetInstance[];
   createdAt: number;
   updatedAt: number;
