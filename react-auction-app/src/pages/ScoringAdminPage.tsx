@@ -311,17 +311,69 @@ function MatchesTab({ matches, teams, soldPlayers, onFeedback, saving, setSaving
     return scheduledAt >= now - (30 * 60 * 1000) && scheduledAt <= now + (60 * 60 * 1000);
   };
 
+  type MatchScheduleDefaults = {
+    venue: string;
+    date: string;
+    maxOvers: number;
+    powerplayOvers: number;
+    stage: MatchStage;
+    gapMinutes: number;
+  };
+
+  const scheduleDefaultsKey = 'cricket-scoring-admin-schedule-defaults';
+  const defaultScheduleSettings: MatchScheduleDefaults = {
+    venue: '',
+    date: localNowInputValue(),
+    maxOvers: 20,
+    powerplayOvers: 6,
+    stage: 'league',
+    gapMinutes: 30,
+  };
+
+  const getNextScheduledDate = (baseDate: string | Date, maxOvers: number, gapMinutes: number) => {
+    const source = new Date(baseDate);
+    const effectiveGap = gapMinutes + Math.max(0, Math.ceil(maxOvers / 6) - 1) * 50;
+    const nextDate = new Date(source.getTime() + effectiveGap * 60 * 1000);
+    const year = nextDate.getFullYear();
+    const month = String(nextDate.getMonth() + 1).padStart(2, '0');
+    const day = String(nextDate.getDate()).padStart(2, '0');
+    const hours = String(nextDate.getHours()).padStart(2, '0');
+    const minutes = String(nextDate.getMinutes()).padStart(2, '0');
+    return `${year}-${month}-${day}T${hours}:${minutes}`;
+  };
+
   const [showForm, setShowForm] = useState(false);
+  const [showScheduleDefaults, setShowScheduleDefaults] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [squadMatchId, setSquadMatchId] = useState<string | null>(null);
   const [savedVenues, setSavedVenues] = useState<string[]>([]);
   const [matchListMode, setMatchListMode] = useState<MatchListMode>('time-default');
-  const [form, setForm] = useState({
-    teamAId: '', teamBId: '', venue: '', date: localNowInputValue(), maxOvers: 20, powerplayOvers: 6,
-    stage: 'league' as MatchStage,
+  const [scheduleDefaults, setScheduleDefaults] = useState<MatchScheduleDefaults>(() => {
+    if (typeof window === 'undefined') return defaultScheduleSettings;
+    try {
+      const saved = window.localStorage.getItem(scheduleDefaultsKey);
+      if (!saved) return defaultScheduleSettings;
+      return { ...defaultScheduleSettings, ...JSON.parse(saved) };
+    } catch {
+      return defaultScheduleSettings;
+    }
   });
+  const [form, setForm] = useState(() => ({
+    teamAId: '', teamBId: '',
+    venue: scheduleDefaults.venue,
+    date: getNextScheduledDate(scheduleDefaults.date, scheduleDefaults.maxOvers, scheduleDefaults.gapMinutes),
+    maxOvers: scheduleDefaults.maxOvers,
+    powerplayOvers: scheduleDefaults.powerplayOvers,
+    stage: scheduleDefaults.stage,
+  }));
   const [activeMatchId, setActiveMatchId] = useState<string | null>(null);
   const singleOverlayMode = !!config.singleOverlayMode;
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(scheduleDefaultsKey, JSON.stringify(scheduleDefaults));
+    }
+  }, [scheduleDefaults, scheduleDefaultsKey]);
 
   useEffect(() => {
     try {
@@ -333,7 +385,16 @@ function MatchesTab({ matches, teams, soldPlayers, onFeedback, saving, setSaving
   }, []);
 
   const resetForm = () => {
-    setForm({ teamAId: '', teamBId: '', venue: '', date: localNowInputValue(), maxOvers: 20, powerplayOvers: 6, stage: 'league' });
+    const nextDate = getNextScheduledDate(scheduleDefaults.date, scheduleDefaults.maxOvers, scheduleDefaults.gapMinutes);
+    setForm({
+      teamAId: '',
+      teamBId: '',
+      venue: scheduleDefaults.venue,
+      date: nextDate,
+      maxOvers: scheduleDefaults.maxOvers,
+      powerplayOvers: scheduleDefaults.powerplayOvers,
+      stage: scheduleDefaults.stage,
+    });
     setEditId(null);
     setShowForm(false);
   };
@@ -385,8 +446,30 @@ function MatchesTab({ matches, teams, soldPlayers, onFeedback, saving, setSaving
       await scoringService.saveVenue(form.venue);
       const mergedVenues = Array.from(new Set([...savedVenues, form.venue.trim()].filter(Boolean))).sort((a, b) => a.localeCompare(b));
       setSavedVenues(mergedVenues);
+
+      const nextDate = getNextScheduledDate(form.date, form.maxOvers, scheduleDefaults.gapMinutes);
+      const nextDefaults: MatchScheduleDefaults = {
+        ...scheduleDefaults,
+        venue: form.venue,
+        date: nextDate,
+        maxOvers: form.maxOvers,
+        powerplayOvers: form.powerplayOvers,
+        stage: form.stage,
+      };
+      setScheduleDefaults(nextDefaults);
+      setForm({
+        teamAId: '',
+        teamBId: '',
+        venue: nextDefaults.venue,
+        date: nextDefaults.date,
+        maxOvers: nextDefaults.maxOvers,
+        powerplayOvers: nextDefaults.powerplayOvers,
+        stage: nextDefaults.stage,
+      });
+
       onFeedback(editId ? 'Match updated' : 'Match created');
-      resetForm();
+      setEditId(null);
+      setShowForm(false);
     } catch (err) {
       onFeedback(`Failed to save match: ${String(err)}`);
     } finally {
@@ -643,21 +726,194 @@ function MatchesTab({ matches, teams, soldPlayers, onFeedback, saving, setSaving
       )}
 
       {showForm && (
+        <div className="scoring-admin__form-card" style={{ marginBottom: '1rem' }}>
+          <div className="scoring-admin__section-header" style={{ marginBottom: '0.75rem' }}>
+            <button
+              type="button"
+              className="scoring-admin__btn scoring-admin__btn--sm scoring-admin__btn--secondary"
+              onClick={() => setShowScheduleDefaults(v => !v)}
+              style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginLeft: 'auto' }}
+            >
+              <span>{showScheduleDefaults ? '▾' : '▸'}</span>
+              <span>{showScheduleDefaults ? 'Hide defaults' : 'Global Match Schedule Defaults'}</span>
+            </button>
+          </div>
+
+          {showScheduleDefaults && (
+            <>
+              <div className="scoring-admin__form-grid">
+                <div className="scoring-admin__field">
+                  <label>Default Venue</label>
+                  <input
+                    type="text"
+                    list="scoring-admin-venues"
+                    value={scheduleDefaults.venue}
+                    onChange={e => setScheduleDefaults(f => ({ ...f, venue: e.target.value }))}
+                    placeholder="Stadium name"
+                    className="scoring-admin__input"
+                  />
+                </div>
+                <div className="scoring-admin__field">
+                  <label>Default Date & Time</label>
+                  <div className="scoring-admin__date-row">
+                    <input
+                      type="datetime-local"
+                      value={scheduleDefaults.date}
+                      onChange={e => setScheduleDefaults(f => ({ ...f, date: e.target.value }))}
+                      className="scoring-admin__input"
+                    />
+                    <button
+                      type="button"
+                      className="scoring-admin__btn scoring-admin__btn--sm"
+                      onClick={() => setScheduleDefaults(f => ({ ...f, date: localNowInputValue() }))}
+                    >
+                      Now
+                    </button>
+                  </div>
+                </div>
+                <div className="scoring-admin__field">
+                  <label>Default Max Overs</label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={50}
+                    value={scheduleDefaults.maxOvers}
+                    onChange={e => {
+                      const overs = Number(e.target.value) || 20;
+                      const pp = overs >= 40 ? 10 : overs >= 16 ? 6 : overs >= 8 ? 3 : Math.max(2, Math.round(overs * 0.3));
+                      setScheduleDefaults(f => ({ ...f, maxOvers: overs, powerplayOvers: pp }));
+                    }}
+                    className="scoring-admin__input"
+                  />
+                </div>
+                <div className="scoring-admin__field">
+                  <label>Default Powerplay Overs</label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={scheduleDefaults.maxOvers}
+                    value={scheduleDefaults.powerplayOvers}
+                    onChange={e => setScheduleDefaults(f => ({ ...f, powerplayOvers: Number(e.target.value) || 1 }))}
+                    className="scoring-admin__input"
+                  />
+                </div>
+                <div className="scoring-admin__field">
+                  <label>Default Match Type</label>
+                  <select
+                    value={scheduleDefaults.stage}
+                    onChange={e => setScheduleDefaults(f => ({ ...f, stage: e.target.value as MatchStage }))}
+                    className="scoring-admin__select"
+                  >
+                    {(Object.keys(MATCH_STAGE_LABELS) as MatchStage[]).map(stage => (
+                      <option key={stage} value={stage}>{MATCH_STAGE_LABELS[stage]}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="scoring-admin__field">
+                  <label>Gap Between Matches (mins)</label>
+                  <input
+                    type="number"
+                    min={0}
+                    max={180}
+                    value={scheduleDefaults.gapMinutes}
+                    onChange={e => setScheduleDefaults(f => ({ ...f, gapMinutes: Math.max(0, Number(e.target.value) || 0) }))}
+                    className="scoring-admin__input"
+                  />
+                  <small className="scoring-admin__hint">Each extra 6 overs adds +50 mins between schedules automatically.</small>
+                </div>
+              </div>
+              <div className="scoring-admin__form-actions" style={{ marginTop: '0.75rem' }}>
+                <button
+                  className="scoring-admin__btn scoring-admin__btn--primary"
+                  onClick={() => {
+                    const nextDate = getNextScheduledDate(scheduleDefaults.date, scheduleDefaults.maxOvers, scheduleDefaults.gapMinutes);
+                    setScheduleDefaults(f => ({ ...f, date: nextDate }));
+                    setForm(f => ({ ...f, venue: scheduleDefaults.venue, date: nextDate, maxOvers: scheduleDefaults.maxOvers, powerplayOvers: scheduleDefaults.powerplayOvers, stage: scheduleDefaults.stage }));
+                  }}
+                >
+                  Use Next Slot
+                </button>
+                <button
+                  className="scoring-admin__btn scoring-admin__btn--secondary"
+                  onClick={() => setForm(f => ({
+                    ...f,
+                    venue: scheduleDefaults.venue,
+                    date: getNextScheduledDate(scheduleDefaults.date, scheduleDefaults.maxOvers, scheduleDefaults.gapMinutes),
+                    maxOvers: scheduleDefaults.maxOvers,
+                    powerplayOvers: scheduleDefaults.powerplayOvers,
+                    stage: scheduleDefaults.stage,
+                  }))}
+                >
+                  Apply to New Match
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
+      {showForm && (
         <motion.div className="scoring-admin__form-card" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0 }}>
           <div className="scoring-admin__form-grid">
-            <div className="scoring-admin__field">
+            <div className="scoring-admin__field" style={{ gridColumn: '1 / -1' }}>
               <label>Team A *</label>
-              <select value={form.teamAId} onChange={e => setForm(f => ({ ...f, teamAId: e.target.value }))} className="scoring-admin__select">
-                <option value="">Select team</option>
-                {teams.filter(t => t.id !== form.teamBId).map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-              </select>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '0.65rem', marginTop: '0.5rem' }}>
+                {teams.filter(t => t.id !== form.teamBId).map(team => (
+                  <button
+                    key={team.id}
+                    type="button"
+                    onClick={() => setForm(f => ({ ...f, teamAId: team.id }))}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.65rem',
+                      padding: '0.8rem 0.9rem',
+                      borderRadius: '0.75rem',
+                      border: form.teamAId === team.id ? '2px solid #2563eb' : '1px solid rgba(148, 163, 184, 0.7)',
+                      background: form.teamAId === team.id ? 'rgba(37, 99, 235, 0.08)' : '#fff',
+                      cursor: 'pointer',
+                      textAlign: 'left',
+                    }}
+                  >
+                    <img
+                      src={team.logoUrl || 'https://placehold.co/48x48/0f172a/ffffff?text=TM'}
+                      alt={team.name}
+                      style={{ width: 34, height: 34, borderRadius: '50%', objectFit: 'cover', background: '#f8fafc' }}
+                    />
+                    <span style={{ fontWeight: 700, color: '#0f172a' }}>{team.name}</span>
+                  </button>
+                ))}
+              </div>
             </div>
-            <div className="scoring-admin__field">
+            <div className="scoring-admin__field" style={{ gridColumn: '1 / -1' }}>
               <label>Team B *</label>
-              <select value={form.teamBId} onChange={e => setForm(f => ({ ...f, teamBId: e.target.value }))} className="scoring-admin__select">
-                <option value="">Select team</option>
-                {teams.filter(t => t.id !== form.teamAId).map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-              </select>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '0.65rem', marginTop: '0.5rem' }}>
+                {teams.filter(t => t.id !== form.teamAId).map(team => (
+                  <button
+                    key={team.id}
+                    type="button"
+                    onClick={() => setForm(f => ({ ...f, teamBId: team.id }))}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.65rem',
+                      padding: '0.8rem 0.9rem',
+                      borderRadius: '0.75rem',
+                      border: form.teamBId === team.id ? '2px solid #16a34a' : '1px solid rgba(148, 163, 184, 0.7)',
+                      background: form.teamBId === team.id ? 'rgba(22, 163, 74, 0.08)' : '#fff',
+                      cursor: 'pointer',
+                      textAlign: 'left',
+                    }}
+                  >
+                    <img
+                      src={team.logoUrl || 'https://placehold.co/48x48/0f172a/ffffff?text=TM'}
+                      alt={team.name}
+                      style={{ width: 34, height: 34, borderRadius: '50%', objectFit: 'cover', background: '#f8fafc' }}
+                    />
+                    <span style={{ fontWeight: 700, color: '#0f172a' }}>{team.name}</span>
+                  </button>
+                ))}
+              </div>
             </div>
             <div className="scoring-admin__field">
               <label>Venue *</label>
