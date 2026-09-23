@@ -155,22 +155,31 @@ class CricHeroesReader {
 
   private async fetchRaw(sourceUrl: string): Promise<string> {
     const failures: string[] = [];
-    for (const template of this.proxies) {
+    const candidates = [sourceUrl, ...this.proxies.map(template => this.buildProxyUrl(template, sourceUrl))];
+
+    for (const candidate of candidates) {
       try {
-        const proxied = this.buildProxyUrl(template, sourceUrl);
-        const response = await fetch(proxied, { headers: { accept: 'text/html,application/json,text/plain' } });
+        const response = await fetch(candidate, {
+          headers: {
+            accept: 'text/html,application/json,text/plain',
+            'x-requested-with': 'XMLHttpRequest',
+          },
+        });
+
         if (!response.ok) {
-          failures.push(`${new URL(proxied).host} -> HTTP ${response.status}`);
+          failures.push(`${new URL(candidate).host} -> HTTP ${response.status}`);
           continue;
         }
+
         const body = await response.text();
         if (body && body.length > 200) return body;
-        failures.push(`${new URL(proxied).host} -> empty body`);
+        failures.push(`${new URL(candidate).host} -> empty body`);
       } catch (err) {
-        failures.push(String(err));
+        failures.push(`${new URL(candidate).host} -> ${String(err)}`);
       }
     }
-    throw new Error(`Could not read CricHeroes page. Tried ${this.proxies.length} proxies. ${failures.join(' | ')}`);
+
+    throw new Error(`Could not read CricHeroes page. Tried ${candidates.length} sources. ${failures.join(' | ')}`);
   }
 
   /** Fetch + parse a CricHeroes scorecard URL into a normalized snapshot. */
@@ -215,40 +224,144 @@ class CricHeroesReader {
         return JSON.parse(match[1]) as Record<string, unknown>;
       } catch { /* try next */ }
     }
+
+    for (const match of raw.matchAll(/self\.__next_f\.push\(\s*\[[^\]]*,\s*("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')\s*\]\)/gi)) {
+      const rawString = match[1];
+      const unquoted = rawString.replace(/^['"]|['"]$/g, '');
+      try {
+        const decoded = JSON.parse(rawString) as string;
+        if (decoded.includes('"team_a"') || decoded.includes("'team_a'")) {
+          const candidate = this.extractObjectContainingKey(decoded, 'team_a');
+          if (candidate) {
+            try {
+              return JSON.parse(candidate) as Record<string, unknown>;
+            } catch { /* continue */ }
+          }
+        }
+      } catch { /* continue */ }
+
+      if (unquoted.includes('team_a')) {
+        const candidate = this.extractObjectContainingKey(unquoted, 'team_a');
+        if (candidate) {
+          try {
+            return JSON.parse(candidate) as Record<string, unknown>;
+          } catch { /* continue */ }
+        }
+      }
+    }
+
+    const teamKeyIndex = raw.indexOf('"team_a"');
+    if (teamKeyIndex >= 0) {
+      const objectText = this.extractObjectContainingKey(raw, 'team_a');
+      if (objectText) {
+        try {
+          return JSON.parse(objectText) as Record<string, unknown>;
+        } catch { /* try next */ }
+      }
+    }
+
+    return null;
+  }
+
+  private extractObjectContainingKey(rawText: string, keyName: string): string | null {
+    const keyIndex = rawText.indexOf(`"${keyName}"`);
+    if (keyIndex < 0) return null;
+
+    const objectStart = rawText.lastIndexOf('{', keyIndex);
+    if (objectStart < 0) return null;
+
+    let depth = 0;
+    let inString = false;
+    let escaped = false;
+    for (let i = objectStart; i < rawText.length; i++) {
+      const ch = rawText[i];
+      if (inString) {
+        if (escaped) escaped = false;
+        else if (ch === '\\') escaped = true;
+        else if (ch === '"') inString = false;
+        continue;
+      }
+
+      if (ch === '"') inString = true;
+      else if (ch === '{') depth++;
+      else if (ch === '}') {
+        depth--;
+        if (depth === 0) {
+          const candidate = rawText.slice(objectStart, i + 1);
+          try {
+            JSON.parse(candidate);
+            return candidate;
+          } catch {
+            return null;
+          }
+        }
+      }
+    }
+
     return null;
   }
 
   /** Walk an arbitrary JSON tree and pick the first node that looks like innings data. */
   private parseFromJson(root: Record<string, unknown>, sourceUrl: string, sourceMatchId: string): CricHeroesSnapshot | null {
-    const inningsNodes: Record<string, unknown>[] = [];
+    const inningsNodes: Array<{ teamName: string; node: Record<string, unknown> }> = [];
     const seen = new Set<unknown>();
 
-    const visit = (node: unknown, depth: number) => {
+    const addInningsLike = (node: Record<string, unknown>, teamNameHint?: string) => {
+      if (!node || typeof node !== 'object') return;
+      const teamName = clean(firstText(teamNameHint, node.team_name, node.teamName, node.name, node.batting_team_name) || 'Team');
+      const hasScore = 'total_run' in node || 'total_runs' in node || 'runs' in node;
+      const hasWickets = 'total_wicket' in node || 'total_wickets' in node || 'wickets' in node;
+      const hasOvers = 'overs' in node || 'total_overs' in node || 'over' in node || 'overs_played' in node || 'oversPlayed' in node || 'over_played' in node;
+      if (hasScore && hasWickets && hasOvers) {
+        inningsNodes.push({ teamName, node });
+      }
+    };
+
+    const teamCandidates: Array<{ teamName?: string; innings: unknown[] }> = [];
+    const teamKeys = ['team_a', 'team_b', 'teamA', 'teamB'];
+    for (const key of teamKeys) {
+      const team = (root as Record<string, unknown>)[key];
+      if (team && typeof team === 'object' && !Array.isArray(team)) {
+        const teamObj = team as Record<string, unknown>;
+        const innings = Array.isArray(teamObj.innings) ? teamObj.innings : [];
+        teamCandidates.push({ teamName: firstText(teamObj.name, teamObj.team_name, teamObj.teamName) as string | undefined, innings });
+      }
+    }
+
+    for (const candidate of teamCandidates) {
+      for (const inning of candidate.innings) {
+        if (inning && typeof inning === 'object') {
+          addInningsLike(inning as Record<string, unknown>, candidate.teamName as string | undefined);
+        }
+      }
+    }
+
+    const visit = (node: unknown, depth: number, teamNameHint?: string) => {
       if (!node || typeof node !== 'object' || depth > 8 || seen.has(node)) return;
       seen.add(node);
 
       if (Array.isArray(node)) {
-        node.forEach(item => visit(item, depth + 1));
+        node.forEach(item => visit(item, depth + 1, teamNameHint));
         return;
       }
 
       const obj = node as Record<string, unknown>;
-      const hasScore = 'total_run' in obj || 'total_runs' in obj || 'runs' in obj;
-      const hasWickets = 'total_wicket' in obj || 'total_wickets' in obj || 'wickets' in obj;
-      const hasOvers = 'overs' in obj || 'total_overs' in obj || 'over' in obj;
-      if (hasScore && hasWickets && hasOvers) inningsNodes.push(obj);
-
-      Object.values(obj).forEach(value => visit(value, depth + 1));
+      const objectTeamName = clean(firstText(teamNameHint, obj.name, obj.team_name, obj.teamName) || 'Team');
+      addInningsLike(obj, objectTeamName);
+      if (Array.isArray(obj.innings)) {
+        obj.innings.forEach((inning) => visit(inning, depth + 1, objectTeamName));
+      }
+      Object.values(obj).forEach((value) => visit(value, depth + 1, objectTeamName));
     };
     visit(root, 0);
 
     if (inningsNodes.length === 0) return null;
 
-    const innings: CricHeroesInnings[] = inningsNodes.slice(0, 2).map(node => ({
-      teamName: clean(firstText(node.team_name, node.batting_team_name, node.name) || 'Team'),
+    const innings: CricHeroesInnings[] = inningsNodes.slice(0, 2).map(({ teamName, node }) => ({
+      teamName: clean(firstText(teamName, node.team_name, node.teamName, node.name, node.batting_team_name) || 'Team'),
       runs: num(node.total_run ?? node.total_runs ?? node.runs),
       wickets: num(node.total_wicket ?? node.total_wickets ?? node.wickets),
-      overs: num(node.overs ?? node.total_overs ?? node.over),
+      overs: num(node.overs ?? node.total_overs ?? node.over ?? node.overs_played ?? node.oversPlayed ?? node.over_played),
       batsmen: this.readBatsmenFromJson(node),
       bowlers: this.readBowlersFromJson(node),
     }));
@@ -256,7 +369,7 @@ class CricHeroesReader {
     return {
       sourceMatchId,
       sourceUrl,
-      title: clean(firstText((root as { title?: string }).title) || 'CricHeroes match'),
+      title: clean(firstText((root as { title?: string }).title, (root as { web_title_message?: string }).web_title_message, (root as { name?: string }).name) || 'CricHeroes match'),
       innings,
       fetchedAt: Date.now(),
       parseMode: 'embedded',
@@ -376,24 +489,35 @@ class CricHeroesReader {
 
     for (const line of lines) {
       const row = splitNameAndNumbers(line);
-      if (row?.cells.length !== 5) continue;
+      if (!row || (row.cells.length !== 4 && row.cells.length !== 5)) continue;
 
       const { name, cells } = row;
       const [a, b, c, d, e] = cells;
-      const isBowlingShape = a <= 50 && b <= 10 && d <= 10 && e <= 36 && c >= d;
+
+      const isBowlingShape = row.cells.length === 5
+        ? a <= 50 && b <= 10 && d <= 10 && e <= 36 && c >= d
+        : a <= 50 && b <= 10 && d <= 36 && c >= 0;
 
       if (isBowlingShape && bowlers.length < 16) {
-        bowlers.push({ name, overs: a, maidens: b, runs: c, wickets: d, economy: e });
+        bowlers.push({
+          name,
+          overs: a,
+          maidens: b,
+          runs: c,
+          wickets: row.cells.length === 5 ? d : 0,
+          economy: row.cells.length === 5 ? e : d,
+        });
         continue;
       }
-      if (e <= 900 && batsmen.length < 22) {
+
+      if ((row.cells.length === 5 ? e <= 900 : d <= 900) && batsmen.length < 22) {
         batsmen.push({
           name,
           runs: a,
           balls: b,
           fours: c,
-          sixes: d,
-          strikeRate: e,
+          sixes: row.cells.length === 5 ? d : 0,
+          strikeRate: row.cells.length === 5 ? e : d,
           dismissal: 'not out',
           isOut: false,
         });

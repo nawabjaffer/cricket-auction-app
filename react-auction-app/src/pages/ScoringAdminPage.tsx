@@ -1245,9 +1245,15 @@ function CricHeroesReaderPanel({ matches, configs, setConfigs, onFeedback }: Rea
   const [busy, setBusy] = useState(false);
   const [snapshot, setSnapshot] = useState<CricHeroesSnapshot | null>(null);
   const [error, setError] = useState('');
+  const [readLog, setReadLog] = useState<string[]>([]);
   const [inningsIndex, setInningsIndex] = useState(0);
 
   const targetMatch = matches.find(m => m.id === targetMatchId);
+
+  const appendReadLog = (message: string) => {
+    const stamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    setReadLog(prev => [...prev, `${stamp} • ${message}`]);
+  };
 
   useEffect(() => {
     if (!targetMatchId) return;
@@ -1259,19 +1265,32 @@ function CricHeroesReaderPanel({ matches, configs, setConfigs, onFeedback }: Rea
   const handleRead = async () => {
     setError('');
     setSnapshot(null);
+    setReadLog([]);
+    appendReadLog('Validating CricHeroes URL');
     if (!isValidCricHeroesUrl(sourceUrl)) {
       setError('Enter a full CricHeroes scorecard URL, e.g. https://cricheroes.com/scorecard/26660839/...');
+      appendReadLog('URL validation failed — missing match ID or scorecard pattern');
       return;
     }
+    appendReadLog(`Using match URL: ${sourceUrl.trim()}`);
     setBusy(true);
     try {
+      if (proxyUrl.trim()) {
+        appendReadLog(`Using custom proxy: ${proxyUrl.trim()}`);
+      } else {
+        appendReadLog('No custom proxy set — falling back to public CricHeroes proxy sequence');
+      }
       cricHeroesReader.setPreferredProxy(proxyUrl);
+      appendReadLog('Fetching public scorecard page...');
       const result = await cricHeroesReader.readScorecard(sourceUrl.trim());
+      appendReadLog(`Fetch succeeded. Parsed ${result.innings.length} innings via ${result.parseMode}.`);
       setSnapshot(result);
       setInningsIndex(0);
       onFeedback(`Read ${result.innings.length} innings from CricHeroes`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      const message = err instanceof Error ? err.message : String(err);
+      appendReadLog(`Read failed: ${message}`);
+      setError(message);
     } finally {
       setBusy(false);
     }
@@ -1279,6 +1298,7 @@ function CricHeroesReaderPanel({ matches, configs, setConfigs, onFeedback }: Rea
 
   const handleApply = async () => {
     if (!snapshot || !targetMatch) return;
+    setReadLog(prev => [...prev, `${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })} • Applying selected innings to ${targetMatch.teamA.name} vs ${targetMatch.teamB.name}`]);
     setBusy(true);
     try {
       const live = cricHeroesReader.toLiveScore(snapshot, {
@@ -1291,11 +1311,15 @@ function CricHeroesReaderPanel({ matches, configs, setConfigs, onFeedback }: Rea
       }, inningsIndex);
 
       if (!live) {
-        setError('Selected innings could not be mapped.');
+        const message = 'Selected innings could not be mapped to this match.';
+        appendReadLog(message);
+        setError(message);
         return;
       }
 
+      appendReadLog(`Mapped innings ${inningsIndex + 1} to the live scorer payload.`);
       await scoringService.saveLiveScore(targetMatch.id, live);
+      appendReadLog('Saved live score to the match.');
 
       const config: MatchScoringConfig = {
         ...(configs[targetMatch.id] || { provider: 'cricheroes' }),
@@ -1306,10 +1330,13 @@ function CricHeroesReaderPanel({ matches, configs, setConfigs, onFeedback }: Rea
       };
       await scoringService.configureMatchScoring(targetMatch.id, config);
       setConfigs(prev => ({ ...prev, [targetMatch.id]: config }));
+      appendReadLog('Config saved and match is now linked to CricHeroes.');
 
       onFeedback('CricHeroes score applied to the live scorecard');
     } catch (err) {
-      setError(`Failed to apply: ${String(err)}`);
+      const message = `Failed to apply: ${String(err)}`;
+      appendReadLog(message);
+      setError(message);
     } finally {
       setBusy(false);
     }
@@ -1361,6 +1388,22 @@ function CricHeroesReaderPanel({ matches, configs, setConfigs, onFeedback }: Rea
           />
         </div>
       </div>
+
+      {readLog.length > 0 && (
+        <div style={{ marginTop: '1rem', marginBottom: '0.75rem', padding: '0.75rem 0.9rem', borderRadius: '10px', background: '#111827', border: '1px solid rgba(148,163,184,0.25)', color: '#e5e7eb' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+            <strong style={{ fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.08em', color: '#93c5fd' }}>Read log</strong>
+            {busy && <span style={{ fontSize: '0.72rem', color: '#fbbf24' }}>Working…</span>}
+          </div>
+          <div style={{ display: 'grid', gap: '0.35rem', fontSize: '0.78rem', lineHeight: 1.5, maxHeight: '180px', overflowY: 'auto' }}>
+            {readLog.map((entry, index) => (
+              <div key={`${entry}-${index}`} style={{ color: entry.includes('failed') || entry.includes('Failed') ? '#fca5a5' : entry.includes('success') || entry.includes('saved') || entry.includes('Config saved') ? '#86efac' : '#dbeafe' }}>
+                {entry}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="scoring-admin__form-actions">
         <button className="scoring-admin__btn scoring-admin__btn--secondary" onClick={handleRead} disabled={busy}>
