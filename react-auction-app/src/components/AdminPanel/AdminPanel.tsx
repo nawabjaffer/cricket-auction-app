@@ -28,7 +28,7 @@ import { DEFAULT_AUCTION_ROLE_ORDER, createEmptyBattingStats, createEmptyBowling
 import { SPORT_ROLE_ORDERS, DEFAULT_SPORT_STAT_FIELDS, getStatFieldsForSport } from '../../config/playerStatFields';
 import { formatRoleDisplay, getRoleCategory, getRoleBadgeColor } from '../../utils/roleFormatter';
 import { localImageCacheService } from '../../services/localImageCache';
-import { getCachedStorageUrl, resolveImageAsync } from '../../services/firebaseStorageService';
+import { ensureMediaInStorage, getCachedStorageUrl, resolveImageAsync } from '../../services/firebaseStorageService';
 import { extractDriveFileId } from '../../utils/driveImage';
 import { getLiveBlobUrl } from '../../services/mediaBlobCache';
 import { getThemeAssetFilter } from '../../utils/themeAssetFilter';
@@ -1280,8 +1280,11 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
     }
     setProcessingPlayerIds(current => ({ ...current, [player.id]: true }));
     try {
-      const source = player.originalImageUrl || player.imageUrl;
-      const storageSource = await resolveMediaToStorage(source, `media/players/${slugify(player.name || player.id)}`);
+      // Process the image currently shown in the player list. The original
+      // source may be an expired Drive URL while imageUrl is already storage-backed.
+      const source = player.imageUrl || player.originalImageUrl;
+      if (!source) throw new Error('Player image is empty');
+      const storageSource = await ensureMediaInStorage(source, `media/players/${slugify(player.name || player.id)}`);
       const processedUrl = await processPlayerImage({
         playerId: player.id,
         playerName: player.name,
@@ -1297,13 +1300,17 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
         imageProcessingError: undefined,
       };
       if (updateDraft && editingPlayerId === player.id) setPlayerDraft(updatedPlayer);
-      setEditingPlayers(current => current.map(item => item.id === player.id ? updatedPlayer : item));
-      setAdminPlayerOverrides(editingPlayers.map(item => item.id === player.id ? updatedPlayer : item));
-      await auctionPersistence.saveAdminPlayers(editingPlayers.map(item => item.id === player.id ? updatedPlayer : item));
+      let latestPlayers: Player[] = [];
+      setEditingPlayers(current => {
+        latestPlayers = current.map(item => item.id === player.id ? updatedPlayer : item);
+        return latestPlayers;
+      });
+      setAdminPlayerOverrides(latestPlayers.length > 0 ? latestPlayers : editingPlayers.map(item => item.id === player.id ? updatedPlayer : item));
+      await auctionPersistence.saveAdminPlayers(latestPlayers.length > 0 ? latestPlayers : editingPlayers.map(item => item.id === player.id ? updatedPlayer : item));
       showUploadFeedback(`Background removed and saved for ${player.name}`);
     } catch (error) {
       console.error('[AdminPanel] Failed to remove player background:', error);
-      showUploadFeedback(`Background removal failed for ${player.name}.`, 'error');
+      showUploadFeedback(`Background removal failed for ${player.name}: ${error instanceof Error ? error.message : 'Unknown processing error'}`, 'error');
       if (updateDraft && editingPlayerId === player.id) setPlayerDraft(current => current ? { ...current, imageProcessingStatus: 'error', imageProcessingError: String(error) } : current);
     } finally {
       setProcessingPlayerIds(current => ({ ...current, [player.id]: false }));

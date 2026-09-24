@@ -1,6 +1,7 @@
 import type { PlayerImageEdit } from './index';
 
 export type RegistrationFieldType = 'text' | 'textarea' | 'number' | 'date' | 'select' | 'phone' | 'email';
+export type RegistrationSport = 'cricket' | 'kabaddi' | 'football';
 
 export const DEFAULT_PHOTO_GUIDE_URL = '/assets/player-pose-guide.svg';
 
@@ -12,7 +13,7 @@ export interface RegistrationField {
   placeholder?: string;
   options?: string[];
   order: number;
-  systemKey?: 'name' | 'phone' | 'dateOfBirth' | 'photo';
+  systemKey?: 'name' | 'phone' | 'dateOfBirth' | 'photo' | 'role';
 }
 
 export interface RegistrationPaymentConfig {
@@ -33,10 +34,27 @@ export interface PlayerRegistrationConfig {
   enabled: boolean;
   title: string;
   description: string;
+  sport?: RegistrationSport;
   photoGuideUrl?: string;
   fields: RegistrationField[];
   payment: RegistrationPaymentConfig;
   updatedAt: number;
+}
+
+export const REGISTRATION_ROLE_OPTIONS: Record<RegistrationSport, string[]> = {
+  cricket: ['Batsman', 'Bowler', 'All-Rounder', 'Wicket-Keeper'],
+  kabaddi: ['Raider', 'Defender', 'All-Rounder'],
+  football: ['Forward', 'Midfielder', 'Defender', 'Goalkeeper'],
+};
+
+export function getRegistrationRoleOptions(sport: RegistrationSport): string[] {
+  return REGISTRATION_ROLE_OPTIONS[sport] ?? REGISTRATION_ROLE_OPTIONS.cricket;
+}
+
+export function applyRegistrationSport(fields: RegistrationField[], sport: RegistrationSport): RegistrationField[] {
+  return fields.map(field => (field.systemKey === 'role' || field.id === 'role'
+    ? { ...field, options: getRegistrationRoleOptions(sport) }
+    : field));
 }
 
 export interface PlayerRegistration {
@@ -61,7 +79,7 @@ export const DEFAULT_REGISTRATION_FIELDS: RegistrationField[] = [
   { id: 'dateOfBirth', label: 'Date of birth', type: 'date', required: true, order: 2, systemKey: 'dateOfBirth' },
   { id: 'photo', label: 'Player photo', type: 'text', required: true, order: 3, systemKey: 'photo' },
   { id: 'place', label: 'Place', type: 'text', required: false, order: 4 },
-  { id: 'role', label: 'Playing role', type: 'select', required: false, options: ['Batsman', 'Bowler', 'All-Rounder', 'Wicket-Keeper'], order: 5 },
+  { id: 'role', label: 'Playing role', type: 'select', required: false, options: getRegistrationRoleOptions('cricket'), order: 5, systemKey: 'role' },
 ];
 
 export const DEFAULT_REGISTRATION_CONFIG: PlayerRegistrationConfig = {

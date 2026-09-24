@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { IoClose, IoPlay, IoRefresh } from 'react-icons/io5';
 import type { Player } from '../../types';
 import { processPlayerImage } from '../../services/playerBackgroundRemovalService';
-import { resolveMediaToStorage } from '../../services/firebaseStorageService';
+import { ensureMediaInStorage } from '../../services/firebaseStorageService';
 
 interface Props {
   players: Player[];
@@ -68,14 +68,14 @@ export default function AdminImageBackgroundRemoval({ players, isOpen, onClose, 
         updateRow(player.id, { state: 'processing', progress: 1, message: 'Preparing image...' });
         try {
           const source = player.originalImageUrl || player.imageUrl;
-          const storageSource = await resolveMediaToStorage(source, `media/players/${player.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`);
+          const storageSource = await ensureMediaInStorage(source, `media/players/${player.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`);
           const processedUrl = await processPlayerImage({
             playerId: player.id,
             playerName: player.name,
             sourceUrl: storageSource,
             onStatus: status => updateRow(player.id, {
               state: 'processing',
-              message: status === 'loading-model' ? 'Loading background-removal model...' : status === 'uploading' ? 'Uploading transparent image...' : 'Removing background...',
+              message: status === 'queued' ? 'Queued behind another image...' : status === 'loading-model' ? 'Loading background-removal model...' : status === 'uploading' ? 'Uploading transparent image...' : 'Removing background...',
             }),
             onProgress: (message, progress) => updateRow(player.id, {
               state: 'processing',

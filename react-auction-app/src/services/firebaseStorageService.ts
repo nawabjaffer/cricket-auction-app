@@ -36,6 +36,7 @@ import {
   remove,
   type Database,
 } from 'firebase/database';
+import { getDriveImageUrl } from '../utils/driveImage';
 
 // ── Firebase config (same project as realtimeSync.ts) ────────────────────────
 const FB_CONFIG = {
@@ -335,6 +336,22 @@ export async function resolveMediaToStorage(
   storagePath: string
 ): Promise<string> {
   return resolveToStorageUrl(originalUrl, storagePath);
+}
+
+/**
+ * Strict variant for processing workflows. Unlike normal display resolution,
+ * this never returns an unreachable Drive URL after a failed conversion.
+ */
+export async function ensureMediaInStorage(
+  originalUrl: string,
+  storagePath: string,
+): Promise<string> {
+  if (!originalUrl) throw new Error('Image URL is empty');
+  if (originalUrl.startsWith('data:') || originalUrl.startsWith('blob:') || originalUrl.includes('firebasestorage')) {
+    return originalUrl;
+  }
+  const driveCandidate = getDriveImageUrl(originalUrl) || originalUrl;
+  return uploadFromRemoteUrl(driveCandidate, storagePath);
 }
 
 /** Uploads a File object directly to Firebase Storage and returns download URL. */

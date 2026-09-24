@@ -229,7 +229,7 @@ export function PlayerImageEditor({ imageUrl, sourceBlob, auctionLayout, edit, p
       const currentDistance = Math.hypot(clientX - interaction.centerX, clientY - interaction.centerY);
       const startDistance = Math.hypot(interaction.startX - interaction.centerX, interaction.startY - interaction.centerY);
       const nextScale = interaction.startScale * (currentDistance / Math.max(1, startDistance));
-      update({ scale: Math.max(0.5, Math.min(2.5, Number(nextScale.toFixed(2)))) });
+      update({ scale: Math.max(0.5, Math.min(5, Number(nextScale.toFixed(2)))) });
       return;
     }
     const currentAngle = Math.atan2(clientY - interaction.centerY, clientX - interaction.centerX) * (180 / Math.PI);
@@ -243,7 +243,7 @@ export function PlayerImageEditor({ imageUrl, sourceBlob, auctionLayout, edit, p
     else if (event.key === 'ArrowRight') update({ xPct: Math.min(70, value.xPct + step) });
     else if (event.key === 'ArrowUp') update({ yPct: Math.max(-20, value.yPct - step) });
     else if (event.key === 'ArrowDown') update({ yPct: Math.min(70, value.yPct + step) });
-    else if (event.key === '+' || event.key === '=') update({ scale: Math.min(2.5, Number((value.scale + 0.05).toFixed(2))) });
+    else if (event.key === '+' || event.key === '=') update({ scale: Math.min(5, Number((value.scale + 0.05).toFixed(2))) });
     else if (event.key === '-') update({ scale: Math.max(0.5, Number((value.scale - 0.05).toFixed(2))) });
     else if (event.key === '[') update({ rotationDeg: value.rotationDeg - 5 });
     else if (event.key === ']') update({ rotationDeg: value.rotationDeg + 5 });

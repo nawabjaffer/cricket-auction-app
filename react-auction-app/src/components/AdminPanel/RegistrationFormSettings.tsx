@@ -2,7 +2,9 @@ import { useEffect, useState } from 'react';
 import { IoAdd, IoArrowDown, IoArrowUp, IoSave, IoTrash } from 'react-icons/io5';
 import { playerRegistrationService } from '../../services/playerRegistrationService';
 import { uploadFileToStorage } from '../../services/firebaseStorageService';
-import { DEFAULT_REGISTRATION_CONFIG, type PlayerRegistrationConfig, type RegistrationField, type RegistrationFieldType } from '../../types/playerRegistration';
+import { getActiveTenant } from '../../services/tenantPath';
+import { tenantService } from '../../services/tenantService';
+import { applyRegistrationSport, DEFAULT_REGISTRATION_CONFIG, type PlayerRegistrationConfig, type RegistrationField, type RegistrationFieldType, type RegistrationSport } from '../../types/playerRegistration';
 import './RegistrationFormSettings.css';
 
 const FIELD_TYPES: RegistrationFieldType[] = ['text', 'textarea', 'number', 'date', 'select', 'phone', 'email'];
@@ -17,10 +19,15 @@ export function RegistrationFormSettings() {
   const [loading, setLoading] = useState(true);
   const [uploadingGuide, setUploadingGuide] = useState(false);
   const [uploadingQr, setUploadingQr] = useState(false);
+  const [tenantSport, setTenantSport] = useState<RegistrationSport>('cricket');
 
   useEffect(() => {
-    playerRegistrationService.getConfig().then(saved => {
-      if (saved) setConfig(saved);
+    Promise.all([playerRegistrationService.getConfig(), tenantService.getTenant(getActiveTenant())]).then(([saved, tenant]) => {
+      const resolvedSport = (saved?.sport ?? tenant?.primarySport ?? tenant?.sports?.[0] ?? 'cricket') as RegistrationSport;
+      setTenantSport(resolvedSport);
+      setConfig(saved
+        ? { ...saved, sport: resolvedSport, fields: applyRegistrationSport(saved.fields, resolvedSport) }
+        : { ...DEFAULT_REGISTRATION_CONFIG, sport: resolvedSport, fields: applyRegistrationSport(DEFAULT_REGISTRATION_CONFIG.fields, resolvedSport) });
     }).catch(error => {
       console.error('[RegistrationFormSettings] Failed to load config:', error);
       setStatus('Could not load registration settings.');
@@ -91,6 +98,7 @@ export function RegistrationFormSettings() {
       </div>
       <label className="registration-settings__switch"><input type="checkbox" checked={config.enabled} onChange={e => setConfig(current => ({ ...current, enabled: e.target.checked }))} /> Registration is open</label>
       <div className="registration-settings__grid">
+        <label>Registration sport<select value={config.sport ?? tenantSport} onChange={e => { const sport = e.target.value as RegistrationSport; setTenantSport(sport); setConfig(current => ({ ...current, sport, fields: applyRegistrationSport(current.fields, sport) })); }}><option value="cricket">Cricket</option><option value="kabaddi">Kabaddi</option><option value="football">Football</option></select></label>
         <label>Form title<input value={config.title} onChange={e => setConfig(current => ({ ...current, title: e.target.value }))} /></label>
         <label>Description<textarea value={config.description} onChange={e => setConfig(current => ({ ...current, description: e.target.value }))} /></label>
       </div>

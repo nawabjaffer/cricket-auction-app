@@ -2,7 +2,9 @@ import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { IoCamera, IoCheckmarkCircle, IoCloudUploadOutline, IoLockClosed } from 'react-icons/io5';
 import { playerRegistrationService } from '../services/playerRegistrationService';
-import { DEFAULT_PHOTO_GUIDE_URL, DEFAULT_REGISTRATION_CONFIG, type PlayerRegistrationConfig, type RegistrationField } from '../types/playerRegistration';
+import { getActiveTenant } from '../services/tenantPath';
+import { tenantService } from '../services/tenantService';
+import { applyRegistrationSport, DEFAULT_PHOTO_GUIDE_URL, DEFAULT_REGISTRATION_CONFIG, type PlayerRegistrationConfig, type RegistrationField, type RegistrationSport } from '../types/playerRegistration';
 import { uploadFileToStorage } from '../services/firebaseStorageService';
 import { processPlayerImage } from '../services/playerBackgroundRemovalService';
 import { PlayerImageEditor } from '../components/AdminPanel/PlayerImageEditor';
@@ -29,6 +31,7 @@ function PhotoGuide({ onFile, guideUrl }: Readonly<{ onFile: (file: File) => voi
 export default function PlayerRegistrationPage() {
   const { tenantSlug = '' } = useParams<{ tenantSlug: string }>();
   const [config, setConfig] = useState<PlayerRegistrationConfig>(DEFAULT_REGISTRATION_CONFIG);
+  const [tenantSport, setTenantSport] = useState<RegistrationSport>('cricket');
   const [values, setValues] = useState<Record<string, string>>({});
   const [photoUrl, setPhotoUrl] = useState('');
   const [photoPreview, setPhotoPreview] = useState('');
@@ -43,8 +46,16 @@ export default function PlayerRegistrationPage() {
   const [accessToken, setAccessToken] = useState('');
   const [paymentReference, setPaymentReference] = useState('');
 
-  useEffect(() => { playerRegistrationService.getConfig().then(saved => saved && setConfig(saved)).catch(() => setError('Registration form is temporarily unavailable.')); }, []);
-  const fields = useMemo(() => [...config.fields].sort((a, b) => a.order - b.order), [config.fields]);
+  useEffect(() => {
+    Promise.all([playerRegistrationService.getConfig(), tenantService.getTenant(getActiveTenant())]).then(([saved, tenant]) => {
+      const resolvedSport = (saved?.sport ?? tenant?.primarySport ?? tenant?.sports?.[0] ?? 'cricket') as RegistrationSport;
+      setTenantSport(resolvedSport);
+      if (saved) setConfig({ ...saved, fields: applyRegistrationSport(saved.fields, resolvedSport) });
+      else setConfig(current => ({ ...current, sport: resolvedSport, fields: applyRegistrationSport(current.fields, resolvedSport) }));
+    }).catch(() => setError('Registration form is temporarily unavailable.'));
+  }, []);
+  const registrationSport = config.sport ?? tenantSport;
+  const fields = useMemo(() => applyRegistrationSport([...config.fields].sort((a, b) => a.order - b.order), registrationSport), [config.fields, registrationSport]);
   const paymentRequired = config.payment.enabled && config.payment.amount > 0 && !config.payment.bypassForTesting;
   const setValue = (field: RegistrationField, value: string) => setValues(current => ({ ...current, [field.id]: value }));
 
@@ -75,7 +86,7 @@ export default function PlayerRegistrationPage() {
         sourceUrl: photoUrl,
         sourceBlob: photoFile ?? undefined,
         onProcessedBlob: blob => setPhotoFile(new File([blob], 'background-removed.png', { type: 'image/png' })),
-        onStatus: status => setPhotoProcessingLog(current => [...current, status === 'loading-model' ? 'Loading AI model...' : status === 'processing' ? 'Analyzing portrait and removing background...' : status === 'uploading' ? 'Saving transparent image...' : 'Background removed successfully.']),
+        onStatus: status => setPhotoProcessingLog(current => [...current, status === 'queued' ? 'Queued behind another background-removal job...' : status === 'loading-model' ? 'Loading AI model...' : status === 'processing' ? 'Analyzing portrait and removing background...' : status === 'uploading' ? 'Saving transparent image...' : 'Background removed successfully.']),
         onProgress: (message, percent) => { if (typeof percent === 'number') setPhotoProcessingProgress(percent); setPhotoProcessingLog(current => [...current.slice(-4), message]); },
       });
       setPhotoUrl(processedUrl);
