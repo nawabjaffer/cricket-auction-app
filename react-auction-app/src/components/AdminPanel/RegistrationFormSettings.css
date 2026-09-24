@@ -1,0 +1,207 @@
+.registration-settings {
+  display: grid;
+  gap: 1rem;
+  padding: 1rem;
+  border: 1px solid #dfe7f3;
+  border-radius: 12px;
+  background: #f8fafc;
+  color: #0f172a;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.04);
+}
+
+.registration-settings__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.registration-settings__header h3,
+.registration-settings__header h4,
+.registration-settings__payment h4 {
+  margin: 0;
+  color: #0f172a;
+}
+
+.registration-settings__header p,
+.registration-settings__payment small {
+  margin: 0.3rem 0 0;
+  color: #475569;
+  font-size: 0.78rem;
+}
+
+.registration-settings__header--sub {
+  align-items: center;
+  border-top: 1px solid #e2e8f0;
+  padding-top: 0.8rem;
+}
+
+.registration-settings__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.registration-settings label {
+  display: grid;
+  gap: 0.3rem;
+  font-size: 0.78rem;
+  color: #1e293b;
+  font-weight: 600;
+}
+
+.registration-settings input,
+.registration-settings textarea,
+.registration-settings select {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 0.6rem 0.7rem;
+  background: #ffffff;
+  color: #0f172a;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.registration-settings input:focus,
+.registration-settings textarea:focus,
+.registration-settings select:focus {
+  outline: none;
+  border-color: #60a5fa;
+  box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.12);
+}
+
+.registration-settings textarea {
+  min-height: 70px;
+  resize: vertical;
+}
+
+.registration-settings__switch,
+.registration-settings__required {
+  display: flex !important;
+  align-items: center;
+  grid-template-columns: auto 1fr;
+  gap: 0.5rem;
+  color: #1e293b;
+}
+
+.registration-settings__switch input,
+.registration-settings__required input {
+  width: auto;
+}
+
+.registration-settings__fields {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.registration-settings__field {
+  display: grid;
+  grid-template-columns: auto 1.5fr 1fr auto auto;
+  gap: 0.5rem;
+  align-items: center;
+  padding: 0.6rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.registration-settings__field button {
+  border: 0;
+  background: transparent;
+  color: #334155;
+  cursor: pointer;
+}
+
+.registration-settings__field button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.registration-settings__field-order {
+  display: flex;
+  gap: 0.15rem;
+}
+
+.registration-settings__payment {
+  display: grid;
+  gap: 0.75rem;
+  border-top: 1px solid #e2e8f0;
+  padding-top: 0.85rem;
+}
+
+.registration-settings__guide {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.8rem;
+  align-items: center;
+  padding: 0.8rem;
+  border: 1px dashed #bfdbfe;
+  border-radius: 10px;
+  background: #eff6ff;
+}
+
+.registration-settings__guide h4 {
+  margin: 0;
+  color: #0f172a;
+}
+
+.registration-settings__guide p {
+  margin: 0.3rem 0 0;
+  color: #475569;
+  font-size: 0.76rem;
+}
+
+.registration-settings__upload {
+  display: inline-flex !important;
+  align-items: center;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.registration-settings__guide-preview {
+  grid-column: 1 / -1;
+  width: 120px;
+  max-height: 150px;
+  object-fit: contain;
+  justify-self: start;
+  background: #edf2f7;
+  border: 1px solid #dfe7f3;
+  border-radius: 8px;
+}
+
+.registration-settings__qr-preview {
+  width: 150px;
+  height: 150px;
+  object-fit: contain;
+  background: #ffffff;
+  border: 1px solid #dfe7f3;
+  border-radius: 10px;
+  padding: 0.35rem;
+}
+
+.registration-settings__status {
+  margin: 0;
+  color: #166534;
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+@media (max-width: 720px) {
+  .registration-settings__grid {
+    grid-template-columns: 1fr;
+  }
+
+  .registration-settings__field {
+    grid-template-columns: auto 1fr;
+  }
+
+  .registration-settings__field select,
+  .registration-settings__field .registration-settings__required {
+    grid-column: 2;
+  }
+
+  .registration-settings__guide {
+    grid-template-columns: 1fr;
+  }
+}

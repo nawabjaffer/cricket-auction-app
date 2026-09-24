@@ -33,6 +33,9 @@ import { getLiveBlobUrl } from '../../services/mediaBlobCache';
 import { getThemeAssetFilter } from '../../utils/themeAssetFilter';
 import { getActiveTenant } from '../../services/tenantPath';
 import { tenantService } from '../../services/tenantService';
+import { processPlayerImage } from '../../services/playerBackgroundRemovalService';
+import { PlayerImageEditor } from './PlayerImageEditor';
+import { RegistrationFormSettings } from './RegistrationFormSettings';
 
 // Small avatar that resolves Google Drive / Firebase Storage URLs the same way
 // PlayerCard does, so admin thumbnails match what the auction listing shows.
@@ -310,7 +313,7 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
     }) ?? null;
   };
 
-  const [activeTab, setActiveTab] = useState<'theme' | 'teams' | 'purse' | 'sponsors' | 'players' | 'export' | 'features' | 'streaming' | 'storage' | 'reset'>('theme');
+  const [activeTab, setActiveTab] = useState<'theme' | 'teams' | 'purse' | 'sponsors' | 'players' | 'registration' | 'export' | 'features' | 'streaming' | 'storage' | 'reset'>('theme');
   const [isSaving, setIsSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'success' | 'error'>('idle');
 
@@ -407,6 +410,8 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
   const [iconTeamId, setIconTeamId] = useState<string>('');
   const [isSavingSponsors, setIsSavingSponsors] = useState(false);
   const [isMigratingMedia, setIsMigratingMedia] = useState(false);
+  const [processingPlayerIds, setProcessingPlayerIds] = useState<Record<string, boolean>>({});
+  const [processingEditorImage, setProcessingEditorImage] = useState(false);
   const [loadedAdminSettings, setLoadedAdminSettings] = useState<AdminSettings | null>(null);
   // Holds the latest extended settings from ThemeSettingsExtended, merged on save
   const extendedSettingsRef = useRef<Partial<AdminSettings>>({});
@@ -1261,6 +1266,52 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
     setPlayerDraft(null);
     setIsIconPlayer(false);
     setIconTeamId('');
+  };
+
+  const processPlayerBackground = async (player: Player, updateDraft = false) => {
+    if (!player.imageUrl && !player.originalImageUrl) {
+      showUploadFeedback(`Add an image for ${player.name} before removing the background.`, 'error');
+      return;
+    }
+    setProcessingPlayerIds(current => ({ ...current, [player.id]: true }));
+    try {
+      const source = player.originalImageUrl || player.imageUrl;
+      const storageSource = await resolveMediaToStorage(source, `media/players/${slugify(player.name || player.id)}`);
+      const processedUrl = await processPlayerImage({
+        playerId: player.id,
+        playerName: player.name,
+        sourceUrl: storageSource,
+      });
+      const updatedPlayer: Player = {
+        ...player,
+        imageUrl: processedUrl,
+        originalImageUrl: source,
+        processedImageUrl: processedUrl,
+        imageProcessingStatus: 'complete',
+        imageProcessingError: undefined,
+      };
+      if (updateDraft && editingPlayerId === player.id) setPlayerDraft(updatedPlayer);
+      setEditingPlayers(current => current.map(item => item.id === player.id ? updatedPlayer : item));
+      setAdminPlayerOverrides(editingPlayers.map(item => item.id === player.id ? updatedPlayer : item));
+      await auctionPersistence.saveAdminPlayers(editingPlayers.map(item => item.id === player.id ? updatedPlayer : item));
+      showUploadFeedback(`Background removed and saved for ${player.name}`);
+    } catch (error) {
+      console.error('[AdminPanel] Failed to remove player background:', error);
+      showUploadFeedback(`Background removal failed for ${player.name}.`, 'error');
+      if (updateDraft && editingPlayerId === player.id) setPlayerDraft(current => current ? { ...current, imageProcessingStatus: 'error', imageProcessingError: String(error) } : current);
+    } finally {
+      setProcessingPlayerIds(current => ({ ...current, [player.id]: false }));
+    }
+  };
+
+  const processEditorBackground = async () => {
+    if (!playerDraft || !editingPlayerId) return;
+    setProcessingEditorImage(true);
+    try {
+      await processPlayerBackground(playerDraft, true);
+    } finally {
+      setProcessingEditorImage(false);
+    }
   };
 
   const savePlayerDraft = async () => {
@@ -2436,6 +2487,12 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
           onClick={() => setActiveTab('players')}
         >
           Players
+        </button>
+        <button
+          className={`admin-tab ${activeTab === 'registration' ? 'active' : ''}`}
+          onClick={() => setActiveTab('registration')}
+        >
+          Registration Form
         </button>
         <button
           className={`admin-tab ${activeTab === 'export' ? 'active' : ''}`}
@@ -4035,6 +4092,15 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
                         <div className="admin-compact-actions">
                           <button
                             type="button"
+                            className="admin-btn admin-btn-warning admin-btn-sm"
+                            onClick={() => { void processPlayerBackground(player); }}
+                            disabled={Boolean(processingPlayerIds[player.id]) || !player.imageUrl}
+                            title="Remove image background and save the processed PNG"
+                          >
+                            {processingPlayerIds[player.id] ? 'Processing...' : 'Remove BG'}
+                          </button>
+                          <button
+                            type="button"
                             className="admin-btn admin-btn-secondary admin-btn-sm"
                             onClick={() => openPlayerEditor(player.id)}
                           >
@@ -4266,6 +4332,13 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
                   >
                     <IoDownload size={18} /> Export Unsold Players CSV
                   </button>
+                </div>
+              )}
+
+              {/* Features Tab */}
+              {activeTab === 'registration' && (
+                <div className="admin-section">
+                  <RegistrationFormSettings />
                 </div>
               )}
 
@@ -4911,6 +4984,18 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
                           onChange={(e) => setPlayerDraft({ ...playerDraft, imageUrl: e.target.value })}
                           placeholder="https://drive.google.com/..."
                         />
+                      )}
+                      {playerDraft.imageUrl && (
+                        <PlayerImageEditor
+                          imageUrl={playerDraft.imageUrl}
+                          edit={playerDraft.imageEdit}
+                          processing={processingEditorImage}
+                          onChange={(imageEdit) => setPlayerDraft(current => current ? { ...current, imageEdit } : current)}
+                          onRemoveBackground={() => { void processEditorBackground(); }}
+                        />
+                      )}
+                      {playerDraft.imageProcessingError && (
+                        <small className="form-error">{playerDraft.imageProcessingError}</small>
                       )}
                     </div>
 

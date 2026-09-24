@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 620 620" role="img" aria-label="Crossed arms portrait player pose guide">
+  <g fill="none" stroke="#38bdf8" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" opacity="0.82">
+    <ellipse cx="310" cy="118" rx="73" ry="88" />
+    <path d="M258 218c-36 10-74 25-103 43-26 16-39 40-46 75l-29 137c-8 38 10 67 48 73 40 6 81 1 119-13" />
+    <path d="M362 218c36 10 74 25 103 43 26 16 39 40 46 75l29 137c8 38-10 67-48 73-40 6-81 1-119-13" />
+    <path d="M202 274c-23 5-39 25-34 48 5 25 29 39 53 30l169-58c19-7 38 5 42 25l8 39c4 17-5 34-22 40l-142 51c-27 10-56 18-84 22" />
+    <path d="M449 322c-31-3-61 3-91 14l-155 60c-20 8-43-1-52-21-8-18-1-39 16-50l40-25c17-10 37-10 54 0l32 19" />
+    <path d="M179 489c-2 42-5 81-9 111" />
+    <path d="M441 489c2 42 5 81 9 111" />
+  </g>
+</svg>

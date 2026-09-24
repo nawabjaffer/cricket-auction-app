@@ -170,7 +170,7 @@ export function ScorecardWidgetView({ widget, content, selected, interactive, ov
       initial="hidden"
       animate="shown"
       variants={variants}
-      transformTemplate={(latest) => `rotate(${geometry.rotationDeg}deg) scale(${zoom}) ${latest}`}
+      transformTemplate={(_transform, generatedTransform) => `rotate(${geometry.rotationDeg}deg) scale(${zoom}) ${generatedTransform}`}
     >
       <div className={`sc-widget__content ${content.urgent ? 'is-urgent' : ''}`} style={{ ...contentStyle, transform: `${contentStyle.transform} scale(${content.urgent ? 1.12 : 1})` }}>{bodyContent}</div>
       {overlay}

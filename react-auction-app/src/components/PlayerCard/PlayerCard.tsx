@@ -133,6 +133,10 @@ export function PlayerCard({
           src={resolvedImg}
           alt={player.name}
           className="w-full h-full object-cover object-top"
+          style={player.imageEdit ? {
+            transform: `translate(${player.imageEdit.xPct / 4}%, ${player.imageEdit.yPct / 4}%) rotate(${player.imageEdit.rotationDeg}deg) scaleX(${player.imageEdit.flipX ? -1 : 1}) scaleY(${player.imageEdit.flipY ? -1 : 1}) scale(${player.imageEdit.scale})`,
+            transformOrigin: 'center center',
+          } : undefined}
           loading="lazy"
           onError={(e) => {
             (e.target as HTMLImageElement).src = '/assets/man.jpg';

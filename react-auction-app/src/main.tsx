@@ -24,6 +24,7 @@ import ScoreOBSOverlayPage from './pages/ScoreOBSOverlayPage'
 import ScoreOBSControlDock from './pages/ScoreOBSControlDock'
 import TenantScoringRouterPage from './pages/TenantScoringRouterPage'
 import GameScorerPage from './pages/GameScorerPage'
+import PlayerRegistrationPage from './pages/PlayerRegistrationPage'
 import { TenantGate } from './components/TenantGate/TenantGate'
 import './index.css'
 
@@ -117,6 +118,7 @@ createRoot(document.getElementById('root')!).render(
             <Route path="/:tenantSlug/obs-dock" element={<TenantGate><OBSDockPage /></TenantGate>} />
             <Route path="/:tenantSlug/mirror" element={<TenantGate><MirrorPage /></TenantGate>} />
             <Route path="/:tenantSlug/connect-bidding-admin" element={<TenantGate><ConnectBiddingAdminPage /></TenantGate>} />
+            <Route path="/:tenantSlug/register" element={<TenantGate><PlayerRegistrationPage /></TenantGate>} />
             {/* Game-type scorer (tenant-scoped) — dispatches per :gameType, restricted to sports enabled in Platform Admin */}
             <Route path="/:tenantSlug/:gameType/scorer/admin" element={<TenantGate><GameScorerPage route="admin" /></TenantGate>} />
             <Route path="/:tenantSlug/:gameType/scorer/update" element={<TenantGate><GameScorerPage route="update" /></TenantGate>} />

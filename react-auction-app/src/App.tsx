@@ -1846,6 +1846,10 @@ function AuctionApp({ mirrorMode = false }: { mirrorMode?: boolean }) {
                     src={imageLoadingState === 'error' ? playerPlaceholder : (imgSrc || playerPlaceholder)} 
                     alt={currentPlayer.name}
                     className="placeholder-image"
+                    style={currentPlayer.imageEdit ? {
+                      transform: `translate(${currentPlayer.imageEdit.xPct / 4}%, ${currentPlayer.imageEdit.yPct / 4}%) rotate(${currentPlayer.imageEdit.rotationDeg}deg) scaleX(${currentPlayer.imageEdit.flipX ? -1 : 1}) scaleY(${currentPlayer.imageEdit.flipY ? -1 : 1}) scale(${currentPlayer.imageEdit.scale})`,
+                      transformOrigin: 'center center',
+                    } : undefined}
                     loading="eager"
                     onLoad={(e) => {
                       const loadedUrl = (e.target as HTMLImageElement).src;

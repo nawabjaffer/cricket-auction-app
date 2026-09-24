@@ -53,6 +53,17 @@ export const createEmptyBowlingStats = (): BowlingStats => ({
   economy: '0.00', strikeRate: '0.00', average: '0.00',
 });
 
+export interface PlayerImageEdit {
+  xPct: number;
+  yPct: number;
+  scale: number;
+  rotationDeg: number;
+  flipX?: boolean;
+  flipY?: boolean;
+}
+
+export type PlayerImageProcessingStatus = 'idle' | 'queued' | 'processing' | 'complete' | 'error';
+
 export interface Player {
   id: string;
   name: string;
@@ -81,6 +92,13 @@ export interface Player {
   bowlingStats?: BowlingStats;
   /** Sport-specific values imported from non-cricket player sheets. */
   customStats?: Record<string, string>;
+  /** Original source retained when the auction image has been processed. */
+  originalImageUrl?: string;
+  /** Background-removed Firebase Storage image used by auction surfaces. */
+  processedImageUrl?: string;
+  imageEdit?: PlayerImageEdit;
+  imageProcessingStatus?: PlayerImageProcessingStatus;
+  imageProcessingError?: string;
 }
 
 export type PlayerRole =

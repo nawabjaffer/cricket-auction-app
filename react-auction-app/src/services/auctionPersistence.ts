@@ -708,6 +708,11 @@ class AuctionPersistenceService {
       if (p.bowlingStats) record.bowlingStats = p.bowlingStats;
       if (p.customStats) record.customStats = p.customStats;
       if (p.place) record.place = p.place;
+      if (p.originalImageUrl) record.originalImageUrl = p.originalImageUrl;
+      if (p.processedImageUrl) record.processedImageUrl = p.processedImageUrl;
+      if (p.imageEdit) record.imageEdit = p.imageEdit;
+      if (p.imageProcessingStatus) record.imageProcessingStatus = p.imageProcessingStatus;
+      if (p.imageProcessingError) record.imageProcessingError = p.imageProcessingError;
       return record;
     });
 
