@@ -412,6 +412,7 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
   const [isMigratingMedia, setIsMigratingMedia] = useState(false);
   const [processingPlayerIds, setProcessingPlayerIds] = useState<Record<string, boolean>>({});
   const [processingEditorImage, setProcessingEditorImage] = useState(false);
+  const [editorImageBlob, setEditorImageBlob] = useState<Blob | undefined>();
   const [loadedAdminSettings, setLoadedAdminSettings] = useState<AdminSettings | null>(null);
   // Holds the latest extended settings from ThemeSettingsExtended, merged on save
   const extendedSettingsRef = useRef<Partial<AdminSettings>>({});
@@ -1249,6 +1250,7 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
 
     setEditingPlayerId(playerId);
     setPlayerDraft({ ...targetPlayer });
+    setEditorImageBlob(undefined);
 
     // Check if this player is currently an icon player for any team
     const assignedTeam = editingTeams.find(t => t.captain?.trim().toLowerCase() === targetPlayer.name.trim().toLowerCase());
@@ -1266,9 +1268,10 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
     setPlayerDraft(null);
     setIsIconPlayer(false);
     setIconTeamId('');
+    setEditorImageBlob(undefined);
   };
 
-  const processPlayerBackground = async (player: Player, updateDraft = false) => {
+  const processPlayerBackground = async (player: Player, updateDraft = false, onProcessedBlob?: (blob: Blob) => void) => {
     if (!player.imageUrl && !player.originalImageUrl) {
       showUploadFeedback(`Add an image for ${player.name} before removing the background.`, 'error');
       return;
@@ -1281,6 +1284,7 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
         playerId: player.id,
         playerName: player.name,
         sourceUrl: storageSource,
+        onProcessedBlob,
       });
       const updatedPlayer: Player = {
         ...player,
@@ -1308,10 +1312,31 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
     if (!playerDraft || !editingPlayerId) return;
     setProcessingEditorImage(true);
     try {
-      await processPlayerBackground(playerDraft, true);
+      await processPlayerBackground(playerDraft, true, setEditorImageBlob);
     } finally {
       setProcessingEditorImage(false);
     }
+  };
+
+  const saveEditedPlayerImage = async (file: File) => {
+    if (!playerDraft || !editingPlayerId) return;
+    const imageUrl = await uploadFileToStorage(file, `media/players/${slugify(playerDraft.name || playerDraft.id)}/edited-${Date.now()}`);
+    const updatedPlayer: Player = {
+      ...playerDraft,
+      imageUrl,
+      originalImageUrl: imageUrl,
+      processedImageUrl: imageUrl,
+      imageEdit: undefined,
+      imageProcessingStatus: 'complete',
+      imageProcessingError: undefined,
+    };
+    const updatedPlayers = editingPlayers.map(player => player.id === editingPlayerId ? updatedPlayer : player);
+    setPlayerDraft(updatedPlayer);
+    setEditorImageBlob(file);
+    setEditingPlayers(updatedPlayers);
+    setAdminPlayerOverrides(updatedPlayers);
+    await auctionPersistence.saveAdminPlayers(updatedPlayers);
+    showUploadFeedback(`Edited image saved for ${updatedPlayer.name}`);
   };
 
   const savePlayerDraft = async () => {
@@ -1477,6 +1502,7 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
         `media/players/${slugify(playerDraft.name || editingPlayerId)}-${Date.now()}`
       );
       setPlayerDraft({ ...playerDraft, imageUrl: storageUrl });
+      setEditorImageBlob(file);
       setPlayerImageSources((prev) => ({ ...prev, [editingPlayerId]: 'upload' }));
       showUploadFeedback(`Player image uploaded to Firebase Storage: ${file.name}`);
     } catch {
@@ -4988,9 +5014,11 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
                       {playerDraft.imageUrl && (
                         <PlayerImageEditor
                           imageUrl={playerDraft.imageUrl}
+                          sourceBlob={editorImageBlob}
                           edit={playerDraft.imageEdit}
                           processing={processingEditorImage}
                           onChange={(imageEdit) => setPlayerDraft(current => current ? { ...current, imageEdit } : current)}
+                          onSaveImage={saveEditedPlayerImage}
                           onRemoveBackground={() => { void processEditorBackground(); }}
                         />
                       )}

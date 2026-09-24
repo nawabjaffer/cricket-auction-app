@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
-import { IoRefresh, IoRemoveCircleOutline } from 'react-icons/io5';
+import { IoRefresh, IoRemoveCircleOutline, IoSave } from 'react-icons/io5';
 import { ScorecardLayoutView } from '../ScorecardCanvas';
 import type { PlayerImageEdit } from '../../types';
 import type { ScorecardLayout, ScorecardWidgetInstance } from '../../types/scorecardDesigner';
@@ -25,15 +25,58 @@ function createLayout(imageUrl: string, edit: PlayerImageEdit): ScorecardLayout 
 
 interface PlayerImageEditorProps {
   imageUrl: string;
+  sourceBlob?: Blob;
   edit?: PlayerImageEdit;
   processing?: boolean;
   processingProgress?: number;
   onChange: (edit: PlayerImageEdit) => void;
+  onSaveImage?: (file: File) => Promise<void>;
   onRemoveBackground: () => void;
 }
 
-export function PlayerImageEditor({ imageUrl, edit, processing, processingProgress = 0, onChange, onRemoveBackground }: Readonly<PlayerImageEditorProps>) {
+async function createEditedImageFile(imageUrl: string, sourceBlob: Blob | undefined, edit: PlayerImageEdit): Promise<File> {
+  const canvas = document.createElement('canvas');
+  canvas.width = 800;
+  canvas.height = 1000;
+  const context = canvas.getContext('2d');
+  if (!context) throw new Error('Image editor is unavailable on this device.');
+
+  const source = sourceBlob ? URL.createObjectURL(sourceBlob) : imageUrl;
+  const image = new Image();
+  if (!sourceBlob) image.crossOrigin = 'anonymous';
+  try {
+    await new Promise<void>((resolve, reject) => {
+      image.onload = () => resolve();
+      image.onerror = () => reject(new Error('The image could not be prepared for saving.'));
+      image.src = source;
+    });
+
+    const boxWidth = canvas.width * 0.72;
+    const boxHeight = canvas.height * 0.92;
+    const centerX = (edit.xPct / 100) * canvas.width + boxWidth / 2;
+    const centerY = (edit.yPct / 100) * canvas.height + boxHeight / 2;
+    const containScale = Math.min(boxWidth / image.naturalWidth, boxHeight / image.naturalHeight) * edit.scale;
+    const drawWidth = image.naturalWidth * containScale;
+    const drawHeight = image.naturalHeight * containScale;
+
+    context.save();
+    context.translate(centerX, centerY);
+    context.rotate((edit.rotationDeg * Math.PI) / 180);
+    context.scale(edit.flipX ? -1 : 1, edit.flipY ? -1 : 1);
+    context.drawImage(image, -drawWidth / 2, -drawHeight / 2, drawWidth, drawHeight);
+    context.restore();
+
+    const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/png'));
+    if (!blob) throw new Error('The edited image could not be generated.');
+    return new File([blob], 'edited-player.png', { type: 'image/png' });
+  } finally {
+    if (sourceBlob) URL.revokeObjectURL(source);
+  }
+}
+
+export function PlayerImageEditor({ imageUrl, sourceBlob, edit, processing, processingProgress = 0, onChange, onSaveImage, onRemoveBackground }: Readonly<PlayerImageEditorProps>) {
   const [guideUrl, setGuideUrl] = useState(DEFAULT_PHOTO_GUIDE_URL);
+  const [savingImage, setSavingImage] = useState(false);
   const canvasRef = useRef<HTMLDivElement>(null);
   const interactionRef = useRef<{
     type: 'move' | 'scale' | 'rotate';
@@ -115,6 +158,17 @@ export function PlayerImageEditor({ imageUrl, edit, processing, processingProgre
     update({ rotationDeg: Math.round(interaction.startRotation + currentAngle - interaction.startAngle) });
   };
 
+  const saveEditedImage = async () => {
+    if (!onSaveImage || savingImage || processing) return;
+    setSavingImage(true);
+    try {
+      await onSaveImage(await createEditedImageFile(imageUrl, sourceBlob, value));
+      onChange({ xPct: 14, yPct: 4, scale: 1, rotationDeg: 0, flipX: false, flipY: false });
+    } finally {
+      setSavingImage(false);
+    }
+  };
+
   return (
     <div className="player-image-editor">
       <div className="player-image-editor__canvas">
@@ -148,6 +202,7 @@ export function PlayerImageEditor({ imageUrl, edit, processing, processingProgre
       </div>
       <div className="player-image-editor__actions">
         <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => onChange({ xPct: 14, yPct: 4, scale: 1, rotationDeg: 0, flipX: false, flipY: false })}><IoRefresh size={15} /> Reset</button>
+        {onSaveImage && <button type="button" className="admin-btn admin-btn-primary admin-btn-sm" onClick={() => void saveEditedImage()} disabled={savingImage || processing}><IoSave size={15} /> {savingImage ? 'Saving image...' : 'Save edited image'}</button>}
         <button type="button" className="admin-btn admin-btn-warning admin-btn-sm" onClick={onRemoveBackground} disabled={processing}><IoRemoveCircleOutline size={15} /> {processing ? 'Processing...' : 'Remove Background'}</button>
       </div>
     </div>

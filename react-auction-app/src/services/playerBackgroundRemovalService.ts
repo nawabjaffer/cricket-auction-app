@@ -5,6 +5,7 @@ export interface ProcessPlayerImageOptions {
   playerName: string;
   sourceUrl?: string;
   sourceBlob?: Blob;
+  onProcessedBlob?: (blob: Blob) => void;
   onStatus?: (status: 'loading-model' | 'processing' | 'uploading' | 'complete') => void;
   onProgress?: (message: string, percent?: number) => void;
 }
@@ -15,6 +16,7 @@ export async function processPlayerImage({
   playerName,
   sourceUrl,
   sourceBlob,
+  onProcessedBlob,
   onStatus,
   onProgress,
 }: ProcessPlayerImageOptions): Promise<string> {
@@ -34,6 +36,7 @@ export async function processPlayerImage({
       }
     },
   });
+  onProcessedBlob?.(processedBlob);
 
   onStatus?.('uploading');
   onProgress?.('Uploading the transparent PNG to Firebase Storage...');
