@@ -1849,6 +1849,7 @@ function AuctionApp({ mirrorMode = false }: { mirrorMode?: boolean }) {
                     style={currentPlayer.imageEdit ? {
                       transform: `translate(${currentPlayer.imageEdit.xPct / 4}%, ${currentPlayer.imageEdit.yPct / 4}%) rotate(${currentPlayer.imageEdit.rotationDeg}deg) scaleX(${currentPlayer.imageEdit.flipX ? -1 : 1}) scaleY(${currentPlayer.imageEdit.flipY ? -1 : 1}) scale(${currentPlayer.imageEdit.scale})`,
                       transformOrigin: 'center center',
+                      animation: 'none',
                     } : undefined}
                     loading="eager"
                     onLoad={(e) => {

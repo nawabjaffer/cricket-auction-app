@@ -321,6 +321,7 @@
   min-width: 220px;
   padding: 0.75rem 1rem;
   border: 1px solid #d1d5db;
+  color: #1f2937;
   border-radius: 0.75rem;
   font-size: 0.95rem;
   background: #f9fafb;
@@ -1959,5 +1960,118 @@
   height: 1rem;
   accent-color: #f59e0b;
   cursor: pointer;
+}
+
+.admin-background-removal-modal {
+  width: min(96vw, 900px);
+}
+
+.admin-background-removal-modal__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.admin-background-removal-modal__header h3 {
+  margin: 0;
+  color: #0f172a;
+}
+
+.admin-background-removal-modal__header p {
+  margin: .35rem 0 0;
+  color: #475569;
+  font-size: .8rem;
+}
+
+.admin-background-removal-modal__summary,
+.admin-background-removal-modal__legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .65rem;
+  align-items: center;
+  color: #334155;
+  font-size: .75rem;
+  font-weight: 700;
+}
+
+.admin-background-removal-modal__summary {
+  margin-top: .9rem;
+  padding: .7rem .8rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.admin-background-removal-modal__legend {
+  padding: .55rem 0;
+  font-weight: 600;
+}
+
+.admin-background-removal-modal__summary .is-done,
+.admin-background-removal-modal__legend .is-done { color: #15803d; }
+.admin-background-removal-modal__summary .is-processing,
+.admin-background-removal-modal__legend .is-processing { color: #1d4ed8; }
+.admin-background-removal-modal__summary .is-pending,
+.admin-background-removal-modal__legend .is-pending { color: #c2410c; }
+.admin-background-removal-modal__summary .is-error { color: #b91c1c; }
+
+.admin-background-removal-modal__list {
+  display: grid;
+  gap: .55rem;
+  max-height: 58vh;
+  overflow: auto;
+  padding: .15rem .15rem .2rem;
+}
+
+.admin-background-removal-row {
+  display: grid;
+  grid-template-columns: 58px minmax(0, 1fr) auto;
+  gap: .75rem;
+  align-items: center;
+  padding: .55rem;
+  border: 2px solid #f97316;
+  border-radius: 9px;
+  background: #fff;
+  transition: border-color .2s ease, background .2s ease;
+}
+
+.admin-background-removal-row--processing { border-color: #3b82f6; background: #eff6ff; }
+.admin-background-removal-row--done { border-color: #22c55e; background: #f0fdf4; }
+.admin-background-removal-row--error { border-color: #ef4444; background: #fef2f2; }
+.admin-background-removal-row--skipped { border-color: #cbd5e1; background: #f8fafc; }
+
+.admin-background-removal-row__image {
+  display: grid;
+  place-items: center;
+  width: 58px;
+  height: 58px;
+  overflow: hidden;
+  border-radius: 6px;
+  background: #e2e8f0;
+  color: #64748b;
+  font-size: .65rem;
+  text-align: center;
+}
+
+.admin-background-removal-row__image img { width: 100%; height: 100%; object-fit: cover; }
+.admin-background-removal-row__details { display: grid; min-width: 0; gap: .22rem; }
+.admin-background-removal-row__details strong { overflow: hidden; color: #0f172a; text-overflow: ellipsis; white-space: nowrap; }
+.admin-background-removal-row__details small { overflow: hidden; color: #475569; text-overflow: ellipsis; white-space: nowrap; }
+.admin-background-removal-row__track { height: 7px; overflow: hidden; border-radius: 999px; background: #e2e8f0; }
+.admin-background-removal-row__bar { height: 100%; border-radius: inherit; background: #f97316; transition: width .25s ease, background .2s ease; }
+.admin-background-removal-row--processing .admin-background-removal-row__bar { background: #2563eb; }
+.admin-background-removal-row--done .admin-background-removal-row__bar { background: #16a34a; }
+.admin-background-removal-row--error .admin-background-removal-row__bar { background: #dc2626; }
+.admin-background-removal-row__percent { min-width: 3.5rem; color: #334155; font-size: .75rem; font-variant-numeric: tabular-nums; text-align: right; }
+
+.admin-background-removal-modal__actions { display: flex; justify-content: flex-end; gap: .6rem; margin-top: .9rem; }
+.admin-background-removal-modal__spin { animation: admin-background-removal-spin .9s linear infinite; }
+@keyframes admin-background-removal-spin { to { transform: rotate(360deg); } }
+
+@media (max-width: 600px) {
+  .admin-background-removal-row { grid-template-columns: 48px minmax(0, 1fr); }
+  .admin-background-removal-row__image { width: 48px; height: 48px; }
+  .admin-background-removal-row__percent { grid-column: 2; text-align: left; }
 }
 

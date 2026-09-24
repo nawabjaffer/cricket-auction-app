@@ -8,7 +8,7 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { formatRoleDisplay } from '../../utils/roleFormatter';
 import { AuctionHomeScreen } from './AuctionHomeScreen';
-import { withAlpha, darken, type AuctionLayoutProps } from './types';
+import { getAuctionPlayerImageStyle, withAlpha, darken, type AuctionLayoutProps } from './types';
 import './AuctionLayouts.css';
 import { getThemeAssetFilter } from '../../utils/themeAssetFilter';
 
@@ -134,7 +134,7 @@ export function SpotlightLayout(props: AuctionLayoutProps) {
               animate={{ opacity: 1, y: 0, scale: 1 }}
               transition={{ duration: 1, delay: 0.2, ease: 'easeOut' }}
             >
-              <img src={playerImageSrc} alt={currentPlayer.name} />
+              <img src={playerImageSrc} alt={currentPlayer.name} style={getAuctionPlayerImageStyle(currentPlayer)} />
               <div className="al-center-rays" aria-hidden>
                 <div className="al-ray-ring al-ray-ring--inner" />
                 <div className="al-ray-beams" />

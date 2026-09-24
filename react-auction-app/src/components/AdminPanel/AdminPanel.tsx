@@ -6,11 +6,12 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 
-import { IoClose, IoSave, IoRefresh, IoDownload, IoVideocam, IoAdd, IoTrash, IoArrowUp, IoArrowDown, IoSearch, IoStatsChart, IoCloudUpload } from 'react-icons/io5';
+import { IoClose, IoSave, IoRefresh, IoDownload, IoVideocam, IoAdd, IoTrash, IoArrowUp, IoArrowDown, IoSearch, IoStatsChart, IoCloudUpload, IoRemoveCircleOutline } from 'react-icons/io5';
 import { auctionPersistence, type AdminSettings, type SponsorRecord, type SpecialCategory, type BidIncrementRange } from '../../services/auctionPersistence';
 import { realtimeSync } from '../../services/realtimeSync';
 import { googleSheetsService, imagePreloaderService, resolveMediaToStorage, uploadFileToStorage } from '../../services';
 import AdminImageBulkUpload from './AdminImageBulkUpload';
+import AdminImageBackgroundRemoval from './AdminImageBackgroundRemoval';
 import { ThemeSettingsExtended } from './ThemeSettingsExtended';
 import '../../components/AdminPanel/ThemeSettingsExtended.css';
 import { useAuctionStore } from '../../store/auctionStore';
@@ -394,6 +395,7 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
   const [editingPlayerId, setEditingPlayerId] = useState<string | null>(null);
   const [playerDraft, setPlayerDraft] = useState<Player | null>(null);
   const [isBulkUploadOpen, setIsBulkUploadOpen] = useState(false);
+  const [isBulkBackgroundRemovalOpen, setIsBulkBackgroundRemovalOpen] = useState(false);
   const [playerImportReview, setPlayerImportReview] = useState<{
     incoming: Player[];
     index: number;
@@ -2459,6 +2461,15 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
         onClose={() => setIsBulkUploadOpen(false)}
         onBulkSave={handleBulkSaveImages}
       />
+      <AdminImageBackgroundRemoval
+        players={editingPlayers}
+        isOpen={isBulkBackgroundRemovalOpen}
+        onClose={() => setIsBulkBackgroundRemovalOpen(false)}
+        onBulkSave={async updatedPlayers => {
+          await handleBulkSaveImages(updatedPlayers);
+          setIsBulkBackgroundRemovalOpen(false);
+        }}
+      />
 
       {/* Save status toast */}
       <AnimatePresence>
@@ -4049,6 +4060,15 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
                       <IoCloudUpload size={18} /> Bulk Upload Images
                     </button>
                     <button
+                      type="button"
+                      className="admin-btn admin-btn-warning"
+                      onClick={() => { setIsBulkBackgroundRemovalOpen(true); showUploadFeedback('Opening bulk background removal', 'success'); }}
+                      disabled={isSaving || editingPlayers.length === 0}
+                      title="Remove backgrounds from all player images in parallel"
+                    >
+                      <IoRemoveCircleOutline size={18} /> Bulk Remove Backgrounds
+                    </button>
+                    <button
                       className="admin-btn admin-btn-accent"
                       onClick={() => statsCsvInputRef.current?.click()}
                       disabled={isSaving}
@@ -5015,6 +5035,7 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
                         <PlayerImageEditor
                           imageUrl={playerDraft.imageUrl}
                           sourceBlob={editorImageBlob}
+                          auctionLayout={auctionLayout}
                           edit={playerDraft.imageEdit}
                           processing={processingEditorImage}
                           onChange={(imageEdit) => setPlayerDraft(current => current ? { ...current, imageEdit } : current)}

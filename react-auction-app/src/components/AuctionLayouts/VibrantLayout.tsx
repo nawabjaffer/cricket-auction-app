@@ -9,17 +9,20 @@ import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { formatRoleDisplay } from '../../utils/roleFormatter';
 import { AuctionHomeScreen } from './AuctionHomeScreen';
-import { withAlpha, type AuctionLayoutProps } from './types';
+import { getAuctionPlayerImageStyle, withAlpha, type AuctionLayoutProps } from './types';
+import type { Player } from '../../types';
 import './AuctionLayouts.css';
 
 function VibrantPlayerReveal({
   imageUrl,
   placeholderUrl,
   playerName,
+  player,
 }: {
   readonly imageUrl: string;
   readonly placeholderUrl: string;
   readonly playerName: string;
+  readonly player: Player;
 }) {
   const [imageReady, setImageReady] = useState(false);
   const [displayUrl, setDisplayUrl] = useState(imageUrl || placeholderUrl);
@@ -114,6 +117,7 @@ function VibrantPlayerReveal({
         src={displayUrl}
         alt={playerName}
         className={`al-vib-player-image${imageReady ? ' is-ready' : ''}`}
+        style={getAuctionPlayerImageStyle(player)}
         onLoad={() => setImageReady(true)}
         onError={() => {
           if (displayUrl !== placeholderUrl) {
@@ -304,6 +308,7 @@ export function VibrantLayout(props: AuctionLayoutProps) {
                 imageUrl={playerImageSrc}
                 placeholderUrl={playerPlaceholderSrc}
                 playerName={currentPlayer.name}
+                player={currentPlayer}
               />
             </motion.div>
           </motion.div>

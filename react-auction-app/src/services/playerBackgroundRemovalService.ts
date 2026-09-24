@@ -28,22 +28,26 @@ export async function processPlayerImage({
 
   onStatus?.('processing');
   onProgress?.('Removing the background from the portrait...');
+  let highestProgress = 35;
   const processedBlob = await removeBackground(sourceBlob ?? sourceUrl!, {
     progress: (key: string, current: number, total: number) => {
       if (total > 0) {
-        const percent = Math.round((current / total) * 100);
-        onProgress?.(`Processing ${key}: ${percent}%`, percent);
+        // The model reports separate file phases, each starting at 0. Map the
+        // raw value into one monotonic range so the UI never jumps backward.
+        const rawPercent = Math.round((current / total) * 100);
+        highestProgress = Math.max(highestProgress, Math.min(92, Math.round(rawPercent * 0.57 + 35)));
+        onProgress?.(`Processing ${key}: ${highestProgress}%`, highestProgress);
       }
     },
   });
   onProcessedBlob?.(processedBlob);
 
   onStatus?.('uploading');
-  onProgress?.('Uploading the transparent PNG to Firebase Storage...');
+  onProgress?.('Uploading the transparent PNG to Firebase Storage...', 96);
   const safeName = playerName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || playerId;
   const file = new File([processedBlob], `${safeName}-background-removed.png`, { type: 'image/png' });
   const processedUrl = await uploadFileToStorage(file, `media/players/processed/${safeName}-${playerId}`);
   onStatus?.('complete');
-  onProgress?.('Background removed successfully.');
+  onProgress?.('Background removed successfully.', 100);
   return processedUrl;
 }

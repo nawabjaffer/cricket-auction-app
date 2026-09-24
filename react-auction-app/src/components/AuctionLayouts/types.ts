@@ -6,6 +6,7 @@
 // presentational components so they can be swapped from the admin panel.
 // ============================================================================
 
+import type { CSSProperties } from 'react';
 import type { Player, Team } from '../../types';
 import type { SponsorRecord } from '../../services/auctionPersistence';
 
@@ -49,6 +50,16 @@ export interface AuctionLayoutProps {
   readonly teamCount: number;
   /** Offsets top content when the fixed app header is toggled on. */
   readonly headerVisible?: boolean;
+}
+
+/** Applies the same saved player-image placement used by the classic screen. */
+export function getAuctionPlayerImageStyle(player: Player): CSSProperties | undefined {
+  const edit = player.imageEdit;
+  if (!edit) return undefined;
+  return {
+    transform: `translate(${edit.xPct / 4}%, ${edit.yPct / 4}%) rotate(${edit.rotationDeg}deg) scaleX(${edit.flipX ? -1 : 1}) scaleY(${edit.flipY ? -1 : 1}) scale(${edit.scale})`,
+    transformOrigin: 'center center',
+  };
 }
 
 /** Adds alpha to a `#rrggbb` color; falls back to the input when unparsable. */

@@ -1,9 +1,15 @@
 .player-image-editor { display: grid; gap: 0.75rem; margin-top: 0.75rem; padding: 0.85rem; border: 1px solid #dbe5f0; border-radius: 10px; background: #f8fafc; }
+.player-image-editor__mode { display: flex; align-items: center; gap: .75rem; flex-wrap: wrap; color: #334155; font-size: .75rem; }
+.player-image-editor__mode > span { color: #0f172a; font-weight: 700; }
+.player-image-editor__mode label { display: inline-flex; align-items: center; gap: .3rem; cursor: pointer; }
+.player-image-editor__mode input { accent-color: #2563eb; }
 .player-image-editor__canvas { position: relative; width: min(100%, 360px); aspect-ratio: 4 / 5; overflow: hidden; border: 1px solid #cbd5e1; border-radius: 8px; margin: 0 auto; background: repeating-linear-gradient(0deg, #f8fafc 0, #f8fafc 10%, #f1f5f9 10%, #f1f5f9 10.35%); }
+.player-image-editor__canvas--auction { width: 100%; max-width: 720px; aspect-ratio: 16 / 9; background: #020617; }
 .player-image-editor__surface { position: absolute; inset: 0; touch-action: none; }
 .player-image-editor__surface .sc-canvas { position: relative; width: 100%; height: 100%; transform: none !important; left: auto; top: auto; }
 .player-image-editor__guide { position: absolute; inset: -6%; z-index: 2; width: 112%; height: 112%; object-fit: contain; pointer-events: none; opacity: .7; }
 .player-image-editor__selection { position: absolute; z-index: 3; width: 72%; height: 92%; border: 1px solid rgba(37,99,235,.8); box-shadow: 0 0 0 1px rgba(255,255,255,.75), 0 7px 18px rgba(15,23,42,.12); cursor: grab; transform-origin: center center; touch-action: none; }
+.player-image-editor__selection--auction { z-index: 40; border-color: #fbbf24; box-shadow: 0 0 0 1px rgba(15,23,42,.65), 0 0 0 3px rgba(251,191,36,.22); }
 .player-image-editor__selection:active { cursor: grabbing; }
 .player-image-editor__selection-label { position: absolute; top: -1.55rem; left: 50%; padding: .2rem .4rem; border-radius: 4px; background: #1d4ed8; color: #fff; font-size: .62rem; font-weight: 700; white-space: nowrap; transform: translateX(-50%); pointer-events: none; }
 .player-image-editor__handle { position: absolute; width: 13px; height: 13px; padding: 0; border: 2px solid #fff; border-radius: 3px; background: #2563eb; box-shadow: 0 1px 5px rgba(15,23,42,.35); cursor: nwse-resize; touch-action: none; }
@@ -18,9 +24,29 @@
 .player-image-editor__controls { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.55rem 0.8rem; }
 .player-image-editor__hint { display: grid; grid-column: 1 / -1; gap: .15rem; padding: .6rem .7rem; border: 1px solid #bfdbfe; border-radius: 7px; background: #eff6ff; color: #1e3a8a; font-size: .75rem; }
 .player-image-editor__hint span { color: #475569; font-size: .7rem; }
+.player-image-editor__hint kbd { display: inline-block; margin: 0 .12rem; padding: .05rem .25rem; border: 1px solid #bfdbfe; border-bottom-width: 2px; border-radius: 3px; background: #fff; color: #1e3a8a; font: .65rem ui-monospace, SFMono-Regular, monospace; }
 .player-image-editor__readout { display: flex; align-items: center; gap: 1rem; color: #475569; font-size: .75rem; }
 .player-image-editor__readout strong { color: #1e3a8a; font-variant-numeric: tabular-nums; }
 .player-image-editor__toggle { display: flex !important; grid-template-columns: 1fr auto; align-items: center; gap: .5rem; color: #334155; font-size: .75rem; }
 .player-image-editor__toggle input { width: auto; accent-color: #2563eb; }
 .player-image-editor__actions { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+.player-image-editor__auction-preview { display: grid; gap: .55rem; padding-top: .25rem; border-top: 1px solid #dbe5f0; }
+.player-image-editor__auction-preview-header { display: flex; align-items: center; justify-content: space-between; gap: .75rem; }
+.player-image-editor__auction-preview-header > div:first-child { display: grid; gap: .15rem; color: #0f172a; font-size: .78rem; }
+.player-image-editor__auction-preview-header span { color: #475569; font-size: .7rem; }
+.player-image-editor__auction-layout-tabs { display: flex; gap: .25rem; flex-wrap: wrap; }
+.player-image-editor__auction-layout-tabs button { padding: .3rem .45rem; border: 1px solid #cbd5e1; border-radius: 5px; background: #fff; color: #475569; cursor: pointer; font-size: .65rem; text-transform: capitalize; }
+.player-image-editor__auction-layout-tabs button.is-active { border-color: #2563eb; background: #eff6ff; color: #1d4ed8; font-weight: 700; }
+.player-image-editor__auction-preview-stage { position: relative; width: 100%; height: 330px; overflow: hidden; border: 1px solid #cbd5e1; border-radius: 8px; background: #020617; }
+.player-image-editor__auction-preview-stage .auction-layout { position: absolute; }
+.player-image-editor__auction-preview-stage--classic { display: flex; align-items: flex-end; justify-content: center; background: radial-gradient(circle at 50% 30%, #1e3a8a, #020617 78%); }
+.player-image-editor__classic-preview-player { position: absolute; inset: 0; width: 100%; height: 100%; aspect-ratio: 16 / 9; overflow: hidden; }
+.player-image-editor__classic-preview-player::before { position: absolute; inset: auto 10% 8%; height: 1px; background: rgba(255,255,255,.35); content: ''; }
+.player-image-editor__classic-preview-image { position: absolute; right: 0; bottom: 0; z-index: 1; width: 54%; height: 100%; display: flex; align-items: flex-end; justify-content: center; overflow: hidden; }
+.player-image-editor__classic-preview-image img { position: relative; width: auto; height: 95%; max-width: 92%; object-fit: contain; object-position: bottom center; transform-origin: center bottom; filter: drop-shadow(0 12px 22px rgba(0,0,0,.55)); }
+.player-image-editor__auction-preview-badge { position: absolute; right: .5rem; bottom: .45rem; z-index: 30; padding: .22rem .4rem; border-radius: 4px; background: rgba(15,23,42,.75); color: #fff; font-size: .62rem; text-transform: capitalize; }
+.player-image-editor__classic-preview-copy { position: absolute; top: 16%; left: 5%; z-index: 2; display: grid; gap: .45rem; width: 43%; color: #fff; }
+.player-image-editor__classic-preview-copy strong { color: #93c5fd; font-size: clamp(.55rem, 1.4vw, 1rem); letter-spacing: .18em; }
+.player-image-editor__classic-preview-copy span { font-size: clamp(1rem, 3.5vw, 2.6rem); font-weight: 900; text-transform: uppercase; }
+.player-image-editor__classic-preview-copy small { color: #cbd5e1; font-size: clamp(.5rem, 1.2vw, .8rem); }
 @media (max-width: 600px) { .player-image-editor__controls { grid-template-columns: 1fr; } .player-image-editor__hint { grid-column: auto; } .player-image-editor__readout { justify-content: space-between; } }
