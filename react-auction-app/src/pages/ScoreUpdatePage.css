@@ -304,7 +304,7 @@
 
 .score-update__run-grid {
   display: grid;
-  grid-template-columns: repeat(6, 1fr);
+  grid-template-columns: repeat(7, 1fr);
   gap: 0.5rem;
   padding: 0.75rem 1rem;
 }
@@ -348,14 +348,16 @@
 
 .score-update__run-btn--single,
 .score-update__run-btn--double,
-.score-update__run-btn--triple {
+.score-update__run-btn--triple,
+.score-update__run-btn--five {
   border-color: rgba(16, 185, 129, 0.3);
   color: #34d399;
 }
 
 .score-update__run-btn--single:hover:not(:disabled),
 .score-update__run-btn--double:hover:not(:disabled),
-.score-update__run-btn--triple:hover:not(:disabled) {
+.score-update__run-btn--triple:hover:not(:disabled),
+.score-update__run-btn--five:hover:not(:disabled) {
   background: rgba(16, 185, 129, 0.15);
 }
 
@@ -377,6 +379,77 @@
 
 .score-update__run-btn--six:hover:not(:disabled) {
   background: rgba(168, 85, 247, 0.2);
+}
+
+.score-update__feed-import {
+  display: grid;
+  justify-items: center;
+  gap: 0.45rem;
+  width: min(100%, 460px);
+  margin: 1rem auto;
+  padding: 0.9rem;
+  border: 1px solid rgba(52, 211, 153, 0.25);
+  border-radius: 8px;
+  background: rgba(16, 185, 129, 0.07);
+  color: #d1fae5;
+  font-size: 0.82rem;
+}
+
+.score-update__feed-import-note {
+  color: #a1a1aa;
+  font-size: 0.78rem;
+  line-height: 1.5;
+}
+
+.score-update__feed-import-score {
+  margin: 0.25rem 0 0.75rem;
+  color: #fbbf24;
+  font-size: 1.1rem;
+  font-weight: 700;
+}
+
+.score-update__feed-map-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(190px, 1fr);
+  align-items: center;
+  gap: 0.6rem;
+  margin: 0.45rem 0;
+  color: #d4d4d8;
+  font-size: 0.78rem;
+}
+
+.score-update__feed-commentary {
+  margin-top: 0.85rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 7px;
+}
+
+.score-update__feed-commentary summary,
+.score-update__imported-commentary summary {
+  padding: 0.65rem;
+  color: #a7f3d0;
+  font-size: 0.76rem;
+  cursor: pointer;
+}
+
+.score-update__feed-commentary pre,
+.score-update__imported-commentary pre {
+  max-height: 220px;
+  margin: 0;
+  padding: 0.75rem;
+  overflow: auto;
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+  color: #d4d4d8;
+  font: 0.72rem/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.score-update__imported-commentary {
+  margin: 0.5rem 1rem 1rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.02);
 }
 
 /* ── Action Row (Wicket + Extras) ───────────────────────────────────────────── */
@@ -809,6 +882,10 @@
   }
 
   .score-update__modal-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .score-update__feed-map-row {
     grid-template-columns: 1fr;
   }
 }

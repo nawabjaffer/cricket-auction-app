@@ -435,6 +435,222 @@
   color: #34d399;
 }
 
+.scoring-admin__sync-card {
+  margin-top: 1.5rem;
+}
+
+.scoring-admin__sync-toolbar {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 1rem;
+  margin: 1rem 0;
+}
+
+.scoring-admin__sync-toolbar > .scoring-admin__field {
+  width: min(100%, 420px);
+}
+
+.scoring-admin__field-label {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: #a1a1aa;
+  text-transform: uppercase;
+}
+
+.scoring-admin__sync-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding-bottom: 0.55rem;
+  color: #a1a1aa;
+  font-size: 0.78rem;
+  white-space: nowrap;
+}
+
+.scoring-admin__sync-status > span {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #71717a;
+}
+
+.scoring-admin__sync-status.is-live > span {
+  background: #34d399;
+  box-shadow: 0 0 10px rgba(52, 211, 153, 0.5);
+}
+
+.scoring-admin__sync-scoreline {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+  padding: 0.75rem 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+  color: #d4d4d8;
+  font-size: 0.8rem;
+}
+
+.scoring-admin__sync-event {
+  color: #fbbf24;
+}
+
+.scoring-admin__mapping-table {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.scoring-admin__mapping-head,
+.scoring-admin__mapping-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.65rem 0.8rem;
+}
+
+.scoring-admin__mapping-head {
+  background: rgba(255, 255, 255, 0.04);
+  color: #a1a1aa;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.scoring-admin__mapping-row + .scoring-admin__mapping-row {
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.scoring-admin__mapping-source {
+  display: grid;
+  min-width: 0;
+  gap: 0.2rem;
+}
+
+.scoring-admin__mapping-source > span {
+  color: #71717a;
+  font-size: 0.68rem;
+  text-transform: uppercase;
+}
+
+.scoring-admin__mapping-source > strong {
+  overflow: hidden;
+  color: #e4e4e7;
+  font-size: 0.82rem;
+  font-weight: 500;
+  text-overflow: ellipsis;
+}
+
+.scoring-admin__sync-empty {
+  margin: 0.75rem 0 0;
+  color: #fbbf24;
+  font-size: 0.78rem;
+}
+
+.scoring-admin__sync-console {
+  margin: 0.75rem 0 1rem;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.scoring-admin__sync-console > summary {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.65rem 0.8rem;
+  color: #d4d4d8;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.scoring-admin__sync-console > summary > span {
+  color: #71717a;
+  font-weight: 400;
+}
+
+.scoring-admin__sync-console-output {
+  display: grid;
+  gap: 0.35rem;
+  max-height: 180px;
+  padding: 0.65rem 0.8rem;
+  overflow: auto;
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+  color: #a7f3d0;
+  font: 0.72rem/1.45 ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.scoring-admin__sync-console-output > div {
+  display: grid;
+  grid-template-columns: 5.5rem minmax(0, 1fr);
+  gap: 0.5rem;
+  overflow-wrap: anywhere;
+}
+
+.scoring-admin__sync-console-output time {
+  color: #71717a;
+}
+
+.scoring-admin__sync-console > p {
+  margin: 0;
+  padding: 0 0.8rem 0.7rem;
+  color: #fbbf24;
+  font-size: 0.73rem;
+  line-height: 1.45;
+}
+
+.scoring-admin__sync-download-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.6rem 0.85rem;
+  margin: 0.85rem 0 1rem;
+}
+
+.scoring-admin__sync-download-row > a {
+  text-decoration: none;
+}
+
+.scoring-admin__sync-download-row > span {
+  color: #9ca3af;
+  font-size: 0.72rem;
+}
+
+.scoring-admin__sync-config {
+  margin: 0.75rem 0 1rem;
+  padding: 0.75rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.scoring-admin__sync-config > summary {
+  display: flex;
+  justify-content: space-between;
+  color: #d4d4d8;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.scoring-admin__sync-config > summary > span {
+  color: #71717a;
+  font-size: 0.7rem;
+  font-weight: 400;
+}
+
+.scoring-admin__selector-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.scoring-admin__sync-config > .scoring-admin__hint {
+  margin: 0.65rem 0 0.85rem;
+}
+
 /* ── Ads ────────────────────────────────────────────────────────────────────── */
 
 .scoring-admin__ad-list {
@@ -630,6 +846,34 @@
   }
 
   .scoring-admin__shortcuts-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .scoring-admin__sync-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .scoring-admin__sync-status {
+    padding-bottom: 0;
+  }
+
+  .scoring-admin__mapping-head,
+  .scoring-admin__mapping-row {
+    gap: 0.45rem;
+    padding: 0.6rem;
+  }
+
+  .scoring-admin__mapping-head {
+    font-size: 0.62rem;
+  }
+
+  .scoring-admin__mapping-source > strong,
+  .scoring-admin__mapping-row .scoring-admin__select {
+    font-size: 0.75rem;
+  }
+
+  .scoring-admin__selector-grid {
     grid-template-columns: 1fr;
   }
 }

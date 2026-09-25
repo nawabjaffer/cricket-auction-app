@@ -19,9 +19,10 @@ import { initializeSharedOBSProfileService, sharedOBSProfileService } from '../s
 import { getActiveTenant } from '../services/tenantPath';
 import { cricHeroesReader, isValidCricHeroesUrl } from '../services/scoring/cricHeroesReader';
 import type { CricHeroesSnapshot } from '../services/scoring/cricHeroesReader';
+import { useCricHeroesSyncAdapter } from '../hooks/useCricHeroesSyncAdapter';
 import { uploadFileToStorage } from '../services';
 import { DEFAULT_MVP_WEIGHTS, MATCH_STAGE_LABELS } from '../types/scoring';
-import type { MatchSetup, MatchStage, ScoringAd, ScoringOverlayConfig, LiveQuestion, MatchScoringConfig, PreMatchState, PreMatchPhase, ImpactPlayer, TossConfig, MatchLineup, TickerConfig, OBSWebSocketConfig, MVPWeights, AnimationConfig, OBSReplayButton, OBSButtonSeriesStep, OBSReplayConfig, TickerStatWidget, SharedOBSProfile } from '../types/scoring';
+import type { MatchSetup, MatchStage, ScoringAd, ScoringOverlayConfig, LiveQuestion, MatchScoringConfig, PreMatchState, PreMatchPhase, ImpactPlayer, TossConfig, MatchLineup, MatchSquadPlayer, TickerConfig, OBSWebSocketConfig, MVPWeights, AnimationConfig, OBSReplayButton, OBSButtonSeriesStep, OBSReplayConfig, TickerStatWidget, SharedOBSProfile } from '../types/scoring';
 import type { SoldPlayer } from '../types';
 import { withScorerAdminChrome } from './withScorerAdminChrome';
 import './ScoringAdminPage.css';
@@ -178,6 +179,7 @@ function ScoringAdminPageContent() {
         {activeTab === 'provider' && (
           <ProviderTab
             matches={matches}
+            soldPlayers={soldPlayers}
             onFeedback={showFeedback}
           />
         )}
@@ -1128,12 +1130,12 @@ function MatchesTab({ matches, teams, soldPlayers, onFeedback, saving, setSaving
 // PROVIDER TAB
 // ═══════════════════════════════════════════════════════════════════════════════
 
-function ProviderTab({ matches, onFeedback }: {
+function ProviderTab({ matches, soldPlayers, onFeedback }: {
   matches: MatchSetup[];
+  soldPlayers: SoldPlayer[];
   onFeedback: (msg: string) => void;
 }) {
   const [configs, setConfigs] = useState<Record<string, MatchScoringConfig>>({});
-  const [globalApiKey, setGlobalApiKey] = useState('');
 
   useEffect(() => {
     // Load config for each match
@@ -1151,8 +1153,8 @@ function ProviderTab({ matches, onFeedback }: {
   const handleSaveConfig = async (matchId: string, provider: string) => {
     try {
       const config: MatchScoringConfig = {
+        ...(configs[matchId] || {}),
         provider: provider as MatchScoringConfig['provider'],
-        apiKey: globalApiKey || undefined,
       };
       await scoringService.configureMatchScoring(matchId, config);
       setConfigs(prev => ({ ...prev, [matchId]: config }));
@@ -1171,17 +1173,8 @@ function ProviderTab({ matches, onFeedback }: {
       </div>
 
       <div className="scoring-admin__form-card">
-        <h3 className="scoring-admin__subsection-title">Global API Key (CricHeroes)</h3>
-        <p className="scoring-admin__hint">Enter your CricHeroes API key to enable automatic score fetching. Leave blank for manual scoring.</p>
-        <div className="scoring-admin__field" style={{ maxWidth: 500 }}>
-          <input
-            type="password"
-            value={globalApiKey}
-            onChange={e => setGlobalApiKey(e.target.value)}
-            placeholder="CricHeroes API key"
-            className="scoring-admin__input"
-          />
-        </div>
+        <h3 className="scoring-admin__subsection-title">Provider Availability</h3>
+        <p className="scoring-admin__hint">Global CricHeroes API-key setup is temporarily hidden. Use browser sync below for live scoring.</p>
         <div className="scoring-admin__provider-badges">
           {providers.map(p => (
             <span key={p.provider} className={`scoring-admin__badge ${p.configured ? 'scoring-admin__badge--active' : ''}`}>
@@ -1216,6 +1209,7 @@ function ProviderTab({ matches, onFeedback }: {
         </div>
       ))}
 
+      <CricHeroesSyncPanel matches={matches} soldPlayers={soldPlayers} />
       <CricHeroesReaderPanel matches={matches} configs={configs} setConfigs={setConfigs} onFeedback={onFeedback} />
 
       <div className="scoring-admin__form-card" style={{ marginTop: '1.5rem' }}>
@@ -1225,6 +1219,208 @@ function ProviderTab({ matches, onFeedback }: {
           Contact the development team to add a new adapter.
         </p>
       </div>
+    </div>
+  );
+}
+
+function CricHeroesSyncPanel({ matches, soldPlayers }: Readonly<{
+  matches: MatchSetup[];
+  soldPlayers: SoldPlayer[];
+}>) {
+  type SelectorConfig = Record<'teamContainers' | 'teamName' | 'teamActive' | 'teamOvers' | 'batterTable' | 'bowlerTable' | 'latestCommentary' | 'fullCommentaryTab', string>;
+  const selectorStorageKey = `cricheroes-selectors:${getActiveTenant()}`;
+  const defaultSelectors: SelectorConfig = {
+    teamContainers: '[class*="scoreWrapper"] [class*="teamScoreDetails"]',
+    teamName: '[class*="teamName"]',
+    teamActive: '[class*="isActive"]',
+    teamOvers: '[class*="overSpan"]',
+    batterTable: 'table[class*="table"]',
+    bowlerTable: 'table[class*="table"]',
+    latestCommentary: '[class*="commentary"], [class*="Commentary"] tr, div[class*="commentaryText"]',
+    fullCommentaryTab: '[class*="dropdownSWrapper"]',
+  };
+  const { latest: source, logs } = useCricHeroesSyncAdapter();
+  const [matchId, setMatchId] = useState('');
+  const [lineups, setLineups] = useState<{ teamA: MatchSquadPlayer[]; teamB: MatchSquadPlayer[] }>({ teamA: [], teamB: [] });
+  const [mappings, setMappings] = useState<Record<string, string>>({});
+  const [selectors, setSelectors] = useState<SelectorConfig>(() => {
+    try {
+      return { ...defaultSelectors, ...JSON.parse(localStorage.getItem(selectorStorageKey) || '{}') as Partial<SelectorConfig> };
+    } catch {
+      return defaultSelectors;
+    }
+  });
+  const [selectorStatus, setSelectorStatus] = useState('');
+  const selectedMatch = matches.find(match => match.id === matchId);
+  const mappingStorageKey = `cricheroes-player-maps:${getActiveTenant()}:${matchId}`;
+
+  useEffect(() => {
+    if (!matchId) return;
+    let cancelled = false;
+    const loadLineups = async () => {
+      const match = matches.find(item => item.id === matchId);
+      if (!match) return;
+      let teamA: MatchLineup | null = null;
+      let teamB: MatchLineup | null = null;
+      try {
+        [teamA, teamB] = await Promise.all([
+          scoringService.getLineup(matchId, match.teamA.id),
+          scoringService.getLineup(matchId, match.teamB.id),
+        ]);
+      } catch { /* use auction rosters when saved match lineups are unavailable */ }
+      const fromAuction = (teamId: string, teamName: string): MatchSquadPlayer[] => soldPlayers
+        .filter(player => player.teamId === teamId || (!player.teamId && player.teamName === teamName))
+        .map((player, index) => ({
+          playerId: player.id,
+          playerName: player.name,
+          role: player.role || 'Player',
+          battingOrder: index + 1,
+          imageUrl: player.imageUrl,
+          auctionPrice: player.soldAmount,
+        }));
+      if (!cancelled) {
+        setLineups({
+          teamA: teamA?.players.length ? teamA.players : fromAuction(match.teamA.id, match.teamA.name),
+          teamB: teamB?.players.length ? teamB.players : fromAuction(match.teamB.id, match.teamB.name),
+        });
+      }
+    };
+    void loadLineups();
+    return () => { cancelled = true; };
+  }, [matchId, matches, soldPlayers]);
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(mappingStorageKey);
+      setMappings(saved ? JSON.parse(saved) as Record<string, string> : {});
+    } catch {
+      setMappings({});
+    }
+  }, [mappingStorageKey]);
+
+  const saveMapping = (key: string, playerId: string) => {
+    const next = { ...mappings, [key]: playerId };
+    setMappings(next);
+    localStorage.setItem(mappingStorageKey, JSON.stringify(next));
+  };
+
+  const saveSelectors = () => {
+    localStorage.setItem(selectorStorageKey, JSON.stringify(selectors));
+    window.postMessage({ source: 'CRICHEROES_SYNC_CONFIG', data: { selectors } }, window.location.origin);
+    setSelectorStatus('Sending selector settings to the extension…');
+  };
+
+  const selectorFields: Array<{ key: keyof SelectorConfig; label: string }> = [
+    { key: 'teamContainers', label: 'Team score containers' },
+    { key: 'teamName', label: 'Team name' },
+    { key: 'teamActive', label: 'Active batting team marker' },
+    { key: 'teamOvers', label: 'Team overs' },
+    { key: 'batterTable', label: 'Batting scorecard table' },
+    { key: 'bowlerTable', label: 'Bowling scorecard table' },
+    { key: 'latestCommentary', label: 'Latest commentary' },
+    { key: 'fullCommentaryTab', label: 'Full commentary section' },
+  ];
+
+  const teamSide = (teamName: string): 'teamA' | 'teamB' | null => {
+    const normalized = teamName.trim().toLocaleLowerCase();
+    if (!selectedMatch || !normalized) return null;
+    if (selectedMatch.teamA.name.toLocaleLowerCase() === normalized) return 'teamA';
+    if (selectedMatch.teamB.name.toLocaleLowerCase() === normalized) return 'teamB';
+    return null;
+  };
+  const battingSide = teamSide(source?.battingTeam || '')
+    || (teamSide(source?.bowlingTeam || '') === 'teamA' ? 'teamB' : 'teamA');
+  const bowlingSide = battingSide === 'teamA' ? 'teamB' : 'teamA';
+  const rows = [
+    { key: 'striker', label: 'Striker', sourceName: source?.striker || '', players: lineups[battingSide] },
+    { key: 'nonStriker', label: 'Non-striker', sourceName: source?.nonStriker || '', players: lineups[battingSide] },
+    { key: 'bowler', label: 'Bowler', sourceName: source?.bowler || '', players: lineups[bowlingSide] },
+  ];
+
+  return (
+    <div className="scoring-admin__form-card scoring-admin__sync-card">
+      <h3 className="scoring-admin__subsection-title">CricHeroes Browser Sync</h3>
+      <p className="scoring-admin__hint">Keep the CricHeroes scorecard and this app open in the same Chrome profile. Source names appear on the left; map each one to this match's roster on the right.</p>
+      <div className="scoring-admin__sync-download-row">
+        <a className="scoring-admin__btn scoring-admin__btn--primary" href="/cricheroes-live-sync.zip" download="cricheroes-live-sync.zip">Download Chrome extension</a>
+        <span>ZIP download → extract → chrome://extensions → Developer mode → Load unpacked</span>
+      </div>
+      <div className="scoring-admin__sync-toolbar">
+        <label className="scoring-admin__field">
+          <span className="scoring-admin__field-label">Roster match (optional)</span>
+          <select className="scoring-admin__select" value={matchId} onChange={event => setMatchId(event.target.value)}>
+            <option value="">Skip roster mapping for feed test</option>
+            {matches.map(match => <option key={match.id} value={match.id}>{match.teamA.name} vs {match.teamB.name} ({match.status})</option>)}
+          </select>
+        </label>
+        <span className={`scoring-admin__sync-status ${source ? 'is-live' : ''}`}>
+          <span />{source ? 'Receiving CricHeroes data' : 'Waiting for browser feed'}
+        </span>
+      </div>
+
+      {source && (
+        <div className="scoring-admin__sync-scoreline">
+          <span>{source.battingTeam || 'Batting team'} {source.runs}/{source.wickets} vs {source.bowlingTeam || 'Bowling team'}</span>
+          <span>{source.overs} overs</span>
+          <span>{source.striker || 'Striker'}: {source.ballsFaced} balls, {source.sixes} sixes</span>
+          {source.latestTextEvent && <span className="scoring-admin__sync-event">{source.latestTextEvent}</span>}
+        </div>
+      )}
+
+      <details className="scoring-admin__sync-console" open>
+        <summary>Extension feed console <span>{logs.length} entries</span></summary>
+        <div className="scoring-admin__sync-console-output" role="log" aria-live="polite">
+          {logs.map((entry, index) => (
+            <div key={`${entry.timestamp}-${index}`}>
+              <time>{new Date(entry.timestamp).toLocaleTimeString()}</time>
+              <span>{entry.message}</span>
+            </div>
+          ))}
+        </div>
+        {!source && <p>Waiting for a score payload. If no relay entry appears, check the CricHeroes tab console and confirm this app's origin is allowed in the extension manifest.</p>}
+      </details>
+
+      <details className="scoring-admin__sync-config">
+        <summary>Scraper selectors <span>Advanced</span></summary>
+        <p className="scoring-admin__hint">Update the CSS selectors used on CricHeroes. Changes are stored in this browser extension and apply on the next poll; they do not rewrite content.js.</p>
+        <div className="scoring-admin__selector-grid">
+          {selectorFields.map(field => (
+            <label className="scoring-admin__field" key={field.key}>
+              <span className="scoring-admin__field-label">{field.label}</span>
+              <input className="scoring-admin__input" value={selectors[field.key]} onChange={event => setSelectors(current => ({ ...current, [field.key]: event.target.value }))} />
+            </label>
+          ))}
+        </div>
+        <div className="scoring-admin__form-actions">
+          <button className="scoring-admin__btn scoring-admin__btn--primary" onClick={saveSelectors}>Save extension selectors</button>
+          {selectorStatus && <span className="scoring-admin__hint">{selectorStatus}</span>}
+        </div>
+      </details>
+
+      <div className="scoring-admin__mapping-table">
+        <div className="scoring-admin__mapping-head"><span>CricHeroes player</span><span>Match roster player</span></div>
+        {rows.map(row => (
+          <div className="scoring-admin__mapping-row" key={row.key}>
+            <div className="scoring-admin__mapping-source">
+              <span>{row.label}</span>
+              <strong>{row.sourceName || 'Waiting for source name'}</strong>
+            </div>
+            <select
+              className="scoring-admin__select"
+              value={mappings[row.key] || ''}
+              onChange={event => saveMapping(row.key, event.target.value)}
+              aria-label={`Match ${row.label.toLowerCase()} to roster player`}
+              disabled={!selectedMatch || !row.players.length}
+            >
+              <option value="">Select roster player</option>
+              {row.players.map(player => <option key={player.playerId} value={player.playerId}>{player.playerName}</option>)}
+            </select>
+          </div>
+        ))}
+      </div>
+      {selectedMatch && lineups.teamA.length + lineups.teamB.length === 0 && (
+        <p className="scoring-admin__sync-empty">No roster players found for this match. Add match lineups or assign auction players to both teams.</p>
+      )}
     </div>
   );
 }

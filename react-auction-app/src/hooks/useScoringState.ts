@@ -307,6 +307,37 @@ export function useScoringState(matchId: string | undefined) {
     }
   }, [matchId, undoStack]);
 
+  const seedLiveScore = useCallback(async (live: LiveScore, innings: Innings) => {
+    if (!matchId || live.matchId !== matchId || !dbRef.current || liveScoreRef.current || recordingRef.current) return false;
+    recordingRef.current = true;
+    setRecording(true);
+    try {
+      await scoringService.saveLiveScore(matchId, live);
+      await scoringService.saveInnings(matchId, live.currentInnings, innings);
+      await scoringService.updateMatch(matchId, { status: 'live' });
+      const normalized = normalizeLive(live);
+      liveScoreRef.current = normalized;
+      inningsRef.current = innings;
+      setUndoStack([]);
+      setState(current => ({
+        ...current,
+        match: current.match ? { ...current.match, status: 'live' } : current.match,
+        liveScore: normalized,
+        currentInnings: innings,
+        isInningsComplete: false,
+        isMatchComplete: false,
+        needsBowlerChange: false,
+      }));
+      return true;
+    } catch (err) {
+      setState(current => ({ ...current, error: `Live feed import failed: ${err}` }));
+      return false;
+    } finally {
+      recordingRef.current = false;
+      setRecording(false);
+    }
+  }, [matchId]);
+
   // Init innings
   const initInnings = useCallback(async (
     inningsNumber: 1 | 2,
@@ -513,6 +544,7 @@ export function useScoringState(matchId: string | undefined) {
     recording,
     recordBall,
     undoLastBall,
+    seedLiveScore,
     initInnings,
     setOverlay,
     changeBatsman,

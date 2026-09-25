@@ -59,7 +59,7 @@ export interface MatchScoringConfig {
 // ── Ball-by-ball ──
 
 export type BallOutcome =
-  | '0' | '1' | '2' | '3' | '4' | '6'
+  | '0' | '1' | '2' | '3' | '4' | '5' | '6'
   | 'W'     // wicket
   | 'WD'    // wide (dot)
   | 'NB'    // no-ball (dot)
@@ -252,6 +252,8 @@ export interface LiveScore {
   allBatsmen?: BatsmanInnings[];
   // All bowler innings (full scorecard)
   allBowlers?: BowlerInnings[];
+  // Full external commentary retained when a live innings is imported mid-match.
+  sourceCommentary?: string;
 }
 
 // ── Player Stats ──

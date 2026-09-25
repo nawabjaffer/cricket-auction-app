@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>CricHeroes Live Sync</title>
+    <link rel="stylesheet" href="popup.css">
+  </head>
+  <body>
+    <main>
+      <header>
+        <div class="brand-lockup">
+          <img src="icons/icon48.png" alt="NJS Store" width="36" height="36">
+          <div>
+            <span class="eyebrow">NJS STORE · CRICKET</span>
+            <h1>Live sync</h1>
+          </div>
+        </div>
+        <p>Choose which scorecard sections to monitor.</p>
+      </header>
+      <label class="url-label" for="match-url">CricHeroes match URL</label>
+      <div class="url-row">
+        <input id="match-url" type="url" placeholder="https://cricheroes.com/scorecard/...">
+        <button id="open-match" class="icon-button" title="Open match" aria-label="Open match">↗</button>
+      </div>
+      <fieldset>
+        <legend>Read these tabs</legend>
+        <div id="tab-options" class="tab-options"></div>
+      </fieldset>
+      <div id="status" role="status">Settings are saved in this browser.</div>
+      <button id="save" class="save-button">Save sync settings</button>
+      <footer>After installing an update, reload the extension and both open tabs.</footer>
+    </main>
+    <script src="popup.js"></script>
+  </body>
+</html>

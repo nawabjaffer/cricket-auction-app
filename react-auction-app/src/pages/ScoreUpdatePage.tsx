@@ -11,6 +11,7 @@ import { GiCricketBat, GiBowlingStrike } from 'react-icons/gi';
 import { useAdminAuth } from '../hooks/useAdminAuth';
 import { useTenantNavigate as useNavigate } from '../hooks/useTenantNavigate';
 import { useScoringState } from '../hooks/useScoringState';
+import { useCricHeroesSyncAdapter } from '../hooks/useCricHeroesSyncAdapter';
 import { scoringService } from '../services/scoring';
 import { statsEngine } from '../services/scoring/statsEngine';
 import { obsReplaySourceService } from '../services/scoring/obsReplaySourceService';
@@ -18,9 +19,10 @@ import { realtimeSync } from '../services/realtimeSync';
 import { tenantPath } from '../services/tenantPath';
 import type {
   BallOutcome, DismissalType, WicketDetail, MatchSquadPlayer, OBSReplayButton,
-  TickerStatWidget, Innings, BatsmanInnings, BowlerInnings, LiveScore,
+  TickerStatWidget, Innings, BatsmanInnings, BowlerInnings, LiveScore, MatchSetup, MatchLineup,
   TournamentStats,
 } from '../types/scoring';
+import type { CricHeroesSyncData } from '../hooks/useCricHeroesSyncAdapter';
 import FieldPlacementEditor from '../components/FieldPlacementEditor/FieldPlacementEditor';
 import LiveCameraSwitcher from '../components/LiveCameraSwitcher/LiveCameraSwitcher';
 import './ScoreUpdatePage.css';
@@ -33,6 +35,7 @@ const RUN_BUTTONS: { outcome: BallOutcome; label: string; className: string }[] 
   { outcome: '2', label: '2', className: 'double' },
   { outcome: '3', label: '3', className: 'triple' },
   { outcome: '4', label: '4', className: 'four' },
+  { outcome: '5', label: '5', className: 'five' },
   { outcome: '6', label: '6', className: 'six' },
 ];
 
@@ -130,7 +133,7 @@ export default function ScoreUpdatePage() {
 
   const {
     match, liveScore, lineups, loading, error, recording,
-    undoStack, recordBall, undoLastBall, initInnings,
+    undoStack, recordBall, undoLastBall, initInnings, seedLiveScore,
     setOverlay, changeBatsman, changeBowler, swapStrike,
     completeMatch, isInningsComplete, isMatchComplete, needsBowlerChange,
     addPlayerToLineup,
@@ -156,6 +159,19 @@ export default function ScoreUpdatePage() {
   const [completedEditFeedback, setCompletedEditFeedback] = useState('');
   const [tournamentStats, setTournamentStats] = useState<TournamentStats | null>(null);
   const [recordAlertDismissed, setRecordAlertDismissed] = useState(false);
+  const [feedImportSnapshot, setFeedImportSnapshot] = useState<CricHeroesSyncData | null>(null);
+
+  const { latest: cricHeroesFeed } = useCricHeroesSyncAdapter(({ outcome }) => {
+    if (!liveScore) return true;
+    if (recording) return false;
+    if (outcome === 'W') {
+      if (showWicketModal) return false;
+      setPendingExtraOutcome(null);
+      setShowWicketModal(true);
+    } else {
+      void recordBall(outcome);
+    }
+  });
 
   const handleStartNextMatch = useCallback(async () => {
     try {
@@ -312,6 +328,7 @@ export default function ScoreUpdatePage() {
       else if (key === '2') recordBall('2');
       else if (key === '3') recordBall('3');
       else if (key === '4') recordBall('4');
+      else if (key === '5') recordBall('5');
       else if (key === '6') recordBall('6');
       else if (key.toLowerCase() === 'w') setShowWicketModal(true);
       else if (key.toLowerCase() === 'z' && (e.ctrlKey || e.metaKey)) undoLastBall();
@@ -356,6 +373,19 @@ export default function ScoreUpdatePage() {
           <GiCricketBat size={48} color="#fbbf24" />
           <h2>Ready to Score</h2>
           <p>{match.teamA.name} vs {match.teamB.name}</p>
+          {cricHeroesFeed && (
+            <div className="score-update__feed-import">
+              <strong>CricHeroes live feed detected</strong>
+              <span>{cricHeroesFeed.battingTeam} {cricHeroesFeed.runs}/{cricHeroesFeed.wickets} ({cricHeroesFeed.overs} ov)</span>
+              <button
+                className="score-update__btn score-update__btn--primary"
+                onClick={() => setFeedImportSnapshot(cricHeroesFeed)}
+                disabled={cricHeroesFeed.runs === 0 && cricHeroesFeed.overs === 0}
+              >
+                Start from current live score
+              </button>
+            </div>
+          )}
           <button
             className="score-update__btn score-update__btn--primary score-update__btn--lg"
             onClick={() => {
@@ -399,6 +429,19 @@ export default function ScoreUpdatePage() {
               setShowInitModal(false);
             }}
             onClose={() => setShowInitModal(false)}
+          />
+        )}
+        {feedImportSnapshot && (
+          <CricHeroesInProgressModal
+            match={match}
+            lineups={lineups}
+            source={feedImportSnapshot}
+            onImport={async (live, innings) => {
+              const imported = await seedLiveScore(live, innings);
+              if (imported) setFeedImportSnapshot(null);
+              return imported;
+            }}
+            onClose={() => setFeedImportSnapshot(null)}
           />
         )}
       </div>
@@ -542,6 +585,12 @@ export default function ScoreUpdatePage() {
           </div>
         )}
       </div>
+      {liveScore.sourceCommentary && (
+        <details className="score-update__imported-commentary">
+          <summary>Imported CricHeroes commentary</summary>
+          <pre>{liveScore.sourceCommentary}</pre>
+        </details>
+      )}
 
       {/* ── Batsmen ───────────────────────────────────────────────────── */}
       <div className="score-update__batsmen">
@@ -1501,6 +1550,219 @@ function InitInningsModal({ match, lineups, defaults, onStart, onClose }: {
             <IoPlay size={18} /> Start Innings
           </button>
           <button className="score-update__btn" onClick={onClose}>Cancel</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CricHeroesInProgressModal({ match, lineups, source, onImport, onClose }: {
+  match: MatchSetup;
+  lineups: { teamA: MatchLineup | null; teamB: MatchLineup | null };
+  source: CricHeroesSyncData;
+  onImport: (live: LiveScore, innings: Innings) => Promise<boolean>;
+  onClose: () => void;
+}) {
+  const normalize = (value: string) => value.toLocaleLowerCase().replace(/[^a-z0-9]/g, '');
+  const sourceTeam = normalize(source.battingTeam);
+  const [battingTeamId, setBattingTeamId] = useState(() =>
+    sourceTeam && sourceTeam === normalize(match.teamB.name) ? match.teamB.id : match.teamA.id,
+  );
+  const [inningsNumber, setInningsNumber] = useState<1 | 2>(1);
+  const [batterOverrides, setBatterOverrides] = useState<Record<string, string>>({});
+  const [bowlerOverrides, setBowlerOverrides] = useState<Record<string, string>>({});
+  const [busy, setBusy] = useState(false);
+  const [target, setTarget] = useState<number | ''>('');
+  const bowlingTeamId = battingTeamId === match.teamA.id ? match.teamB.id : match.teamA.id;
+  const battingLineup = lineups.teamA?.teamId === battingTeamId ? lineups.teamA : lineups.teamB;
+  const bowlingLineup = lineups.teamA?.teamId === bowlingTeamId ? lineups.teamA : lineups.teamB;
+  const battingPlayers = battingLineup?.players || [];
+  const bowlingPlayers = bowlingLineup?.players || [];
+
+  const sourceBatsmen = source.batsmen.length > 0 ? source.batsmen : [
+    ...(source.striker ? [{ name: source.striker, runs: 0, balls: source.ballsFaced, fours: 0, sixes: source.sixes, strikeRate: 0, dismissal: '', isStriker: true, isOut: false }] : []),
+    ...(source.nonStriker ? [{ name: source.nonStriker, runs: 0, balls: 0, fours: 0, sixes: 0, strikeRate: 0, dismissal: '', isStriker: false, isOut: false }] : []),
+  ];
+  const sourceBowlers = source.bowlers.length > 0 ? source.bowlers : source.bowler
+    ? [{ name: source.bowler, overs: 0, maidens: 0, runs: 0, wickets: 0, economy: 0 }]
+    : [{ name: 'Current bowler', overs: 0, maidens: 0, runs: 0, wickets: 0, economy: 0 }];
+  const autoMatch = (name: string, players: MatchSquadPlayer[]) => {
+    const normalized = normalize(name);
+    const exact = players.filter(player => normalize(player.playerName) === normalized);
+    return exact.length === 1 ? exact[0].playerId : '';
+  };
+  const batterIdFor = (name: string) => batterOverrides[name] || autoMatch(name, battingPlayers);
+  const bowlerIdFor = (name: string) => bowlerOverrides[name] || autoMatch(name, bowlingPlayers);
+  const allNamesMapped = sourceBatsmen.every(player => batterIdFor(player.name))
+    && sourceBowlers.every(player => bowlerIdFor(player.name));
+  const batterIds = sourceBatsmen.map(player => batterIdFor(player.name));
+  const uniqueBatters = new Set(batterIds).size === batterIds.length;
+
+  const handleImport = async () => {
+    const mappedBatsmen: BatsmanInnings[] = sourceBatsmen.flatMap((player, index) => {
+      const rosterPlayer = battingPlayers.find(candidate => candidate.playerId === batterIds[index]);
+      if (!rosterPlayer) return [];
+      return [{
+        playerId: rosterPlayer.playerId,
+        playerName: rosterPlayer.playerName,
+        runs: player.runs,
+        balls: player.balls,
+        fours: player.fours,
+        sixes: player.sixes,
+        strikeRate: player.strikeRate,
+        dismissal: player.dismissal || (player.isOut ? 'dismissed' : 'not out'),
+        isOut: player.isOut,
+        order: index + 1,
+      }];
+    });
+    const mappedBowlers: BowlerInnings[] = sourceBowlers.flatMap(player => {
+      const rosterPlayer = bowlingPlayers.find(candidate => candidate.playerId === bowlerIdFor(player.name));
+      if (!rosterPlayer) return [];
+      return [{
+        playerId: rosterPlayer.playerId,
+        playerName: rosterPlayer.playerName,
+        overs: player.overs,
+        maidens: player.maidens,
+        runs: player.runs,
+        wickets: player.wickets,
+        economy: player.economy,
+        wides: 0,
+        noBalls: 0,
+        dots: 0,
+      }];
+    });
+
+    const strikerName = source.striker || sourceBatsmen.find(player => player.isStriker)?.name || '';
+    const nonStrikerName = source.nonStriker || sourceBatsmen.find(player => !player.isOut && normalize(player.name) !== normalize(strikerName))?.name || '';
+    const striker = mappedBatsmen.find(player => player.playerId === batterIdFor(strikerName));
+    const nonStriker = mappedBatsmen.find(player => player.playerId === batterIdFor(nonStrikerName));
+    const currentBowlerName = source.bowler || sourceBowlers[0]?.name || '';
+    const currentBowler = mappedBowlers.find(player => player.playerId === bowlerIdFor(currentBowlerName));
+    if (!striker || !nonStriker || striker.playerId === nonStriker.playerId || !currentBowler) return;
+
+    const ballCount = Math.floor(source.overs) * 6 + Math.round((source.overs % 1) * 10);
+    const runRate = ballCount > 0 ? Math.round((source.runs / ballCount) * 600) / 100 : 0;
+    const powerplayOvers = match.powerplayOvers || (match.maxOvers <= 20 ? 6 : 10);
+    const extrasTotal = Math.max(0, source.runs - mappedBatsmen.reduce((total, player) => total + player.runs, 0));
+    const live: LiveScore = {
+      matchId: match.id,
+      currentInnings: inningsNumber,
+      battingTeamId,
+      bowlingTeamId,
+      runs: source.runs,
+      wickets: source.wickets,
+      overs: source.overs,
+      runRate,
+      target: inningsNumber === 2 && target !== '' ? target : undefined,
+      currentBatsmen: [
+        { ...striker, isOnStrike: true },
+        { ...nonStriker, isOnStrike: false },
+      ],
+      currentBowler: { ...currentBowler, dots: 0 },
+      lastBall: '0',
+      lastBallRuns: 0,
+      currentOverBalls: [],
+      recentOvers: [],
+      partnership: { runs: 0, balls: 0 },
+      lastUpdated: Date.now(),
+      isPowerplay: source.overs < powerplayOvers,
+      powerplayOvers,
+      isFreehit: false,
+      allBatsmen: mappedBatsmen,
+      allBowlers: mappedBowlers,
+      sourceCommentary: source.fullCommentary,
+    };
+    const innings: Innings = {
+      number: inningsNumber,
+      battingTeamId,
+      bowlingTeamId,
+      totalRuns: source.runs,
+      totalWickets: source.wickets,
+      totalOvers: source.overs,
+      maxOvers: match.maxOvers,
+      extras: { total: extrasTotal, wides: 0, noBalls: 0, byes: 0, legByes: 0, penalty: 0 },
+      batsmen: mappedBatsmen,
+      bowlers: mappedBowlers,
+      fallOfWickets: [],
+      overs: [],
+      isCompleted: false,
+    };
+    setBusy(true);
+    try {
+      await onImport(live, innings);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const currentStrikerId = batterIdFor(source.striker || sourceBatsmen.find(player => player.isStriker)?.name || '');
+  const currentNonStrikerId = batterIdFor(source.nonStriker || sourceBatsmen.find(player => !player.isOut && batterIdFor(player.name) !== currentStrikerId)?.name || '');
+  const currentBowlerId = bowlerIdFor(source.bowler || sourceBowlers[0]?.name || '');
+  const canImport = !busy && allNamesMapped && uniqueBatters && currentStrikerId && currentNonStrikerId
+    && currentStrikerId !== currentNonStrikerId && currentBowlerId
+    && (source.runs > 0 || source.overs > 0);
+
+  return (
+    <div className="score-update__modal-overlay" onClick={onClose}>
+      <div className="score-update__modal score-update__modal--wide" onClick={event => event.stopPropagation()}>
+        <h3>Start from CricHeroes live score</h3>
+        <p className="score-update__feed-import-note">
+          Imports current totals and player figures into this fixture. Earlier deliveries are not fabricated; the complete commentary captured below is retained with this imported score.
+        </p>
+        <div className="score-update__modal-grid">
+          <div className="score-update__modal-field">
+            <label>Innings</label>
+            <select className="score-update__select" value={inningsNumber} onChange={event => setInningsNumber(Number(event.target.value) as 1 | 2)}>
+              <option value={1}>1st innings</option>
+              <option value={2}>2nd innings</option>
+            </select>
+          </div>
+          <div className="score-update__modal-field">
+            <label>Batting side · {source.battingTeam || 'CricHeroes'}</label>
+            <select className="score-update__select" value={battingTeamId} onChange={event => setBattingTeamId(event.target.value)}>
+              <option value={match.teamA.id}>{match.teamA.name}</option>
+              <option value={match.teamB.id}>{match.teamB.name}</option>
+            </select>
+          </div>
+        </div>
+        {inningsNumber === 2 && (
+          <div className="score-update__modal-field">
+            <label>Target (optional)</label>
+            <input type="number" min="1" className="score-update__input" value={target} onChange={event => setTarget(event.target.value === '' ? '' : Number(event.target.value))} />
+          </div>
+        )}
+        <div className="score-update__feed-import-score">{source.runs}/{source.wickets} after {source.overs} overs</div>
+
+        <h4>Batting roster matches</h4>
+        {sourceBatsmen.map((player, index) => (
+          <div className="score-update__feed-map-row" key={`${player.name}-${index}`}>
+            <span>{player.name} · {player.runs} ({player.balls})</span>
+            <select className="score-update__select" value={batterIdFor(player.name)} onChange={event => setBatterOverrides(current => ({ ...current, [player.name]: event.target.value }))}>
+              <option value="">Choose app squad player</option>
+              {battingPlayers.map(rosterPlayer => <option key={rosterPlayer.playerId} value={rosterPlayer.playerId}>{rosterPlayer.playerName} · {rosterPlayer.role}</option>)}
+            </select>
+          </div>
+        ))}
+        <h4>Bowling roster matches</h4>
+        {sourceBowlers.map((player, index) => (
+          <div className="score-update__feed-map-row" key={`${player.name}-${index}`}>
+            <span>{player.name} · {player.overs} ov, {player.runs} runs</span>
+            <select className="score-update__select" value={bowlerIdFor(player.name)} onChange={event => setBowlerOverrides(current => ({ ...current, [player.name]: event.target.value }))}>
+              <option value="">Choose app squad player</option>
+              {bowlingPlayers.map(rosterPlayer => <option key={rosterPlayer.playerId} value={rosterPlayer.playerId}>{rosterPlayer.playerName} · {rosterPlayer.role}</option>)}
+            </select>
+          </div>
+        ))}
+        {(!battingPlayers.length || !bowlingPlayers.length) && <p className="score-update__feed-import-note">This fixture needs both team lineups before player stats can be mapped.</p>}
+        <details className="score-update__feed-commentary">
+          <summary>Full commentary captured ({source.fullCommentary.length} characters)</summary>
+          <pre>{source.fullCommentary || 'No full commentary was found in the CricHeroes tab.'}</pre>
+        </details>
+        <div className="score-update__modal-actions">
+          <button className="score-update__btn score-update__btn--primary" onClick={() => void handleImport()} disabled={!canImport}>
+            {busy ? 'Importing…' : 'Import score and start innings'}
+          </button>
+          <button className="score-update__btn" onClick={onClose} disabled={busy}>Cancel</button>
         </div>
       </div>
     </div>
