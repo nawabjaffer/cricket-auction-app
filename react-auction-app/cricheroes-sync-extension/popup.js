@@ -13,12 +13,24 @@ const tabsRoot = document.getElementById('tab-options');
 const urlInput = document.getElementById('match-url');
 const status = document.getElementById('status');
 
+function saveSyncSettings(matchUrl, enabledTabs, callback) {
+  chrome.storage.sync.get({ cricHeroesSyncSettings: {} }, ({ cricHeroesSyncSettings }) => {
+    chrome.storage.sync.set({
+      cricHeroesSyncSettings: {
+        ...(cricHeroesSyncSettings || {}),
+        matchUrl,
+        enabledTabs,
+      },
+    }, callback);
+  });
+}
+
 for (const [value, label] of tabs) {
   const wrapper = document.createElement('label');
   const checkbox = document.createElement('input');
   checkbox.type = 'checkbox';
   checkbox.value = value;
-  checkbox.checked = value === 'scorecard' || value === 'commentary';
+  checkbox.checked = value === 'scorecard' || value === 'commentary' || value === 'teams';
   const text = document.createElement('span');
   text.textContent = label;
   wrapper.append(checkbox, text);
@@ -46,7 +58,7 @@ document.getElementById('save').addEventListener('click', () => {
     status.textContent = 'Enter a valid CricHeroes scorecard URL.';
     return;
   }
-  chrome.storage.sync.set({ cricHeroesSyncSettings: { matchUrl, enabledTabs } }, () => {
+  saveSyncSettings(matchUrl, enabledTabs, () => {
     status.textContent = 'Sync settings saved.';
   });
 });
@@ -57,8 +69,7 @@ document.getElementById('open-match').addEventListener('click', () => {
     status.textContent = 'Enter a valid CricHeroes scorecard URL first.';
     return;
   }
-  chrome.storage.sync.set({ cricHeroesSyncSettings: {
-    matchUrl,
-    enabledTabs: [...tabsRoot.querySelectorAll('input:checked')].map(input => input.value),
-  } }, () => chrome.tabs.create({ url: matchUrl }));
+  saveSyncSettings(matchUrl, [...tabsRoot.querySelectorAll('input:checked')].map(input => input.value), () => {
+    chrome.tabs.create({ url: matchUrl });
+  });
 });

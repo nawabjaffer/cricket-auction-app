@@ -3,7 +3,7 @@
 // Ball-by-ball scoring interface with run buttons, wicket modal, undo
 // ============================================================================
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { IoArrowUndo, IoSwapHorizontal, IoClose, IoPlay, IoChevronDown } from 'react-icons/io5';
@@ -16,7 +16,7 @@ import { scoringService } from '../services/scoring';
 import { statsEngine } from '../services/scoring/statsEngine';
 import { obsReplaySourceService } from '../services/scoring/obsReplaySourceService';
 import { realtimeSync } from '../services/realtimeSync';
-import { tenantPath } from '../services/tenantPath';
+import { getActiveTenant, tenantPath } from '../services/tenantPath';
 import type {
   BallOutcome, DismissalType, WicketDetail, MatchSquadPlayer, OBSReplayButton,
   TickerStatWidget, Innings, BatsmanInnings, BowlerInnings, LiveScore, MatchSetup, MatchLineup,
@@ -132,7 +132,7 @@ export default function ScoreUpdatePage() {
   }, []);
 
   const {
-    match, liveScore, lineups, loading, error, recording,
+    match, liveScore, currentInnings, lineups, loading, error, recording,
     undoStack, recordBall, undoLastBall, initInnings, seedLiveScore,
     setOverlay, changeBatsman, changeBowler, swapStrike,
     completeMatch, isInningsComplete, isMatchComplete, needsBowlerChange,
@@ -172,6 +172,123 @@ export default function ScoreUpdatePage() {
       void recordBall(outcome);
     }
   });
+  const appliedCricHeroesSummary = useRef('');
+
+  useEffect(() => {
+    const selectedInnings = cricHeroesFeed?.scorecards?.find(innings => innings.inningsNumber === cricHeroesFeed.inningsNumber);
+    if (!match || !liveScore || !currentInnings || !isInningsComplete || !cricHeroesFeed?.scorecardSelection || !selectedInnings) return;
+    if (selectedInnings.runs === null || selectedInnings.wickets === null || selectedInnings.overs === null) return;
+
+    let savedAliases: { teamAliases?: Record<string, string>; playerAliases?: Record<string, string> } = {};
+    try {
+      savedAliases = JSON.parse(localStorage.getItem(`cricheroes-name-mappings:${getActiveTenant()}`) || '{}');
+    } catch { /* use exact team and player names when aliases are unavailable */ }
+    const normalizeName = (name: string) => name.trim().toLocaleLowerCase().replace(/[^a-z0-9]/g, '');
+    const teamAliasId = savedAliases.teamAliases?.[selectedInnings.battingTeam.trim().toLocaleLowerCase().replace(/\s+/g, ' ')];
+    const selectedTeamId = teamAliasId === match.teamA.id || normalizeName(match.teamA.name) === normalizeName(selectedInnings.battingTeam)
+      ? match.teamA.id
+      : teamAliasId === match.teamB.id || normalizeName(match.teamB.name) === normalizeName(selectedInnings.battingTeam)
+        ? match.teamB.id
+        : '';
+    if (!selectedTeamId || selectedInnings.inningsNumber !== liveScore.currentInnings || selectedTeamId !== liveScore.battingTeamId) return;
+
+    const signature = `${match.id}|${selectedInnings.inningsNumber}|${selectedInnings.battingTeam}|${selectedInnings.runs}|${selectedInnings.wickets}|${selectedInnings.overs}|${selectedInnings.extras}|${JSON.stringify(selectedInnings.batsmen)}|${JSON.stringify(selectedInnings.bowlers)}`;
+    if (signature === appliedCricHeroesSummary.current) return;
+    appliedCricHeroesSummary.current = signature;
+
+    const battingLineup = lineups.teamA?.teamId === liveScore.battingTeamId ? lineups.teamA : lineups.teamB;
+    const bowlingLineup = lineups.teamA?.teamId === liveScore.bowlingTeamId ? lineups.teamA : lineups.teamB;
+    const resolvePlayer = (name: string, players: MatchSquadPlayer[]) => {
+      const aliasKey = name.trim().toLocaleLowerCase().replace(/\s+/g, ' ');
+      const aliasId = savedAliases.playerAliases?.[aliasKey];
+      return players.find(player => player.playerId === aliasId)
+        || players.find(player => normalizeName(player.playerName) === normalizeName(name));
+    };
+    const importedBatters: BatsmanInnings[] = selectedInnings.batsmen.flatMap((player, index) => {
+      if (!player.statsComplete || player.runs === null || player.balls === null || player.fours === null || player.sixes === null || player.strikeRate === null) return [];
+      const rosterPlayer = battingLineup?.players.find(candidate => resolvePlayer(player.name, [candidate]));
+      if (!rosterPlayer) return [];
+      return [{
+        playerId: rosterPlayer.playerId,
+        playerName: rosterPlayer.playerName,
+        runs: player.runs,
+        balls: player.balls,
+        fours: player.fours,
+        sixes: player.sixes,
+        strikeRate: player.strikeRate,
+        dismissal: player.dismissal || (player.isOut ? 'dismissed' : 'not out'),
+        isOut: player.isOut,
+        order: index + 1,
+      }];
+    });
+    const importedBowlers: BowlerInnings[] = selectedInnings.bowlers.flatMap(player => {
+      if (!player.statsComplete || player.overs === null || player.maidens === null || player.runs === null || player.wickets === null || player.economy === null) return [];
+      const rosterPlayer = bowlingLineup?.players.find(candidate => resolvePlayer(player.name, [candidate]));
+      if (!rosterPlayer) return [];
+      return [{
+        playerId: rosterPlayer.playerId,
+        playerName: rosterPlayer.playerName,
+        overs: player.overs,
+        maidens: player.maidens,
+        runs: player.runs,
+        wickets: player.wickets,
+        economy: player.economy,
+        wides: player.wides ?? 0,
+        noBalls: player.noBalls ?? 0,
+        dots: player.dots ?? 0,
+      }];
+    });
+    const mergeStats = <T extends { playerId: string }>(existing: T[], imported: T[]) => {
+      const merged = [...existing];
+      for (const row of imported) {
+        const index = merged.findIndex(current => current.playerId === row.playerId);
+        if (index < 0) merged.push(row);
+        else merged[index] = { ...merged[index], ...row };
+      }
+      return merged;
+    };
+    const syncedBatsmen = mergeStats(currentInnings.batsmen, importedBatters);
+    const syncedBowlers = mergeStats(currentInnings.bowlers, importedBowlers);
+    const nextInnings: Innings = {
+      ...currentInnings,
+      totalRuns: selectedInnings.runs,
+      totalWickets: selectedInnings.wickets,
+      totalOvers: selectedInnings.overs,
+      extras: {
+        ...currentInnings.extras,
+        total: selectedInnings.extras ?? currentInnings.extras.total,
+        wides: selectedInnings.extrasBreakdown.wides ?? currentInnings.extras.wides,
+        noBalls: selectedInnings.extrasBreakdown.noBalls ?? currentInnings.extras.noBalls,
+        byes: selectedInnings.extrasBreakdown.byes ?? currentInnings.extras.byes,
+        legByes: selectedInnings.extrasBreakdown.legByes ?? currentInnings.extras.legByes,
+      },
+      batsmen: syncedBatsmen,
+      bowlers: syncedBowlers,
+    };
+    const balls = Math.floor(selectedInnings.overs) * 6 + Math.round((selectedInnings.overs % 1) * 10);
+    const nextLive: LiveScore = {
+      ...liveScore,
+      runs: selectedInnings.runs,
+      wickets: selectedInnings.wickets,
+      overs: selectedInnings.overs,
+      runRate: balls > 0 ? Math.round((selectedInnings.runs / balls) * 600) / 100 : 0,
+      allBatsmen: syncedBatsmen,
+      allBowlers: syncedBowlers,
+      lastUpdated: Date.now(),
+    };
+
+    void Promise.all([
+      scoringService.saveInnings(match.id, selectedInnings.inningsNumber as 1 | 2, nextInnings),
+      scoringService.saveLiveScore(match.id, nextLive),
+    ]).then(() => {
+      setMatchActionFeedback(`Innings ${selectedInnings.inningsNumber} summary synced: ${selectedInnings.runs}/${selectedInnings.wickets}`);
+      window.setTimeout(() => setMatchActionFeedback(''), 3000);
+    }).catch(error => {
+      appliedCricHeroesSummary.current = '';
+      console.error('[ScoreUpdatePage] CricHeroes innings summary sync failed:', error);
+      setMatchActionFeedback('CricHeroes summary could not be saved. Check the Provider scorecard and retry.');
+    });
+  }, [cricHeroesFeed, currentInnings, isInningsComplete, lineups, liveScore, match]);
 
   const handleStartNextMatch = useCallback(async () => {
     try {
@@ -436,6 +553,24 @@ export default function ScoreUpdatePage() {
             match={match}
             lineups={lineups}
             source={feedImportSnapshot}
+            onImportSummary={async innings => {
+              try {
+                await scoringService.saveInnings(match.id, innings.number, innings);
+                setFeedImportSnapshot(null);
+                if (innings.number === 1) {
+                  setInitModalDefaults({
+                    inningsNumber: 2,
+                    battingTeamId: innings.bowlingTeamId,
+                    target: innings.totalRuns + 1,
+                  });
+                  setShowInitModal(true);
+                }
+                return true;
+              } catch (importError) {
+                console.error('[ScoreUpdatePage] Innings summary import failed:', importError);
+                return false;
+              }
+            }}
             onImport={async (live, innings) => {
               const imported = await seedLiveScore(live, innings);
               if (imported) setFeedImportSnapshot(null);
@@ -1556,23 +1691,42 @@ function InitInningsModal({ match, lineups, defaults, onStart, onClose }: {
   );
 }
 
-function CricHeroesInProgressModal({ match, lineups, source, onImport, onClose }: {
+function CricHeroesInProgressModal({ match, lineups, source, onImport, onImportSummary, onClose }: {
   match: MatchSetup;
   lineups: { teamA: MatchLineup | null; teamB: MatchLineup | null };
   source: CricHeroesSyncData;
   onImport: (live: LiveScore, innings: Innings) => Promise<boolean>;
+  onImportSummary: (innings: Innings) => Promise<boolean>;
   onClose: () => void;
 }) {
   const normalize = (value: string) => value.toLocaleLowerCase().replace(/[^a-z0-9]/g, '');
+  const normalizeAlias = (value: string) => value.trim().toLocaleLowerCase().replace(/\s+/g, ' ');
+  const [savedAliases, setSavedAliases] = useState<{
+    teamAliases?: Record<string, string>;
+    playerAliases?: Record<string, string>;
+  }>(() => {
+    try {
+      return JSON.parse(localStorage.getItem(`cricheroes-name-mappings:${getActiveTenant()}`) || '{}') as {
+        teamAliases?: Record<string, string>;
+        playerAliases?: Record<string, string>;
+      };
+    } catch {
+      return {};
+    }
+  });
   const sourceTeam = normalize(source.battingTeam);
-  const [battingTeamId, setBattingTeamId] = useState(() =>
-    sourceTeam && sourceTeam === normalize(match.teamB.name) ? match.teamB.id : match.teamA.id,
-  );
-  const [inningsNumber, setInningsNumber] = useState<1 | 2>(1);
+  const [battingTeamId, setBattingTeamId] = useState(() => {
+    const savedTeamId = savedAliases.teamAliases?.[normalizeAlias(source.battingTeam)];
+    if (savedTeamId === match.teamA.id || savedTeamId === match.teamB.id) return savedTeamId;
+    return sourceTeam && sourceTeam === normalize(match.teamB.name) ? match.teamB.id : match.teamA.id;
+  });
+  const [inningsNumber, setInningsNumber] = useState<1 | 2>(source.inningsNumber === 2 ? 2 : 1);
   const [batterOverrides, setBatterOverrides] = useState<Record<string, string>>({});
   const [bowlerOverrides, setBowlerOverrides] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const [target, setTarget] = useState<number | ''>('');
+  const [summaryOnly, setSummaryOnly] = useState(source.scorecardSelection || source.overs >= match.maxOvers || source.wickets >= 10);
+  const [summaryImportError, setSummaryImportError] = useState('');
   const bowlingTeamId = battingTeamId === match.teamA.id ? match.teamB.id : match.teamA.id;
   const battingLineup = lineups.teamA?.teamId === battingTeamId ? lineups.teamA : lineups.teamB;
   const bowlingLineup = lineups.teamA?.teamId === bowlingTeamId ? lineups.teamA : lineups.teamB;
@@ -1586,17 +1740,84 @@ function CricHeroesInProgressModal({ match, lineups, source, onImport, onClose }
   const sourceBowlers = source.bowlers.length > 0 ? source.bowlers : source.bowler
     ? [{ name: source.bowler, overs: 0, maidens: 0, runs: 0, wickets: 0, economy: 0 }]
     : [{ name: 'Current bowler', overs: 0, maidens: 0, runs: 0, wickets: 0, economy: 0 }];
+  const selectedScorecard = source.scorecards?.find(innings => innings.inningsNumber === source.inningsNumber);
+  const bestBowlers = [...(selectedScorecard?.bowlers || source.bowlers)]
+    .sort((left, right) => (right.wickets ?? 0) - (left.wickets ?? 0) || (left.runs ?? 0) - (right.runs ?? 0) || (right.overs ?? 0) - (left.overs ?? 0))
+    .slice(0, 3);
   const autoMatch = (name: string, players: MatchSquadPlayer[]) => {
+    const savedPlayerId = savedAliases.playerAliases?.[normalizeAlias(name)];
+    if (savedPlayerId && players.some(player => player.playerId === savedPlayerId)) return savedPlayerId;
     const normalized = normalize(name);
     const exact = players.filter(player => normalize(player.playerName) === normalized);
     return exact.length === 1 ? exact[0].playerId : '';
   };
+  const savePlayerAlias = (name: string, playerId: string) => {
+    const alias = normalizeAlias(name);
+    if (!alias) return;
+    const playerAliases = { ...(savedAliases.playerAliases || {}) };
+    if (playerId) playerAliases[alias] = playerId;
+    else delete playerAliases[alias];
+    const nextAliases = { ...savedAliases, playerAliases };
+    setSavedAliases(nextAliases);
+    localStorage.setItem(`cricheroes-name-mappings:${getActiveTenant()}`, JSON.stringify(nextAliases));
+  };
   const batterIdFor = (name: string) => batterOverrides[name] || autoMatch(name, battingPlayers);
   const bowlerIdFor = (name: string) => bowlerOverrides[name] || autoMatch(name, bowlingPlayers);
+  const mappedBowlers = (): BowlerInnings[] => sourceBowlers.flatMap(player => {
+    const rosterPlayer = bowlingPlayers.find(candidate => candidate.playerId === bowlerIdFor(player.name));
+    if (!rosterPlayer) return [];
+    return [{
+      playerId: rosterPlayer.playerId,
+      playerName: rosterPlayer.playerName,
+      overs: player.overs,
+      maidens: player.maidens,
+      runs: player.runs,
+      wickets: player.wickets,
+      economy: player.economy,
+      wides: 0,
+      noBalls: 0,
+      dots: 0,
+    }];
+  });
   const allNamesMapped = sourceBatsmen.every(player => batterIdFor(player.name))
     && sourceBowlers.every(player => bowlerIdFor(player.name));
   const batterIds = sourceBatsmen.map(player => batterIdFor(player.name));
   const uniqueBatters = new Set(batterIds).size === batterIds.length;
+
+  const handleSummaryImport = async () => {
+    const batterRuns = source.batsmen.reduce((total, player) => total + player.runs, 0);
+    const selectedScorecard = source.scorecards?.find(innings => innings.inningsNumber === source.inningsNumber);
+    const summary: Innings = {
+      number: inningsNumber,
+      battingTeamId,
+      bowlingTeamId,
+      totalRuns: source.runs,
+      totalWickets: source.wickets,
+      totalOvers: source.overs,
+      maxOvers: match.maxOvers,
+      extras: {
+        total: selectedScorecard?.extras ?? (source.batsmen.length ? Math.max(0, source.runs - batterRuns) : 0),
+        wides: selectedScorecard?.extrasBreakdown.wides ?? 0,
+        noBalls: selectedScorecard?.extrasBreakdown.noBalls ?? 0,
+        byes: selectedScorecard?.extrasBreakdown.byes ?? 0,
+        legByes: selectedScorecard?.extrasBreakdown.legByes ?? 0,
+        penalty: 0,
+      },
+      batsmen: [],
+      bowlers: mappedBowlers(),
+      fallOfWickets: [],
+      overs: [],
+      isCompleted: true,
+    };
+    setBusy(true);
+    setSummaryImportError('');
+    try {
+      if (await onImportSummary(summary)) onClose();
+      else setSummaryImportError('Could not save the innings summary. Try again.');
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const handleImport = async () => {
     const mappedBatsmen: BatsmanInnings[] = sourceBatsmen.flatMap((player, index) => {
@@ -1615,29 +1836,14 @@ function CricHeroesInProgressModal({ match, lineups, source, onImport, onClose }
         order: index + 1,
       }];
     });
-    const mappedBowlers: BowlerInnings[] = sourceBowlers.flatMap(player => {
-      const rosterPlayer = bowlingPlayers.find(candidate => candidate.playerId === bowlerIdFor(player.name));
-      if (!rosterPlayer) return [];
-      return [{
-        playerId: rosterPlayer.playerId,
-        playerName: rosterPlayer.playerName,
-        overs: player.overs,
-        maidens: player.maidens,
-        runs: player.runs,
-        wickets: player.wickets,
-        economy: player.economy,
-        wides: 0,
-        noBalls: 0,
-        dots: 0,
-      }];
-    });
+    const mappedBowlerStats = mappedBowlers();
 
     const strikerName = source.striker || sourceBatsmen.find(player => player.isStriker)?.name || '';
     const nonStrikerName = source.nonStriker || sourceBatsmen.find(player => !player.isOut && normalize(player.name) !== normalize(strikerName))?.name || '';
     const striker = mappedBatsmen.find(player => player.playerId === batterIdFor(strikerName));
     const nonStriker = mappedBatsmen.find(player => player.playerId === batterIdFor(nonStrikerName));
     const currentBowlerName = source.bowler || sourceBowlers[0]?.name || '';
-    const currentBowler = mappedBowlers.find(player => player.playerId === bowlerIdFor(currentBowlerName));
+    const currentBowler = mappedBowlerStats.find(player => player.playerId === bowlerIdFor(currentBowlerName));
     if (!striker || !nonStriker || striker.playerId === nonStriker.playerId || !currentBowler) return;
 
     const ballCount = Math.floor(source.overs) * 6 + Math.round((source.overs % 1) * 10);
@@ -1669,7 +1875,7 @@ function CricHeroesInProgressModal({ match, lineups, source, onImport, onClose }
       powerplayOvers,
       isFreehit: false,
       allBatsmen: mappedBatsmen,
-      allBowlers: mappedBowlers,
+      allBowlers: mappedBowlerStats,
       sourceCommentary: source.fullCommentary,
     };
     const innings: Innings = {
@@ -1682,7 +1888,7 @@ function CricHeroesInProgressModal({ match, lineups, source, onImport, onClose }
       maxOvers: match.maxOvers,
       extras: { total: extrasTotal, wides: 0, noBalls: 0, byes: 0, legByes: 0, penalty: 0 },
       batsmen: mappedBatsmen,
-      bowlers: mappedBowlers,
+      bowlers: mappedBowlerStats,
       fallOfWickets: [],
       overs: [],
       isCompleted: false,
@@ -1701,6 +1907,7 @@ function CricHeroesInProgressModal({ match, lineups, source, onImport, onClose }
   const canImport = !busy && allNamesMapped && uniqueBatters && currentStrikerId && currentNonStrikerId
     && currentStrikerId !== currentNonStrikerId && currentBowlerId
     && (source.runs > 0 || source.overs > 0);
+  const canImportSummary = !busy && (source.runs > 0 || source.wickets > 0 || source.overs > 0);
 
   return (
     <div className="score-update__modal-overlay" onClick={onClose}>
@@ -1719,12 +1926,25 @@ function CricHeroesInProgressModal({ match, lineups, source, onImport, onClose }
           </div>
           <div className="score-update__modal-field">
             <label>Batting side · {source.battingTeam || 'CricHeroes'}</label>
-            <select className="score-update__select" value={battingTeamId} onChange={event => setBattingTeamId(event.target.value)}>
+            <select className="score-update__select" value={battingTeamId} onChange={event => {
+              setBattingTeamId(event.target.value);
+              const alias = normalizeAlias(source.battingTeam);
+              if (alias) {
+                const teamAliases = { ...(savedAliases.teamAliases || {}), [alias]: event.target.value };
+                const nextAliases = { ...savedAliases, teamAliases };
+                setSavedAliases(nextAliases);
+                localStorage.setItem(`cricheroes-name-mappings:${getActiveTenant()}`, JSON.stringify(nextAliases));
+              }
+            }}>
               <option value={match.teamA.id}>{match.teamA.name}</option>
               <option value={match.teamB.id}>{match.teamB.name}</option>
             </select>
           </div>
         </div>
+        <label className="score-update__feed-import-toggle">
+          <input type="checkbox" checked={summaryOnly} onChange={event => setSummaryOnly(event.target.checked)} />
+          <span>Between-innings summary only: import totals and bowling figures without reconstructing deliveries.</span>
+        </label>
         {inningsNumber === 2 && (
           <div className="score-update__modal-field">
             <label>Target (optional)</label>
@@ -1733,37 +1953,69 @@ function CricHeroesInProgressModal({ match, lineups, source, onImport, onClose }
         )}
         <div className="score-update__feed-import-score">{source.runs}/{source.wickets} after {source.overs} overs</div>
 
-        <h4>Batting roster matches</h4>
-        {sourceBatsmen.map((player, index) => (
-          <div className="score-update__feed-map-row" key={`${player.name}-${index}`}>
-            <span>{player.name} · {player.runs} ({player.balls})</span>
-            <select className="score-update__select" value={batterIdFor(player.name)} onChange={event => setBatterOverrides(current => ({ ...current, [player.name]: event.target.value }))}>
-              <option value="">Choose app squad player</option>
-              {battingPlayers.map(rosterPlayer => <option key={rosterPlayer.playerId} value={rosterPlayer.playerId}>{rosterPlayer.playerName} · {rosterPlayer.role}</option>)}
-            </select>
-          </div>
-        ))}
-        <h4>Bowling roster matches</h4>
-        {sourceBowlers.map((player, index) => (
-          <div className="score-update__feed-map-row" key={`${player.name}-${index}`}>
-            <span>{player.name} · {player.overs} ov, {player.runs} runs</span>
-            <select className="score-update__select" value={bowlerIdFor(player.name)} onChange={event => setBowlerOverrides(current => ({ ...current, [player.name]: event.target.value }))}>
-              <option value="">Choose app squad player</option>
-              {bowlingPlayers.map(rosterPlayer => <option key={rosterPlayer.playerId} value={rosterPlayer.playerId}>{rosterPlayer.playerName} · {rosterPlayer.role}</option>)}
-            </select>
-          </div>
-        ))}
-        {(!battingPlayers.length || !bowlingPlayers.length) && <p className="score-update__feed-import-note">This fixture needs both team lineups before player stats can be mapped.</p>}
+        {summaryOnly ? (
+          <>
+            <h4>Top bowling figures</h4>
+            {bestBowlers.length > 0 ? bestBowlers.map((player, index) => (
+              <div className="score-update__feed-map-row" key={`${player.name}-${index}`}>
+                <span>{player.name} · {player.overs ?? '—'}-{player.maidens ?? '—'}-{player.runs ?? '—'}-{player.wickets ?? '—'}</span>
+                <select className="score-update__select" value={bowlerIdFor(player.name)} onChange={event => {
+                  setBowlerOverrides(current => ({ ...current, [player.name]: event.target.value }));
+                  savePlayerAlias(player.name, event.target.value);
+                }}>
+                  <option value="">Not mapped</option>
+                  {bowlingPlayers.map(rosterPlayer => <option key={rosterPlayer.playerId} value={rosterPlayer.playerId}>{rosterPlayer.playerName} · {rosterPlayer.role}</option>)}
+                </select>
+              </div>
+            )) : <p className="score-update__feed-import-note">No bowling figures were exposed in the CricHeroes feed.</p>}
+            <p className="score-update__feed-import-note">Saved name aliases are matched automatically. Unmapped bowling figures remain visible above but are not linked to app players.</p>
+          </>
+        ) : (
+          <>
+            <h4>Batting roster matches</h4>
+            {sourceBatsmen.map((player, index) => (
+              <div className="score-update__feed-map-row" key={`${player.name}-${index}`}>
+                <span>{player.name} · {player.runs} ({player.balls})</span>
+                <select className="score-update__select" value={batterIdFor(player.name)} onChange={event => {
+                  setBatterOverrides(current => ({ ...current, [player.name]: event.target.value }));
+                  savePlayerAlias(player.name, event.target.value);
+                }}>
+                  <option value="">Choose app squad player</option>
+                  {battingPlayers.map(rosterPlayer => <option key={rosterPlayer.playerId} value={rosterPlayer.playerId}>{rosterPlayer.playerName} · {rosterPlayer.role}</option>)}
+                </select>
+              </div>
+            ))}
+            <h4>Bowling roster matches</h4>
+            {sourceBowlers.map((player, index) => (
+              <div className="score-update__feed-map-row" key={`${player.name}-${index}`}>
+                <span>{player.name} · {player.overs} ov, {player.runs} runs</span>
+                <select className="score-update__select" value={bowlerIdFor(player.name)} onChange={event => {
+                  setBowlerOverrides(current => ({ ...current, [player.name]: event.target.value }));
+                  savePlayerAlias(player.name, event.target.value);
+                }}>
+                  <option value="">Choose app squad player</option>
+                  {bowlingPlayers.map(rosterPlayer => <option key={rosterPlayer.playerId} value={rosterPlayer.playerId}>{rosterPlayer.playerName} · {rosterPlayer.role}</option>)}
+                </select>
+              </div>
+            ))}
+            {(!battingPlayers.length || !bowlingPlayers.length) && <p className="score-update__feed-import-note">This fixture needs both team lineups before player stats can be mapped.</p>}
+          </>
+        )}
         <details className="score-update__feed-commentary">
           <summary>Full commentary captured ({source.fullCommentary.length} characters)</summary>
           <pre>{source.fullCommentary || 'No full commentary was found in the CricHeroes tab.'}</pre>
         </details>
         <div className="score-update__modal-actions">
-          <button className="score-update__btn score-update__btn--primary" onClick={() => void handleImport()} disabled={!canImport}>
-            {busy ? 'Importing…' : 'Import score and start innings'}
+          <button
+            className="score-update__btn score-update__btn--primary"
+            onClick={() => void (summaryOnly ? handleSummaryImport() : handleImport())}
+            disabled={summaryOnly ? !canImportSummary : !canImport}
+          >
+            {busy ? 'Importing…' : summaryOnly ? 'Import innings summary' : 'Import score and start innings'}
           </button>
           <button className="score-update__btn" onClick={onClose} disabled={busy}>Cancel</button>
         </div>
+        {summaryImportError && <p className="score-update__feed-import-note" role="alert">{summaryImportError}</p>}
       </div>
     </div>
   );

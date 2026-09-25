@@ -38,7 +38,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
-  if (message?.source !== "CRICHEROES_SYNC_ADAPTER" || !message.data || !sender.tab?.id) return;
+  if (!['CRICHEROES_SYNC_ADAPTER', 'CRICHEROES_TEAM_ROSTER'].includes(message?.source) || !message.data || !sender.tab?.id) return;
 
   chrome.tabs.query({}, (tabs) => {
     const targets = tabs.filter((tab) => {
@@ -56,7 +56,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         console.info(`[CricHeroes Sync] Feed delivered to: ${deliveredOrigins.join(', ')}.`);
         hasLoggedDelivery = true;
       } else if (delivered === 0 && !hasLoggedNoReceiver) {
-        console.warn(`[CricHeroes Sync] No receiving scorer tab acknowledged the feed. Tried: ${failedOrigins.join(', ') || 'no supported scorer app tab is open'}. Add the scorer origin to appHosts and content_scripts.matches in manifest.json, then reload the extension.`);
+        console.warn(`[CricHeroes Sync] No receiving app tab acknowledged ${message.source === 'CRICHEROES_TEAM_ROSTER' ? 'the team roster' : 'the score feed'}. Tried: ${failedOrigins.join(', ') || 'no supported scorer app tab is open'}. Add the scorer origin to appHosts and content_scripts.matches in manifest.json, then reload the extension.`);
         hasLoggedNoReceiver = true;
       }
       sendResponse({ delivered, deliveredOrigins, failedOrigins });

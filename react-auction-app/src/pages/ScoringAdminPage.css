@@ -221,6 +221,11 @@
   cursor: pointer;
 }
 
+.scoring-admin__select:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
 .scoring-admin__select option {
   background: #1a1a2e;
 }
@@ -430,9 +435,22 @@
 }
 
 .scoring-admin__badge--active {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
   background: rgba(16, 185, 129, 0.1);
   border-color: rgba(16, 185, 129, 0.3);
   color: #34d399;
+}
+
+.scoring-admin__badge--active::before {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #34d399;
+  box-shadow: 0 0 8px rgba(52, 211, 153, 0.65);
+  content: '';
+  flex: 0 0 auto;
 }
 
 .scoring-admin__sync-card {
@@ -465,7 +483,7 @@
   padding-bottom: 0.55rem;
   color: #a1a1aa;
   font-size: 0.78rem;
-  white-space: nowrap;
+  white-space: normal;
 }
 
 .scoring-admin__sync-status > span {
@@ -542,6 +560,21 @@
   text-overflow: ellipsis;
 }
 
+.scoring-admin__checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  margin: 0.85rem 0;
+  color: #d4d4d8;
+  font-size: 0.78rem;
+}
+
+.scoring-admin__checkbox-row input {
+  width: 1rem;
+  height: 1rem;
+  accent-color: #34d399;
+}
+
 .scoring-admin__sync-empty {
   margin: 0.75rem 0 0;
   color: #fbbf24;
@@ -571,6 +604,28 @@
   font-weight: 400;
 }
 
+.scoring-admin__sync-console-actions {
+  display: flex;
+  justify-content: flex-end;
+  padding: 0 0.8rem 0.45rem;
+}
+
+.scoring-admin__sync-clear {
+  padding: 0.3rem 0.55rem;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 5px;
+  background: transparent;
+  color: #d4d4d8;
+  font: inherit;
+  font-size: 0.72rem;
+  cursor: pointer;
+}
+
+.scoring-admin__sync-clear:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 .scoring-admin__sync-console-output {
   display: grid;
   gap: 0.35rem;
@@ -589,6 +644,27 @@
   overflow-wrap: anywhere;
 }
 
+.scoring-admin__sync-console-output > section {
+  display: grid;
+  gap: 0.4rem;
+  padding-bottom: 0.55rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+  overflow-wrap: anywhere;
+}
+
+.scoring-admin__sync-console-output > section > strong > span {
+  color: #71717a;
+  font-weight: 400;
+}
+
+.scoring-admin__roster-steps {
+  margin: 0 0 0.7rem;
+  padding-left: 2rem;
+  color: #a1a1aa;
+  font-size: 0.73rem;
+  line-height: 1.55;
+}
+
 .scoring-admin__sync-console-output time {
   color: #71717a;
 }
@@ -599,6 +675,10 @@
   color: #fbbf24;
   font-size: 0.73rem;
   line-height: 1.45;
+}
+
+.scoring-admin__sync-console > p.is-connected {
+  color: #6ee7b7;
 }
 
 .scoring-admin__sync-download-row {
@@ -616,6 +696,90 @@
 .scoring-admin__sync-download-row > span {
   color: #9ca3af;
   font-size: 0.72rem;
+}
+
+.scoring-admin__sync-download-row code,
+.scoring-admin__sync-guide code {
+  color: #fde68a;
+  font: 0.75rem ui-monospace, SFMono-Regular, Menlo, monospace;
+  overflow-wrap: anywhere;
+}
+
+.scoring-admin__sync-guide {
+  margin: 0.75rem 0 1rem;
+  padding: 0.9rem 1rem;
+  border: 1px solid rgba(251, 191, 36, 0.22);
+  border-radius: 8px;
+  background: linear-gradient(115deg, rgba(251, 191, 36, 0.07), rgba(52, 211, 153, 0.035));
+}
+
+.scoring-admin__sync-guide-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.75rem;
+}
+
+.scoring-admin__sync-guide-heading h3 {
+  margin: 0;
+  color: #f4f4f5;
+  font-size: 0.9rem;
+}
+
+.scoring-admin__sync-guide-heading p,
+.scoring-admin__sync-guide-note {
+  margin: 0.3rem 0 0;
+  color: #a1a1aa;
+  font-size: 0.73rem;
+  line-height: 1.5;
+}
+
+.scoring-admin__sync-guide-heading > span {
+  flex: 0 0 auto;
+  color: #6ee7b7;
+  font-size: 0.68rem;
+}
+
+.scoring-admin__sync-guide ol {
+  display: grid;
+  gap: 0.5rem;
+  margin: 0.8rem 0;
+  padding-left: 1.4rem;
+  color: #d4d4d8;
+  font-size: 0.75rem;
+  line-height: 1.55;
+}
+
+.scoring-admin__sync-guide li::marker {
+  color: #fbbf24;
+  font-weight: 700;
+}
+
+.scoring-admin__sync-guide li strong {
+  color: #f4f4f5;
+}
+
+.scoring-admin__sync-guide-note {
+  padding-top: 0.55rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.scoring-admin__sync-guide-note strong {
+  color: #fcd34d;
+}
+
+@media (max-width: 640px) {
+  .scoring-admin__sync-download-row {
+    align-items: flex-start;
+  }
+
+  .scoring-admin__sync-guide {
+    padding: 0.75rem;
+  }
+
+  .scoring-admin__sync-guide-heading {
+    flex-direction: column;
+  }
 }
 
 .scoring-admin__sync-config {

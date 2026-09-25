@@ -4,11 +4,19 @@ This Chrome extension reads selected sections of a CricHeroes match and relays t
 
 ## Install
 
-1. Download `cricheroes-live-sync.zip` from **Scoring Admin → Providers → CricHeroes Browser Sync**, then extract the ZIP.
-2. In Chrome, open `chrome://extensions` and enable **Developer mode**.
+1. Download `cricheroes-live-sync.zip` from **Scoring Admin → Providers** and extract it.
+2. In Chrome, type `chrome://extensions/` in the address bar and enable **Developer mode**.
 3. Choose **Load unpacked** and select the extracted `cricheroes-live-sync` folder. Chrome requires this explicit user action; downloading an extension cannot silently install it.
-4. Open the extension popup, enter the CricHeroes scorecard URL, select the tabs to monitor, and save. Use **Open match** to navigate to the match.
-5. Open the scorer app in another tab in the same Chrome profile. If updating, use **Reload** on the extension details page and reload both tabs.
+4. Open the extension from Chrome’s Extensions menu. Enter the CricHeroes scorecard URL, enable **Scorecard**, **Commentary**, and **Teams**, then save.
+5. Keep the scorer app’s **Providers** page open in another tab in the same Chrome profile. Select the app match below, then open the configured CricHeroes scorecard.
+
+## Capture Team Rosters
+
+With **Teams** enabled, open each CricHeroes team profile’s **Members** tab once and wait for the player cards to load. The open Providers page receives and saves the roster for the current tenant in this browser. Map the captured CricHeroes team to its app team, then map the players. The feed console on Providers is optional; it is only for troubleshooting.
+
+If no roster appears, confirm the extension is enabled, reload the CricHeroes Members tab and the Providers tab, and make sure the player cards have finished loading. If live scores do not appear, confirm the configured match URL is the same scorecard and both tabs use the same Chrome profile.
+
+When updating, open `chrome://extensions/`, choose **Reload** on the extension card, then reload the Providers and CricHeroes tabs.
 
 ## Use
 
@@ -22,7 +30,7 @@ The extension forwards team totals, batting/bowling scorecard rows, current play
 
 ## Troubleshooting
 
-- If the admin page says it is waiting, verify both tabs are in the same Chrome profile, reload them, and check that this extension is enabled. The CricHeroes console should show the installed extension version.
+- If the Providers page says it is waiting, verify both tabs are in the same Chrome profile, reload them, and check that this extension is enabled. The optional feed console shows diagnostic logs.
 - If the feed is stale, keep the CricHeroes live scorecard active long enough for its scorecard/commentary to render, then revisit the admin tab.
 - If a player is not in the selector, set up that match's lineup or auction team roster first.
 - If Chrome shows an extension error after editing files, open the extension card in `chrome://extensions`, choose **Reload**, then reload both browser tabs.

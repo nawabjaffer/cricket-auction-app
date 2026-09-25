@@ -401,6 +401,23 @@
   line-height: 1.5;
 }
 
+.score-update__feed-import-toggle {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.55rem;
+  margin: 0.8rem 0;
+  color: #d4d4d8;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  cursor: pointer;
+}
+
+.score-update__feed-import-toggle input {
+  flex: 0 0 auto;
+  margin: 0.15rem 0 0;
+  accent-color: #34d399;
+}
+
 .score-update__feed-import-score {
   margin: 0.25rem 0 0.75rem;
   color: #fbbf24;

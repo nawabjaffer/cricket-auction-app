@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "CricHeroes Live Sync",
-  "version": "2.0",
+  "version": "2.3",
   "description": "Syncs CricHeroes scores locally to a React app stream overlay.",
   "icons": {
     "16": "icons/icon16.png",
@@ -39,7 +39,7 @@
         "https://e-auction-store.web.app/*",
         "https://e-auction-store.firebaseapp.com/*"
       ],
-      "js": ["content.js"],
+      "js": ["scorecard-parser.js", "content.js"],
       "run_at": "document_end"
     }
   ]

@@ -9,6 +9,7 @@ const outputPath = resolve(projectRoot, 'public/cricheroes-live-sync.zip');
 const packageFiles = [
   'manifest.json',
   'background.js',
+  'scorecard-parser.js',
   'content.js',
   'popup.html',
   'popup.css',

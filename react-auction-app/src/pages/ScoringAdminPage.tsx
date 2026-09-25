@@ -3,7 +3,7 @@
 // Match setup, provider config, ads, overlay branding, animation triggers
 // ============================================================================
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { Fragment, useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { IoAdd, IoTrash, IoSave, IoClose, IoPlay, IoStop, IoTrophy, IoSettings, IoImage, IoFlash, IoVideocam, IoLink, IoDesktop, IoPencil, IoPeople, IoGameController } from 'react-icons/io5';
 import { useAdminAuth } from '../hooks/useAdminAuth';
@@ -28,6 +28,48 @@ import { withScorerAdminChrome } from './withScorerAdminChrome';
 import './ScoringAdminPage.css';
 
 type Tab = 'matches' | 'provider' | 'ads' | 'overlay' | 'animations' | 'prematch' | 'ticker' | 'stats' | 'obs';
+type CricHeroesSyncState = ReturnType<typeof useCricHeroesSyncAdapter>;
+type CricHeroesSelectorConfig = Record<'teamContainers' | 'teamName' | 'teamActive' | 'teamOvers' | 'batterTable' | 'bowlerTable' | 'latestCommentary' | 'fullCommentaryTab' | 'scorecardHead' | 'scorecardWrapper' | 'teamNameAndScore' | 'scorecardOvers' | 'scorecardSelectedTeam' | 'teamRosterRoot' | 'teamRosterHeader', string>;
+
+const DEFAULT_CRICHEROES_SELECTORS: CricHeroesSelectorConfig = {
+  teamContainers: '[class*="scoreWrapper"] [class*="teamScoreDetails"]',
+  teamName: '[class*="teamName"]',
+  teamActive: '[class*="isActive"]',
+  teamOvers: '[class*="overSpan"]',
+  batterTable: 'table[class*="table"]',
+  bowlerTable: 'table[class*="table"]',
+  latestCommentary: '[class*="commentary"], [class*="Commentary"] tr, div[class*="commentaryText"]',
+  fullCommentaryTab: '[class*="dropdownSWrapper"]',
+  scorecardHead: '[class*="scorecardHead"]',
+  scorecardWrapper: '[class*="scorecardWrapper"]',
+  teamNameAndScore: '[class*="teamNameAndScore"]',
+  scorecardOvers: '[class~="over"]',
+  scorecardSelectedTeam: '[class*="selectedText"]',
+  teamRosterRoot: '.currentTab',
+  teamRosterHeader: 'a[href*="/team-profile/"][href*="/members"]',
+};
+type CricHeroesNameMappings = {
+  teamAliases: Record<string, string>;
+  playerAliases: Record<string, string>;
+};
+
+const getCricHeroesNameMappingsKey = () => `cricheroes-name-mappings:${getActiveTenant()}`;
+
+function normalizeCricHeroesName(name: string): string {
+  return name.trim().toLocaleLowerCase().replace(/\s+/g, ' ');
+}
+
+function loadCricHeroesNameMappings(): CricHeroesNameMappings {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(getCricHeroesNameMappingsKey()) || '{}') as Partial<CricHeroesNameMappings>;
+    return {
+      teamAliases: parsed.teamAliases || {},
+      playerAliases: parsed.playerAliases || {},
+    };
+  } catch {
+    return { teamAliases: {}, playerAliases: {} };
+  }
+}
 
 const DEFAULT_OVERLAY_CONFIG: ScoringOverlayConfig = {
   showLiveBadge: true,
@@ -49,6 +91,7 @@ function ScoringAdminPageContent() {
   const baseUrl = window.location.origin + (tenantSlug ? `/${tenantSlug}` : '');
   const { isAuthenticated, extendSession } = useAdminAuth();
   const [activeTab, setActiveTab] = useState<Tab>('matches');
+  const cricHeroesSync = useCricHeroesSyncAdapter();
 
   useInitialData();
   useAuctionDataLoader();
@@ -98,6 +141,7 @@ function ScoringAdminPageContent() {
 
   // ── State ──
   const [matches, setMatches] = useState<MatchSetup[]>([]);
+  const [cricHeroesNameMappings, setCricHeroesNameMappings] = useState<CricHeroesNameMappings>(loadCricHeroesNameMappings);
   const [ads, setAds] = useState<ScoringAd[]>([]);
   const [overlayConfig, setOverlayConfig] = useState<ScoringOverlayConfig>(DEFAULT_OVERLAY_CONFIG);
   const [saving, setSaving] = useState(false);
@@ -174,13 +218,20 @@ function ScoringAdminPageContent() {
             navigate={navigate}
             baseUrl={baseUrl}
             config={overlayConfig}
+            sync={cricHeroesSync}
+            nameMappings={cricHeroesNameMappings}
+            setNameMappings={setCricHeroesNameMappings}
           />
         )}
         {activeTab === 'provider' && (
           <ProviderTab
             matches={matches}
+            teams={allTeams}
             soldPlayers={soldPlayers}
             onFeedback={showFeedback}
+            sync={cricHeroesSync}
+            nameMappings={cricHeroesNameMappings}
+            setNameMappings={setCricHeroesNameMappings}
           />
         )}
         {activeTab === 'ads' && (
@@ -262,7 +313,7 @@ export default withScorerAdminChrome(ScoringAdminPageContent, {
 // MATCHES TAB
 // ═══════════════════════════════════════════════════════════════════════════════
 
-function MatchesTab({ matches, teams, soldPlayers, onFeedback, saving, setSaving, navigate, baseUrl, config }: {
+function MatchesTab({ matches, teams, soldPlayers, onFeedback, saving, setSaving, navigate, baseUrl, config, sync, nameMappings, setNameMappings }: {
   matches: MatchSetup[];
   teams: { id: string; name: string; logoUrl?: string; primaryColor?: string }[];
   soldPlayers: SoldPlayer[];
@@ -272,6 +323,9 @@ function MatchesTab({ matches, teams, soldPlayers, onFeedback, saving, setSaving
   navigate: (to: string) => void;
   baseUrl: string;
   config: ScoringOverlayConfig;
+  sync: CricHeroesSyncState;
+  nameMappings: CricHeroesNameMappings;
+  setNameMappings: React.Dispatch<React.SetStateAction<CricHeroesNameMappings>>;
 }) {
   type MatchListMode = 'time-default' | 'upcoming' | 'not-done' | 'live' | 'completed';
   const formatDateTimeInput = (value: string) => {
@@ -369,6 +423,7 @@ function MatchesTab({ matches, teams, soldPlayers, onFeedback, saving, setSaving
     stage: scheduleDefaults.stage,
   }));
   const [activeMatchId, setActiveMatchId] = useState<string | null>(null);
+  const [syncMatchId, setSyncMatchId] = useState<string | null>(null);
   const singleOverlayMode = !!config.singleOverlayMode;
 
   useEffect(() => {
@@ -385,6 +440,13 @@ function MatchesTab({ matches, teams, soldPlayers, onFeedback, saving, setSaving
       return () => {};
     }
   }, []);
+
+  useEffect(() => {
+    if (syncMatchId && matches.some(match => match.id === syncMatchId)) return;
+    const activeMatch = matches.find(match => match.id === activeMatchId);
+    const liveMatch = activeMatch || matches.find(match => match.status === 'live');
+    setSyncMatchId(liveMatch?.id || null);
+  }, [activeMatchId, matches, syncMatchId]);
 
   const resetForm = () => {
     const nextDate = getNextScheduledDate(scheduleDefaults.date, scheduleDefaults.maxOvers, scheduleDefaults.gapMinutes);
@@ -620,6 +682,7 @@ function MatchesTab({ matches, teams, soldPlayers, onFeedback, saving, setSaving
   };
 
   const handleStart = async (matchId: string) => {
+    setSyncMatchId(matchId);
     await handleStatusChange(matchId, 'live');
     if (singleOverlayMode) {
       try {
@@ -684,6 +747,7 @@ function MatchesTab({ matches, teams, soldPlayers, onFeedback, saving, setSaving
         return getMatchTimeDistance(a.date) - getMatchTimeDistance(b.date);
       });
   }, [matchListMode, matches]);
+    const syncMatch = matches.find(match => match.id === syncMatchId);
 
   return (
     <div className="scoring-admin__section">
@@ -988,7 +1052,8 @@ function MatchesTab({ matches, teams, soldPlayers, onFeedback, saving, setSaving
           </div>
         )}
         {visibleMatches.map(match => (
-          <div key={match.id} className="scoring-admin__match-card">
+          <Fragment key={match.id}>
+          <div className="scoring-admin__match-card">
             <div className="scoring-admin__match-teams">
               <span className="scoring-admin__team-name">{match.teamA.name}</span>
               <span className="scoring-admin__vs">vs</span>
@@ -1074,8 +1139,15 @@ function MatchesTab({ matches, teams, soldPlayers, onFeedback, saving, setSaving
               </button>
             </div>
           </div>
+          {syncMatchId === match.id && (
+            <CricHeroesSyncPanel match={match} teams={teams} soldPlayers={soldPlayers} sync={sync} nameMappings={nameMappings} setNameMappings={setNameMappings} />
+          )}
+          </Fragment>
         ))}
       </div>
+      {syncMatch && !visibleMatches.some(match => match.id === syncMatch.id) && (
+        <CricHeroesSyncPanel match={syncMatch} teams={teams} soldPlayers={soldPlayers} sync={sync} nameMappings={nameMappings} setNameMappings={setNameMappings} />
+      )}
 
       {/* Squad Selection Modal */}
       <AnimatePresence>
@@ -1130,12 +1202,49 @@ function MatchesTab({ matches, teams, soldPlayers, onFeedback, saving, setSaving
 // PROVIDER TAB
 // ═══════════════════════════════════════════════════════════════════════════════
 
-function ProviderTab({ matches, soldPlayers, onFeedback }: {
+function ProviderTab({ matches, teams, soldPlayers, onFeedback, sync, nameMappings, setNameMappings }: {
   matches: MatchSetup[];
+  teams: { id: string; name: string; logoUrl?: string; primaryColor?: string }[];
   soldPlayers: SoldPlayer[];
   onFeedback: (msg: string) => void;
+  sync: CricHeroesSyncState;
+  nameMappings: CricHeroesNameMappings;
+  setNameMappings: React.Dispatch<React.SetStateAction<CricHeroesNameMappings>>;
 }) {
   const [configs, setConfigs] = useState<Record<string, MatchScoringConfig>>({});
+  const autoMatchOption = '__auto__';
+  const [selectedSyncMatchId, setSelectedSyncMatchId] = useState(() => matches.find(match => match.status === 'live')?.id || autoMatchOption);
+  const lastContextLog = useRef('');
+  const source = sync.latest;
+  const selectedMatch = matches.find(match => match.id === selectedSyncMatchId);
+  const matchByNames = source && matches.find(match => {
+    const teamA = normalizeCricHeroesName(match.teamA.name);
+    const teamB = normalizeCricHeroesName(match.teamB.name);
+    const battingTeam = normalizeCricHeroesName(source.battingTeam);
+    const bowlingTeam = normalizeCricHeroesName(source.bowlingTeam);
+    return (teamA === battingTeam && teamB === bowlingTeam) || (teamA === bowlingTeam && teamB === battingTeam);
+  });
+  const sourceTeamIds = source
+    ? [nameMappings.teamAliases[normalizeCricHeroesName(source.battingTeam)], nameMappings.teamAliases[normalizeCricHeroesName(source.bowlingTeam)]].filter(Boolean)
+    : [];
+  const matchByAliases = sourceTeamIds.length === 2 && matches.find(match =>
+    [match.teamA.id, match.teamB.id].every(teamId => sourceTeamIds.includes(teamId)));
+  const onlyLiveMatch = matches.filter(match => match.status === 'live').length === 1
+    ? matches.find(match => match.status === 'live')
+    : undefined;
+  const resolvedMatch = selectedMatch || matchByNames || matchByAliases || onlyLiveMatch || null;
+
+  useEffect(() => {
+    if (!source) return;
+    const scoreSummary = `${source.battingTeam}|${source.bowlingTeam}|${source.runs}/${source.wickets}|${source.overs}|${source.latestTextEvent}`;
+    const contextKey = `${selectedSyncMatchId}|${resolvedMatch?.id || 'unresolved'}|${scoreSummary}`;
+    if (contextKey === lastContextLog.current) return;
+    lastContextLog.current = contextKey;
+    const matchLabel = resolvedMatch
+      ? `${resolvedMatch.teamA.name} vs ${resolvedMatch.teamB.name}${selectedMatch ? ' (selected)' : ' (auto-detected)'}`
+      : 'Match unresolved; select the current match';
+    sync.appendLog(`Match context: ${matchLabel}. Live feed: ${source.battingTeam} ${source.runs}/${source.wickets} vs ${source.bowlingTeam}, ${source.overs} overs${source.latestTextEvent ? `, ${source.latestTextEvent}` : ''}.`);
+  }, [source, selectedSyncMatchId, resolvedMatch, selectedMatch, sync.appendLog]);
 
   useEffect(() => {
     // Load config for each match
@@ -1172,17 +1281,55 @@ function ProviderTab({ matches, soldPlayers, onFeedback }: {
         <h2>Scoring Providers</h2>
       </div>
 
+      <div className="scoring-admin__sync-download-row">
+        <a className="scoring-admin__btn scoring-admin__btn--primary" href="/cricheroes-live-sync.zip" download="cricheroes-live-sync.zip">Download Chrome extension</a>
+        <span>Chrome extension settings: enter <code>chrome://extensions/</code> in Chrome’s address bar.</span>
+      </div>
+      <section className="scoring-admin__sync-guide" aria-labelledby="cricheroes-sync-guide-title">
+        <div className="scoring-admin__sync-guide-heading">
+          <div>
+            <h3 id="cricheroes-sync-guide-title">Connect CricHeroes</h3>
+            <p>One-time browser setup. The Providers page receives sync data; you do not need to open the feed console.</p>
+          </div>
+          <span>Same Chrome profile</span>
+        </div>
+        <ol>
+          <li><strong>Install:</strong> download and extract the ZIP. Open <code>chrome://extensions/</code>, turn on <strong>Developer mode</strong>, choose <strong>Load unpacked</strong>, then select the extracted <code>cricheroes-live-sync</code> folder.</li>
+          <li><strong>Configure:</strong> open the extension from Chrome’s Extensions menu. Paste the CricHeroes match scorecard URL, enable <strong>Scorecard</strong>, <strong>Commentary</strong>, and <strong>Teams</strong>, then save.</li>
+          <li><strong>Receive live scores:</strong> keep this Providers page open, select the app match below, and open the configured CricHeroes scorecard in another tab. Keep both tabs in the same Chrome profile.</li>
+          <li><strong>Capture squads:</strong> with Teams enabled, open each CricHeroes team profile’s <strong>Members</strong> tab once. Wait for its player cards to load, then map the captured team and players below.</li>
+        </ol>
+        <p className="scoring-admin__sync-guide-note"><strong>Nothing showing?</strong> Reload both tabs, confirm the extension is enabled and the match URL matches the scorecard, then revisit the Members tab. The console is optional and only provides diagnostic logs.</p>
+      </section>
+      <CricHeroesSelectorSettings />
+
       <div className="scoring-admin__form-card">
         <h3 className="scoring-admin__subsection-title">Provider Availability</h3>
-        <p className="scoring-admin__hint">Global CricHeroes API-key setup is temporarily hidden. Use browser sync below for live scoring.</p>
+        <p className="scoring-admin__hint">Review the extension feed, choose the receiving match, and maintain reusable CricHeroes team/player name mappings here.</p>
         <div className="scoring-admin__provider-badges">
-          {providers.map(p => (
-            <span key={p.provider} className={`scoring-admin__badge ${p.configured ? 'scoring-admin__badge--active' : ''}`}>
-              {p.name} — {p.configured ? 'Ready' : 'Not Configured'}
-            </span>
-          ))}
+          {providers.map(provider => {
+            const isCricHeroes = provider.provider === 'cricheroes';
+            const isReady = isCricHeroes ? sync.bridgeReady : provider.configured;
+            const status = isCricHeroes
+              ? sync.bridgeReady ? 'In Sync With Extension' : 'Not Configured'
+              : provider.configured ? 'Ready' : 'Not Configured';
+            return (
+              <span key={provider.provider} className={`scoring-admin__badge ${isReady ? 'scoring-admin__badge--active' : ''}`}>
+                {provider.name} — {status}
+              </span>
+            );
+          })}
         </div>
       </div>
+
+      <label className="scoring-admin__field" style={{ maxWidth: 440, margin: '1rem 0' }}>
+        <span className="scoring-admin__field-label">Current match for CricHeroes feed</span>
+        <select className="scoring-admin__select" value={selectedSyncMatchId} onChange={event => setSelectedSyncMatchId(event.target.value)}>
+          <option value={autoMatchOption}>Auto-detect current live match</option>
+          {matches.map(match => <option key={match.id} value={match.id}>{match.teamA.name} vs {match.teamB.name} ({match.status})</option>)}
+        </select>
+      </label>
+      <CricHeroesSyncPanel match={resolvedMatch} teams={teams} soldPlayers={soldPlayers} sync={sync} nameMappings={nameMappings} setNameMappings={setNameMappings} />
 
       <h3 className="scoring-admin__subsection-title" style={{ marginTop: '1.5rem' }}>Per-Match Provider</h3>
       {matches.length === 0 && (
@@ -1209,7 +1356,6 @@ function ProviderTab({ matches, soldPlayers, onFeedback }: {
         </div>
       ))}
 
-      <CricHeroesSyncPanel matches={matches} soldPlayers={soldPlayers} />
       <CricHeroesReaderPanel matches={matches} configs={configs} setConfigs={setConfigs} onFeedback={onFeedback} />
 
       <div className="scoring-admin__form-card" style={{ marginTop: '1.5rem' }}>
@@ -1223,49 +1369,106 @@ function ProviderTab({ matches, soldPlayers, onFeedback }: {
   );
 }
 
-function CricHeroesSyncPanel({ matches, soldPlayers }: Readonly<{
-  matches: MatchSetup[];
-  soldPlayers: SoldPlayer[];
-}>) {
-  type SelectorConfig = Record<'teamContainers' | 'teamName' | 'teamActive' | 'teamOvers' | 'batterTable' | 'bowlerTable' | 'latestCommentary' | 'fullCommentaryTab', string>;
+function CricHeroesSelectorSettings() {
   const selectorStorageKey = `cricheroes-selectors:${getActiveTenant()}`;
-  const defaultSelectors: SelectorConfig = {
-    teamContainers: '[class*="scoreWrapper"] [class*="teamScoreDetails"]',
-    teamName: '[class*="teamName"]',
-    teamActive: '[class*="isActive"]',
-    teamOvers: '[class*="overSpan"]',
-    batterTable: 'table[class*="table"]',
-    bowlerTable: 'table[class*="table"]',
-    latestCommentary: '[class*="commentary"], [class*="Commentary"] tr, div[class*="commentaryText"]',
-    fullCommentaryTab: '[class*="dropdownSWrapper"]',
-  };
-  const { latest: source, logs } = useCricHeroesSyncAdapter();
-  const [matchId, setMatchId] = useState('');
-  const [lineups, setLineups] = useState<{ teamA: MatchSquadPlayer[]; teamB: MatchSquadPlayer[] }>({ teamA: [], teamB: [] });
-  const [mappings, setMappings] = useState<Record<string, string>>({});
-  const [selectors, setSelectors] = useState<SelectorConfig>(() => {
+  const [selectors, setSelectors] = useState<CricHeroesSelectorConfig>(() => {
     try {
-      return { ...defaultSelectors, ...JSON.parse(localStorage.getItem(selectorStorageKey) || '{}') as Partial<SelectorConfig> };
+      return { ...DEFAULT_CRICHEROES_SELECTORS, ...JSON.parse(localStorage.getItem(selectorStorageKey) || '{}') as Partial<CricHeroesSelectorConfig> };
     } catch {
-      return defaultSelectors;
+      return DEFAULT_CRICHEROES_SELECTORS;
     }
   });
-  const [selectorStatus, setSelectorStatus] = useState('');
-  const selectedMatch = matches.find(match => match.id === matchId);
-  const mappingStorageKey = `cricheroes-player-maps:${getActiveTenant()}:${matchId}`;
+  const [status, setStatus] = useState('');
 
   useEffect(() => {
-    if (!matchId) return;
+    const handleMessage = (event: MessageEvent) => {
+      if (event.data?.source !== 'CRICHEROES_SYNC_CONFIG_RESULT') return;
+      const result = event.data.data as { saved?: unknown; error?: unknown } | undefined;
+      setStatus(result?.saved === true
+        ? 'Custom selectors saved to the extension.'
+        : `Could not save selectors: ${typeof result?.error === 'string' ? result.error : 'extension not responding'}`);
+    };
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, []);
+
+  const selectorFields: Array<{ key: keyof CricHeroesSelectorConfig; label: string }> = [
+    { key: 'teamContainers', label: 'Team score containers' },
+    { key: 'teamName', label: 'Team name' },
+    { key: 'teamActive', label: 'Active batting team marker' },
+    { key: 'teamOvers', label: 'Team overs' },
+    { key: 'batterTable', label: 'Batting scorecard table' },
+    { key: 'bowlerTable', label: 'Bowling scorecard table' },
+    { key: 'latestCommentary', label: 'Latest commentary' },
+    { key: 'fullCommentaryTab', label: 'Full commentary section' },
+    { key: 'scorecardHead', label: 'Innings scorecard header' },
+    { key: 'scorecardWrapper', label: 'Innings scorecard details' },
+    { key: 'teamNameAndScore', label: 'Scorecard team and total' },
+    { key: 'scorecardOvers', label: 'Scorecard overs' },
+    { key: 'scorecardSelectedTeam', label: 'Selected commentary team' },
+    { key: 'teamRosterRoot', label: 'Team Members content' },
+    { key: 'teamRosterHeader', label: 'Team Members profile link' },
+  ];
+
+  const saveSelectors = () => {
+    localStorage.setItem(selectorStorageKey, JSON.stringify(selectors));
+    window.postMessage({ source: 'CRICHEROES_SYNC_CONFIG', data: { selectors } }, window.location.origin);
+    setStatus('Sending custom selectors to the extension…');
+  };
+
+  return (
+    <details className="scoring-admin__sync-config">
+      <summary>Advanced CricHeroes selectors <span>CSS classes and elements</span></summary>
+      <p className="scoring-admin__hint">Customize the CSS selectors used to find CricHeroes page elements. Enter a class such as .scoreWrapper, an ID such as #scorecard, or any CSS selector. Changes apply on the next extension poll.</p>
+      <div className="scoring-admin__selector-grid">
+        {selectorFields.map(field => (
+          <label className="scoring-admin__field" key={field.key}>
+            <span className="scoring-admin__field-label">{field.label} CSS selector</span>
+            <input
+              className="scoring-admin__input"
+              value={selectors[field.key]}
+              onChange={event => setSelectors(current => ({ ...current, [field.key]: event.target.value }))}
+              placeholder=".className, #elementId, or [attribute]"
+            />
+          </label>
+        ))}
+      </div>
+      <div className="scoring-admin__form-actions">
+        <button className="scoring-admin__btn scoring-admin__btn--primary" onClick={saveSelectors}>Save custom selectors</button>
+        {status && <span className="scoring-admin__hint" role="status">{status}</span>}
+      </div>
+    </details>
+  );
+}
+
+function CricHeroesSyncPanel({ match, teams, soldPlayers, sync, nameMappings, setNameMappings }: Readonly<{
+  match: MatchSetup | null;
+  teams: { id: string; name: string; logoUrl?: string; primaryColor?: string }[];
+  soldPlayers: SoldPlayer[];
+  sync: CricHeroesSyncState;
+  nameMappings: CricHeroesNameMappings;
+  setNameMappings: React.Dispatch<React.SetStateAction<CricHeroesNameMappings>>;
+}>) {
+  const { latest: source, scorecards, teamRosters, logs, bridgeReady, clearLogs, commentaryHistory } = sync;
+  const mappingStorageKey = `cricheroes-player-maps:${getActiveTenant()}:${match?.id || 'auto'}`;
+  const fullSquadPreferenceKey = `cricheroes-full-squad-mapping:${getActiveTenant()}`;
+  const [lineups, setLineups] = useState<{ teamA: MatchSquadPlayer[]; teamB: MatchSquadPlayer[] }>({ teamA: [], teamB: [] });
+  const [legacyMappings, setLegacyMappings] = useState<Record<string, string>>({});
+  const [mapFullSquad, setMapFullSquad] = useState(() => localStorage.getItem(fullSquadPreferenceKey) === 'true');
+
+  useEffect(() => {
+    if (!match) {
+      setLineups({ teamA: [], teamB: [] });
+      return;
+    }
     let cancelled = false;
     const loadLineups = async () => {
-      const match = matches.find(item => item.id === matchId);
-      if (!match) return;
       let teamA: MatchLineup | null = null;
       let teamB: MatchLineup | null = null;
       try {
         [teamA, teamB] = await Promise.all([
-          scoringService.getLineup(matchId, match.teamA.id),
-          scoringService.getLineup(matchId, match.teamB.id),
+          scoringService.getLineup(match.id, match.teamA.id),
+          scoringService.getLineup(match.id, match.teamB.id),
         ]);
       } catch { /* use auction rosters when saved match lineups are unavailable */ }
       const fromAuction = (teamId: string, teamName: string): MatchSquadPlayer[] => soldPlayers
@@ -1287,74 +1490,102 @@ function CricHeroesSyncPanel({ matches, soldPlayers }: Readonly<{
     };
     void loadLineups();
     return () => { cancelled = true; };
-  }, [matchId, matches, soldPlayers]);
+  }, [match?.id, match?.teamA.id, match?.teamB.id, match?.teamA.name, match?.teamB.name, soldPlayers]);
 
   useEffect(() => {
     try {
       const saved = localStorage.getItem(mappingStorageKey);
-      setMappings(saved ? JSON.parse(saved) as Record<string, string> : {});
+      setLegacyMappings(saved ? JSON.parse(saved) as Record<string, string> : {});
     } catch {
-      setMappings({});
+      setLegacyMappings({});
     }
   }, [mappingStorageKey]);
 
-  const saveMapping = (key: string, playerId: string) => {
-    const next = { ...mappings, [key]: playerId };
-    setMappings(next);
-    localStorage.setItem(mappingStorageKey, JSON.stringify(next));
+  const saveAlias = (kind: 'teamAliases' | 'playerAliases', sourceName: string, targetId: string, legacyKey?: string) => {
+    const aliasKey = normalizeCricHeroesName(sourceName);
+    if (!aliasKey) return;
+    const nextAliases = { ...nameMappings[kind] };
+    if (targetId) nextAliases[aliasKey] = targetId;
+    else delete nextAliases[aliasKey];
+    const nextMappings = { ...nameMappings, [kind]: nextAliases };
+    setNameMappings(nextMappings);
+    localStorage.setItem(getCricHeroesNameMappingsKey(), JSON.stringify(nextMappings));
+    if (legacyKey && match) {
+      const nextLegacyMappings = { ...legacyMappings, [legacyKey]: targetId };
+      setLegacyMappings(nextLegacyMappings);
+      localStorage.setItem(mappingStorageKey, JSON.stringify(nextLegacyMappings));
+    }
   };
-
-  const saveSelectors = () => {
-    localStorage.setItem(selectorStorageKey, JSON.stringify(selectors));
-    window.postMessage({ source: 'CRICHEROES_SYNC_CONFIG', data: { selectors } }, window.location.origin);
-    setSelectorStatus('Sending selector settings to the extension…');
-  };
-
-  const selectorFields: Array<{ key: keyof SelectorConfig; label: string }> = [
-    { key: 'teamContainers', label: 'Team score containers' },
-    { key: 'teamName', label: 'Team name' },
-    { key: 'teamActive', label: 'Active batting team marker' },
-    { key: 'teamOvers', label: 'Team overs' },
-    { key: 'batterTable', label: 'Batting scorecard table' },
-    { key: 'bowlerTable', label: 'Bowling scorecard table' },
-    { key: 'latestCommentary', label: 'Latest commentary' },
-    { key: 'fullCommentaryTab', label: 'Full commentary section' },
-  ];
 
   const teamSide = (teamName: string): 'teamA' | 'teamB' | null => {
-    const normalized = teamName.trim().toLocaleLowerCase();
-    if (!selectedMatch || !normalized) return null;
-    if (selectedMatch.teamA.name.toLocaleLowerCase() === normalized) return 'teamA';
-    if (selectedMatch.teamB.name.toLocaleLowerCase() === normalized) return 'teamB';
+    if (!match || !teamName) return null;
+    const aliasId = nameMappings.teamAliases[normalizeCricHeroesName(teamName)];
+    if (aliasId === match.teamA.id || normalizeCricHeroesName(match.teamA.name) === normalizeCricHeroesName(teamName)) return 'teamA';
+    if (aliasId === match.teamB.id || normalizeCricHeroesName(match.teamB.name) === normalizeCricHeroesName(teamName)) return 'teamB';
     return null;
   };
-  const battingSide = teamSide(source?.battingTeam || '')
-    || (teamSide(source?.bowlingTeam || '') === 'teamA' ? 'teamB' : 'teamA');
-  const bowlingSide = battingSide === 'teamA' ? 'teamB' : 'teamA';
-  const rows = [
-    { key: 'striker', label: 'Striker', sourceName: source?.striker || '', players: lineups[battingSide] },
-    { key: 'nonStriker', label: 'Non-striker', sourceName: source?.nonStriker || '', players: lineups[battingSide] },
-    { key: 'bowler', label: 'Bowler', sourceName: source?.bowler || '', players: lineups[bowlingSide] },
+
+  const battingSide: 'teamA' | 'teamB' | null = teamSide(source?.battingTeam || '')
+    || (teamSide(source?.bowlingTeam || '') === 'teamA' ? 'teamB' : teamSide(source?.bowlingTeam || '') === 'teamB' ? 'teamA' : null);
+  const bowlingSide: 'teamA' | 'teamB' | null = battingSide ? (battingSide === 'teamA' ? 'teamB' : 'teamA') : null;
+  const allRosterPlayers = [...lineups.teamA, ...lineups.teamB];
+  const playersForSide = (side: 'teamA' | 'teamB' | null) => side ? lineups[side] : [];
+  const currentPlayerRows = [
+    { key: 'striker', label: 'Striker', sourceName: source?.striker || '', side: battingSide },
+    { key: 'nonStriker', label: 'Non-striker', sourceName: source?.nonStriker || '', side: battingSide },
+    { key: 'bowler', label: 'Bowler', sourceName: source?.bowler || '', side: bowlingSide },
   ];
+  const playerRows = new Map<string, { key: string; label: string; sourceName: string; side: 'teamA' | 'teamB' | null; legacyKey?: string }>();
+  for (const row of currentPlayerRows) {
+    const key = normalizeCricHeroesName(row.sourceName);
+    if (key) playerRows.set(key, { ...row, legacyKey: row.key });
+  }
+  if (mapFullSquad && source) {
+    const selectedScorecard = source.scorecards?.find(innings => innings.inningsNumber === source.inningsNumber);
+    const scorecardBatsmen = selectedScorecard?.batsmen || source.batsmen;
+    const scorecardBowlers = selectedScorecard?.bowlers || source.bowlers;
+    for (const batter of scorecardBatsmen) {
+      const key = normalizeCricHeroesName(batter.name);
+      if (key && !playerRows.has(key)) playerRows.set(key, { key: `squad-${key}`, label: 'Squad batter', sourceName: batter.name, side: battingSide });
+    }
+    for (const bowler of scorecardBowlers) {
+      const key = normalizeCricHeroesName(bowler.name);
+      if (key && !playerRows.has(key)) playerRows.set(key, { key: `squad-${key}`, label: 'Squad bowler', sourceName: bowler.name, side: bowlingSide });
+    }
+  }
+
+  const findExactPlayer = (name: string, players: MatchSquadPlayer[]) =>
+    players.find(player => normalizeCricHeroesName(player.playerName) === normalizeCricHeroesName(name))?.playerId || '';
+  const rosterTeamOptions = match ? [match.teamA, match.teamB] : teams;
+  const resolveRosterTeamId = (teamName: string) => {
+    const aliasId = nameMappings.teamAliases[normalizeCricHeroesName(teamName)];
+    if (aliasId && rosterTeamOptions.some(team => team.id === aliasId)) return aliasId;
+    return rosterTeamOptions.find(team => normalizeCricHeroesName(team.name) === normalizeCricHeroesName(teamName))?.id || '';
+  };
+  const playersForRosterTeam = (teamId: string) => {
+    const lineup = match?.teamA.id === teamId ? lineups.teamA : match?.teamB.id === teamId ? lineups.teamB : null;
+    if (lineup?.length) return lineup;
+    return soldPlayers.filter(player => player.teamId === teamId).map((player, index) => ({
+      playerId: player.id,
+      playerName: player.name,
+      role: player.role || 'Player',
+      battingOrder: index + 1,
+    }));
+  };
 
   return (
     <div className="scoring-admin__form-card scoring-admin__sync-card">
-      <h3 className="scoring-admin__subsection-title">CricHeroes Browser Sync</h3>
-      <p className="scoring-admin__hint">Keep the CricHeroes scorecard and this app open in the same Chrome profile. Source names appear on the left; map each one to this match's roster on the right.</p>
-      <div className="scoring-admin__sync-download-row">
-        <a className="scoring-admin__btn scoring-admin__btn--primary" href="/cricheroes-live-sync.zip" download="cricheroes-live-sync.zip">Download Chrome extension</a>
-        <span>ZIP download → extract → chrome://extensions → Developer mode → Load unpacked</span>
-      </div>
+      <h3 className="scoring-admin__subsection-title">CricHeroes Browser Sync{match ? ` - ${match.teamA.name} vs ${match.teamB.name}` : ''}</h3>
+      <p className="scoring-admin__hint">Live feed details are logged below. Map CricHeroes team/player names to app names once; tenant-level aliases are reused across matches.</p>
       <div className="scoring-admin__sync-toolbar">
-        <label className="scoring-admin__field">
-          <span className="scoring-admin__field-label">Roster match (optional)</span>
-          <select className="scoring-admin__select" value={matchId} onChange={event => setMatchId(event.target.value)}>
-            <option value="">Skip roster mapping for feed test</option>
-            {matches.map(match => <option key={match.id} value={match.id}>{match.teamA.name} vs {match.teamB.name} ({match.status})</option>)}
-          </select>
-        </label>
-        <span className={`scoring-admin__sync-status ${source ? 'is-live' : ''}`}>
-          <span />{source ? 'Receiving CricHeroes data' : 'Waiting for browser feed'}
+        <span className={`scoring-admin__sync-status ${bridgeReady ? 'is-live' : ''}`}>
+          <span />{source && bridgeReady
+            ? 'Receiving CricHeroes data'
+            : bridgeReady
+              ? 'Extension connected - waiting for score'
+              : source
+                ? 'Extension disconnected - last score received'
+                : 'Waiting for extension connection'}
         </span>
       </div>
 
@@ -1367,8 +1598,99 @@ function CricHeroesSyncPanel({ matches, soldPlayers }: Readonly<{
         </div>
       )}
 
-      <details className="scoring-admin__sync-console" open>
+      {scorecards.length > 0 && (
+        <details className="scoring-admin__sync-console">
+          <summary>Captured innings scorecards <span>{scorecards.length} innings · selected {source?.inningsNumber || 'not identified'}</span></summary>
+          <div className="scoring-admin__sync-console-output">
+            {scorecards.map(innings => (
+              <section key={`${innings.inningsNumber}-${innings.battingTeam}`}>
+                <strong>{innings.inningsNumber}. {innings.battingTeam} {innings.runs ?? '—'}/{innings.wickets ?? '—'} ({innings.overs ?? '—'} ov)</strong>
+                <span>{innings.statsComplete ? 'Player figures complete' : 'Some canvas-rendered figures are unavailable to the extension; those values are not imported as zero.'}</span>
+                {innings.extras !== null && <span>Extras {innings.extras} (WD {innings.extrasBreakdown.wides ?? '—'}, NB {innings.extrasBreakdown.noBalls ?? '—'}, B {innings.extrasBreakdown.byes ?? '—'}, LB {innings.extrasBreakdown.legByes ?? '—'})</span>}
+                {innings.batsmen.map(player => (
+                  <span key={`bat-${player.name}`}>Bat: {player.name} {player.runs ?? '—'} ({player.balls ?? '—'}) · {player.dismissal || (player.isOut ? 'out' : 'not out')}</span>
+                ))}
+                {innings.bowlers.map(player => (
+                  <span key={`bowl-${player.name}`}>Bowl: {player.name} {player.overs ?? '—'}-{player.maidens ?? '—'}-{player.runs ?? '—'}-{player.wickets ?? '—'} · Eco {player.economy ?? '—'}</span>
+                ))}
+                {innings.fallOfWickets && <span>{innings.fallOfWickets}</span>}
+                {innings.yetToBat && <span>{innings.yetToBat}</span>}
+              </section>
+            ))}
+          </div>
+        </details>
+      )}
+
+      <details className="scoring-admin__sync-console" open={teamRosters.length === 0}>
+        <summary>Team roster capture and mapping <span>{teamRosters.length} saved CricHeroes teams</span></summary>
+        <p>One-time roster setup:</p>
+        <ol className="scoring-admin__roster-steps">
+          <li>In the extension popup, enable Teams and save the setting.</li>
+          <li>Open each CricHeroes team profile’s Members tab once while this Providers page is open.</li>
+          <li>Map each captured team, then map its players. Name aliases are saved for this tenant and reused later.</li>
+        </ol>
+        {teamRosters.length === 0 ? (
+          <p className="scoring-admin__sync-empty">No roster received yet. Open a CricHeroes URL ending in /team-profile/.../members and wait for its player cards to load.</p>
+        ) : (
+          <div className="scoring-admin__sync-console-output">
+            {teamRosters.map(roster => {
+              const appTeamId = resolveRosterTeamId(roster.teamName);
+              const appPlayers = playersForRosterTeam(appTeamId);
+              return (
+                <section key={roster.sourceTeamId}>
+                  <strong>{roster.teamName} <span>· {roster.players.length} players · ID {roster.sourceTeamId}</span></strong>
+                  <span>Captured {roster.capturedAt ? new Date(roster.capturedAt).toLocaleString() : 'time unavailable'}</span>
+                  <div className="scoring-admin__mapping-row">
+                    <div className="scoring-admin__mapping-source"><span>App team</span><strong>Link this CricHeroes squad</strong></div>
+                    <select
+                      className="scoring-admin__select"
+                      value={appTeamId}
+                      onChange={event => saveAlias('teamAliases', roster.teamName, event.target.value)}
+                      aria-label={`Map CricHeroes team ${roster.teamName} to an app team`}
+                      disabled={rosterTeamOptions.length === 0}
+                    >
+                      <option value="">Select app team</option>
+                      {rosterTeamOptions.map(team => <option key={team.id} value={team.id}>{team.name}</option>)}
+                    </select>
+                  </div>
+                  {roster.players.map(player => {
+                    const aliasId = nameMappings.playerAliases[normalizeCricHeroesName(player.name)];
+                    const exactId = findExactPlayer(player.name, appPlayers);
+                    const playerId = [aliasId, exactId].find(id => id && appPlayers.some(appPlayer => appPlayer.playerId === id)) || '';
+                    return (
+                      <div className="scoring-admin__mapping-row" key={`${roster.sourceTeamId}-${player.sourcePlayerId}`}>
+                        <div className="scoring-admin__mapping-source">
+                          <span>{player.badges.length ? player.badges.join(' · ') : `CricHeroes ID ${player.sourcePlayerId}`}</span>
+                          <strong>{player.name}</strong>
+                        </div>
+                        <select
+                          className="scoring-admin__select"
+                          value={playerId}
+                          onChange={event => saveAlias('playerAliases', player.name, event.target.value)}
+                          aria-label={`Map CricHeroes player ${player.name} to an app player`}
+                          disabled={!appPlayers.length}
+                        >
+                          <option value="">Select app player</option>
+                          {appPlayers.map(appPlayer => <option key={appPlayer.playerId} value={appPlayer.playerId}>{appPlayer.playerName}</option>)}
+                        </select>
+                      </div>
+                    );
+                  })}
+                  {!appTeamId && <span>Choose an app team to load its players for mapping.</span>}
+                  {appTeamId && !appPlayers.length && <span>No app squad players found for this team; add its lineup or auction roster to enable player mapping.</span>}
+                  {!rosterTeamOptions.length && <span>No app teams are available yet. Add the tournament teams before mapping CricHeroes squads.</span>}
+                </section>
+              );
+            })}
+          </div>
+        )}
+      </details>
+
+      <details className="scoring-admin__sync-console">
         <summary>Extension feed console <span>{logs.length} entries</span></summary>
+        <div className="scoring-admin__sync-console-actions">
+          <button className="scoring-admin__sync-clear" type="button" onClick={clearLogs} disabled={logs.length === 0}>Clear logs</button>
+        </div>
         <div className="scoring-admin__sync-console-output" role="log" aria-live="polite">
           {logs.map((entry, index) => (
             <div key={`${entry.timestamp}-${index}`}>
@@ -1377,48 +1699,96 @@ function CricHeroesSyncPanel({ matches, soldPlayers }: Readonly<{
             </div>
           ))}
         </div>
-        {!source && <p>Waiting for a score payload. If no relay entry appears, check the CricHeroes tab console and confirm this app's origin is allowed in the extension manifest.</p>}
+        {!source && <p className={bridgeReady ? 'is-connected' : ''}>
+          {bridgeReady
+            ? 'Extension connected. Open a CricHeroes scorecard tab; score details will appear here when a feed arrives.'
+            : 'Waiting for the extension bridge. Confirm the extension is enabled and reload this app tab.'}
+        </p>}
       </details>
 
-      <details className="scoring-admin__sync-config">
-        <summary>Scraper selectors <span>Advanced</span></summary>
-        <p className="scoring-admin__hint">Update the CSS selectors used on CricHeroes. Changes are stored in this browser extension and apply on the next poll; they do not rewrite content.js.</p>
-        <div className="scoring-admin__selector-grid">
-          {selectorFields.map(field => (
-            <label className="scoring-admin__field" key={field.key}>
-              <span className="scoring-admin__field-label">{field.label}</span>
-              <input className="scoring-admin__input" value={selectors[field.key]} onChange={event => setSelectors(current => ({ ...current, [field.key]: event.target.value }))} />
-            </label>
+      <details className="scoring-admin__sync-console">
+        <summary>Commentary catch-up queue <span>Innings {source?.inningsNumber || '—'} · {source?.battingTeam || 'waiting'} · {commentaryHistory.length} deliveries</span></summary>
+        <div className="scoring-admin__sync-console-output" role="log">
+          {commentaryHistory.map(delivery => (
+            <div key={delivery.key}>
+              <time>{delivery.over}.{delivery.ball}</time>
+              <span>{delivery.bowler} to {delivery.batter}: {delivery.text}</span>
+            </div>
           ))}
-        </div>
-        <div className="scoring-admin__form-actions">
-          <button className="scoring-admin__btn scoring-admin__btn--primary" onClick={saveSelectors}>Save extension selectors</button>
-          {selectorStatus && <span className="scoring-admin__hint">{selectorStatus}</span>}
+          {commentaryHistory.length === 0 && <span>No over.ball commentary markers found yet.</span>}
         </div>
       </details>
 
       <div className="scoring-admin__mapping-table">
-        <div className="scoring-admin__mapping-head"><span>CricHeroes player</span><span>Match roster player</span></div>
-        {rows.map(row => (
-          <div className="scoring-admin__mapping-row" key={row.key}>
-            <div className="scoring-admin__mapping-source">
-              <span>{row.label}</span>
-              <strong>{row.sourceName || 'Waiting for source name'}</strong>
+        <div className="scoring-admin__mapping-head"><span>CricHeroes team</span><span>App team</span></div>
+        {[
+          { label: 'Batting team', sourceName: source?.battingTeam || '' },
+          { label: 'Bowling team', sourceName: source?.bowlingTeam || '' },
+        ].map(row => {
+          const teamOptions = match ? [match.teamA, match.teamB] : teams;
+          const exactTeamId = match && normalizeCricHeroesName(match.teamA.name) === normalizeCricHeroesName(row.sourceName)
+            ? match.teamA.id
+            : match && normalizeCricHeroesName(match.teamB.name) === normalizeCricHeroesName(row.sourceName)
+              ? match.teamB.id
+              : '';
+          const value = nameMappings.teamAliases[normalizeCricHeroesName(row.sourceName)] || exactTeamId;
+          return (
+            <div className="scoring-admin__mapping-row" key={row.label}>
+              <div className="scoring-admin__mapping-source"><span>{row.label}</span><strong>{row.sourceName || 'Waiting for team name'}</strong></div>
+              <select
+                className="scoring-admin__select"
+                value={value}
+                onChange={event => saveAlias('teamAliases', row.sourceName, event.target.value)}
+                aria-label={`Map CricHeroes ${row.label.toLowerCase()} to app team`}
+                disabled={!teamOptions.length || !row.sourceName}
+              >
+                <option value="">Select app team</option>
+                {teamOptions.map(team => <option key={team.id} value={team.id}>{team.name}</option>)}
+              </select>
             </div>
-            <select
-              className="scoring-admin__select"
-              value={mappings[row.key] || ''}
-              onChange={event => saveMapping(row.key, event.target.value)}
-              aria-label={`Match ${row.label.toLowerCase()} to roster player`}
-              disabled={!selectedMatch || !row.players.length}
-            >
-              <option value="">Select roster player</option>
-              {row.players.map(player => <option key={player.playerId} value={player.playerId}>{player.playerName}</option>)}
-            </select>
-          </div>
-        ))}
+          );
+        })}
       </div>
-      {selectedMatch && lineups.teamA.length + lineups.teamB.length === 0 && (
+
+      <label className="scoring-admin__checkbox-row">
+        <input type="checkbox" checked={mapFullSquad} onChange={event => {
+          setMapFullSquad(event.target.checked);
+          localStorage.setItem(fullSquadPreferenceKey, String(event.target.checked));
+        }} />
+        <span>Enable full squad mapping (all batters and bowlers returned by CricHeroes)</span>
+      </label>
+      <div className="scoring-admin__mapping-table">
+        <div className="scoring-admin__mapping-head"><span>CricHeroes player</span><span>App player</span></div>
+        {[...playerRows.values()].map(row => {
+          const players = playersForSide(row.side);
+          const normalizedName = normalizeCricHeroesName(row.sourceName);
+          const aliasId = nameMappings.playerAliases[normalizedName];
+          const exactId = findExactPlayer(row.sourceName, players);
+          const legacyId = row.legacyKey ? legacyMappings[row.legacyKey] : '';
+          const mappedPlayerId = [aliasId, legacyId, exactId].find(id => id && players.some(player => player.playerId === id)) || '';
+          return (
+            <div className="scoring-admin__mapping-row" key={row.key}>
+              <div className="scoring-admin__mapping-source"><span>{row.label}</span><strong>{row.sourceName}</strong></div>
+              <select
+                className="scoring-admin__select"
+                value={mappedPlayerId}
+                onChange={event => saveAlias('playerAliases', row.sourceName, event.target.value, row.legacyKey)}
+                aria-label={`Map CricHeroes ${row.label.toLowerCase()} ${row.sourceName} to app player`}
+                disabled={!match || !players.length}
+              >
+                <option value="">Select app player</option>
+                {players.map(player => <option key={player.playerId} value={player.playerId}>{player.playerName}</option>)}
+              </select>
+            </div>
+          );
+        })}
+        {playerRows.size === 0 && <p className="scoring-admin__sync-empty">Waiting for CricHeroes player names. Enable full squad mapping to map all names in the scorecard.</p>}
+      </div>
+      {!match && <p className="scoring-admin__sync-empty">Select a match above to map CricHeroes team and player names. Live feed details continue to appear in the log.</p>}
+      {match && !battingSide && source && (
+        <p className="scoring-admin__sync-empty">Map the CricHeroes batting and bowling teams above to filter player choices to each team.</p>
+      )}
+      {match && allRosterPlayers.length === 0 && (
         <p className="scoring-admin__sync-empty">No roster players found for this match. Add match lineups or assign auction players to both teams.</p>
       )}
     </div>
