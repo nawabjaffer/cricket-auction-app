@@ -27,6 +27,7 @@
 .player-image-editor__hint kbd { display: inline-block; margin: 0 .12rem; padding: .05rem .25rem; border: 1px solid #bfdbfe; border-bottom-width: 2px; border-radius: 3px; background: #fff; color: #1e3a8a; font: .65rem ui-monospace, SFMono-Regular, monospace; }
 .player-image-editor__readout { display: flex; align-items: center; gap: 1rem; color: #475569; font-size: .75rem; }
 .player-image-editor__readout strong { color: #1e3a8a; font-variant-numeric: tabular-nums; }
+.player-image-editor__flip-controls { display: flex; align-items: center; gap: 1rem; }
 .player-image-editor__toggle { display: flex !important; grid-template-columns: 1fr auto; align-items: center; gap: .5rem; color: #334155; font-size: .75rem; }
 .player-image-editor__toggle input { width: auto; accent-color: #2563eb; }
 .player-image-editor__actions { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }

@@ -4,7 +4,8 @@ import { playerRegistrationService } from '../../services/playerRegistrationServ
 import { uploadFileToStorage } from '../../services/firebaseStorageService';
 import { getActiveTenant } from '../../services/tenantPath';
 import { tenantService } from '../../services/tenantService';
-import { applyRegistrationSport, DEFAULT_REGISTRATION_CONFIG, type PlayerRegistrationConfig, type RegistrationField, type RegistrationFieldType, type RegistrationSport } from '../../types/playerRegistration';
+import { auctionPersistence } from '../../services/auctionPersistence';
+import { applyRegistrationSport, applyRegistrationTeams, DEFAULT_REGISTRATION_CONFIG, type PlayerRegistrationConfig, type RegistrationField, type RegistrationFieldType, type RegistrationSport } from '../../types/playerRegistration';
 import './RegistrationFormSettings.css';
 
 const FIELD_TYPES: RegistrationFieldType[] = ['text', 'textarea', 'number', 'date', 'select', 'phone', 'email'];
@@ -22,12 +23,13 @@ export function RegistrationFormSettings() {
   const [tenantSport, setTenantSport] = useState<RegistrationSport>('cricket');
 
   useEffect(() => {
-    Promise.all([playerRegistrationService.getConfig(), tenantService.getTenant(getActiveTenant())]).then(([saved, tenant]) => {
+    Promise.all([playerRegistrationService.getConfig(), tenantService.getTenant(getActiveTenant()), auctionPersistence.getTeams()]).then(([saved, tenant, teams]) => {
       const resolvedSport = (saved?.sport ?? tenant?.primarySport ?? tenant?.sports?.[0] ?? 'cricket') as RegistrationSport;
+      const teamOptions = (teams ?? []).map(team => ({ id: team.id, name: team.name }));
       setTenantSport(resolvedSport);
       setConfig(saved
-        ? { ...saved, sport: resolvedSport, fields: applyRegistrationSport(saved.fields, resolvedSport) }
-        : { ...DEFAULT_REGISTRATION_CONFIG, sport: resolvedSport, fields: applyRegistrationSport(DEFAULT_REGISTRATION_CONFIG.fields, resolvedSport) });
+        ? { ...saved, sport: resolvedSport, fields: applyRegistrationTeams(applyRegistrationSport(saved.fields, resolvedSport), teamOptions) }
+        : { ...DEFAULT_REGISTRATION_CONFIG, sport: resolvedSport, fields: applyRegistrationTeams(applyRegistrationSport(DEFAULT_REGISTRATION_CONFIG.fields, resolvedSport), teamOptions) });
     }).catch(error => {
       console.error('[RegistrationFormSettings] Failed to load config:', error);
       setStatus('Could not load registration settings.');
@@ -88,6 +90,9 @@ export function RegistrationFormSettings() {
     }
   };
 
+  const paymentConfigured = config.payment.amount > 0
+    && Boolean(config.payment.gateway && config.payment.gatewayMerchantId && config.payment.merchantId && config.payment.merchantName);
+
   if (loading) return <div className="registration-settings">Loading registration form…</div>;
 
   return (
@@ -115,7 +120,8 @@ export function RegistrationFormSettings() {
             <input value={field.label} onChange={e => updateField(field.id, { label: e.target.value })} aria-label="Field label" />
             <select value={field.type} onChange={e => updateField(field.id, { type: e.target.value as RegistrationFieldType })} aria-label="Field type">{FIELD_TYPES.map(type => <option key={type} value={type}>{type}</option>)}</select>
             <label className="registration-settings__required"><input type="checkbox" checked={field.required} disabled={Boolean(field.systemKey)} onChange={e => updateField(field.id, { required: e.target.checked })} /> Required</label>
-            <button type="button" aria-label="Remove field" onClick={() => setConfig(current => ({ ...current, fields: current.fields.filter(item => item.id !== field.id) }))} disabled={Boolean(field.systemKey)}><IoTrash /></button>
+            <button type="button" aria-label="Remove field" onClick={() => setConfig(current => ({ ...current, fields: current.fields.filter(item => item.id !== field.id) }))} disabled={Boolean(field.systemKey && field.systemKey !== 'team')}><IoTrash /></button>
+            {field.type === 'select' && <input className="registration-settings__options" value={(field.options ?? []).join(', ')} disabled={field.systemKey === 'role' || field.systemKey === 'team'} onChange={e => updateField(field.id, { options: e.target.value.split(',').map(option => option.trim()).filter(Boolean) })} placeholder="Options separated by commas" aria-label="Select options" />}
           </div>
         ))}
       </div>
@@ -123,6 +129,7 @@ export function RegistrationFormSettings() {
         <h4>Google Pay</h4>
         <label className="registration-settings__switch"><input type="checkbox" checked={config.payment.enabled} onChange={e => setConfig(current => ({ ...current, payment: { ...current.payment, enabled: e.target.checked } }))} /> Require payment before registration</label>
         <small>{config.payment.enabled && !config.payment.bypassForTesting ? 'Payment is required.' : 'Testing mode: players can register without payment.'} Turn payment off for free registration.</small>
+        <small className={config.payment.enabled && !config.payment.bypassForTesting && !paymentConfigured ? 'registration-settings__payment-warning' : 'registration-settings__payment-ready'}>{config.payment.enabled && !config.payment.bypassForTesting ? (paymentConfigured ? 'Gateway is configured. The payment screen will appear on /register.' : 'Gateway setup incomplete. Add amount, gateway, gateway merchant ID, merchant ID, and merchant name to activate payment.') : 'Payment gate is inactive.'}</small>
         <label className="registration-settings__switch"><input type="checkbox" checked={Boolean(config.payment.bypassForTesting)} onChange={e => setConfig(current => ({ ...current, payment: { ...current.payment, bypassForTesting: e.target.checked } }))} /> Temporary testing bypass</label>
         <div className="registration-settings__grid">
           <label>Amount (INR)<input type="number" min="0" value={config.payment.amount} onChange={e => setConfig(current => ({ ...current, payment: { ...current.payment, amount: Number(e.target.value) || 0 } }))} /></label>

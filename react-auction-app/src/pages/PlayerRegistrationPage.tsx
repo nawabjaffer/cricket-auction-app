@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { IoCamera, IoCheckmarkCircle, IoCloudUploadOutline, IoLockClosed } from 'react-icons/io5';
+import { IoCamera, IoCheckmarkCircle, IoCloudUploadOutline, IoLockClosed, IoRemoveCircleOutline } from 'react-icons/io5';
 import { playerRegistrationService } from '../services/playerRegistrationService';
 import { getActiveTenant } from '../services/tenantPath';
 import { tenantService } from '../services/tenantService';
-import { applyRegistrationSport, DEFAULT_PHOTO_GUIDE_URL, DEFAULT_REGISTRATION_CONFIG, type PlayerRegistrationConfig, type RegistrationField, type RegistrationSport } from '../types/playerRegistration';
+import { auctionPersistence } from '../services/auctionPersistence';
+import { applyRegistrationSport, applyRegistrationTeams, DEFAULT_PHOTO_GUIDE_URL, DEFAULT_REGISTRATION_CONFIG, type PlayerRegistrationConfig, type RegistrationField, type RegistrationSport } from '../types/playerRegistration';
 import { uploadFileToStorage } from '../services/firebaseStorageService';
 import { processPlayerImage } from '../services/playerBackgroundRemovalService';
 import { PlayerImageEditor } from '../components/AdminPanel/PlayerImageEditor';
@@ -28,10 +29,15 @@ function PhotoGuide({ onFile, guideUrl }: Readonly<{ onFile: (file: File) => voi
   return <div className="registration-photo"><div className="registration-photo__guide"><img src={guideUrl || DEFAULT_PHOTO_GUIDE_URL} alt="Portrait placement guide" /></div><p>Stand straight, face the camera, and keep your full body inside the outline.</p><label className="registration-photo__button"><IoCamera size={18} /> Take photo<input type="file" accept="image/*" capture="environment" hidden onChange={e => { const file = e.target.files?.[0]; if (file) onFile(file); }} /></label><label className="registration-photo__button registration-photo__button--secondary"><IoCloudUploadOutline size={18} /> Upload photo<input type="file" accept="image/*" hidden onChange={e => { const file = e.target.files?.[0]; if (file) onFile(file); }} /></label></div>;
 }
 
+function RegistrationTenantBrand({ logoUrl, tenantSlug }: Readonly<{ logoUrl?: string; tenantSlug: string }>) {
+  return <div className="registration-brand">{logoUrl ? <img src={logoUrl} alt={`${tenantSlug} logo`} /> : <span>{tenantSlug}</span>}</div>;
+}
+
 export default function PlayerRegistrationPage() {
   const { tenantSlug = '' } = useParams<{ tenantSlug: string }>();
   const [config, setConfig] = useState<PlayerRegistrationConfig>(DEFAULT_REGISTRATION_CONFIG);
   const [tenantSport, setTenantSport] = useState<RegistrationSport>('cricket');
+  const [tenantLogo, setTenantLogo] = useState('');
   const [values, setValues] = useState<Record<string, string>>({});
   const [photoUrl, setPhotoUrl] = useState('');
   const [photoPreview, setPhotoPreview] = useState('');
@@ -47,16 +53,21 @@ export default function PlayerRegistrationPage() {
   const [paymentReference, setPaymentReference] = useState('');
 
   useEffect(() => {
-    Promise.all([playerRegistrationService.getConfig(), tenantService.getTenant(getActiveTenant())]).then(([saved, tenant]) => {
+    Promise.all([playerRegistrationService.getConfig(), tenantService.getTenant(getActiveTenant()), auctionPersistence.getTeams()]).then(([saved, tenant, teams]) => {
       const resolvedSport = (saved?.sport ?? tenant?.primarySport ?? tenant?.sports?.[0] ?? 'cricket') as RegistrationSport;
+      const teamOptions = (teams ?? []).map(team => ({ id: team.id, name: team.name }));
       setTenantSport(resolvedSport);
-      if (saved) setConfig({ ...saved, fields: applyRegistrationSport(saved.fields, resolvedSport) });
-      else setConfig(current => ({ ...current, sport: resolvedSport, fields: applyRegistrationSport(current.fields, resolvedSport) }));
+      setTenantLogo(tenant?.logoUrl || '');
+      if (saved) setConfig({ ...saved, fields: applyRegistrationTeams(applyRegistrationSport(saved.fields, resolvedSport), teamOptions) });
+      else setConfig(current => ({ ...current, sport: resolvedSport, fields: applyRegistrationTeams(applyRegistrationSport(current.fields, resolvedSport), teamOptions) }));
     }).catch(() => setError('Registration form is temporarily unavailable.'));
   }, []);
   const registrationSport = config.sport ?? tenantSport;
+  const backgroundRemoved = photoProcessingLog.some(message => message.includes('successfully'));
   const fields = useMemo(() => applyRegistrationSport([...config.fields].sort((a, b) => a.order - b.order), registrationSport), [config.fields, registrationSport]);
-  const paymentRequired = config.payment.enabled && config.payment.amount > 0 && !config.payment.bypassForTesting;
+  const paymentRequired = config.payment.enabled && !config.payment.bypassForTesting;
+  const paymentConfigured = config.payment.amount > 0
+    && Boolean(config.payment.gateway && config.payment.gatewayMerchantId && config.payment.merchantId && config.payment.merchantName);
   const setValue = (field: RegistrationField, value: string) => setValues(current => ({ ...current, [field.id]: value }));
 
   useEffect(() => {
@@ -111,6 +122,7 @@ export default function PlayerRegistrationPage() {
       setAccessToken('not-required');
       return;
     }
+    if (!paymentConfigured) throw new Error('Payment is enabled, but the gateway and merchant details are not configured yet.');
     await loadGooglePayScript();
     const PaymentsClient = window.google?.payments?.api?.PaymentsClient;
     if (!PaymentsClient) throw new Error('Google Pay is unavailable on this device.');
@@ -150,9 +162,9 @@ export default function PlayerRegistrationPage() {
     } catch (submitError) { setError(submitError instanceof Error ? submitError.message : 'Registration failed.'); } finally { setBusy(false); }
   };
 
-  if (success) return <main className="registration-page"><section className="registration-card registration-card--success"><IoCheckmarkCircle size={64} /><h1>Registration complete</h1><p>{success}</p><strong>{tenantSlug}</strong></section></main>;
-  if (paymentRequired && !accessToken) return <main className="registration-page"><section className="registration-card registration-card--payment"><header><span className="registration-eyebrow">{tenantSlug}</span><h1>Registration access</h1><p>Complete the registration fee to unlock the player details form.</p></header><div className="registration-payment-summary"><span>Registration fee</span><strong>₹{config.payment.amount.toFixed(2)}</strong></div>{config.payment.qrCodeUrl && <img className="registration-payment-qr" src={config.payment.qrCodeUrl} alt="Scan to pay registration fee" />}{config.payment.upiId && <div className="registration-payment-detail"><span>UPI ID</span><strong>{config.payment.upiId}</strong><a href={`upi://pay?pa=${encodeURIComponent(config.payment.upiId)}&pn=${encodeURIComponent(config.payment.merchantName)}&am=${config.payment.amount.toFixed(2)}&cu=INR`}>Open UPI app</a></div>}{config.payment.paymentUrl && <a className="registration-payment-link" href={config.payment.paymentUrl} target="_blank" rel="noreferrer">Open payment page</a>}<button className="registration-submit" type="button" onClick={() => void handlePayment()} disabled={busy}><IoLockClosed size={17} />{busy ? 'Opening Google Pay…' : 'Pay with Google Pay'}</button>{error && <p className="registration-error">{error}</p>}<small className="registration-privacy">Google Pay success automatically unlocks the registration form. Payment links and QR codes still require gateway verification.</small></section></main>;
-  return <main className="registration-page"><section className="registration-card"><header><span className="registration-eyebrow">{tenantSlug}</span><h1>{config.title}</h1><p>{config.description}</p></header>{!config.enabled && <div className="registration-notice">Registration is currently closed.</div>}<form onSubmit={submit}>
+  if (success) return <main className="registration-page"><section className="registration-card registration-card--success"><RegistrationTenantBrand logoUrl={tenantLogo} tenantSlug={tenantSlug} /><IoCheckmarkCircle size={64} /><h1>Registration complete</h1><p>{success}</p><strong>{tenantSlug}</strong></section></main>;
+  if (paymentRequired && !accessToken) return <main className="registration-page"><section className="registration-card registration-card--payment"><RegistrationTenantBrand logoUrl={tenantLogo} tenantSlug={tenantSlug} /><header><span className="registration-eyebrow">{tenantSlug}</span><h1>Registration access</h1><p>Complete the registration fee to unlock the player details form.</p></header>{!paymentConfigured && <div className="registration-notice">Payment is enabled, but the gateway setup is incomplete. Please contact the tournament administrator.</div>}<div className="registration-payment-summary"><span>Registration fee</span><strong>₹{config.payment.amount.toFixed(2)}</strong></div>{config.payment.qrCodeUrl && <img className="registration-payment-qr" src={config.payment.qrCodeUrl} alt="Scan to pay registration fee" />}{config.payment.upiId && <div className="registration-payment-detail"><span>UPI ID</span><strong>{config.payment.upiId}</strong><a href={`upi://pay?pa=${encodeURIComponent(config.payment.upiId)}&pn=${encodeURIComponent(config.payment.merchantName)}&am=${config.payment.amount.toFixed(2)}&cu=INR`}>Open UPI app</a></div>}{config.payment.paymentUrl && <a className="registration-payment-link" href={config.payment.paymentUrl} target="_blank" rel="noreferrer">Open payment page</a>}<button className="registration-submit" type="button" onClick={() => void handlePayment()} disabled={busy || !paymentConfigured}><IoLockClosed size={17} />{busy ? 'Opening Google Pay…' : 'Pay with Google Pay'}</button>{error && <p className="registration-error">{error}</p>}<small className="registration-privacy">Google Pay success automatically unlocks the registration form. Payment links and QR codes still require gateway verification.</small></section></main>;
+  return <main className="registration-page"><section className="registration-card"><RegistrationTenantBrand logoUrl={tenantLogo} tenantSlug={tenantSlug} /><header><span className="registration-eyebrow">{tenantSlug}</span><h1>{config.title}</h1><p>{config.description}</p></header>{!config.enabled && <div className="registration-notice">Registration is currently closed.</div>}<form onSubmit={submit}>
     {fields.map(field => field.systemKey === 'photo' ? (photoUrl ? null : <PhotoGuide key={field.id} onFile={handlePhoto} guideUrl={config.photoGuideUrl} />) : <label className="registration-field" key={field.id}><span>{field.label}{field.required && ' *'}</span>{field.type === 'textarea' ? <textarea required={field.required} value={values[field.id] || ''} placeholder={field.placeholder} onChange={e => setValue(field, e.target.value)} /> : field.type === 'select' ? <select required={field.required} value={values[field.id] || ''} onChange={e => setValue(field, e.target.value)}><option value="">Select</option>{field.options?.map(option => <option key={option}>{option}</option>)}</select> : <input required={field.required} type={field.type === 'phone' ? 'tel' : field.type} value={values[field.id] || ''} placeholder={field.placeholder} onChange={e => setValue(field, e.target.value)} />}</label>)}
-    {photoPreview && photoUrl && <div className="registration-photo-editor"><div className="registration-photo-editor__heading"><strong>Adjust your auction photo</strong><span>Match the portrait to the guide before submitting.</span></div><img className="registration-photo__preview" src={photoPreview} alt="Selected player" />{photoProcessingLog.length > 0 && <div className="registration-photo-editor__log" role="status" aria-live="polite">{photoProcessingLog.map((message, index) => <div key={`${message}-${index}`}>{message}</div>)}</div>}{photoProcessingLog.some(message => message.includes('successfully')) && <div className="registration-photo-editor__success">✓ Background removed successfully. Your transparent image is ready for auction.</div>}<PlayerImageEditor imageUrl={photoUrl} sourceBlob={photoFile ?? undefined} edit={photoEdit} processing={processingPhoto} processingProgress={photoProcessingProgress} onChange={setPhotoEdit} onSaveImage={saveEditedPhoto} onRemoveBackground={() => { void removePhotoBackground(); }} /></div>}<button className="registration-submit" type="submit" disabled={busy || !config.enabled || processingPhoto}><IoLockClosed size={17} />{busy ? 'Submitting…' : 'Submit registration'}</button>{error && <p className="registration-error">{error}</p>}<small className="registration-privacy">Your registration is stored only for this tenant’s auction and match operations.</small></form></section></main>;
+    {photoPreview && photoUrl && <div className="registration-photo-editor"><div className="registration-photo-editor__heading"><strong>Adjust your auction photo</strong><span>Match the portrait to the guide before submitting.</span></div><div className="registration-photo-editor__photo-wrap"><img className="registration-photo__preview" src={photoPreview} alt="Selected player" />{!backgroundRemoved && <button type="button" className="registration-photo-editor__remove-button" onClick={() => { void removePhotoBackground(); }} disabled={processingPhoto}><IoRemoveCircleOutline size={15} /> {processingPhoto ? 'Removing...' : 'Remove background'}</button>}</div>{photoProcessingLog.length > 0 && <div className="registration-photo-editor__log" role="status" aria-live="polite">{photoProcessingLog.map((message, index) => <div key={`${message}-${index}`}>{message}</div>)}</div>}{backgroundRemoved && <div className="registration-photo-editor__success">✓ Background removed successfully. Your transparent image is ready for auction.</div>}<PlayerImageEditor imageUrl={photoUrl} sourceBlob={photoFile ?? undefined} edit={photoEdit} processing={processingPhoto} processingProgress={photoProcessingProgress} onChange={setPhotoEdit} onSaveImage={saveEditedPhoto} onRemoveBackground={backgroundRemoved ? undefined : () => { void removePhotoBackground(); }} /></div>}<button className="registration-submit" type="submit" disabled={busy || !config.enabled || processingPhoto}><IoLockClosed size={17} />{busy ? 'Submitting…' : 'Submit registration'}</button>{error && <p className="registration-error">{error}</p>}<small className="registration-privacy">Your registration is stored only for this tenant’s auction and match operations.</small></form></section></main>;
 }

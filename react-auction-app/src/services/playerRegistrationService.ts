@@ -1,7 +1,8 @@
 import { get, ref, set, type Database } from 'firebase/database';
 import { realtimeSync } from './realtimeSync';
 import { getActiveTenant, tenantPath } from './tenantPath';
-import type { Player } from '../types';
+import { auctionPersistence } from './auctionPersistence';
+import type { Player, Team } from '../types';
 import type { PlayerRegistration, PlayerRegistrationConfig } from '../types/playerRegistration';
 
 const CONFIG_PATH = 'auction/playerRegistrationConfig';
@@ -32,7 +33,7 @@ export function buildAuctionPlayerFromRegistration(registration: PlayerRegistrat
     phone: registration.phone || '',
     dateOfBirth: registration.dateOfBirth || '',
     referencePlayerId: undefined,
-    customStats: {},
+    customStats: registration.data,
     originalImageUrl: registration.photoUrl || '',
     processedImageUrl: registration.photoUrl || '',
     imageEdit: registration.imageEdit,
@@ -117,6 +118,16 @@ class PlayerRegistrationService {
       updatedAt: now,
     });
 
+    const preferredTeamName = registration.data?.teamPreference?.trim();
+    let preferredTeam: Team | undefined;
+    let availableTeams: Team[] = [];
+    if (preferredTeamName) {
+      auctionPersistence.initialize(db);
+      availableTeams = (await auctionPersistence.getTeams()) ?? [];
+      preferredTeam = availableTeams.find(item => item.id === preferredTeamName || item.name.trim().toLocaleLowerCase() === preferredTeamName.toLocaleLowerCase());
+      if (!preferredTeam) throw new Error('The selected preferred team is no longer available. Please choose a current team.');
+    }
+
     const registrationRef = ref(db, `${tenantPath(REGISTRATIONS_PATH)}/${registration.id}`);
     await set(registrationRef, registration);
 
@@ -130,6 +141,20 @@ class PlayerRegistrationService {
     const nextPlayers = existingPlayers.filter((player) => player.id !== registration.id);
     nextPlayers.push(nextPlayer);
     await set(adminPlayersRef, nextPlayers);
+
+    if (preferredTeam) {
+      await auctionPersistence.saveDirectAssignedPlayer(nextPlayer, preferredTeam);
+      const updatedTeams = availableTeams.map(item => {
+        if (item.id !== preferredTeam?.id) return item;
+        const playersBought = (item.playersBought ?? 0) + 1;
+        return {
+          ...item,
+          playersBought,
+          remainingPlayers: Math.max(0, (item.totalPlayerThreshold ?? 0) - playersBought),
+        };
+      });
+      await auctionPersistence.saveTeams(updatedTeams);
+    }
 
     return registration;
   }

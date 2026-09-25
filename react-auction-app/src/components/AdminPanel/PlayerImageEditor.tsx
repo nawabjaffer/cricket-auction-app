@@ -36,7 +36,7 @@ interface PlayerImageEditorProps {
   processingProgress?: number;
   onChange: (edit: PlayerImageEdit) => void;
   onSaveImage?: (file: File) => Promise<void>;
-  onRemoveBackground: () => void;
+  onRemoveBackground?: () => void;
 }
 
 async function createEditedImageFile(imageUrl: string, sourceBlob: Blob | undefined, edit: PlayerImageEdit): Promise<File> {
@@ -328,13 +328,15 @@ export function PlayerImageEditor({ imageUrl, sourceBlob, auctionLayout, edit, p
       <div className="player-image-editor__controls">
         <div className="player-image-editor__hint"><strong>Direct manipulation</strong><span>Drag inside the box to position. Pull a corner to scale. Use the rotate handle above the box to turn the image. Keyboard: <kbd>Arrow keys</kbd> position, <kbd>+</kbd>/<kbd>-</kbd> scale, <kbd>[</kbd>/<kbd>]</kbd> rotate, <kbd>P</kbd> flip.</span></div>
         <div className="player-image-editor__readout"><span>Scale <strong>{value.scale.toFixed(2)}x</strong></span><span>Rotation <strong>{value.rotationDeg}°</strong></span></div>
-        <label className="player-image-editor__toggle"><span>Flip horizontal</span><input type="checkbox" checked={Boolean(value.flipX)} onChange={e => update({ flipX: e.target.checked })} /></label>
-        <label className="player-image-editor__toggle"><span>Flip vertical</span><input type="checkbox" checked={Boolean(value.flipY)} onChange={e => update({ flipY: e.target.checked })} /></label>
+        <div className="player-image-editor__flip-controls">
+          <label className="player-image-editor__toggle"><span>Flip horizontal</span><input type="checkbox" checked={Boolean(value.flipX)} onChange={e => update({ flipX: e.target.checked })} /></label>
+          <label className="player-image-editor__toggle"><span>Flip vertical</span><input type="checkbox" checked={Boolean(value.flipY)} onChange={e => update({ flipY: e.target.checked })} /></label>
+        </div>
       </div>
       <div className="player-image-editor__actions">
         <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => onChange({ xPct: 14, yPct: 4, scale: 1, rotationDeg: 0, flipX: false, flipY: false })}><IoRefresh size={15} /> Reset</button>
         {onSaveImage && <button type="button" className="admin-btn admin-btn-primary admin-btn-sm" onClick={() => void saveEditedImage()} disabled={savingImage || processing}><IoSave size={15} /> {savingImage ? 'Saving image...' : 'Save edited image'}</button>}
-        <button type="button" className="admin-btn admin-btn-warning admin-btn-sm" onClick={onRemoveBackground} disabled={processing}><IoRemoveCircleOutline size={15} /> {processing ? 'Processing...' : 'Remove Background'}</button>
+        {onRemoveBackground && <button type="button" className="admin-btn admin-btn-warning admin-btn-sm" onClick={onRemoveBackground} disabled={processing}><IoRemoveCircleOutline size={15} /> {processing ? 'Processing...' : 'Remove Background'}</button>}
       </div>
     </div>
   );

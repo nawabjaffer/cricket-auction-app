@@ -13,7 +13,7 @@ export interface RegistrationField {
   placeholder?: string;
   options?: string[];
   order: number;
-  systemKey?: 'name' | 'phone' | 'dateOfBirth' | 'photo' | 'role';
+  systemKey?: 'name' | 'phone' | 'dateOfBirth' | 'photo' | 'role' | 'team';
 }
 
 export interface RegistrationPaymentConfig {
@@ -57,6 +57,12 @@ export function applyRegistrationSport(fields: RegistrationField[], sport: Regis
     : field));
 }
 
+export function applyRegistrationTeams(fields: RegistrationField[], teams: Array<{ id: string; name: string }>): RegistrationField[] {
+  return fields.map(field => (field.systemKey === 'team' || field.id === 'teamPreference'
+    ? { ...field, options: teams.map(team => team.name) }
+    : field));
+}
+
 export interface PlayerRegistration {
   id: string;
   tenantId: string;
@@ -79,7 +85,8 @@ export const DEFAULT_REGISTRATION_FIELDS: RegistrationField[] = [
   { id: 'dateOfBirth', label: 'Date of birth', type: 'date', required: true, order: 2, systemKey: 'dateOfBirth' },
   { id: 'photo', label: 'Player photo', type: 'text', required: true, order: 3, systemKey: 'photo' },
   { id: 'place', label: 'Place', type: 'text', required: false, order: 4 },
-  { id: 'role', label: 'Playing role', type: 'select', required: false, options: getRegistrationRoleOptions('cricket'), order: 5, systemKey: 'role' },
+  { id: 'teamPreference', label: 'Preferred team', type: 'select', required: false, options: [], order: 5, systemKey: 'team' },
+  { id: 'role', label: 'Playing role', type: 'select', required: false, options: getRegistrationRoleOptions('cricket'), order: 6, systemKey: 'role' },
 ];
 
 export const DEFAULT_REGISTRATION_CONFIG: PlayerRegistrationConfig = {
