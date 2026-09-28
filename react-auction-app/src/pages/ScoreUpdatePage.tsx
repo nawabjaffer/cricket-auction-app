@@ -17,8 +17,11 @@ import { statsEngine } from '../services/scoring/statsEngine';
 import { obsReplaySourceService } from '../services/scoring/obsReplaySourceService';
 import { realtimeSync } from '../services/realtimeSync';
 import { liveCommentService } from '../services/liveCommentService';
+import { cricHeroesMappingService } from '../services/cricHeroesMappingService';
 import { getActiveTenant, tenantPath } from '../services/tenantPath';
 import { isPowerplayOver } from '../utils/powerplay';
+import { cricHeroesPlayerAliasKey, EMPTY_CRICHEROES_MAPPINGS, normalizeCricHeroesAliasName, normalizeCricHeroesMappings, resolveCricHeroesPlayerAlias } from '../utils/cricHeroesMappings';
+import type { CricHeroesNameMappings } from '../utils/cricHeroesMappings';
 import type {
   BallOutcome, DismissalType, WicketDetail, MatchSquadPlayer, OBSReplayButton,
   TickerStatWidget, Innings, BatsmanInnings, BowlerInnings, LiveScore, MatchSetup, MatchLineup,
@@ -118,12 +121,24 @@ export default function ScoreUpdatePage() {
   useEffect(() => {
     let unsubConfig: (() => void) | undefined;
     let unsubActive: (() => void) | undefined;
+    let unsubMappings: (() => void) | undefined;
     const init = async () => {
       try {
         await realtimeSync.ensureInitialized();
         const db = realtimeSync.getDatabase();
         if (!db) return;
         try { scoringService.initialize(db, tenantPath('scoring')); } catch { /* already initialized */ }
+        cricHeroesMappingService.initialize(db, tenantPath('scoring'));
+        unsubMappings = cricHeroesMappingService.subscribe(mappings => {
+          let nextMappings = mappings;
+          if (!nextMappings) {
+            try {
+              nextMappings = normalizeCricHeroesMappings(JSON.parse(localStorage.getItem(`cricheroes-name-mappings:${getActiveTenant()}`) || '{}'));
+            } catch { nextMappings = EMPTY_CRICHEROES_MAPPINGS; }
+          }
+          setCricHeroesNameMappings(nextMappings);
+          localStorage.setItem(`cricheroes-name-mappings:${getActiveTenant()}`, JSON.stringify(nextMappings));
+        });
         const cfg = await scoringService.getOverlayConfig().catch(() => null);
         setSingleOverlayMode(!!cfg?.singleOverlayMode);
         unsubConfig = scoringService.subscribeOverlayConfig((liveCfg) => setSingleOverlayMode(!!liveCfg.singleOverlayMode));
@@ -131,7 +146,7 @@ export default function ScoreUpdatePage() {
       } catch { /* non-critical — falls back to explicit matchId only */ }
     };
     init();
-    return () => { unsubConfig?.(); unsubActive?.(); };
+    return () => { unsubConfig?.(); unsubActive?.(); unsubMappings?.(); };
   }, []);
 
   const {
@@ -163,6 +178,11 @@ export default function ScoreUpdatePage() {
   const [tournamentStats, setTournamentStats] = useState<TournamentStats | null>(null);
   const [recordAlertDismissed, setRecordAlertDismissed] = useState(false);
   const [feedImportSnapshot, setFeedImportSnapshot] = useState<CricHeroesSyncData | null>(null);
+  const [cricHeroesNameMappings, setCricHeroesNameMappings] = useState<CricHeroesNameMappings>(() => {
+    try {
+      return normalizeCricHeroesMappings(JSON.parse(localStorage.getItem(`cricheroes-name-mappings:${getActiveTenant()}`) || '{}'));
+    } catch { return EMPTY_CRICHEROES_MAPPINGS; }
+  });
 
   const { latest: cricHeroesFeed } = useCricHeroesSyncAdapter(({ outcome }) => {
     if (!liveScore) return true;
@@ -182,12 +202,8 @@ export default function ScoreUpdatePage() {
     if (!match || !liveScore || !currentInnings || !isInningsComplete || !cricHeroesFeed?.scorecardSelection || !selectedInnings) return;
     if (selectedInnings.runs === null || selectedInnings.wickets === null || selectedInnings.overs === null) return;
 
-    let savedAliases: { teamAliases?: Record<string, string>; playerAliases?: Record<string, string> } = {};
-    try {
-      savedAliases = JSON.parse(localStorage.getItem(`cricheroes-name-mappings:${getActiveTenant()}`) || '{}');
-    } catch { /* use exact team and player names when aliases are unavailable */ }
     const normalizeName = (name: string) => name.trim().toLocaleLowerCase().replace(/[^a-z0-9]/g, '');
-    const teamAliasId = savedAliases.teamAliases?.[selectedInnings.battingTeam.trim().toLocaleLowerCase().replace(/\s+/g, ' ')];
+    const teamAliasId = cricHeroesNameMappings.teamAliases[normalizeCricHeroesAliasName(selectedInnings.battingTeam)];
     const selectedTeamId = teamAliasId === match.teamA.id || normalizeName(match.teamA.name) === normalizeName(selectedInnings.battingTeam)
       ? match.teamA.id
       : teamAliasId === match.teamB.id || normalizeName(match.teamB.name) === normalizeName(selectedInnings.battingTeam)
@@ -201,15 +217,14 @@ export default function ScoreUpdatePage() {
 
     const battingLineup = lineups.teamA?.teamId === liveScore.battingTeamId ? lineups.teamA : lineups.teamB;
     const bowlingLineup = lineups.teamA?.teamId === liveScore.bowlingTeamId ? lineups.teamA : lineups.teamB;
-    const resolvePlayer = (name: string, players: MatchSquadPlayer[]) => {
-      const aliasKey = name.trim().toLocaleLowerCase().replace(/\s+/g, ' ');
-      const aliasId = savedAliases.playerAliases?.[aliasKey];
+    const resolvePlayer = (name: string, players: MatchSquadPlayer[], teamId: string) => {
+      const aliasId = resolveCricHeroesPlayerAlias(cricHeroesNameMappings, name, teamId);
       return players.find(player => player.playerId === aliasId)
         || players.find(player => normalizeName(player.playerName) === normalizeName(name));
     };
     const importedBatters: BatsmanInnings[] = selectedInnings.batsmen.flatMap((player, index) => {
       if (!player.statsComplete || player.runs === null || player.balls === null || player.fours === null || player.sixes === null || player.strikeRate === null) return [];
-      const rosterPlayer = battingLineup?.players.find(candidate => resolvePlayer(player.name, [candidate]));
+      const rosterPlayer = battingLineup?.players.find(candidate => resolvePlayer(player.name, [candidate], liveScore.battingTeamId));
       if (!rosterPlayer) return [];
       return [{
         playerId: rosterPlayer.playerId,
@@ -226,7 +241,7 @@ export default function ScoreUpdatePage() {
     });
     const importedBowlers: BowlerInnings[] = selectedInnings.bowlers.flatMap(player => {
       if (!player.statsComplete || player.overs === null || player.maidens === null || player.runs === null || player.wickets === null || player.economy === null) return [];
-      const rosterPlayer = bowlingLineup?.players.find(candidate => resolvePlayer(player.name, [candidate]));
+      const rosterPlayer = bowlingLineup?.players.find(candidate => resolvePlayer(player.name, [candidate], liveScore.bowlingTeamId));
       if (!rosterPlayer) return [];
       return [{
         playerId: rosterPlayer.playerId,
@@ -291,7 +306,7 @@ export default function ScoreUpdatePage() {
       console.error('[ScoreUpdatePage] CricHeroes innings summary sync failed:', error);
       setMatchActionFeedback('CricHeroes summary could not be saved. Check the Provider scorecard and retry.');
     });
-  }, [cricHeroesFeed, currentInnings, isInningsComplete, lineups, liveScore, match]);
+  }, [cricHeroesFeed, cricHeroesNameMappings, currentInnings, isInningsComplete, lineups, liveScore, match]);
 
   const handleStartNextMatch = useCallback(async () => {
     try {
@@ -557,6 +572,12 @@ export default function ScoreUpdatePage() {
             match={match}
             lineups={lineups}
             source={feedImportSnapshot}
+            nameMappings={cricHeroesNameMappings}
+            onMappingsChange={nextMappings => {
+              setCricHeroesNameMappings(nextMappings);
+              localStorage.setItem(`cricheroes-name-mappings:${getActiveTenant()}`, JSON.stringify(nextMappings));
+              void cricHeroesMappingService.save(nextMappings).catch(() => {});
+            }}
             onImportSummary={async innings => {
               try {
                 await scoringService.saveInnings(match.id, innings.number, innings);
@@ -1723,35 +1744,29 @@ function InitInningsModal({ match, lineups, defaults, onStart, onClose }: {
   );
 }
 
-function CricHeroesInProgressModal({ match, lineups, source, onImport, onImportSummary, onClose }: {
+function CricHeroesInProgressModal({ match, lineups, source, nameMappings, onMappingsChange, onImport, onImportSummary, onClose }: {
   match: MatchSetup;
   lineups: { teamA: MatchLineup | null; teamB: MatchLineup | null };
   source: CricHeroesSyncData;
+  nameMappings: CricHeroesNameMappings;
+  onMappingsChange: (mappings: CricHeroesNameMappings) => void;
   onImport: (live: LiveScore, innings: Innings) => Promise<boolean>;
   onImportSummary: (innings: Innings) => Promise<boolean>;
   onClose: () => void;
 }) {
   const normalize = (value: string) => value.toLocaleLowerCase().replace(/[^a-z0-9]/g, '');
   const normalizeAlias = (value: string) => value.trim().toLocaleLowerCase().replace(/\s+/g, ' ');
-  const [savedAliases, setSavedAliases] = useState<{
-    teamAliases?: Record<string, string>;
-    playerAliases?: Record<string, string>;
-  }>(() => {
-    try {
-      return JSON.parse(localStorage.getItem(`cricheroes-name-mappings:${getActiveTenant()}`) || '{}') as {
-        teamAliases?: Record<string, string>;
-        playerAliases?: Record<string, string>;
-      };
-    } catch {
-      return {};
-    }
-  });
+  const savedAliases = nameMappings;
   const sourceTeam = normalize(source.battingTeam);
   const [battingTeamId, setBattingTeamId] = useState(() => {
     const savedTeamId = savedAliases.teamAliases?.[normalizeAlias(source.battingTeam)];
     if (savedTeamId === match.teamA.id || savedTeamId === match.teamB.id) return savedTeamId;
     return sourceTeam && sourceTeam === normalize(match.teamB.name) ? match.teamB.id : match.teamA.id;
   });
+  useEffect(() => {
+    const savedTeamId = savedAliases.teamAliases?.[normalizeAlias(source.battingTeam)];
+    if (savedTeamId === match.teamA.id || savedTeamId === match.teamB.id) setBattingTeamId(savedTeamId);
+  }, [match.teamA.id, match.teamB.id, savedAliases.teamAliases, source.battingTeam]);
   const [inningsNumber, setInningsNumber] = useState<1 | 2>(source.inningsNumber === 2 ? 2 : 1);
   const [batterOverrides, setBatterOverrides] = useState<Record<string, string>>({});
   const [bowlerOverrides, setBowlerOverrides] = useState<Record<string, string>>({});
@@ -1776,25 +1791,31 @@ function CricHeroesInProgressModal({ match, lineups, source, onImport, onImportS
   const bestBowlers = [...(selectedScorecard?.bowlers || source.bowlers)]
     .sort((left, right) => (right.wickets ?? 0) - (left.wickets ?? 0) || (left.runs ?? 0) - (right.runs ?? 0) || (right.overs ?? 0) - (left.overs ?? 0))
     .slice(0, 3);
-  const autoMatch = (name: string, players: MatchSquadPlayer[]) => {
-    const savedPlayerId = savedAliases.playerAliases?.[normalizeAlias(name)];
+  const autoMatch = (name: string, players: MatchSquadPlayer[], teamId: string) => {
+    const savedPlayerId = resolveCricHeroesPlayerAlias(savedAliases, name, teamId);
     if (savedPlayerId && players.some(player => player.playerId === savedPlayerId)) return savedPlayerId;
     const normalized = normalize(name);
     const exact = players.filter(player => normalize(player.playerName) === normalized);
     return exact.length === 1 ? exact[0].playerId : '';
   };
-  const savePlayerAlias = (name: string, playerId: string) => {
-    const alias = normalizeAlias(name);
+  const savePlayerAlias = (name: string, playerId: string, teamId: string) => {
+    const alias = cricHeroesPlayerAliasKey(name, teamId);
     if (!alias) return;
     const playerAliases = { ...(savedAliases.playerAliases || {}) };
     if (playerId) playerAliases[alias] = playerId;
     else delete playerAliases[alias];
-    const nextAliases = { ...savedAliases, playerAliases };
-    setSavedAliases(nextAliases);
-    localStorage.setItem(`cricheroes-name-mappings:${getActiveTenant()}`, JSON.stringify(nextAliases));
+    onMappingsChange({ ...savedAliases, playerAliases });
   };
-  const batterIdFor = (name: string) => batterOverrides[name] || autoMatch(name, battingPlayers);
-  const bowlerIdFor = (name: string) => bowlerOverrides[name] || autoMatch(name, bowlingPlayers);
+  const saveTeamAlias = (sourceName: string, teamId: string) => {
+    const alias = normalizeCricHeroesAliasName(sourceName);
+    if (!alias) return;
+    const teamAliases = { ...(savedAliases.teamAliases || {}) };
+    if (teamId) teamAliases[alias] = teamId;
+    else delete teamAliases[alias];
+    onMappingsChange({ ...savedAliases, teamAliases });
+  };
+  const batterIdFor = (name: string) => batterOverrides[name] || autoMatch(name, battingPlayers, battingTeamId);
+  const bowlerIdFor = (name: string) => bowlerOverrides[name] || autoMatch(name, bowlingPlayers, bowlingTeamId);
   const mappedBowlers = (): BowlerInnings[] => sourceBowlers.flatMap(player => {
     const rosterPlayer = bowlingPlayers.find(candidate => candidate.playerId === bowlerIdFor(player.name));
     if (!rosterPlayer) return [];
@@ -1962,13 +1983,7 @@ function CricHeroesInProgressModal({ match, lineups, source, onImport, onImportS
             <label>Batting side · {source.battingTeam || 'CricHeroes'}</label>
             <select className="score-update__select" value={battingTeamId} onChange={event => {
               setBattingTeamId(event.target.value);
-              const alias = normalizeAlias(source.battingTeam);
-              if (alias) {
-                const teamAliases = { ...(savedAliases.teamAliases || {}), [alias]: event.target.value };
-                const nextAliases = { ...savedAliases, teamAliases };
-                setSavedAliases(nextAliases);
-                localStorage.setItem(`cricheroes-name-mappings:${getActiveTenant()}`, JSON.stringify(nextAliases));
-              }
+              saveTeamAlias(source.battingTeam, event.target.value);
             }}>
               <option value={match.teamA.id}>{match.teamA.name}</option>
               <option value={match.teamB.id}>{match.teamB.name}</option>
@@ -1995,7 +2010,7 @@ function CricHeroesInProgressModal({ match, lineups, source, onImport, onImportS
                 <span>{player.name} · {player.overs ?? '—'}-{player.maidens ?? '—'}-{player.runs ?? '—'}-{player.wickets ?? '—'}</span>
                 <select className="score-update__select" value={bowlerIdFor(player.name)} onChange={event => {
                   setBowlerOverrides(current => ({ ...current, [player.name]: event.target.value }));
-                  savePlayerAlias(player.name, event.target.value);
+                  savePlayerAlias(player.name, event.target.value, bowlingTeamId);
                 }}>
                   <option value="">Not mapped</option>
                   {bowlingPlayers.map(rosterPlayer => <option key={rosterPlayer.playerId} value={rosterPlayer.playerId}>{rosterPlayer.playerName} · {rosterPlayer.role}</option>)}
@@ -2012,7 +2027,7 @@ function CricHeroesInProgressModal({ match, lineups, source, onImport, onImportS
                 <span>{player.name} · {player.runs} ({player.balls})</span>
                 <select className="score-update__select" value={batterIdFor(player.name)} onChange={event => {
                   setBatterOverrides(current => ({ ...current, [player.name]: event.target.value }));
-                  savePlayerAlias(player.name, event.target.value);
+                  savePlayerAlias(player.name, event.target.value, battingTeamId);
                 }}>
                   <option value="">Choose app squad player</option>
                   {battingPlayers.map(rosterPlayer => <option key={rosterPlayer.playerId} value={rosterPlayer.playerId}>{rosterPlayer.playerName} · {rosterPlayer.role}</option>)}
@@ -2025,7 +2040,7 @@ function CricHeroesInProgressModal({ match, lineups, source, onImport, onImportS
                 <span>{player.name} · {player.overs} ov, {player.runs} runs</span>
                 <select className="score-update__select" value={bowlerIdFor(player.name)} onChange={event => {
                   setBowlerOverrides(current => ({ ...current, [player.name]: event.target.value }));
-                  savePlayerAlias(player.name, event.target.value);
+                  savePlayerAlias(player.name, event.target.value, bowlingTeamId);
                 }}>
                   <option value="">Choose app squad player</option>
                   {bowlingPlayers.map(rosterPlayer => <option key={rosterPlayer.playerId} value={rosterPlayer.playerId}>{rosterPlayer.playerName} · {rosterPlayer.role}</option>)}

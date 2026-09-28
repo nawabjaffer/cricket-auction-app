@@ -526,6 +526,58 @@
   overflow: hidden;
 }
 
+.scoring-admin__prematch-team-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.8rem;
+  margin-top: 0.85rem;
+}
+
+.scoring-admin__prematch-team-card {
+  min-width: 0;
+  padding: 0.85rem;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-top: 2px solid rgba(251, 191, 36, 0.65);
+  border-radius: 8px;
+  background: rgba(7, 12, 22, 0.38);
+}
+
+.scoring-admin__prematch-team-header {
+  display: grid;
+  gap: 3px;
+  margin-bottom: 0.75rem;
+}
+
+.scoring-admin__prematch-team-header > span {
+  color: #fbbf24;
+  font-size: 0.64rem;
+  font-weight: 800;
+}
+
+.scoring-admin__prematch-team-header > strong { color: #f4f4f5; font-size: 0.95rem; }
+.scoring-admin__prematch-team-fields { display: grid; gap: 0.7rem; }
+.scoring-admin__prematch-team-alias-form { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 0.5rem; }
+.scoring-admin__prematch-player-alias-form { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: end; gap: 0.5rem; }
+.scoring-admin__prematch-player-alias-form > button { grid-column: 1 / -1; justify-self: start; }
+.scoring-admin__prematch-saved-mappings { margin-top: 0.8rem; border: 1px solid rgba(255,255,255,0.07); border-radius: 6px; overflow: hidden; }
+.scoring-admin__prematch-saved-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; align-items: center; gap: 0.5rem; padding: 0.5rem 0.6rem; }
+.scoring-admin__prematch-saved-row + .scoring-admin__prematch-saved-row { border-top: 1px solid rgba(255,255,255,0.07); }
+.scoring-admin__prematch-saved-row > div { display: grid; min-width: 0; gap: 2px; }
+.scoring-admin__prematch-saved-row small { color: #71717a; font-size: 0.62rem; text-transform: uppercase; }
+.scoring-admin__prematch-saved-row strong,.scoring-admin__prematch-saved-row > span { overflow: hidden; color: #d4d4d8; font-size: 0.73rem; text-overflow: ellipsis; white-space: nowrap; }
+
+@media (max-width: 820px) {
+  .scoring-admin__prematch-team-grid { grid-template-columns: minmax(0, 1fr); }
+}
+
+@media (max-width: 520px) {
+  .scoring-admin__prematch-team-alias-form,.scoring-admin__prematch-player-alias-form { grid-template-columns: minmax(0, 1fr); }
+  .scoring-admin__prematch-player-alias-form > button { grid-column: auto; }
+  .scoring-admin__prematch-saved-row { grid-template-columns: minmax(0, 1fr) auto; }
+  .scoring-admin__prematch-saved-row > span { grid-column: 1; grid-row: 2; }
+  .scoring-admin__prematch-saved-row > button { grid-column: 2; grid-row: 1 / span 2; }
+}
+
 .scoring-admin__mapping-head,
 .scoring-admin__mapping-row {
   display: grid;

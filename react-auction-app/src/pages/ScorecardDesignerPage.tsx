@@ -754,7 +754,7 @@ export default function ScorecardDesignerPage({ gameType = 'cricket' }: Readonly
       next.hPct = Math.max(1, Math.min(100, next.hPct));
       next.xPct = Math.max(0, Math.min(100 - next.wPct, next.xPct));
       next.yPct = Math.max(0, Math.min(100 - next.hPct, next.yPct));
-      next.zoom = Math.max(0.1, Math.min(3, next.zoom));
+      next.zoom = Math.max(0.1, Math.min(5, next.zoom));
       return { ...l, backgroundGeometry: next };
     });
   }, []);
@@ -1471,7 +1471,7 @@ function BackgroundPropertiesPanel({ geometry, onChange }: Readonly<{
       </div>
       <label className="scd__field">
         <span>Zoom ({current.zoom.toFixed(2)}×)</span>
-        <input type="range" min={0.1} max={3} step={0.05} value={current.zoom} onChange={e => onChange({ zoom: Number(e.target.value) })} />
+        <input type="range" min={0.1} max={5} step={0.05} value={current.zoom} onChange={e => onChange({ zoom: Number(e.target.value) })} />
       </label>
     </div>
   );
@@ -1827,12 +1827,12 @@ function PropertiesPanel({ widget, assets, auctionTeams, branding, layout, prope
 
       <label className="scd__field">
         <span>Zoom ({(style.zoom ?? 1).toFixed(2)}×)</span>
-        <input type="range" min={0.1} max={3} step={0.05} value={style.zoom ?? 1} onChange={e => onStyleChange({ zoom: Number(e.target.value) })} />
+        <input type="range" min={0.1} max={5} step={0.05} value={style.zoom ?? 1} onChange={e => onStyleChange({ zoom: Number(e.target.value) })} />
       </label>
 
       <label className="scd__field">
         <span>Content scale ({(style.contentScale ?? 1).toFixed(2)}×)</span>
-        <input type="range" min={0.25} max={3} step={0.05} value={style.contentScale ?? 1} onChange={e => onStyleChange({ contentScale: Number(e.target.value) })} />
+        <input type="range" min={0.25} max={5} step={0.05} value={style.contentScale ?? 1} onChange={e => onStyleChange({ contentScale: Number(e.target.value) })} />
       </label>
 
       <div className="scd__prop-grid">

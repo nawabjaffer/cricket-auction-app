@@ -12,7 +12,7 @@ import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { initializeApp, getApps } from 'firebase/app';
 import { getDatabase, ref, onValue, set as fbSet } from 'firebase/database';
-import { tenantPath } from '../services/tenantPath';
+import { getActiveTenant, tenantPath } from '../services/tenantPath';
 import { useBroadcastOverlaySurface } from '../hooks/useBroadcastOverlaySurface';
 import { overlayMediaPreload, getPreloadedMediaUrl } from '../services/overlayMediaPreload';
 import { ScorecardLayoutView } from '../components/ScorecardCanvas';
@@ -31,7 +31,8 @@ import type {
 } from '../types/scoring';
 import PreMatchOverlay from './PreMatchOverlay';
 import { MATCH_STAGE_LABELS } from '../types/scoring';
-import { resolvePlayerImageUrl } from '../utils/playerImage';
+import { preferMigratedPlayerImageUrl, resolvePlayerImageUrl } from '../utils/playerImage';
+import { fingerprintImageUrls, schedulePreMatchImageWarmup } from '../utils/preMatchImageWarmup';
 import { getMatchSquadOverlayStyle, normalizeMatchSquadOverlayDesign } from '../utils/matchSquadOverlayDesign';
 import { normalizePlayerStatsSequenceConfig } from '../utils/playerStatsSequence';
 import { isInningsBreak } from '../utils/inningsBreak';
@@ -187,7 +188,12 @@ export default function ScoreOBSOverlayPage() {
   const [innings, setInnings] = useState<Record<string, Innings>>({});
   const [, setReplayTrigger] = useState<ReplayTrigger | null>(null);
   const [tickerVisible, setTickerVisible] = useState(false);
-  const [allMatches, setAllMatches] = useState<Record<string, { setup: MatchSetup; final?: MatchScore }>>({});
+  const [allMatches, setAllMatches] = useState<Record<string, {
+    setup: MatchSetup;
+    final?: MatchScore;
+    lineups?: Record<string, MatchLineup>;
+    preMatch?: PreMatchState;
+  }>>({});
   const [allTeams, setAllTeams] = useState<{ id: string; name: string; logoUrl?: string; brandLogoUrl?: string }[]>([]);
   const [inningsIntroPhase, setInningsIntroPhase] = useState<'batsmen' | 'bowler' | 'done'>('done');
   const inningsIntroPhaseRef = useRef<'batsmen' | 'bowler' | 'done'>('done');
@@ -326,6 +332,47 @@ export default function ScoreOBSOverlayPage() {
     }
     setMatchId(urlMatchId || null);
   }, [urlMatchId, urlPinned, activeMatchId, config.singleOverlayMode]);
+
+  useEffect(() => {
+    let previousAssetSignature = '';
+    return onValue(ref(obsDb, tenantPath('scoring/matches')), snap => {
+      if (!snap.exists()) {
+        previousAssetSignature = '';
+        setAllMatches({});
+        return;
+      }
+      const data = snap.val() as Record<string, {
+        setup?: MatchSetup;
+        final?: MatchScore;
+        lineups?: Record<string, MatchLineup>;
+        preMatch?: PreMatchState;
+      }>;
+      const result: Record<string, {
+        setup: MatchSetup;
+        final?: MatchScore;
+        lineups?: Record<string, MatchLineup>;
+        preMatch?: PreMatchState;
+      }> = {};
+      for (const [id, entry] of Object.entries(data)) {
+        if (entry.setup) result[id] = { setup: entry.setup, final: entry.final, lineups: entry.lineups, preMatch: entry.preMatch };
+      }
+      const assetSignature = JSON.stringify(Object.entries(result).map(([id, entry]) => [
+        id,
+        entry.setup.status,
+        entry.setup.date,
+        entry.setup.updatedAt,
+        entry.setup.teamA.logoUrl,
+        entry.setup.teamB.logoUrl,
+        Object.values(entry.lineups || {}).map(lineup => [lineup.teamId, lineup.players.map(player => [player.playerId, player.imageUrl])]),
+        [entry.preMatch?.impactPlayers?.teamA, entry.preMatch?.impactPlayers?.teamB]
+          .map(players => players?.map(player => [player.playerId, player.imageUrl])),
+        entry.final?.innings?.map(innings => [innings.totalRuns, innings.totalWickets]),
+      ]));
+      if (assetSignature === previousAssetSignature) return;
+      previousAssetSignature = assetSignature;
+      setAllMatches(result);
+    });
+  }, []);
 
   useEffect(() => {
     // Prevent stale scorecard data when active match pointer changes in single-overlay mode.
@@ -470,22 +517,11 @@ export default function ScoreOBSOverlayPage() {
         const data = snap.val() as Record<string, { id: string; imageUrl?: string; processedImageUrl?: string }>;
         const imgMap: Record<string, string> = {};
         for (const p of Object.values(data)) {
-          const savedImage = p.processedImageUrl || p.imageUrl;
+          const savedImage = preferMigratedPlayerImageUrl(p.processedImageUrl, p.imageUrl);
           if (savedImage) imgMap[p.id] = savedImage;
         }
         setPlayerImages(imgMap);
       }
-    }));
-
-    // All matches (for points table)
-    unsubs.push(onValue(ref(obsDb, `${basePath}/matches`), snap => {
-      if (!snap.exists()) return;
-      const data = snap.val() as Record<string, { setup?: MatchSetup; final?: MatchScore }>;
-      const result: Record<string, { setup: MatchSetup; final?: MatchScore }> = {};
-      for (const [id, m] of Object.entries(data)) {
-        if (m.setup) result[id] = { setup: m.setup, final: m.final };
-      }
-      setAllMatches(result);
     }));
 
     // All auction teams (for full points table)
@@ -539,6 +575,51 @@ export default function ScoreOBSOverlayPage() {
       setLineups({ teamA: teamALineup, teamB: teamBLineup });
     }
   }, [match, rawLineups]);
+
+  const activeWarmupMatch = match || (matchId ? allMatches[matchId]?.setup : undefined);
+  const scheduledWarmupMatches = Object.entries(allMatches)
+    .filter(([id, entry]) => id !== activeWarmupMatch?.id && entry.setup.status === 'scheduled')
+    .sort(([, left], [, right]) => {
+      const leftDate = Date.parse(left.setup.date);
+      const rightDate = Date.parse(right.setup.date);
+      return (Number.isFinite(leftDate) ? leftDate : Number.MAX_SAFE_INTEGER)
+        - (Number.isFinite(rightDate) ? rightDate : Number.MAX_SAFE_INTEGER);
+    });
+  const futureWarmupMatches = scheduledWarmupMatches.filter(([, entry]) => Date.parse(entry.setup.date) >= Date.now());
+  const nextWarmupMatch = (futureWarmupMatches.length > 0 ? futureWarmupMatches : scheduledWarmupMatches)[0];
+  const warmupCandidates = [
+    ...(activeWarmupMatch && activeWarmupMatch.status !== 'completed' && activeWarmupMatch.status !== 'abandoned'
+      ? [{ id: activeWarmupMatch.id, setup: activeWarmupMatch, lineups: allMatches[activeWarmupMatch.id]?.lineups, preMatch: allMatches[activeWarmupMatch.id]?.preMatch }]
+      : []),
+    ...(nextWarmupMatch ? [{ id: nextWarmupMatch[0], ...nextWarmupMatch[1] }] : []),
+  ];
+  const preMatchWarmupUrls: string[] = [];
+  const addWarmupUrl = (url?: string) => {
+    if (url) preMatchWarmupUrls.push(overlayMediaPreload.normalizeUrl(url));
+  };
+  [config.tournamentLogo, config.titleSponsorLogo, config.broadcastPartnerLogo].forEach(addWarmupUrl);
+  warmupCandidates.forEach(candidate => {
+    addWarmupUrl(candidate.setup.teamA.logoUrl);
+    addWarmupUrl(candidate.setup.teamB.logoUrl);
+    const candidateLineups = Object.values(candidate.lineups || {});
+    if (candidate.id === activeWarmupMatch?.id) candidateLineups.push(...[lineups.teamA, lineups.teamB].filter((lineup): lineup is MatchLineup => !!lineup));
+    candidateLineups.forEach(lineup => lineup.players.forEach(player => {
+      addWarmupUrl(resolvePlayerImageUrl(player.playerId, player.imageUrl, playerImages));
+    }));
+    const impactPlayers = candidate.id === activeWarmupMatch?.id ? preMatch?.impactPlayers : candidate.preMatch?.impactPlayers;
+    [...(impactPlayers?.teamA || []), ...(impactPlayers?.teamB || [])].forEach(player => {
+      addWarmupUrl(resolvePlayerImageUrl(player.playerId, player.imageUrl, playerImages));
+    });
+  });
+  const warmupFingerprint = fingerprintImageUrls(preMatchWarmupUrls);
+  const warmupCacheKey = `${getActiveTenant()}:${warmupCandidates.map(candidate => candidate.id).join(',') || 'waiting'}`;
+  const warmupAssetsRef = useRef({ urls: preMatchWarmupUrls, cacheKey: warmupCacheKey });
+  warmupAssetsRef.current = { urls: preMatchWarmupUrls, cacheKey: warmupCacheKey };
+
+  useEffect(() => {
+    const { urls, cacheKey } = warmupAssetsRef.current;
+    return schedulePreMatchImageWarmup(urls, cacheKey);
+  }, [warmupCacheKey, warmupFingerprint]);
 
   // Preload animation assets (video/image) and key logos to eliminate latency
   useEffect(() => {
@@ -1281,7 +1362,7 @@ function BatsmanStatsOverlay({ batsman, playerImages, lineups }: {
   const imgMap: Record<string, string> = { ...(playerImages || {}) };
   if (lineups) {
     [lineups.teamA, lineups.teamB].forEach(l => {
-      l?.players?.forEach(p => { if (p.imageUrl) imgMap[p.playerId] = p.imageUrl; });
+      l?.players?.forEach(p => { imgMap[p.playerId] = preferMigratedPlayerImageUrl(imgMap[p.playerId], p.imageUrl) || ''; });
     });
   }
   const playerImg = imgMap[batsman.playerId];
@@ -1355,7 +1436,7 @@ function BowlerStatsOverlay({ bowler, playerImages, lineups }: {
   const imgMap: Record<string, string> = { ...(playerImages || {}) };
   if (lineups) {
     [lineups.teamA, lineups.teamB].forEach(l => {
-      l?.players?.forEach(p => { if (p.imageUrl) imgMap[p.playerId] = p.imageUrl; });
+      l?.players?.forEach(p => { imgMap[p.playerId] = preferMigratedPlayerImageUrl(imgMap[p.playerId], p.imageUrl) || ''; });
     });
   }
   const playerImg = imgMap[bowler.playerId];
@@ -2770,7 +2851,7 @@ function ScorecardTicker({ live, match, battingTeam, bowlingTeam, config, lineup
   // Build player image lookup from lineups + fallback from auction DB
   const playerImageMap: Record<string, string> = { ...playerImages };
   [lineups.teamA, lineups.teamB].forEach(l => {
-    l?.players?.forEach(p => { if (p.imageUrl) playerImageMap[p.playerId] = p.imageUrl; });
+    l?.players?.forEach(p => { playerImageMap[p.playerId] = preferMigratedPlayerImageUrl(playerImageMap[p.playerId], p.imageUrl) || ''; });
   });
 
   const renderInfoPanel = (variant: 'glass' | 'premium') => {
@@ -3537,7 +3618,7 @@ function InningsIntroCard({ type, live, match, playerImages, lineups }: {
 }) {
   const imgMap: Record<string, string> = { ...playerImages };
   [lineups.teamA, lineups.teamB].forEach(l => {
-    l?.players?.forEach(p => { if (p.imageUrl) imgMap[p.playerId] = p.imageUrl; });
+    l?.players?.forEach(p => { imgMap[p.playerId] = preferMigratedPlayerImageUrl(imgMap[p.playerId], p.imageUrl) || ''; });
   });
 
   const battingTeamName = live.battingTeamId === match.teamA.id ? match.teamA.name : match.teamB.name;
