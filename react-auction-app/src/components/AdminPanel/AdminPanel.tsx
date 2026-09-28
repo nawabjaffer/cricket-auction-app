@@ -168,15 +168,22 @@ function PlayerImportReviewModal({ incoming, index, existingPlayers, onDecision,
   );
 }
 
-function AssignedPlayerReviewModal({ rows, index, existingPlayers, onDecision, onCancel }: Readonly<{
+function AssignedPlayerReviewModal({ rows, index, existingPlayers, soldPlayers, onDecision, onCancel }: Readonly<{
   rows: Array<{ player: Player; team: Team }>;
   index: number;
   existingPlayers: Player[];
-  onDecision: (decision: 'add' | 'skip' | 'remove') => void;
+  soldPlayers: SoldPlayer[];
+  onDecision: (decision: 'same' | 'different' | 'add' | 'skip' | 'remove') => void;
   onCancel: () => void;
 }>) {
   const row = rows[index];
-  const match = playerDuplicateMatch(row.player, existingPlayers);
+  const match = playerDuplicateMatch(row.player, existingPlayers, {
+    incomingTeam: { id: row.team.id, name: row.team.name },
+    getExistingTeam: existing => {
+      const assigned = soldPlayers.find(player => player.id === existing.id);
+      return assigned ? { id: assigned.teamId, name: assigned.teamName } : undefined;
+    },
+  });
   return (
     <motion.div className="stats-review-overlay" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
       <motion.div className="stats-review-panel" initial={{ y: 40, opacity: 0 }} animate={{ y: 0, opacity: 1 }}>
@@ -185,11 +192,16 @@ function AssignedPlayerReviewModal({ rows, index, existingPlayers, onDecision, o
           <button className="stats-review-close" onClick={onCancel}><IoClose size={22} /></button>
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginTop: 18 }}>
-          <div className="stats-review-section"><h3 className="stats-section-title">Incoming player</h3><p><strong>{row.player.name}</strong></p><p>Phone: {row.player.phone || 'Not provided'}</p><p>Place: {row.player.place || 'Not provided'}</p><p>Role: {row.player.role}</p><p>DOB: {row.player.dateOfBirth || 'Not provided'}</p></div>
-          <div className={`stats-review-section ${match ? 'stats-section-error' : 'stats-section-success'}`}><h3 className="stats-section-title">{match ? 'Existing player found' : 'New player'}</h3>{match ? <><p><strong>{match.existing.name}</strong></p><p>Phone: {match.existing.phone || 'Not provided'}</p><p>{match.confidence === 'high' ? 'Strong identity match' : 'Manual inspection recommended'}</p><p className="stats-mismatch-reason">{match.reasons.join(', ')}</p></> : <p>Add this player to the player list and assign to {row.team.name}.</p>}</div>
+          <div className="stats-review-section"><h3 className="stats-section-title">Incoming player</h3><p><strong>{row.player.name}</strong></p><p>Team: {row.team.name}</p><p>Age: {row.player.age ?? 'Not provided'}</p><p>Phone: {row.player.phone || 'Not provided'}</p><p>Place: {row.player.place || 'Not provided'}</p><p>Role: {row.player.role}</p><p>DOB: {row.player.dateOfBirth || 'Not provided'}</p></div>
+          <div className={`stats-review-section ${match ? 'stats-section-error' : 'stats-section-success'}`}><h3 className="stats-section-title">{match ? 'Possible existing player' : 'New player'}</h3>{match ? <><p><strong>{match.existing.name}</strong></p><p>Team: {soldPlayers.find(player => player.id === match.existing.id)?.teamName || 'Not assigned'}</p><p>Age: {match.existing.age ?? 'Not provided'}</p><p>Phone: {match.existing.phone || match.existing.whatsappNumber || 'Not provided'}</p><p>{match.confidence === 'high' ? 'Strong identity match' : 'Manual inspection recommended'}</p><p className="stats-mismatch-reason">{match.reasons.join(', ')}</p></> : <p>Add this player to the player list and assign to {row.team.name}.</p>}</div>
         </div>
         <div className="stats-review-actions">
-          <button className="admin-btn admin-btn-primary" onClick={() => onDecision('add')}>{match ? 'Add / use existing' : 'Add player to list'}</button>
+          {match ? (
+            <>
+              <button className="admin-btn admin-btn-primary" onClick={() => onDecision('same')}>Same player — use existing</button>
+              <button className="admin-btn admin-btn-secondary" onClick={() => onDecision('different')}>Different player — add new</button>
+            </>
+          ) : <button className="admin-btn admin-btn-primary" onClick={() => onDecision('add')}>Add player to list</button>}
           <button className="admin-btn admin-btn-secondary" onClick={() => onDecision('skip')}>Skip</button>
           <button className="admin-btn admin-btn-secondary" onClick={() => onDecision('remove')}>Remove row</button>
         </div>
@@ -427,7 +439,7 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
   const [assignedImportReview, setAssignedImportReview] = useState<{
     rows: Array<{ player: Player; team: Team }>;
     index: number;
-    decisions: Record<string, 'add' | 'skip' | 'remove'>;
+    decisions: Record<string, 'same' | 'different' | 'add' | 'skip' | 'remove'>;
   } | null>(null);
   // Icon player state for the player editor
   const [isIconPlayer, setIsIconPlayer] = useState(false);
@@ -2306,14 +2318,22 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
   const finishAssignedImport = async (review: NonNullable<typeof assignedImportReview>) => {
     let added = 0; let skipped = 0; let removed = 0;
     const nextPlayers = [...editingPlayers];
+    const existingTeams = new Map(soldPlayers.flatMap(player => player.teamId || player.teamName
+      ? [[player.id, { id: player.teamId, name: player.teamName }] as const]
+      : []));
     for (const { player, team } of review.rows) {
       const decision = review.decisions[player.id] || 'skip';
       if (decision === 'remove') { removed += 1; continue; }
       if (decision === 'skip') { skipped += 1; continue; }
-      let canonical = nextPlayers.find(existing => existing.id === player.id) || playerDuplicateMatch(player, nextPlayers)?.existing;
+      const duplicate = playerDuplicateMatch(player, nextPlayers, {
+        incomingTeam: { id: team.id, name: team.name },
+        getExistingTeam: existing => existingTeams.get(existing.id),
+      });
+      let canonical = decision === 'same' ? duplicate?.existing : undefined;
       if (!canonical) {
         canonical = { ...player, id: uniqueImportedPlayerId(player.id, new Set(nextPlayers.map(item => item.id))) };
         nextPlayers.push(canonical);
+        existingTeams.set(canonical.id, { id: team.id, name: team.name });
         added += 1;
       }
       await auctionPersistence.saveDirectAssignedPlayer(canonical, team);
@@ -5585,6 +5605,7 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
       rows={assignedImportReview.rows}
       index={assignedImportReview.index}
       existingPlayers={editingPlayers}
+      soldPlayers={soldPlayers}
       onDecision={(decision) => {
         const current = assignedImportReview.rows[assignedImportReview.index];
         const nextDecisions = { ...assignedImportReview.decisions, [current.player.id]: decision };
