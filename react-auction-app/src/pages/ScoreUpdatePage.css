@@ -9,7 +9,8 @@
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
   display: flex;
   flex-direction: column;
-  max-width: 520px;
+  width: 100%;
+  max-width: 680px;
   margin: 0 auto;
   padding-bottom: 2rem;
 }
@@ -683,6 +684,51 @@
   color: #d1fae5;
 }
 
+.score-update__comment-panel {
+  margin: 0.75rem 1rem;
+  padding: 0.8rem;
+  border: 1px solid rgba(118, 224, 176, 0.2);
+  border-radius: 10px;
+  background: rgba(20, 38, 32, 0.72);
+}
+
+.score-update__comment-heading,
+.score-update__comment-heading > div,
+.score-update__comment-link,
+.score-update__comment-item,
+.score-update__comment-actions {
+  display: flex;
+  align-items: center;
+}
+
+.score-update__comment-heading { justify-content: space-between; gap: 0.7rem; }
+.score-update__comment-heading > div { align-items: flex-start; flex-direction: column; gap: 0.2rem; }
+.score-update__comment-heading strong { color: #d9f8e7; font-size: 0.85rem; }
+.score-update__comment-heading span { color: #99b6a6; font-size: 0.7rem; }
+.score-update__comment-toggle { display: inline-flex; align-items: center; gap: 7px; min-height: 42px; padding: 0 11px; border: 1px solid rgba(255,255,255,0.14); border-radius: 8px; color: #cbd5d1; background: rgba(255,255,255,0.04); font-size: 0.72rem; font-weight: 700; cursor: pointer; }
+.score-update__comment-toggle > span { width: 8px; height: 8px; border-radius: 50%; background: #7b8580; }
+.score-update__comment-toggle.is-open { color: #9ef0be; border-color: rgba(118,224,176,0.4); background: rgba(118,224,176,0.1); }
+.score-update__comment-toggle.is-open > span { background: #76e0b0; }
+.score-update__comment-link { gap: 6px; margin-top: 0.7rem; }
+.score-update__comment-link input { min-width: 0; flex: 1; height: 40px; padding: 0 9px; border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; color: #9fb2a7; background: rgba(0,0,0,0.18); font-size: 0.68rem; }
+.score-update__comment-link button,
+.score-update__comment-link a { display: inline-flex; align-items: center; justify-content: center; min-width: 46px; min-height: 40px; padding: 0 9px; border: 1px solid rgba(118,224,176,0.28); border-radius: 6px; color: #a8e7c2; background: rgba(118,224,176,0.08); font: inherit; font-size: 0.7rem; text-decoration: none; cursor: pointer; }
+.score-update__comment-queue { margin-top: 0.7rem; }
+.score-update__comment-queue summary { min-height: 38px; padding: 0.65rem 0; color: #9fb2a7; font-size: 0.72rem; font-weight: 700; cursor: pointer; }
+.score-update__comment-empty { margin: 0; padding: 0.4rem 0; color: #84948d; font-size: 0.75rem; }
+.score-update__comment-item { align-items: flex-start; gap: 8px; padding: 0.65rem 0; border-top: 1px solid rgba(255,255,255,0.07); }
+.score-update__comment-item.is-on-air { background: rgba(118,224,176,0.06); }
+.score-update__comment-rank { min-width: 22px; padding-top: 2px; color: #e6bd61; font: 700 0.66rem ui-monospace, monospace; }
+.score-update__comment-copy { min-width: 0; flex: 1; }
+.score-update__comment-copy strong { color: #e5eee8; font-size: 0.74rem; }
+.score-update__comment-copy small { color: #e6bd61; font-weight: 500; }
+.score-update__comment-copy p { margin: 3px 0; color: #ccd7d0; font-size: 0.76rem; line-height: 1.4; overflow-wrap: anywhere; }
+.score-update__comment-copy > span { color: #879990; font-size: 0.66rem; }
+.score-update__comment-actions { gap: 5px; }
+.score-update__comment-actions button { min-height: 38px; padding: 0 8px; border: 1px solid rgba(118,224,176,0.25); border-radius: 6px; color: #b4e8c6; background: transparent; font-size: 0.67rem; cursor: pointer; }
+.score-update__comment-actions button.is-remove { border-color: rgba(248,113,113,0.22); color: #fca5a5; }
+.score-update__comment-feedback { margin: 0.6rem 0 0; color: #e6bd61; font-size: 0.7rem; }
+
 .score-update__ticker-widget-chip {
   display: inline-flex;
   align-items: center;
@@ -704,6 +750,27 @@
 .score-update__ticker-order-btn:disabled {
   opacity: 0.45;
   cursor: not-allowed;
+}
+
+@media (max-width: 520px) {
+  .score-update { padding-bottom: max(1.5rem, env(safe-area-inset-bottom)); }
+  .score-update__header { min-height: 56px; padding: 0.65rem 0.8rem; }
+  .score-update__score-strip { position: sticky; top: 56px; z-index: 15; padding: 0.7rem 0.8rem; }
+  .score-update__team-label { max-width: 105px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .score-update__runs { font-size: 1.45rem; }
+  .score-update__run-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0.45rem; padding: 0.7rem 0.8rem; }
+  .score-update__run-btn { min-width: 0; height: 58px; border-radius: 10px; font-size: 1.35rem; touch-action: manipulation; }
+  .score-update__action-row { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 0.4rem; padding: 0 0.8rem; }
+  .score-update__action-row .score-update__btn { justify-content: center; min-width: 0; min-height: 48px; padding: 0.35rem 0.15rem; }
+  .score-update__controls { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.45rem; padding: 0.7rem 0.8rem; }
+  .score-update__controls .score-update__btn { justify-content: center; min-height: 46px; }
+  .score-update__overlay-triggers { gap: 0.4rem; padding-inline: 0.8rem; }
+  .score-update__overlay-btn { min-height: 38px; padding: 0.4rem 0.55rem; font-size: 0.7rem; touch-action: manipulation; }
+  .score-update__sub-options { gap: 0.45rem; padding-inline: 0.8rem; }
+  .score-update__btn--sub { min-height: 42px; padding-inline: 0.65rem; }
+  .score-update__comment-panel { margin-inline: 0.8rem; padding: 0.7rem; }
+  .score-update__comment-item { flex-wrap: wrap; }
+  .score-update__comment-actions { margin-left: auto; }
 }
 
 /* ── Buttons (shared) ───────────────────────────────────────────────────────── */

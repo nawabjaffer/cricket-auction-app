@@ -16,12 +16,14 @@ import { scoringService } from '../services/scoring';
 import { statsEngine } from '../services/scoring/statsEngine';
 import { obsReplaySourceService } from '../services/scoring/obsReplaySourceService';
 import { realtimeSync } from '../services/realtimeSync';
+import { liveCommentService } from '../services/liveCommentService';
 import { getActiveTenant, tenantPath } from '../services/tenantPath';
 import { isPowerplayOver } from '../utils/powerplay';
 import type {
   BallOutcome, DismissalType, WicketDetail, MatchSquadPlayer, OBSReplayButton,
   TickerStatWidget, Innings, BatsmanInnings, BowlerInnings, LiveScore, MatchSetup, MatchLineup,
   TournamentStats,
+  LiveComment, LiveCommentSettings, OverlayControlState,
 } from '../types/scoring';
 import type { CricHeroesSyncData } from '../hooks/useCricHeroesSyncAdapter';
 import FieldPlacementEditor from '../components/FieldPlacementEditor/FieldPlacementEditor';
@@ -520,6 +522,7 @@ export default function ScoreUpdatePage() {
             Toss details are captured here before the first innings starts.
           </p>
         </div>
+        <LiveCommentModerationPanel matchId={match.id} />
         {showTossModal && (
           <TossSetupModal
             match={match}
@@ -1033,7 +1036,14 @@ export default function ScoreUpdatePage() {
           className="score-update__overlay-btn"
           onClick={() => setShowPlayerStatsModal(true)}
         >
-          📊 Player Stats
+          Edit Stats
+        </button>
+        <button
+          className="score-update__overlay-btn"
+          onClick={() => setOverlay('player_stats_notes')}
+          title="Show the custom player stats on the broadcast"
+        >
+          Show Stats
         </button>
       </div>
 
@@ -1103,6 +1113,8 @@ export default function ScoreUpdatePage() {
           );
         })}
       </div>
+
+      <LiveCommentModerationPanel matchId={match.id} clearOnComplete={isMatchComplete} />
 
       {/* ── Field Placement Editor Panel ──────────────────────────────── */}
       <AnimatePresence>
@@ -2205,6 +2217,120 @@ function AddPlayerModal({ match, lineups, onAdd, onClose }: {
 }
 
 // ── Player Stats Notes Modal (input/edit stats mid-match) ────────────────────
+
+function LiveCommentModerationPanel({ matchId, clearOnComplete = false }: { matchId: string; clearOnComplete?: boolean }) {
+  const [settings, setSettings] = useState<LiveCommentSettings>({
+    enabled: false, autoAdvance: true, displayDurationSeconds: 8, youtubeEnabled: false,
+  });
+  const [comments, setComments] = useState<LiveComment[]>([]);
+  const [activeCommentId, setActiveCommentId] = useState('');
+  const [feedback, setFeedback] = useState('');
+  const [serviceReady, setServiceReady] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    let unsubscribers: Array<() => void> = [];
+    const subscribe = async () => {
+      try {
+        await realtimeSync.ensureInitialized();
+        const db = realtimeSync.getDatabase();
+        if (!db || cancelled) return;
+        try { scoringService.initialize(db, tenantPath('scoring')); } catch { /* already initialized */ }
+        liveCommentService.initialize(db, tenantPath('scoring'));
+        unsubscribers = [
+          liveCommentService.subscribeSettings(setSettings),
+          liveCommentService.subscribeQueue(matchId, setComments),
+          scoringService.subscribeOverlayControl(matchId, (control: OverlayControlState) => {
+            const data = control.activeOverlayData as { id?: string } | undefined;
+            setActiveCommentId(control.activeOverlay === 'live_comment' ? data?.id || '' : '');
+          }),
+        ];
+        setServiceReady(true);
+      } catch { setFeedback('Audience queue is temporarily unavailable.'); }
+    };
+    void subscribe();
+    return () => { cancelled = true; unsubscribers.forEach(unsubscribe => unsubscribe()); };
+  }, [matchId]);
+
+  useEffect(() => {
+    if (!clearOnComplete || !serviceReady) return;
+    void liveCommentService.clearMatch(matchId).then(() => {
+      if (activeCommentId) return scoringService.setOverlayControl(matchId, { activeOverlay: 'none', activeOverlayData: undefined });
+      return undefined;
+    }).catch(() => setFeedback('Could not clear the completed match comment queue.'));
+  }, [activeCommentId, clearOnComplete, matchId, serviceReady]);
+
+  const audienceLink = new URL(window.location.href);
+  audienceLink.pathname = audienceLink.pathname.replace(/\/update$/, '/live-chat');
+  audienceLink.searchParams.set('matchId', matchId);
+
+  const toggleEnabled = async () => {
+    try {
+      await liveCommentService.updateSettings({ enabled: !settings.enabled });
+      setFeedback(settings.enabled ? 'Audience comments closed.' : 'Audience comments are open.');
+    } catch { setFeedback('Could not update audience comment status.'); }
+  };
+
+  const showComment = async (comment: LiveComment) => {
+    try {
+      await scoringService.setOverlayControl(matchId, {
+        activeOverlay: 'live_comment',
+        activeOverlayData: { ...comment } as unknown as Record<string, unknown>,
+      });
+      setFeedback(`Showing #${comments.findIndex(item => item.id === comment.id) + 1} on air.`);
+    } catch { setFeedback('Could not show this comment.'); }
+  };
+
+  const removeComment = async (comment: LiveComment) => {
+    try {
+      if (activeCommentId === comment.id) {
+        await scoringService.setOverlayControl(matchId, { activeOverlay: 'none', activeOverlayData: undefined });
+      }
+      await liveCommentService.remove(matchId, comment.id);
+    } catch { setFeedback('Could not remove this comment.'); }
+  };
+
+  return (
+    <section className="score-update__comment-panel" aria-label="Audience comments">
+      <div className="score-update__comment-heading">
+        <div>
+          <strong>Audience comments</strong>
+          <span>{comments.length} in queue{activeCommentId ? ' · on air' : ''}</span>
+        </div>
+        <button className={`score-update__comment-toggle ${settings.enabled ? 'is-open' : ''}`} onClick={() => void toggleEnabled()} aria-pressed={settings.enabled} disabled={!serviceReady}>
+          <span />{settings.enabled ? 'Close link' : 'Open link'}
+        </button>
+      </div>
+      <div className="score-update__comment-link">
+        <input aria-label="Audience comment link" readOnly value={audienceLink.toString()} />
+        <button onClick={() => {
+          void navigator.clipboard?.writeText(audienceLink.toString()).then(() => setFeedback('Audience link copied.')).catch(() => setFeedback('Copy was blocked by the browser.'));
+        }}>Copy</button>
+        <a href={audienceLink.toString()} target="_blank" rel="noreferrer" aria-label="Open audience comments">Open</a>
+      </div>
+      <details className="score-update__comment-queue" open={comments.length > 0}>
+        <summary>Queue order · highest votes first</summary>
+        {comments.length === 0 ? (
+          <p className="score-update__comment-empty">No audience messages yet.</p>
+        ) : comments.map((comment, index) => (
+          <article key={comment.id} className={`score-update__comment-item ${activeCommentId === comment.id ? 'is-on-air' : ''}`}>
+            <span className="score-update__comment-rank">{String(index + 1).padStart(2, '0')}</span>
+            <div className="score-update__comment-copy">
+              <strong>{comment.name}{comment.source === 'youtube' && <small> · YouTube</small>}</strong>
+              <p>{comment.message}</p>
+              <span>{comment.upvotes} upvote{comment.upvotes === 1 ? '' : 's'}{comment.details ? ` · ${comment.details}` : ''}</span>
+            </div>
+            <div className="score-update__comment-actions">
+              <button onClick={() => void showComment(comment)}>{activeCommentId === comment.id ? 'Replay' : 'Show'}</button>
+              <button className="is-remove" onClick={() => void removeComment(comment)} aria-label={`Remove comment by ${comment.name}`}>Remove</button>
+            </div>
+          </article>
+        ))}
+      </details>
+      {feedback && <p className="score-update__comment-feedback" role="status">{feedback}</p>}
+    </section>
+  );
+}
 
 function PlayerStatsNotesModal({ matchId, lineups, onClose }: {
   matchId: string;

@@ -5,7 +5,7 @@
 // extras tracking, replay triggers, bowling consecutive-over prevention.
 // ============================================================================
 
-import { ref, get, set, onValue, push, type Database } from 'firebase/database';
+import { ref, get, set, remove, onValue, push, type Database } from 'firebase/database';
 import type {
   IScoringAdapter, MatchScore, PlayerMatchStats, LiveScore,
   BallEvent, BallOutcome, WicketDetail, LiveBatsman, LiveBowler,
@@ -646,6 +646,14 @@ export class ManualScoringAdapter implements IScoringAdapter {
 
     // Update match status
     await set(ref(this.db, `${this.basePath}/matches/${matchId}/setup/status`), 'completed');
+
+    // A completed match should not leave audience messages available to the next session.
+    await remove(ref(this.db, `${this.basePath}/matches/${matchId}/liveComments`));
+    const overlayRef = ref(this.db, `${this.basePath}/matches/${matchId}/overlay`);
+    const overlaySnapshot = await get(overlayRef);
+    if (overlaySnapshot.exists() && overlaySnapshot.val()?.activeOverlay === 'live_comment') {
+      await set(overlayRef, { activeOverlay: 'none', lastUpdated: Date.now() });
+    }
 
     return score;
   }

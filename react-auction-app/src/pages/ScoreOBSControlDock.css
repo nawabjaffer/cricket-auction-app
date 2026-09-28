@@ -96,6 +96,30 @@
   margin-bottom: 8px;
 }
 
+.score-dock__comments .score-dock__section-label { display: flex; justify-content: space-between; gap: 8px; }
+.score-dock__comments .score-dock__section-label span { color: #75ddb0; font-size: 9px; }
+.score-dock__comment-status-row,.score-dock__comment-link-row,.score-dock__youtube-row { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin: 6px 0; }
+.score-dock__comment-status-row > span,.score-dock__youtube-status { color: #a6b0ac; font-size: 10px; text-transform: capitalize; }
+.score-dock__comment-status-row > span.is-open { color: #75ddb0; }
+.score-dock__comment-toggle,.score-dock__comment-link-row button,.score-dock__youtube-row button { min-height: 38px; padding: 0 10px; border: 1px solid rgba(255,255,255,0.12); border-radius: 7px; color: #dbe5df; background: rgba(255,255,255,0.05); font-size: 10px; font-weight: 700; cursor: pointer; }
+.score-dock__comment-toggle.is-open { color: #75ddb0; border-color: rgba(117,221,176,0.34); background: rgba(117,221,176,0.08); }
+.score-dock__comment-toggle:disabled,.score-dock__youtube-row button:disabled { opacity: 0.45; cursor: not-allowed; }
+.score-dock__comment-link-row input { min-width: 0; flex: 1; height: 36px; padding: 0 8px; border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; color: #aab8b0; background: rgba(0,0,0,0.18); font-size: 9px; }
+.score-dock__youtube-status.is-connected { color: #75ddb0; }
+.score-dock__youtube-status.is-error { color: #f87171; }
+.score-dock__comment-queue { max-height: 340px; overflow: auto; overscroll-behavior: contain; }
+.score-dock__comment-queue > p { color: rgba(255,255,255,0.4); font-size: 10px; }
+.score-dock__comment-queue article { display: flex; align-items: flex-start; gap: 6px; padding: 8px 0; border-top: 1px solid rgba(255,255,255,0.07); }
+.score-dock__comment-queue article.is-on-air { background: rgba(117,221,176,0.07); }
+.score-dock__comment-rank { min-width: 19px; color: #e6bd61; font: 700 9px ui-monospace, monospace; }
+.score-dock__comment-copy { min-width: 0; flex: 1; }
+.score-dock__comment-copy strong { color: #e5eee8; font-size: 10px; }
+.score-dock__comment-copy p { margin: 3px 0; color: #cbd5cf; font-size: 10px; line-height: 1.35; overflow-wrap: anywhere; }
+.score-dock__comment-copy small { color: #84958c; font-size: 8px; }
+.score-dock__comment-actions { display: flex; flex-direction: column; gap: 4px; }
+.score-dock__comment-actions button { min-height: 32px; padding: 0 7px; border: 1px solid rgba(117,221,176,0.24); border-radius: 5px; color: #9ce1b9; background: transparent; font-size: 9px; cursor: pointer; }
+.score-dock__comment-actions button.is-remove { border-color: rgba(248,113,113,0.2); color: #fca5a5; }
+
 /* Select */
 .score-dock__select {
   width: 100%;

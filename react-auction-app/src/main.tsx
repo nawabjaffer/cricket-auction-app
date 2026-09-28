@@ -95,6 +95,7 @@ createRoot(document.getElementById('root')!).render(
             <Route path="/:gameType/scorer/camera/host" element={<GameScorerPage route="camera-host" />} />
             <Route path="/:gameType/scorer/obs-dock" element={<GameScorerPage route="obs-dock" />} />
             <Route path="/:gameType/scorer/live-question" element={<GameScorerPage route="live-question" />} />
+            <Route path="/:gameType/scorer/live-chat" element={<GameScorerPage route="live-chat" />} />
             <Route path="/:gameType/scorer/designer" element={<GameScorerPage route="designer" />} />
             {/* Legacy scorer routes (redirects) */}
             <Route path="/scoring/admin" element={<ScoringAdminPage />} />
@@ -128,6 +129,7 @@ createRoot(document.getElementById('root')!).render(
             <Route path="/:tenantSlug/:gameType/scorer/camera/host" element={<TenantGate><GameScorerPage route="camera-host" /></TenantGate>} />
             <Route path="/:tenantSlug/:gameType/scorer/obs-dock" element={<TenantGate><GameScorerPage route="obs-dock" /></TenantGate>} />
             <Route path="/:tenantSlug/:gameType/scorer/live-question" element={<TenantGate><GameScorerPage route="live-question" /></TenantGate>} />
+            <Route path="/:tenantSlug/:gameType/scorer/live-chat" element={<TenantGate><GameScorerPage route="live-chat" /></TenantGate>} />
             <Route path="/:tenantSlug/:gameType/scorer/designer" element={<TenantGate><GameScorerPage route="designer" /></TenantGate>} />
             {/* Legacy scorer routes */}
             <Route path="/:tenantSlug/scoring/admin" element={<TenantGate><TenantScoringRouterPage route="admin" /></TenantGate>} />

@@ -339,6 +339,7 @@ export type OverlayType =
   | 'duck_out'
   | 'hat_trick'
   | 'live_question'
+  | 'live_comment'
   | 'ads_break'
   // Stats overlays — match scope (current match only, 2 teams)
   | 'player_stats_notes'
@@ -375,6 +376,35 @@ export interface LiveQuestion {
   duration: number;        // seconds
   responses?: Record<string, number>; // optionIndex -> count
 }
+
+export type LiveCommentSource = 'audience' | 'youtube';
+
+export interface LiveComment {
+  id: string;
+  name: string;
+  message: string;
+  details?: string;
+  imageUrl?: string;
+  source: LiveCommentSource;
+  upvotes: number;
+  createdAt: number;
+}
+
+export interface LiveCommentSettings {
+  enabled: boolean;
+  autoAdvance: boolean;
+  displayDurationSeconds: number;
+  youtubeEnabled: boolean;
+  youtubeClientId?: string;
+  youtubeVideoId?: string;
+}
+
+export const DEFAULT_LIVE_COMMENT_SETTINGS: LiveCommentSettings = {
+  enabled: false,
+  autoAdvance: true,
+  displayDurationSeconds: 8,
+  youtubeEnabled: false,
+};
 
 export interface OverlayControlState {
   activeOverlay: OverlayType;

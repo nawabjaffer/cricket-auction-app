@@ -1081,7 +1081,12 @@ export default function ScoreOBSOverlayPage() {
       {/* ── Info/Stats Overlay Components ──────────────────────────── */}
       <AnimatePresence mode="wait">
         {effectiveOverlay === 'player_stats_notes' && (
-          <PlayerStatsNotesOverlay notes={playerMatchNotes} lineups={lineups} playerImages={playerImages} />
+          <PlayerStatsNotesOverlay
+            notes={playerMatchNotes}
+            lineups={lineups}
+            playerImages={playerImages}
+            teamNames={match ? { [match.teamA.id]: match.teamA.name, [match.teamB.id]: match.teamB.name } : {}}
+          />
         )}
         {effectiveOverlay === 'ads_break' && match && (
           <InningsBreakOverlay match={match} live={live} config={config} ads={breakAds} adIndex={breakAdIndex} />
@@ -1100,6 +1105,9 @@ export default function ScoreOBSOverlayPage() {
         )}
         {effectiveOverlay === 'live_question' && currentQuestion && (
           <QuestionOverlay key="overlay-question" question={currentQuestion} />
+        )}
+        {effectiveOverlay === 'live_comment' && _overlay?.activeOverlayData && (
+          <LiveCommentOverlay key="overlay-live-comment" data={_overlay.activeOverlayData} />
         )}
         {effectiveOverlay === 'stats_fours' && matchStats && (
           <StatsListOverlay
@@ -2063,6 +2071,37 @@ function QuestionOverlay({ question }: { question: LiveQuestion }) {
   );
 }
 
+function LiveCommentOverlay({ data }: { data: Record<string, unknown> }) {
+  const name = typeof data.name === 'string' ? data.name : 'Live viewer';
+  const message = typeof data.message === 'string' ? data.message : '';
+  const details = typeof data.details === 'string' ? data.details : '';
+  const imageUrl = typeof data.imageUrl === 'string' ? data.imageUrl : '';
+  const upvotes = Number(data.upvotes) || 0;
+  return (
+    <motion.div
+      className="score-obs__live-comment"
+      initial={{ y: 40, opacity: 0 }}
+      animate={{ y: 0, opacity: 1 }}
+      exit={{ y: 40, opacity: 0 }}
+      role="status"
+    >
+      <div className="score-obs__live-comment-avatar">
+        {name.slice(0, 1).toUpperCase()}
+        {imageUrl && <img src={imageUrl} alt="" onError={event => { event.currentTarget.style.display = 'none'; }} />}
+      </div>
+      <div className="score-obs__live-comment-content">
+        <div className="score-obs__live-comment-meta">
+          <strong>{name}</strong>
+          {details && <span>{details}</span>}
+          <em>LIVE AUDIENCE</em>
+        </div>
+        <p>{message}</p>
+      </div>
+      <div className="score-obs__live-comment-votes"><span>♥</span>{upvotes}</div>
+    </motion.div>
+  );
+}
+
 // ── Stats List Overlay (Leaderboard style) ──
 
 function StatsListOverlay({ title, items, playerImages }: {
@@ -2163,56 +2202,106 @@ function StatsListOverlay({ title, items, playerImages }: {
   );
 }
 
-function PlayerStatsNotesOverlay({ notes, lineups, playerImages }: {
+function PlayerStatsNotesOverlay({ notes, lineups, playerImages, teamNames }: {
   notes: Record<string, { stats: { stat: string; value: string }[] }>;
   lineups: { teamA: MatchLineup | null; teamB: MatchLineup | null };
   playerImages?: Record<string, string>;
+  teamNames: Record<string, string>;
 }) {
   const players = [...(lineups.teamA?.players || []), ...(lineups.teamB?.players || [])];
   const playerById = new Map(players.map(player => [player.playerId, player]));
-  const items = Object.entries(notes).flatMap(([playerId, data]) =>
-    (data.stats || []).map(stat => ({ playerId, stat: stat.stat, value: stat.value })),
-  );
+  const statPriority = (label: string): number => {
+    const normalized = label.toLowerCase();
+    const priority = [
+      /runs?/, /wickets?/, /strike[ -]?rate|\bsr\b/, /average|\bavg\b/,
+      /economy|\beco\b/, /overs?/, /sixes|\b6s\b/, /fours|\b4s\b/,
+      /catches|run.?outs?|stumpings?/,
+    ];
+    const index = priority.findIndex(pattern => pattern.test(normalized));
+    return index < 0 ? priority.length : index;
+  };
+  const spotlights = Object.entries(notes).flatMap(([playerId, data]) => {
+    const player = playerById.get(playerId);
+    const stats = (data.stats || [])
+      .filter(stat => stat.stat?.trim() && stat.value?.trim())
+      .slice()
+      .sort((a, b) => statPriority(a.stat) - statPriority(b.stat));
+    if (stats.length === 0) return [];
+    const teamId = lineups.teamA?.players.some(item => item.playerId === playerId)
+      ? lineups.teamA.teamId
+      : lineups.teamB?.teamId;
+    return [{
+      playerId,
+      player,
+      teamName: teamId ? teamNames[teamId] : undefined,
+      stats,
+    }];
+  }).slice(0, 3);
 
   return (
     <motion.aside
       className="score-obs__player-notes"
-      initial={{ x: 70, opacity: 0 }}
-      animate={{ x: 0, opacity: 1 }}
-      exit={{ x: 70, opacity: 0 }}
-      transition={{ type: 'spring', stiffness: 180, damping: 24 }}
+      initial={{ y: 34, opacity: 0, scale: 0.98 }}
+      animate={{ y: 0, opacity: 1, scale: 1 }}
+      exit={{ y: 24, opacity: 0, scale: 0.99 }}
+      transition={{ type: 'spring', stiffness: 190, damping: 24 }}
     >
       <header className="score-obs__player-notes-header">
-        <span className="score-obs__player-notes-kicker">MATCH INSIGHTS</span>
-        <strong>PLAYER STATS &amp; NOTES</strong>
+        <div className="score-obs__player-notes-heading">
+          <span className="score-obs__player-notes-mark">XI</span>
+          <div>
+            <span className="score-obs__player-notes-kicker">MATCH CENTRE <i /> SPECIAL STATS</span>
+            <strong>PLAYER SPOTLIGHTS</strong>
+          </div>
+        </div>
+        <span className="score-obs__player-notes-count">{spotlights.length.toString().padStart(2, '0')} FEATURED</span>
       </header>
-      {items.length > 0 ? (
+      {spotlights.length > 0 ? (
         <div className="score-obs__player-notes-list">
-          {items.slice(0, 8).map((item, index) => {
-            const player = playerById.get(item.playerId);
-            const image = resolvePlayerImageUrl(item.playerId, player?.imageUrl, playerImages);
+          {spotlights.map((spotlight, index) => {
+            const image = resolvePlayerImageUrl(spotlight.playerId, spotlight.player?.imageUrl, playerImages);
+            const [primaryStat, ...supportingStats] = spotlight.stats;
             return (
               <motion.div
-                key={`${item.playerId}-${item.stat}`}
+                key={spotlight.playerId}
                 className="score-obs__player-note"
-                initial={{ opacity: 0, x: 18 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: index * 0.06 }}
+                initial={{ opacity: 0, y: 16 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: index * 0.1, duration: 0.35 }}
               >
-                <div className="score-obs__player-note-avatar">
-                  {image ? <img src={image} alt="" /> : <span>{(player?.playerName || '?').charAt(0)}</span>}
+                <div className="score-obs__player-note-identity">
+                  <span className="score-obs__player-note-rank">{String(index + 1).padStart(2, '0')}</span>
+                  <div className="score-obs__player-note-avatar">
+                    <span>{(spotlight.player?.playerName || '?').charAt(0).toUpperCase()}</span>
+                    {image && <img src={image} alt="" onError={event => { event.currentTarget.style.display = 'none'; }} />}
+                  </div>
+
                 </div>
-                <div className="score-obs__player-note-copy">
-                  <strong>{player?.playerName || item.playerId}</strong>
-                  <span>{item.stat}</span>
+                <div className="score-obs__player-note-metrics">
+                  <div className="score-obs__player-note-name">
+                    <strong>{spotlight.player?.playerName || spotlight.playerId}</strong>
+                    <span>{spotlight.teamName || spotlight.player?.role || 'MATCH PLAYER'}</span>
+                  </div>
+                  <div className="score-obs__player-note-primary">
+                    <span>{primaryStat.stat}</span>
+                    <strong>{primaryStat.value}</strong>
+                  </div>
+                  {supportingStats.slice(0, 3).map(stat => (
+                    <div className="score-obs__player-note-secondary" key={`${stat.stat}-${stat.value}`}>
+                      <span>{stat.stat}</span>
+                      <strong>{stat.value}</strong>
+                    </div>
+                  ))}
                 </div>
-                <b>{item.value}</b>
               </motion.div>
             );
           })}
         </div>
       ) : (
-        <p className="score-obs__player-notes-empty">Add player stats or notes from the scorer controls to feature them here.</p>
+        <div className="score-obs__player-notes-empty">
+          <span>STATS DESK</span>
+          <strong>Player features are ready for the next innings.</strong>
+        </div>
       )}
     </motion.aside>
   );

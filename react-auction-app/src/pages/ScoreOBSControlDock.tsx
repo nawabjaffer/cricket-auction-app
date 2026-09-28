@@ -13,13 +13,17 @@ import { realtimeSync } from '../services/realtimeSync';
 import { tenantPath } from '../services/tenantPath';
 import { obsService } from '../services/obsService';
 import { obsReplaySourceService } from '../services/scoring/obsReplaySourceService';
+import { liveCommentService } from '../services/liveCommentService';
+import { requestYouTubeReadToken, startYouTubeLiveChat } from '../services/youtubeLiveChat';
+import { nextLiveComment } from '../utils/liveComments';
 import { normalizePlayerName } from '../utils/playerName';
 import { isInningsBreak } from '../utils/inningsBreak';
 import { getAnimationActionDelayMs } from '../utils/animationAction';
 import type {
   MatchSetup, LiveScore, OverlayControlState, OverlayType,
-  OBSReplayButton, OBSReplayConfig, ScoringOverlayConfig,
+  OBSReplayButton, OBSReplayConfig, ScoringOverlayConfig, LiveComment, LiveCommentSettings,
 } from '../types/scoring';
+import { DEFAULT_LIVE_COMMENT_SETTINGS } from '../types/scoring';
 import './ScoreOBSControlDock.css';
 
 const OVERLAY_BUTTONS: { key: OverlayType; label: string; icon: string; shortcut: string; color: string }[] = [
@@ -79,8 +83,12 @@ export default function ScoreOBSControlDock() {
   const [liveScore, setLiveScore] = useState<LiveScore | null>(null);
   const [firstInningsComplete, setFirstInningsComplete] = useState(false);
   const [activeOverlay, setActiveOverlay] = useState<OverlayType>('none');
+  const [activeOverlayData, setActiveOverlayData] = useState<Record<string, unknown> | null>(null);
   const [autoActionEvent, setAutoActionEvent] = useState<{ matchId: string; control: OverlayControlState } | null>(null);
   const [animationSettings, setAnimationSettings] = useState<ScoringOverlayConfig | null>(null);
+  const [liveCommentSettings, setLiveCommentSettings] = useState<LiveCommentSettings>(DEFAULT_LIVE_COMMENT_SETTINGS);
+  const [liveComments, setLiveComments] = useState<LiveComment[]>([]);
+  const [youtubeStatus, setYoutubeStatus] = useState<'off' | 'connecting' | 'connected' | 'error'>('off');
   const [feedback, setFeedback] = useState('');
   const initialized = useRef(false);
 
@@ -131,6 +139,7 @@ export default function ScoreOBSControlDock() {
   const preBreakSceneRef = useRef<string | null>(null);
   const lastAutoActionEventRef = useRef<string | null>(null);
   const autoActionTimersRef = useRef(new Set<ReturnType<typeof setTimeout>>());
+  const youtubeStopRef = useRef<(() => void) | null>(null);
 
   const isLoopbackHost = (value: string): boolean => {
     const host = value.trim().toLowerCase();
@@ -155,6 +164,7 @@ export default function ScoreOBSControlDock() {
           const db = realtimeSync.getDatabase();
           if (db) {
             scoringService.initialize(db, tenantPath('scoring'));
+            liveCommentService.initialize(db, tenantPath('scoring'));
             obsReplaySourceService.initialize(db, tenantPath('scoring'));
             initialized.current = true;
           } else {
@@ -222,6 +232,7 @@ export default function ScoreOBSControlDock() {
           setSingleOverlayMode(!!liveCfg.singleOverlayMode);
           setAnimationSettings(liveCfg);
         }));
+        dockCleanupRef.current.push(liveCommentService.subscribeSettings(setLiveCommentSettings));
         dockCleanupRef.current.push(scoringService.subscribeActiveMatch((id) => {
           setActiveMatchPointer(id);
           if (!singleOverlayModeRef.current) return;
@@ -237,6 +248,14 @@ export default function ScoreOBSControlDock() {
       dockCleanupRef.current = [];
     };
   }, []);
+
+  useEffect(() => {
+    youtubeStopRef.current?.();
+    youtubeStopRef.current = null;
+    setYoutubeStatus('off');
+    if (!selectedMatchId || !initialized.current) { setLiveComments([]); return; }
+    return liveCommentService.subscribeQueue(selectedMatchId, setLiveComments);
+  }, [selectedMatchId]);
 
   // Subscribe to live score
   useEffect(() => {
@@ -270,6 +289,7 @@ export default function ScoreOBSControlDock() {
     let isInitialSnapshot = true;
     const unsub = scoringService.subscribeOverlayControl(selectedMatchId, (control: OverlayControlState) => {
       setActiveOverlay(control.activeOverlay);
+      setActiveOverlayData(control.activeOverlayData || null);
       if (isInitialSnapshot) {
         isInitialSnapshot = false;
         return;
@@ -506,6 +526,88 @@ export default function ScoreOBSControlDock() {
     }
   }, [selectedMatchId, activeOverlay, showFeedback]);
 
+  const publishComment = useCallback(async (comment: LiveComment) => {
+    if (!selectedMatchId) return;
+    try {
+      await scoringService.setOverlayControl(selectedMatchId, {
+        activeOverlay: 'live_comment',
+        activeOverlayData: { ...comment } as unknown as Record<string, unknown>,
+      });
+      showFeedback(`Showing comment #${liveComments.findIndex(item => item.id === comment.id) + 1}`);
+    } catch { showFeedback('Could not show audience comment'); }
+  }, [liveComments, selectedMatchId, showFeedback]);
+
+  const removeComment = useCallback(async (comment: LiveComment) => {
+    if (!selectedMatchId) return;
+    try {
+      if (activeOverlay === 'live_comment' && activeOverlayData?.id === comment.id) {
+        await scoringService.setOverlayControl(selectedMatchId, { activeOverlay: 'none', activeOverlayData: {} });
+      }
+      await liveCommentService.remove(selectedMatchId, comment.id);
+    } catch { showFeedback('Could not remove audience comment'); }
+  }, [activeOverlay, activeOverlayData, selectedMatchId, showFeedback]);
+
+  const toggleAudienceComments = useCallback(async () => {
+    try {
+      await liveCommentService.updateSettings({ enabled: !liveCommentSettings.enabled });
+      showFeedback(liveCommentSettings.enabled ? 'Audience comments closed' : 'Audience comments opened');
+    } catch { showFeedback('Could not update audience comment status'); }
+  }, [liveCommentSettings.enabled, showFeedback]);
+
+  const connectYouTube = useCallback(async () => {
+    if (!selectedMatchId || !liveCommentSettings.youtubeEnabled || !liveCommentSettings.youtubeClientId || !liveCommentSettings.youtubeVideoId) {
+      showFeedback('Configure YouTube and select a match first');
+      return;
+    }
+    setYoutubeStatus('connecting');
+    try {
+      const accessToken = await requestYouTubeReadToken(liveCommentSettings.youtubeClientId);
+      const stop = await startYouTubeLiveChat(
+        accessToken,
+        liveCommentSettings.youtubeVideoId,
+        comment => { void liveCommentService.importYouTubeComment(selectedMatchId, comment.id, comment).catch(() => {}); },
+        error => {
+          youtubeStopRef.current?.();
+          youtubeStopRef.current = null;
+          setYoutubeStatus('error');
+          showFeedback(error.message);
+        },
+      );
+      youtubeStopRef.current = stop;
+      setYoutubeStatus('connected');
+      showFeedback('YouTube Live Chat connected');
+    } catch (error) {
+      setYoutubeStatus('error');
+      showFeedback(error instanceof Error ? error.message : 'YouTube connection failed');
+    }
+  }, [liveCommentSettings, selectedMatchId, showFeedback]);
+
+  const disconnectYouTube = useCallback(() => {
+    youtubeStopRef.current?.();
+    youtubeStopRef.current = null;
+    setYoutubeStatus('off');
+    showFeedback('YouTube Live Chat disconnected');
+  }, [showFeedback]);
+
+  useEffect(() => {
+    if (activeOverlay !== 'live_comment' || !selectedMatchId || !liveCommentSettings.autoAdvance || liveComments.length === 0) return;
+    const activeId = String(activeOverlayData?.id || '');
+    const timer = setTimeout(() => {
+      const next = nextLiveComment(liveComments, activeId);
+      if (!next) return;
+      void scoringService.setOverlayControl(selectedMatchId, {
+        activeOverlay: 'live_comment',
+        activeOverlayData: { ...next } as unknown as Record<string, unknown>,
+      });
+    }, Math.max(3, Number(liveCommentSettings.displayDurationSeconds) || 8) * 1000);
+    return () => clearTimeout(timer);
+  }, [activeOverlay, activeOverlayData, liveComments, liveCommentSettings.autoAdvance, liveCommentSettings.displayDurationSeconds, selectedMatchId]);
+
+  useEffect(() => () => {
+    youtubeStopRef.current?.();
+    youtubeStopRef.current = null;
+  }, []);
+
   const clearOverlay = useCallback(async () => {
     if (!selectedMatchId) return;
     try {
@@ -581,9 +683,22 @@ export default function ScoreOBSControlDock() {
   }, [triggerOverlay, clearOverlay]);
 
   const selectedMatch = matches.find(m => m.id === selectedMatchId);
+  useEffect(() => {
+    if (selectedMatch?.status !== 'completed') return;
+    youtubeStopRef.current?.();
+    youtubeStopRef.current = null;
+    setYoutubeStatus('off');
+    if (activeOverlay === 'live_comment' && selectedMatchId) {
+      void scoringService.setOverlayControl(selectedMatchId, { activeOverlay: 'none', activeOverlayData: {} });
+    }
+  }, [activeOverlay, selectedMatch?.status, selectedMatchId]);
   const obsIsConnected = obsStatus === 'connected';
   const relayReady = connectionMode === 'relay' || relayOnlyMode || (!obsIsConnected && obsStatus !== 'connecting');
   const enabledButtons = replayConfig.buttons.filter(b => b.enabled).sort((a, b) => a.order - b.order);
+  const audienceUrl = new URL(globalThis.location.href);
+  audienceUrl.pathname = audienceUrl.pathname.replace(/\/obs-dock$/, '/live-chat');
+  if (selectedMatchId) audienceUrl.searchParams.set('matchId', selectedMatchId);
+  else audienceUrl.searchParams.delete('matchId');
 
   return (
     <div className="score-dock">
@@ -887,6 +1002,51 @@ export default function ScoreOBSControlDock() {
           <span>{activeOverlay.replace(/_/g, ' ').toUpperCase()}</span>
         </div>
       )}
+
+      {/* Audience Comment Queue */}
+      <div className="score-dock__section score-dock__comments">
+        <div className="score-dock__section-label">Audience Comments <span>{liveComments.length} queued</span></div>
+        <div className="score-dock__comment-status-row">
+          <span className={liveCommentSettings.enabled ? 'is-open' : ''}>{liveCommentSettings.enabled ? 'Link open' : 'Link closed'}</span>
+          <button className={`score-dock__comment-toggle ${liveCommentSettings.enabled ? 'is-open' : ''}`} onClick={() => void toggleAudienceComments()} disabled={!selectedMatchId}>
+            {liveCommentSettings.enabled ? 'Close link' : 'Open link'}
+          </button>
+        </div>
+        {selectedMatchId && (
+          <div className="score-dock__comment-link-row">
+            <input value={audienceUrl.toString()} readOnly aria-label="Audience comment link" />
+            <button onClick={() => { void navigator.clipboard?.writeText(audienceUrl.toString()).then(() => showFeedback('Audience link copied')).catch(() => showFeedback('Copy blocked by browser')); }}>Copy</button>
+          </div>
+        )}
+        {liveCommentSettings.youtubeEnabled && (
+          <div className="score-dock__youtube-row">
+            <span className={`score-dock__youtube-status is-${youtubeStatus}`}>YouTube: {youtubeStatus}</span>
+            {youtubeStatus === 'connected' ? (
+              <button onClick={disconnectYouTube}>Disconnect</button>
+            ) : (
+              <button onClick={() => void connectYouTube()} disabled={!selectedMatchId || youtubeStatus === 'connecting'}>
+                {youtubeStatus === 'connecting' ? 'Connecting...' : 'Connect YouTube'}
+              </button>
+            )}
+          </div>
+        )}
+        <div className="score-dock__comment-queue">
+          {liveComments.length === 0 ? <p>No comments in the queue.</p> : liveComments.map((comment, index) => (
+            <article key={comment.id} className={activeOverlay === 'live_comment' && activeOverlayData?.id === comment.id ? 'is-on-air' : ''}>
+              <span className="score-dock__comment-rank">{String(index + 1).padStart(2, '0')}</span>
+              <div className="score-dock__comment-copy">
+                <strong>{comment.name}{comment.source === 'youtube' ? ' · YouTube' : ''}</strong>
+                <p>{comment.message}</p>
+                <small>{comment.upvotes} upvotes{comment.details ? ` · ${comment.details}` : ''}</small>
+              </div>
+              <div className="score-dock__comment-actions">
+                <button onClick={() => void publishComment(comment)}>{activeOverlayData?.id === comment.id ? 'Replay' : 'Show'}</button>
+                <button className="is-remove" onClick={() => void removeComment(comment)}>Remove</button>
+              </div>
+            </article>
+          ))}
+        </div>
+      </div>
 
       {/* Stats Overlay Controls */}
       <div className="score-dock__section">

@@ -15,6 +15,7 @@ import ScoreCameraAdminPage from './ScoreCameraAdminPage';
 import ScoreCameraHostPage from './ScoreCameraHostPage';
 import ScoreOBSControlDock from './ScoreOBSControlDock';
 import LiveQuestionPage from './LiveQuestionPage';
+import LiveCommentsPage from './LiveCommentsPage';
 
 import FootballAdminPage from './FootballAdminPage';
 import FootballUpdatePage from './FootballUpdatePage';
@@ -30,7 +31,7 @@ import ScorecardDesignerPage from './ScorecardDesignerPage';
 
 export type ScorerRouteKey =
   | 'admin' | 'update' | 'overlay' | 'obs-dock'
-  | 'camera' | 'camera-admin' | 'camera-host' | 'live-question' | 'designer';
+  | 'camera' | 'camera-admin' | 'camera-host' | 'live-question' | 'live-chat' | 'designer';
 
 /** Sports that currently have an implemented scorer workspace. */
 export type SupportedGameType = Extract<SportKey, 'cricket' | 'football' | 'kabaddi'>;
@@ -63,6 +64,7 @@ export function buildScorerPages(): Record<SupportedGameType, Partial<Record<Sco
       'camera-host': <ScoreCameraHostPage />,
       'obs-dock': <ScoreOBSControlDock />,
       'live-question': <LiveQuestionPage />,
+      'live-chat': <LiveCommentsPage />,
       designer: <ScorecardDesignerPage gameType="cricket" />,
     },
     football: {

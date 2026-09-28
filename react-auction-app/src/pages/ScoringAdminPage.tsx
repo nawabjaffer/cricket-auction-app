@@ -16,6 +16,7 @@ import { useTeams, useSoldPlayers } from '../store';
 import { tenantPath } from '../services/tenantPath';
 import { realtimeSync } from '../services/realtimeSync';
 import { scoringService } from '../services/scoring';
+import { liveCommentService } from '../services/liveCommentService';
 import PreMatchPreviewModal from '../components/PreMatchPreviewModal';
 import { initializeSharedOBSProfileService, sharedOBSProfileService } from '../services/sharedOBSProfileService';
 import { getActiveTenant } from '../services/tenantPath';
@@ -23,8 +24,8 @@ import { cricHeroesReader, isValidCricHeroesUrl } from '../services/scoring/cric
 import type { CricHeroesSnapshot } from '../services/scoring/cricHeroesReader';
 import { useCricHeroesSyncAdapter } from '../hooks/useCricHeroesSyncAdapter';
 import { uploadFileToStorage } from '../services';
-import { DEFAULT_MVP_WEIGHTS, MATCH_STAGE_LABELS } from '../types/scoring';
-import type { MatchSetup, MatchStage, ScoringAd, ScoringOverlayConfig, LiveQuestion, MatchScoringConfig, PreMatchState, ImpactPlayer, TossConfig, MatchLineup, MatchSquadPlayer, TickerConfig, OBSWebSocketConfig, MVPWeights, AnimationConfig, OBSReplayButton, OBSButtonSeriesStep, OBSReplayConfig, TickerStatWidget, SharedOBSProfile, PlayerStatsSequenceItem } from '../types/scoring';
+import { DEFAULT_LIVE_COMMENT_SETTINGS, DEFAULT_MVP_WEIGHTS, MATCH_STAGE_LABELS } from '../types/scoring';
+import type { MatchSetup, MatchStage, ScoringAd, ScoringOverlayConfig, LiveQuestion, MatchScoringConfig, PreMatchState, ImpactPlayer, TossConfig, MatchLineup, MatchSquadPlayer, TickerConfig, OBSWebSocketConfig, MVPWeights, AnimationConfig, OBSReplayButton, OBSButtonSeriesStep, OBSReplayConfig, TickerStatWidget, SharedOBSProfile, PlayerStatsSequenceItem, LiveCommentSettings } from '../types/scoring';
 import type { SoldPlayer } from '../types';
 import { DEFAULT_MATCH_SQUAD_OVERLAY_DESIGN, type MatchSquadOverlayDesign } from '../types/matchSquadOverlay';
 import { normalizeMatchSquadOverlayDesign } from '../utils/matchSquadOverlayDesign';
@@ -125,6 +126,7 @@ function ScoringAdminPageContent() {
         const db = realtimeSync.getDatabase();
         if (!db) throw new Error('Database not available after init');
         scoringService.initialize(db, tenantPath('scoring'));
+        liveCommentService.initialize(db, tenantPath('scoring'));
         if (!cancelled) setScoringReady(true);
       } catch (err) {
         console.warn('[ScoringAdmin] Init failed, retrying:', err);
@@ -2331,6 +2333,26 @@ function AnimationsTab({ config, setConfig, onFeedback }: {
   onFeedback: (msg: string) => void;
 }) {
   const [newQ, setNewQ] = useState({ text: '', options: '', duration: 10 });
+  const [liveCommentSettings, setLiveCommentSettings] = useState<LiveCommentSettings>(DEFAULT_LIVE_COMMENT_SETTINGS);
+  const [savingLiveComments, setSavingLiveComments] = useState(false);
+
+  useEffect(() => {
+    let unsubscribe: (() => void) | undefined;
+    let cancelled = false;
+    const subscribe = async () => {
+      try {
+        await realtimeSync.ensureInitialized();
+        const db = realtimeSync.getDatabase();
+        if (!db || cancelled) return;
+        liveCommentService.initialize(db, tenantPath('scoring'));
+        unsubscribe = liveCommentService.subscribeSettings(settings => {
+          if (!cancelled) setLiveCommentSettings(settings);
+        });
+      } catch { /* the admin page will show defaults until the database is available */ }
+    };
+    void subscribe();
+    return () => { cancelled = true; unsubscribe?.(); };
+  }, []);
 
   // Safe access to liveQuestions (may be undefined from Firebase)
   const liveQuestions = config.liveQuestions || [];
@@ -2387,6 +2409,23 @@ function AnimationsTab({ config, setConfig, onFeedback }: {
 
   const removeQuestion = (id: string) => {
     setConfig({ ...config, liveQuestions: liveQuestions.filter(q => q.id !== id) });
+  };
+
+  const saveLiveCommentSettings = async () => {
+    setSavingLiveComments(true);
+    try {
+      await liveCommentService.saveSettings({
+        ...liveCommentSettings,
+        displayDurationSeconds: Math.max(3, Math.min(60, Number(liveCommentSettings.displayDurationSeconds) || 8)),
+        youtubeClientId: liveCommentSettings.youtubeClientId?.trim() || undefined,
+        youtubeVideoId: liveCommentSettings.youtubeVideoId?.trim() || undefined,
+      });
+      onFeedback('Audience comment settings saved');
+    } catch (err) {
+      onFeedback(`Could not save audience settings: ${String(err)}`);
+    } finally {
+      setSavingLiveComments(false);
+    }
   };
 
   const handleUpload = async (file: File, field: string) => {
@@ -2654,6 +2693,48 @@ function AnimationsTab({ config, setConfig, onFeedback }: {
           </div>
         );
       })}
+
+      <div className="scoring-admin__form-card">
+        <h3 className="scoring-admin__subsection-title">Audience Comments</h3>
+        <p className="scoring-admin__hint">Moderate audience and YouTube messages from the scorer or OBS dock before showing them on air.</p>
+        <label className="scoring-admin__toggle-label">
+          <input type="checkbox" checked={liveCommentSettings.enabled} onChange={event => setLiveCommentSettings(settings => ({ ...settings, enabled: event.target.checked }))} />
+          Open audience comments
+        </label>
+        <label className="scoring-admin__toggle-label">
+          <input type="checkbox" checked={liveCommentSettings.autoAdvance} onChange={event => setLiveCommentSettings(settings => ({ ...settings, autoAdvance: event.target.checked }))} />
+          Automatically rotate through the queue
+        </label>
+        <div className="scoring-admin__field" style={{ maxWidth: 260, marginTop: '0.8rem' }}>
+          <label>Time per on-air message (seconds)</label>
+          <input type="number" min={3} max={60} value={liveCommentSettings.displayDurationSeconds} onChange={event => setLiveCommentSettings(settings => ({ ...settings, displayDurationSeconds: Number(event.target.value) }))} className="scoring-admin__input" />
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '0.7rem' }}>
+          <button className="scoring-admin__btn scoring-admin__btn--primary" onClick={() => void saveLiveCommentSettings()} disabled={savingLiveComments}>
+            <IoSave size={16} /> {savingLiveComments ? 'Saving...' : 'Save comment settings'}
+          </button>
+        </div>
+        <div style={{ borderTop: '1px solid rgba(255,255,255,0.08)', marginTop: '1rem', paddingTop: '1rem' }}>
+          <label className="scoring-admin__toggle-label">
+            <input type="checkbox" checked={liveCommentSettings.youtubeEnabled} onChange={event => setLiveCommentSettings(settings => ({ ...settings, youtubeEnabled: event.target.checked }))} />
+            Enable YouTube Live Chat in OBS dock
+          </label>
+          <p className="scoring-admin__hint">Configure a Google OAuth web client with the YouTube read-only scope and this site as an authorized origin. The OBS dock user signs in; access tokens are not saved.</p>
+          <div className="scoring-admin__form-grid" style={{ marginTop: '0.8rem' }}>
+            <div className="scoring-admin__field">
+              <label>Google OAuth client ID</label>
+              <input type="text" value={liveCommentSettings.youtubeClientId || ''} onChange={event => setLiveCommentSettings(settings => ({ ...settings, youtubeClientId: event.target.value }))} className="scoring-admin__input" placeholder="...apps.googleusercontent.com" autoComplete="off" />
+            </div>
+            <div className="scoring-admin__field">
+              <label>YouTube live video ID</label>
+              <input type="text" value={liveCommentSettings.youtubeVideoId || ''} onChange={event => setLiveCommentSettings(settings => ({ ...settings, youtubeVideoId: event.target.value }))} className="scoring-admin__input" placeholder="Video ID from the live URL" />
+            </div>
+          </div>
+          <button className="scoring-admin__btn scoring-admin__btn--secondary" onClick={() => void saveLiveCommentSettings()} disabled={savingLiveComments}>
+            Save YouTube settings
+          </button>
+        </div>
+      </div>
 
       <div className="scoring-admin__form-card">
         <h3 className="scoring-admin__subsection-title">❓ Live Questions (Q key)</h3>
