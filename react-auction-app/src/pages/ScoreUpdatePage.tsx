@@ -13,6 +13,7 @@ import { useTenantNavigate as useNavigate } from '../hooks/useTenantNavigate';
 import { useScoringState } from '../hooks/useScoringState';
 import { useCricHeroesSyncAdapter } from '../hooks/useCricHeroesSyncAdapter';
 import { scoringService } from '../services/scoring';
+import { DEFAULT_FIELD_PLACEMENTS } from '../types/scoring';
 import { statsEngine } from '../services/scoring/statsEngine';
 import { obsReplaySourceService } from '../services/scoring/obsReplaySourceService';
 import { realtimeSync } from '../services/realtimeSync';
@@ -475,6 +476,32 @@ export default function ScoreUpdatePage() {
   const handleRunClick = useCallback((outcome: BallOutcome) => {
     recordBall(outcome);
   }, [recordBall]);
+
+  const handleShowFieldPlacement = useCallback(async () => {
+    if (!matchId) return;
+    try {
+      const [activeId, savedPlacements] = await Promise.all([
+        scoringService.getActiveFieldPlacement(matchId),
+        scoringService.getFieldPlacements(matchId),
+      ]);
+      const placement = savedPlacements.find(item => item.id === activeId)
+        || savedPlacements.find(item => item.isDefault)
+        || DEFAULT_FIELD_PLACEMENTS.find(item => item.isDefault)
+        || DEFAULT_FIELD_PLACEMENTS[0];
+      if (placement) {
+        if (!savedPlacements.some(item => item.id === placement.id)) {
+          await scoringService.saveFieldPlacement(matchId, placement);
+        }
+        if (activeId !== placement.id) {
+          await scoringService.setActiveFieldPlacement(matchId, placement.id);
+        }
+      }
+      await setOverlay('field_placement');
+    } catch (error) {
+      setMatchActionFeedback(`Could not show field placement: ${String(error)}`);
+      window.setTimeout(() => setMatchActionFeedback(''), 3000);
+    }
+  }, [matchId, setOverlay]);
 
   if (!isAuthenticated) return null;
 
@@ -1042,7 +1069,7 @@ export default function ScoreUpdatePage() {
           <button
             key={item.type}
             className={`score-update__overlay-btn ${item.type === 'none' ? 'score-update__overlay-btn--clear' : ''}`}
-            onClick={() => setOverlay(item.type)}
+            onClick={() => item.type === 'field_placement' ? void handleShowFieldPlacement() : void setOverlay(item.type)}
           >
             {item.label}
           </button>

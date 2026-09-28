@@ -1341,14 +1341,10 @@ export default function ScoreOBSOverlayPage() {
         {effectiveOverlay === 'match_intro' && match && (
           <MatchIntroOverlay match={match} config={config} lineups={lineups} playerImages={playerImages} impactPlayers={preMatch?.impactPlayers} squadDesign={squadDesign} />
         )}
-        {effectiveOverlay === 'field_placement' && activeFieldPlacement && (
-          <FieldPlacementOverlay placement={activeFieldPlacement} />
-        )}
       </AnimatePresence>
     </div>
   );
 }
-
 // ═══════════════════════════════════════════════════════════════════════════════
 // OVERLAY SUB-COMPONENTS
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -3685,36 +3681,6 @@ function InningsIntroCard({ type, live, match, playerImages, lineups }: {
           </div>
         </div>
       </div>
-    </motion.div>
-  );
-}
-
-// ── Field Placement Overlay (full-screen triggered via overlay button) ─────
-
-function FieldPlacementOverlay({ placement }: { placement: FieldPlacement }) {
-  return (
-    <motion.div
-      className="score-obs__field-overlay-full"
-      initial={{ scale: 0.7, opacity: 0 }}
-      animate={{ scale: 1, opacity: 1 }}
-      exit={{ scale: 0.7, opacity: 0 }}
-      transition={{ type: 'spring', stiffness: 160, damping: 20 }}
-    >
-      <div className="score-obs__field-overlay-ground">
-        <div className="score-obs__field-pitch" />
-        <div className="score-obs__field-inner-circle" />
-        {placement.positions.map(pos => (
-          <div
-            key={pos.id}
-            className="score-obs__field-overlay-dot"
-            style={{ left: `${pos.x}%`, top: `${pos.y}%` }}
-          >
-            <div className="score-obs__field-overlay-dot-inner" />
-            <span className="score-obs__field-overlay-dot-label">{pos.label}</span>
-          </div>
-        ))}
-      </div>
-      <div className="score-obs__field-overlay-title">{placement.name}</div>
     </motion.div>
   );
 }

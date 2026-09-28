@@ -23,7 +23,7 @@ import type {
   MatchSetup, LiveScore, OverlayControlState, OverlayType,
   OBSReplayButton, OBSReplayConfig, ScoringOverlayConfig, LiveComment, LiveCommentSettings,
 } from '../types/scoring';
-import { DEFAULT_LIVE_COMMENT_SETTINGS } from '../types/scoring';
+import { DEFAULT_FIELD_PLACEMENTS, DEFAULT_LIVE_COMMENT_SETTINGS } from '../types/scoring';
 import './ScoreOBSControlDock.css';
 
 const OVERLAY_BUTTONS: { key: OverlayType; label: string; icon: string; shortcut: string; color: string }[] = [
@@ -518,6 +518,24 @@ export default function ScoreOBSControlDock() {
       const animationTypes = ['boundary_four', 'boundary_six', 'wicket', 'duck_out', 'hat_trick'];
       const isAnimation = animationTypes.includes(overlay);
       const newOverlay = isAnimation ? overlay : (activeOverlay === overlay ? 'none' : overlay);
+      if (newOverlay === 'field_placement') {
+        const [activePlacementId, savedPlacements] = await Promise.all([
+          scoringService.getActiveFieldPlacement(selectedMatchId),
+          scoringService.getFieldPlacements(selectedMatchId),
+        ]);
+        const placement = savedPlacements.find(item => item.id === activePlacementId)
+          || savedPlacements.find(item => item.isDefault)
+          || DEFAULT_FIELD_PLACEMENTS.find(item => item.isDefault)
+          || DEFAULT_FIELD_PLACEMENTS[0];
+        if (placement) {
+          if (!savedPlacements.some(item => item.id === placement.id)) {
+            await scoringService.saveFieldPlacement(selectedMatchId, placement);
+          }
+          if (activePlacementId !== placement.id) {
+            await scoringService.setActiveFieldPlacement(selectedMatchId, placement.id);
+          }
+        }
+      }
       await scoringService.setOverlayControl(selectedMatchId, { activeOverlay: newOverlay });
       setActiveOverlay(newOverlay);
       showFeedback(newOverlay === 'none' ? 'Overlay cleared' : `Showing: ${overlay.replace(/_/g, ' ')}`);
