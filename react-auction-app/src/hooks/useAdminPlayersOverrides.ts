@@ -16,7 +16,11 @@ export function useAdminPlayersOverrides() {
         if (!db) return;
 
         auctionPersistence.initialize(db);
-        const adminPlayers = await auctionPersistence.getAdminPlayers();
+        const [adminPlayers, removedPlayerIds] = await Promise.all([
+          auctionPersistence.getAdminPlayers(),
+          auctionPersistence.getRemovedPlayerIds(),
+        ]);
+        useAuctionStore.getState().setRemovedPlayerIds(removedPlayerIds);
         if (!adminPlayers || adminPlayers.length === 0) return;
 
         // Store as admin overrides — these survive Google Sheets reloads

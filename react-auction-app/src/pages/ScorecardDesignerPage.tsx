@@ -1296,11 +1296,14 @@ function PropertiesPanel({ widget, assets, auctionTeams, branding, layout, prope
         || widget.kind === 'football_score' || widget.kind === 'kabaddi_score' || widget.kind === 'kabaddi_players_on_mat'
         || widget.kind === 'kabaddi_team_a_players_on_mat' || widget.kind === 'kabaddi_team_b_players_on_mat') && (
         <label className="scd__field">
-          <span>Score preview</span>
+          <span>{widget.kind.includes('players_on_mat') ? 'Active player preview count' : 'Score preview'}</span>
           <input
+            type={widget.kind.includes('players_on_mat') ? 'number' : 'text'}
+            min={widget.kind.includes('players_on_mat') ? 0 : undefined}
+            max={widget.kind.includes('players_on_mat') ? 12 : undefined}
             value={widget.previewText ?? ''}
-            onChange={e => onFieldChange({ previewText: e.target.value || undefined })}
-            placeholder={widget.kind === 'cricket_score' ? '0/0' : '0 - 0'}
+            onChange={e => onFieldChange({ previewText: widget.kind.includes('players_on_mat') ? String(Math.max(0, Number(e.target.value) || 0)) : e.target.value || undefined })}
+            placeholder={widget.kind.includes('players_on_mat') ? '5' : widget.kind === 'cricket_score' ? '0/0' : '0 - 0'}
           />
         </label>
       )}

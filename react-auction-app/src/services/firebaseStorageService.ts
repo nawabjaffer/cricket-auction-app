@@ -486,6 +486,41 @@ export async function deleteStorageObjects(fullPaths: string[]): Promise<string[
   return failed;
 }
 
+/** Deletes Firebase Storage files referenced by a player and clears their source-URL index entries. */
+export async function deletePlayerImageAssets(imageUrls: string[], preserveUrls: string[] = []): Promise<void> {
+  const urls = [...new Set(imageUrls.filter(url => !!url && !url.startsWith('data:') && !url.startsWith('blob:')))];
+  const preserved = new Set(preserveUrls);
+  const indexEntries = await getImageIndexEntries();
+  const indexKeys = urls
+    .filter(url => !url.includes('firebasestorage.googleapis.com') && !url.includes('firebasestorage.app'))
+    .map(hashUrl);
+  const storageUrls = new Set<string>();
+  for (const url of urls) {
+    if (url.includes('firebasestorage.googleapis.com') || url.includes('firebasestorage.app') || url.startsWith('gs://')) {
+      storageUrls.add(url);
+    }
+  }
+  for (const key of indexKeys) {
+    const indexedUrl = indexEntries[key];
+    if (indexedUrl && !preserved.has(indexedUrl)) storageUrls.add(indexedUrl);
+  }
+
+  const failedUrls: string[] = [];
+  for (const url of storageUrls) {
+    if (preserved.has(url)) continue;
+    try {
+      await fbDeleteObject(storageRef(getStorageInstance(), url));
+    } catch (error) {
+      if ((error as { code?: string }).code !== 'storage/object-not-found') failedUrls.push(url);
+    }
+  }
+  if (failedUrls.length) throw new Error(`Could not delete ${failedUrls.length} player image file(s) from Firebase Storage.`);
+
+  await Promise.all(indexKeys
+    .filter(key => !preserved.has(indexEntries[key] || ''))
+    .map(removeImageIndexEntry));
+}
+
 /**
  * Gets the list of URLs referenced in the RTDB imageIndex.
  * Used to cross-reference with actual storage objects to find orphans.

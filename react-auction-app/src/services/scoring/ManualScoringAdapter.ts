@@ -12,6 +12,7 @@ import type {
   Innings, BatsmanInnings, BowlerInnings, Extras,
   ReplayTrigger,
 } from '../../types/scoring';
+import { isPowerplayOver } from '../../utils/powerplay';
 
 export interface BallInput {
   outcome: BallOutcome;
@@ -226,7 +227,12 @@ export class ManualScoringAdapter implements IScoringAdapter {
 
     // Powerplay tracking
     const powerplayOvers = currentLive.powerplayOvers || 6;
-    const isPowerplay = newOvers < powerplayOvers;
+    const isPowerplay = currentLive.powerplayOverride ?? isPowerplayOver(
+      newOvers,
+      currentLive.powerplayEnabled,
+      currentLive.powerplayOversSelected,
+      powerplayOvers,
+    );
 
     // Update all batsmen and bowlers arrays for full scorecard
     const allBatsmen = this.updateAllBatsmen(
@@ -505,9 +511,10 @@ export class ManualScoringAdapter implements IScoringAdapter {
     openingBowler: { id: string; name: string },
     target?: number,
     maxOvers?: number,
+    powerplayRule?: { enabled?: boolean; selectedOvers?: string; legacyOvers?: number },
   ): Promise<LiveScore> {
     const effectiveMaxOvers = maxOvers || 20;
-    const powerplayOvers = effectiveMaxOvers >= 20 ? 6 : Math.min(effectiveMaxOvers, 6);
+    const powerplayOvers = powerplayRule?.legacyOvers ?? (effectiveMaxOvers >= 20 ? 6 : Math.min(effectiveMaxOvers, 6));
     const live: LiveScore = {
       matchId,
       currentInnings: inningsNumber,
@@ -533,8 +540,10 @@ export class ManualScoringAdapter implements IScoringAdapter {
       recentOvers: [],
       partnership: { runs: 0, balls: 0 },
       lastUpdated: Date.now(),
-      isPowerplay: true,
+      isPowerplay: isPowerplayOver(0, powerplayRule?.enabled, powerplayRule?.selectedOvers, powerplayOvers),
       powerplayOvers,
+      powerplayEnabled: powerplayRule?.enabled,
+      powerplayOversSelected: powerplayRule?.selectedOvers,
       isFreehit: false,
       allBatsmen: [
         { playerId: openers[0].id, playerName: openers[0].name, runs: 0, balls: 0, fours: 0, sixes: 0, strikeRate: 0, dismissal: 'not out', isOut: false, order: 1 },

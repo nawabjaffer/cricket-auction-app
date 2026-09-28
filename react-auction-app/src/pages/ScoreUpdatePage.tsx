@@ -17,6 +17,7 @@ import { statsEngine } from '../services/scoring/statsEngine';
 import { obsReplaySourceService } from '../services/scoring/obsReplaySourceService';
 import { realtimeSync } from '../services/realtimeSync';
 import { getActiveTenant, tenantPath } from '../services/tenantPath';
+import { isPowerplayOver } from '../utils/powerplay';
 import type {
   BallOutcome, DismissalType, WicketDetail, MatchSquadPlayer, OBSReplayButton,
   TickerStatWidget, Innings, BatsmanInnings, BowlerInnings, LiveScore, MatchSetup, MatchLineup,
@@ -133,7 +134,7 @@ export default function ScoreUpdatePage() {
 
   const {
     match, liveScore, currentInnings, lineups, loading, error, recording,
-    undoStack, recordBall, undoLastBall, initInnings, seedLiveScore,
+    undoStack, recordBall, undoLastBall, initInnings, seedLiveScore, setPowerplayActive,
     setOverlay, changeBatsman, changeBowler, swapStrike,
     completeMatch, isInningsComplete, isMatchComplete, needsBowlerChange,
     addPlayerToLineup,
@@ -622,6 +623,10 @@ export default function ScoreUpdatePage() {
 
       {/* ── Powerplay & Free Hit Indicators ─────────────────────────── */}
       <div className="score-update__indicators">
+        <label className="score-update__powerplay-toggle">
+          <input type="checkbox" checked={liveScore.isPowerplay} onChange={e => void setPowerplayActive(e.target.checked)} />
+          Powerplay
+        </label>
         {liveScore.isPowerplay && (
           <span className="score-update__indicator score-update__indicator--powerplay">
             ⚡ POWERPLAY
@@ -1871,8 +1876,10 @@ function CricHeroesInProgressModal({ match, lineups, source, onImport, onImportS
       recentOvers: [],
       partnership: { runs: 0, balls: 0 },
       lastUpdated: Date.now(),
-      isPowerplay: source.overs < powerplayOvers,
+      isPowerplay: isPowerplayOver(source.overs, match.powerplayEnabled, match.powerplayOversSelected, powerplayOvers),
       powerplayOvers,
+      powerplayEnabled: match.powerplayEnabled,
+      powerplayOversSelected: match.powerplayOversSelected,
       isFreehit: false,
       allBatsmen: mappedBatsmen,
       allBowlers: mappedBowlerStats,

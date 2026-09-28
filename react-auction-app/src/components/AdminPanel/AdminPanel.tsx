@@ -5,9 +5,10 @@
 
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { createPortal } from 'react-dom';
 
 import { IoClose, IoSave, IoRefresh, IoDownload, IoVideocam, IoAdd, IoTrash, IoArrowUp, IoArrowDown, IoSearch, IoStatsChart, IoCloudUpload, IoRemoveCircleOutline } from 'react-icons/io5';
-import { auctionPersistence, type AdminSettings, type SponsorRecord, type SpecialCategory, type BidIncrementRange } from '../../services/auctionPersistence';
+import { auctionPersistence, type AdminSettings, type SponsorRecord, type SpecialCategory, type BidIncrementRange, type PlayerTrashRecord } from '../../services/auctionPersistence';
 import { realtimeSync } from '../../services/realtimeSync';
 import { googleSheetsService, imagePreloaderService, resolveMediaToStorage, uploadFileToStorage } from '../../services';
 import AdminImageBulkUpload from './AdminImageBulkUpload';
@@ -37,6 +38,12 @@ import { tenantService } from '../../services/tenantService';
 import { processPlayerImage } from '../../services/playerBackgroundRemovalService';
 import { PlayerImageEditor } from './PlayerImageEditor';
 import { RegistrationFormSettings } from './RegistrationFormSettings';
+import { normalizePlayerName } from '../../utils/playerName';
+
+function hasBackgroundRemoved(player: Player): boolean {
+  return player.isBackgroundRemoved === true
+    || (player.imageProcessingStatus === 'complete' && Boolean(player.processedImageUrl));
+}
 
 // Small avatar that resolves Google Drive / Firebase Storage URLs the same way
 // PlayerCard does, so admin thumbnails match what the auction listing shows.
@@ -92,6 +99,23 @@ function CompactPlayerAvatar({ imageUrl, playerName }: { readonly imageUrl?: str
       {showError && <span className="admin-compact-avatar-error">✕</span>}
     </div>
   );
+}
+
+type MediaMigrationStatus = 'pending' | 'migrating' | 'done' | 'failed';
+type MediaMigrationOwner = 'player' | 'team' | 'sponsor';
+type MediaMigrationField = 'imageUrl' | 'originalImageUrl' | 'processedImageUrl' | 'logoUrl' | 'brandLogoUrl' | 'videoUrl';
+
+interface MediaMigrationRow {
+  id: string;
+  ownerId: string;
+  ownerType: MediaMigrationOwner;
+  ownerName: string;
+  field: MediaMigrationField;
+  label: string;
+  url: string;
+  storagePath: string;
+  status: MediaMigrationStatus;
+  error?: string;
 }
 
 function PlayerImportReviewModal({ incoming, index, existingPlayers, onDecision, onCancel }: Readonly<{
@@ -297,10 +321,6 @@ interface AdminPanelProps {
 export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }: AdminPanelProps) {
   const PAGE_SIZE_OPTIONS = [10, 20, 50, 100] as const;
   const slugify = (value: string) => value.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
-  const isDriveLikeUrl = (value?: string) => {
-    const url = (value ?? '').trim().toLowerCase();
-    return url.includes('drive.google.com') || url.includes('docs.google.com') || url.includes('googleusercontent.com');
-  };
 
   // Get matching special category for a player's age
   const getAgeCategory = (age?: number | null) => {
@@ -383,6 +403,8 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
   const [sponsorLogoSources, setSponsorLogoSources] = useState<Record<string, LogoSourceMode>>({});
   const [playerImageSources, setPlayerImageSources] = useState<Record<string, LogoSourceMode>>({});
   const [editingPlayers, setEditingPlayers] = useState<typeof originalPlayers>([]);
+  const [playerTrash, setPlayerTrash] = useState<Array<{ id: string; record: PlayerTrashRecord }>>([]);
+  const [isPlayerTrashView, setIsPlayerTrashView] = useState(false);
   const [playerSearch, setPlayerSearch] = useState('');
   const [teamPage, setTeamPage] = useState(1);
   const [playerPage, setPlayerPage] = useState(1);
@@ -412,7 +434,12 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
   const [iconTeamId, setIconTeamId] = useState<string>('');
   const [isSavingSponsors, setIsSavingSponsors] = useState(false);
   const [isMigratingMedia, setIsMigratingMedia] = useState(false);
+  const [isMediaMigrationOpen, setIsMediaMigrationOpen] = useState(false);
+  const [mediaMigrationRows, setMediaMigrationRows] = useState<MediaMigrationRow[]>([]);
+  const mediaCollectionsRef = useRef({ players: editingPlayers, teams: editingTeams, sponsors: editingSponsors });
+  mediaCollectionsRef.current = { players: editingPlayers, teams: editingTeams, sponsors: editingSponsors };
   const [processingPlayerIds, setProcessingPlayerIds] = useState<Record<string, boolean>>({});
+  const [processingPlayerLogs, setProcessingPlayerLogs] = useState<Record<string, string[]>>({});
   const [processingEditorImage, setProcessingEditorImage] = useState(false);
   const [editorImageBlob, setEditorImageBlob] = useState<Blob | undefined>();
   const [loadedAdminSettings, setLoadedAdminSettings] = useState<AdminSettings | null>(null);
@@ -432,6 +459,13 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
     secondaryColor,
     getGifHue(assetKey) ?? undefined,
   );
+
+  useEffect(() => {
+    const normalizedPlayers = editingPlayers.map(player => ({ ...player, name: normalizePlayerName(player.name) }));
+    if (normalizedPlayers.some((player, index) => player.name !== editingPlayers[index].name)) {
+      setEditingPlayers(normalizedPlayers);
+    }
+  }, [editingPlayers]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -472,9 +506,23 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
     setTimeout(() => setUploadFeedback(null), 3000);
   };
 
+  const refreshPlayerTrash = async () => {
+    const [records, removedIds] = await Promise.all([
+      auctionPersistence.getTrashedPlayers(),
+      auctionPersistence.getRemovedPlayerIds(),
+    ]);
+    setPlayerTrash(records);
+    useAuctionStore.getState().setRemovedPlayerIds(removedIds);
+    return records;
+  };
+
   const filteredPlayers = useMemo(
     () => editingPlayers.filter((player) => player.name.toLowerCase().includes(playerSearch.toLowerCase())),
     [editingPlayers, playerSearch],
+  );
+  const filteredTrash = useMemo(
+    () => playerTrash.filter(item => item.record.player.name.toLowerCase().includes(playerSearch.toLowerCase())),
+    [playerTrash, playerSearch],
   );
 
   // All players available for icon player selection (editingPlayers + originalPlayers, deduplicated)
@@ -679,9 +727,26 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
       }
     };
 
+    const loadPlayerTrash = async () => {
+      try {
+        const dbReady = await ensureDb();
+        if (!dbReady || !isMounted) return;
+        const [records, removedIds] = await Promise.all([
+          auctionPersistence.getTrashedPlayers(),
+          auctionPersistence.getRemovedPlayerIds(),
+        ]);
+        if (!isMounted) return;
+        setPlayerTrash(records);
+        useAuctionStore.getState().setRemovedPlayerIds(removedIds);
+      } catch (error) {
+        console.error('[AdminPanel] Failed to load player trash:', error);
+      }
+    };
+
     if (isOpen) {
       loadSettings();
       loadSponsors();
+      loadPlayerTrash();
       setEditingTeams(teams.map((team) => ({ ...team })));
       setTeamLogoSources(Object.fromEntries(
         teams.map((team) => [team.id, getLogoSourceMode(team.logoUrl)])
@@ -966,31 +1031,97 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
     setTeamOwnerLogoSources((prev) => ({ ...prev, [newTeamId]: 'drive' }));
   };
 
-  const handleDeletePlayer = (playerId: string) => {
+  const handleDeletePlayer = async (playerId: string) => {
     const target = editingPlayers.find((player) => player.id === playerId);
     if (!target) return;
 
-    const confirmed = globalThis.confirm(`Delete ${target.name} from admin players list?`);
+    const confirmed = globalThis.confirm(`Move ${target.name} to Trash? You can restore this player later.`);
     if (!confirmed) return;
 
-    setEditingPlayers((current) => current.filter((player) => player.id !== playerId));
+    try {
+      setIsSaving(true);
+      await auctionPersistence.movePlayerToTrash(target);
+      const updatedPlayers = editingPlayers.filter(player => player.id !== playerId);
+      setEditingPlayers(updatedPlayers);
+      useAuctionStore.getState().setAdminPlayerOverrides(updatedPlayers);
+      await refreshPlayerTrash();
+      if (editingPlayerId === playerId) { setEditingPlayerId(null); setPlayerDraft(null); }
+      showUploadFeedback(`${target.name} moved to Trash`);
+    } catch (error) {
+      showUploadFeedback(`Could not move player to Trash: ${error instanceof Error ? error.message : String(error)}`, 'error');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleDeleteAllPlayers = async () => {
     if (editingPlayers.length === 0) return;
     const confirmed = globalThis.confirm(
-      `Delete ALL ${editingPlayers.length} players? They will need to be re-imported via bulk import.`
+      `Move all ${editingPlayers.length} players to Trash? You can restore them later.`
     );
     if (!confirmed) return;
 
     try {
       setIsSaving(true);
-      await auctionPersistence.clearAdminPlayers();
+      await auctionPersistence.movePlayersToTrash(editingPlayers);
       setEditingPlayers([]);
-      setAdminPlayerOverrides([]);
-      showUploadFeedback('All players deleted. Re-import when ready.');
+      useAuctionStore.getState().setAdminPlayerOverrides([]);
+      await refreshPlayerTrash();
+      showUploadFeedback('All players moved to Trash');
     } catch (err) {
-      showUploadFeedback(`Failed to delete players: ${(err as Error).message}`, 'error');
+      showUploadFeedback(`Failed to move players to Trash: ${(err as Error).message}`, 'error');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleRestorePlayer = async (playerId: string) => {
+    try {
+      setIsSaving(true);
+      const player = await auctionPersistence.restorePlayerFromTrash(playerId);
+      const updatedPlayers = editingPlayers.some(item => item.id === playerId) ? editingPlayers : [...editingPlayers, player];
+      setEditingPlayers(updatedPlayers);
+      useAuctionStore.getState().setAdminPlayerOverrides(updatedPlayers);
+      await refreshPlayerTrash();
+      showUploadFeedback(`${player.name} restored to the player list`);
+    } catch (error) {
+      showUploadFeedback(`Could not restore player: ${error instanceof Error ? error.message : String(error)}`, 'error');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handlePermanentlyDeletePlayer = async (playerId: string) => {
+    const item = playerTrash.find(entry => entry.id === playerId);
+    const name = item?.record.player.name || 'this player';
+    if (!globalThis.confirm(`Permanently delete ${name}, its Firebase player data, registration record, and image files? This cannot be undone.`)) return;
+    try {
+      setIsSaving(true);
+      await auctionPersistence.permanentlyDeletePlayer(playerId);
+      await refreshPlayerTrash();
+      const store = useAuctionStore.getState();
+      store.setSoldPlayers(store.soldPlayers.filter(player => player.id !== playerId));
+      showUploadFeedback(`${name} permanently deleted`);
+    } catch (error) {
+      showUploadFeedback(`Permanent delete failed: ${error instanceof Error ? error.message : String(error)}`, 'error');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleEmptyPlayerTrash = async () => {
+    if (playerTrash.length === 0) return;
+    if (!globalThis.confirm(`Permanently delete all ${playerTrash.length} trashed players and their Firebase data and image files? This cannot be undone.`)) return;
+    try {
+      setIsSaving(true);
+      for (const item of playerTrash) await auctionPersistence.permanentlyDeletePlayer(item.id);
+      await refreshPlayerTrash();
+      const store = useAuctionStore.getState();
+      store.setSoldPlayers(store.soldPlayers.filter(player => !playerTrash.some(item => item.id === player.id)));
+      showUploadFeedback('Trash permanently emptied');
+    } catch (error) {
+      await refreshPlayerTrash().catch(() => undefined);
+      showUploadFeedback(`Could not empty Trash: ${error instanceof Error ? error.message : String(error)}`, 'error');
     } finally {
       setIsSaving(false);
     }
@@ -1251,7 +1382,7 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
     if (!targetPlayer) return;
 
     setEditingPlayerId(playerId);
-    setPlayerDraft({ ...targetPlayer });
+    setPlayerDraft({ ...targetPlayer, name: normalizePlayerName(targetPlayer.name) });
     setEditorImageBlob(undefined);
 
     // Check if this player is currently an icon player for any team
@@ -1273,29 +1404,78 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
     setEditorImageBlob(undefined);
   };
 
-  const processPlayerBackground = async (player: Player, updateDraft = false, onProcessedBlob?: (blob: Blob) => void) => {
+  const appendPlayerBackgroundLog = (playerId: string, message: string) => {
+    const line = `${new Date().toLocaleTimeString()} ${message}`;
+    setProcessingPlayerLogs(current => ({
+      ...current,
+      [playerId]: [...(current[playerId] ?? []).slice(-29), line],
+    }));
+  };
+
+  const processPlayerBackground = async (player: Player, updateDraft = false, onProcessedBlob?: (blob: Blob) => void, sourceBlob?: Blob) => {
+    if (hasBackgroundRemoved(player)) {
+      showUploadFeedback(`Background is already removed for ${player.name}.`);
+      return;
+    }
     if (!player.imageUrl && !player.originalImageUrl) {
       showUploadFeedback(`Add an image for ${player.name} before removing the background.`, 'error');
       return;
     }
     setProcessingPlayerIds(current => ({ ...current, [player.id]: true }));
+    setProcessingPlayerLogs(current => ({
+      ...current,
+      [player.id]: [`${new Date().toLocaleTimeString()} Starting background removal for ${player.name}.`],
+    }));
+    let failureStage = 'preparing the source image';
+    let lastLoggedProgress = 30;
     try {
       // Process the image currently shown in the player list. The original
       // source may be an expired Drive URL while imageUrl is already storage-backed.
       const source = player.imageUrl || player.originalImageUrl;
       if (!source) throw new Error('Player image is empty');
+      appendPlayerBackgroundLog(player.id, 'Preparing source image.');
       const storageSource = await ensureMediaInStorage(source, `media/players/${slugify(player.name || player.id)}`);
+      appendPlayerBackgroundLog(player.id, 'Source image ready.');
+      failureStage = 'fetching the source image';
       const processedUrl = await processPlayerImage({
         playerId: player.id,
         playerName: player.name,
         sourceUrl: storageSource,
+        sourceBlob,
         onProcessedBlob,
+        onStatus: status => {
+          const labels = {
+            queued: 'Waiting for the background-removal worker.',
+            'loading-model': 'Loading the background-removal model.',
+            processing: 'Removing the image background.',
+            uploading: 'Uploading the transparent image.',
+            complete: 'Image processing complete.',
+          };
+          if (status === 'loading-model') failureStage = 'loading the background-removal model';
+          else if (status === 'processing') failureStage = 'removing the image background';
+          else if (status === 'uploading') failureStage = 'uploading the processed image';
+          appendPlayerBackgroundLog(player.id, labels[status]);
+        },
+        onProgress: (message, percent) => {
+          if (message.startsWith('Processing ')) {
+            const progressStep = Math.floor((percent ?? 0) / 10) * 10;
+            if (progressStep > lastLoggedProgress) {
+              lastLoggedProgress = progressStep;
+              appendPlayerBackgroundLog(player.id, `Background removal ${progressStep}%.`);
+            }
+            return;
+          }
+          appendPlayerBackgroundLog(player.id, message);
+        },
       });
+      failureStage = 'saving the updated player record';
+      appendPlayerBackgroundLog(player.id, 'Saving the updated player record.');
       const updatedPlayer: Player = {
         ...player,
         imageUrl: processedUrl,
         originalImageUrl: source,
         processedImageUrl: processedUrl,
+        isBackgroundRemoved: true,
         imageProcessingStatus: 'complete',
         imageProcessingError: undefined,
       };
@@ -1307,10 +1487,13 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
       });
       setAdminPlayerOverrides(latestPlayers.length > 0 ? latestPlayers : editingPlayers.map(item => item.id === player.id ? updatedPlayer : item));
       await auctionPersistence.saveAdminPlayers(latestPlayers.length > 0 ? latestPlayers : editingPlayers.map(item => item.id === player.id ? updatedPlayer : item));
+      appendPlayerBackgroundLog(player.id, 'Background removed and player record saved.');
       showUploadFeedback(`Background removed and saved for ${player.name}`);
     } catch (error) {
       console.error('[AdminPanel] Failed to remove player background:', error);
-      showUploadFeedback(`Background removal failed for ${player.name}: ${error instanceof Error ? error.message : 'Unknown processing error'}`, 'error');
+      const errorMessage = error instanceof Error ? error.message : 'Unknown processing error';
+      appendPlayerBackgroundLog(player.id, `ERROR while ${failureStage}: ${errorMessage}`);
+      showUploadFeedback(`Background removal failed for ${player.name} while ${failureStage}: ${errorMessage}`, 'error');
       if (updateDraft && editingPlayerId === player.id) setPlayerDraft(current => current ? { ...current, imageProcessingStatus: 'error', imageProcessingError: String(error) } : current);
     } finally {
       setProcessingPlayerIds(current => ({ ...current, [player.id]: false }));
@@ -1321,7 +1504,7 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
     if (!playerDraft || !editingPlayerId) return;
     setProcessingEditorImage(true);
     try {
-      await processPlayerBackground(playerDraft, true, setEditorImageBlob);
+      await processPlayerBackground(playerDraft, true, setEditorImageBlob, editorImageBlob);
     } finally {
       setProcessingEditorImage(false);
     }
@@ -1334,9 +1517,10 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
       ...playerDraft,
       imageUrl,
       originalImageUrl: imageUrl,
-      processedImageUrl: imageUrl,
+      processedImageUrl: hasBackgroundRemoved(playerDraft) ? imageUrl : undefined,
+      isBackgroundRemoved: hasBackgroundRemoved(playerDraft),
       imageEdit: undefined,
-      imageProcessingStatus: 'complete',
+      imageProcessingStatus: hasBackgroundRemoved(playerDraft) ? 'complete' : 'idle',
       imageProcessingError: undefined,
     };
     const updatedPlayers = editingPlayers.map(player => player.id === editingPlayerId ? updatedPlayer : player);
@@ -1358,9 +1542,10 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
     // Block save if icon player toggled on but no team selected
     if (isIconPlayer && !iconTeamId) return;
 
+    const normalizedDraft = { ...playerDraft, name: normalizePlayerName(playerDraft.name) };
     const updatedPlayers = editingPlayers.map((player) => (
       player.id === editingPlayerId
-        ? { ...playerDraft }
+        ? normalizedDraft
         : player
     ));
     setEditingPlayers(updatedPlayers);
@@ -1395,9 +1580,9 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
         if (t.id !== iconTeamId) return t;
         const currentIconics = t.iconicPlayers || (t.captain ? [t.captain] : []);
         const alreadyExists = currentIconics.some(
-          n => n.trim().toLowerCase() === playerDraft.name.trim().toLowerCase()
+          n => n.trim().toLowerCase() === normalizedDraft.name.trim().toLowerCase()
         );
-        const updatedIconics = alreadyExists ? currentIconics : [...currentIconics, playerDraft.name];
+        const updatedIconics = alreadyExists ? currentIconics : [...currentIconics, normalizedDraft.name];
         return { ...t, captain: updatedIconics[0] || '', iconicPlayers: updatedIconics };
       });
     }
@@ -1510,7 +1695,7 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
         file,
         `media/players/${slugify(playerDraft.name || editingPlayerId)}-${Date.now()}`
       );
-      setPlayerDraft({ ...playerDraft, imageUrl: storageUrl });
+      setPlayerDraft({ ...playerDraft, imageUrl: storageUrl, originalImageUrl: storageUrl, processedImageUrl: undefined, isBackgroundRemoved: false, imageProcessingStatus: 'idle', imageProcessingError: undefined });
       setEditorImageBlob(file);
       setPlayerImageSources((prev) => ({ ...prev, [editingPlayerId]: 'upload' }));
       showUploadFeedback(`Player image uploaded to Firebase Storage: ${file.name}`);
@@ -1622,65 +1807,103 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
     }
   };
 
-  const handleMigrateDriveMediaToStorage = async () => {
-    if (isMigratingMedia) return;
+  const isFirebaseStorageUrl = (url: string) => url.includes('firebasestorage.googleapis.com')
+    || url.includes('firebasestorage.app')
+    || url.startsWith('gs://');
+
+  const collectMediaMigrationRows = (): MediaMigrationRow[] => {
+    const rows: MediaMigrationRow[] = [];
+    const add = (ownerType: MediaMigrationOwner, ownerId: string, ownerName: string, field: MediaMigrationField, label: string, url?: string, storagePath?: string) => {
+      const source = url?.trim() || '';
+      if (!/^https?:\/\//i.test(source) || isFirebaseStorageUrl(source)) return;
+      rows.push({
+        id: `${ownerType}:${ownerId}:${field}`,
+        ownerId,
+        ownerType,
+        ownerName,
+        field,
+        label,
+        url: source,
+        storagePath: storagePath || `media/${ownerType}/${slugify(ownerName || ownerId)}-${field}`,
+        status: 'pending',
+      });
+    };
+
+    for (const player of editingPlayers) {
+      const base = `media/players/${slugify(player.name || player.id)}`;
+      add('player', player.id, player.name, 'imageUrl', 'Player image', player.imageUrl, base);
+      add('player', player.id, player.name, 'originalImageUrl', 'Original image', player.originalImageUrl, `${base}-original`);
+      add('player', player.id, player.name, 'processedImageUrl', 'Processed image', player.processedImageUrl, `${base}-processed`);
+    }
+    for (const team of editingTeams) {
+      add('team', team.id, team.name, 'logoUrl', 'Team logo', team.logoUrl, `media/teams/${slugify(team.name || team.id)}-logo`);
+      add('team', team.id, team.name, 'brandLogoUrl', 'Brand logo', team.brandLogoUrl, `media/teams/${slugify(team.name || team.id)}-owner-logo`);
+    }
+    for (const sponsor of editingSponsors) {
+      add('sponsor', sponsor.id, sponsor.name, 'logoUrl', 'Sponsor logo', sponsor.logoUrl, `media/sponsors/${slugify(sponsor.name || sponsor.id)}-logo`);
+      add('sponsor', sponsor.id, sponsor.name, 'videoUrl', 'Sponsor video', sponsor.videoUrl, `media/sponsors/${slugify(sponsor.name || sponsor.id)}-video`);
+    }
+    return rows;
+  };
+
+  const openMediaMigration = () => {
+    setMediaMigrationRows(collectMediaMigrationRows());
+    setIsMediaMigrationOpen(true);
+  };
+
+  const migrateMediaRow = async (rowId: string): Promise<boolean> => {
+    if (isMigratingMedia) return false;
+    const row = mediaMigrationRows.find(item => item.id === rowId);
+    if (!row) return false;
+    if (row.status === 'done') return true;
     setIsMigratingMedia(true);
     setIsSaving(true);
+    setMediaMigrationRows(current => current.map(item => item.id === rowId ? { ...item, status: 'migrating', error: undefined } : item));
     try {
-      let migratedCount = 0;
-      const toStorage = async (url: string | undefined, storagePath: string): Promise<string> => {
-        const raw = (url ?? '').trim();
-        if (!raw) return raw;
-        if (raw.includes('firebasestorage.googleapis.com') || raw.includes('firebasestorage.app')) return raw;
-        if (!isDriveLikeUrl(raw)) return raw;
-        const resolved = await resolveMediaToStorage(raw, storagePath);
-        if (resolved !== raw) migratedCount += 1;
-        return resolved;
-      };
+      const storageUrl = await ensureMediaInStorage(row.url, row.storagePath);
+      if (!isFirebaseStorageUrl(storageUrl)) throw new Error('Upload did not return a Firebase Storage URL.');
+      const collections = mediaCollectionsRef.current;
 
-      const nextPlayers = await Promise.all(editingPlayers.map(async (player) => ({
-        ...player,
-        imageUrl: await toStorage(player.imageUrl, `media/players/${slugify(player.name || player.id)}`),
-      })));
-
-      const nextTeams = await Promise.all(editingTeams.map(async (team) => ({
-        ...team,
-        logoUrl: await toStorage(team.logoUrl, `media/teams/${slugify(team.name || team.id)}-logo`),
-        brandLogoUrl: await toStorage(team.brandLogoUrl, `media/teams/${slugify(team.name || team.id)}-owner-logo`),
-      })));
-
-      const nextSponsors = await Promise.all(editingSponsors.map(async (sponsor) => ({
-        ...sponsor,
-        logoUrl: await toStorage(sponsor.logoUrl, `media/sponsors/${slugify(sponsor.name || sponsor.id)}-logo`),
-        videoUrl: await toStorage(sponsor.videoUrl, `media/sponsors/${slugify(sponsor.name || sponsor.id)}-video`),
-      })));
-
-      setEditingPlayers(nextPlayers);
-      setEditingTeams(nextTeams);
-      setEditingSponsors(nextSponsors);
-
-      setAdminPlayerOverrides(nextPlayers);
-      setTeams(nextTeams);
-      reconcilePlayerPools();
-
-      await Promise.all([
-        auctionPersistence.saveAdminPlayers(nextPlayers),
-        auctionPersistence.saveTeams(nextTeams),
-        auctionPersistence.saveSponsors(nextSponsors),
-      ]);
-
-      showUploadFeedback(`Migration complete: ${migratedCount} Drive media URL(s) moved to Firebase Storage.`);
-      setSaveStatus('success');
-      setTimeout(() => setSaveStatus('idle'), 2000);
+      if (row.ownerType === 'player') {
+        const nextPlayers = collections.players.map(player => player.id === row.ownerId ? { ...player, [row.field]: storageUrl } : player);
+        mediaCollectionsRef.current = { ...collections, players: nextPlayers };
+        setEditingPlayers(nextPlayers);
+        setAdminPlayerOverrides(nextPlayers);
+        await auctionPersistence.saveAdminPlayers(nextPlayers);
+      } else if (row.ownerType === 'team') {
+        const nextTeams = collections.teams.map(team => team.id === row.ownerId ? { ...team, [row.field]: storageUrl } : team);
+        mediaCollectionsRef.current = { ...collections, teams: nextTeams };
+        setEditingTeams(nextTeams);
+        setTeams(nextTeams);
+        await auctionPersistence.saveTeams(nextTeams);
+      } else {
+        const nextSponsors = collections.sponsors.map(sponsor => sponsor.id === row.ownerId ? { ...sponsor, [row.field]: storageUrl } : sponsor);
+        mediaCollectionsRef.current = { ...collections, sponsors: nextSponsors };
+        setEditingSponsors(nextSponsors);
+        await auctionPersistence.saveSponsors(nextSponsors);
+      }
+      setMediaMigrationRows(current => current.map(item => item.id === rowId ? { ...item, status: 'done', url: storageUrl } : item));
+      return true;
     } catch (error) {
-      console.error('[AdminPanel] Failed to migrate Drive media:', error);
-      showUploadFeedback('Drive media migration failed. Check console for details.', 'error');
-      setSaveStatus('error');
-      setTimeout(() => setSaveStatus('idle'), 3000);
+      const message = error instanceof Error ? error.message : String(error);
+      console.error(`[AdminPanel] Failed to migrate media row ${rowId}:`, error);
+      setMediaMigrationRows(current => current.map(item => item.id === rowId ? { ...item, status: 'failed', error: message } : item));
+      return false;
     } finally {
       setIsMigratingMedia(false);
       setIsSaving(false);
     }
+  };
+
+  const migrateAllMedia = async () => {
+    if (isMigratingMedia) return;
+    const pendingRows = mediaMigrationRows.filter(row => row.status === 'pending' || row.status === 'failed');
+    let failedCount = 0;
+    for (const row of pendingRows) {
+      if (!await migrateMediaRow(row.id)) failedCount += 1;
+    }
+    if (failedCount === 0) showUploadFeedback('All listed media migrated to Firebase Storage.');
+    else showUploadFeedback(`${failedCount} media file(s) failed. Review the row errors and retry.`, 'error');
   };
 
   // Handle export sold players
@@ -1948,10 +2171,11 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
     if (players.length === 0) {
       throw new Error('No valid players found to import.');
     }
+    const normalizedPlayers = players.map(player => ({ ...player, name: normalizePlayerName(player.name) }));
 
     // Auto-migrate any Drive / external image URLs to Firebase Storage so
     // imports never leave the app depending on slow / blocked sources.
-    const migrated = await Promise.all(players.map(async (p) => {
+    const migrated = await Promise.all(normalizedPlayers.map(async (p) => {
       if (!p.imageUrl || typeof p.imageUrl !== 'string') return p;
       const url = p.imageUrl.trim();
       if (!url) return p;
@@ -1986,7 +2210,18 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
       if (match && decision === 'same') {
         const existingIndex = mergedPlayers.findIndex(player => player.id === match.existing.id);
         if (existingIndex >= 0) {
+          const imageChanged = Boolean(incoming.imageUrl && incoming.imageUrl !== match.existing.imageUrl);
           mergedPlayers[existingIndex] = { ...match.existing, ...incoming, id: match.existing.id, imageUrl: incoming.imageUrl || match.existing.imageUrl };
+          if (imageChanged) {
+            mergedPlayers[existingIndex] = {
+              ...mergedPlayers[existingIndex],
+              originalImageUrl: incoming.imageUrl,
+              processedImageUrl: undefined,
+              isBackgroundRemoved: false,
+              imageProcessingStatus: 'idle',
+              imageProcessingError: undefined,
+            };
+          }
         }
         linked += 1;
         return;
@@ -2477,6 +2712,55 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
           setIsBulkBackgroundRemovalOpen(false);
         }}
       />
+
+      {isMediaMigrationOpen && createPortal(
+        <div className="admin-media-migration-backdrop" onMouseDown={event => { if (event.target === event.currentTarget && !isMigratingMedia) setIsMediaMigrationOpen(false); }}>
+          <section className="admin-media-migration" role="dialog" aria-modal="true" aria-labelledby="admin-media-migration-title">
+            <header className="admin-media-migration__header">
+              <div>
+                <h2 id="admin-media-migration-title">Media Migration</h2>
+                <p>Review remote media files and move each one into Firebase Storage.</p>
+              </div>
+              <button type="button" className="admin-close-btn" onClick={() => setIsMediaMigrationOpen(false)} disabled={isMigratingMedia} aria-label="Close media migration">
+                <IoClose size={22} />
+              </button>
+            </header>
+            <div className="admin-media-migration__summary">
+              <span>{mediaMigrationRows.length} file{mediaMigrationRows.length === 1 ? '' : 's'} found</span>
+              <span>{mediaMigrationRows.filter(row => row.status === 'done').length} migrated</span>
+              <span>{mediaMigrationRows.filter(row => row.status === 'failed').length} failed</span>
+            </div>
+            <div className="admin-media-migration__list">
+              {mediaMigrationRows.map(row => (
+                <article className="admin-media-migration__row" key={row.id}>
+                  <div className="admin-media-migration__details">
+                    <strong>{row.ownerName}</strong>
+                    <span>{row.label} · {row.ownerType}</span>
+                    <a href={row.url} target="_blank" rel="noreferrer" title={row.url}>{row.url}</a>
+                    {row.error && <small className="admin-media-migration__error">{row.error}</small>}
+                  </div>
+                  <div className="admin-media-migration__row-actions">
+                    <span className={`admin-media-migration__status admin-media-migration__status--${row.status}`}>
+                      {row.status === 'migrating' ? 'Migrating…' : row.status === 'done' ? 'Migrated' : row.status === 'failed' ? 'Failed' : 'Pending'}
+                    </span>
+                    <button type="button" className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => void migrateMediaRow(row.id)} disabled={isMigratingMedia || row.status === 'done'}>
+                      {row.status === 'failed' ? 'Retry' : 'Migrate'}
+                    </button>
+                  </div>
+                </article>
+              ))}
+              {mediaMigrationRows.length === 0 && <div className="admin-empty-state">All listed media is already in Firebase Storage.</div>}
+            </div>
+            <footer className="admin-media-migration__footer">
+              <button type="button" className="admin-btn admin-btn-secondary" onClick={() => setIsMediaMigrationOpen(false)} disabled={isMigratingMedia}>Close</button>
+              <button type="button" className="admin-btn admin-btn-primary" onClick={() => void migrateAllMedia()} disabled={isMigratingMedia || !mediaMigrationRows.some(row => row.status === 'pending' || row.status === 'failed')}>
+                <IoCloudUpload size={17} /> {isMigratingMedia ? 'Migrating…' : 'Migrate All'}
+              </button>
+            </footer>
+          </section>
+        </div>,
+        document.body,
+      )}
 
       {/* Save status toast */}
       <AnimatePresence>
@@ -4001,6 +4285,16 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
               {activeTab === 'players' && (
                 <div className="admin-section">
                   <h3>Edit Player Listings</h3>
+                  <div className="admin-player-view-switch" role="tablist" aria-label="Player list views">
+                    <button type="button" role="tab" aria-selected={!isPlayerTrashView} className={!isPlayerTrashView ? 'active' : ''} onClick={() => setIsPlayerTrashView(false)}>
+                      Player List <span>{editingPlayers.length}</span>
+                    </button>
+                    <button type="button" role="tab" aria-selected={isPlayerTrashView} className={isPlayerTrashView ? 'active' : ''} onClick={() => setIsPlayerTrashView(true)}>
+                      Trash <span>{playerTrash.length}</span>
+                    </button>
+                  </div>
+                  {!isPlayerTrashView ? (
+                    <>
                   <div className="admin-player-toolbar">
                     <input
                       type="text"
@@ -4025,10 +4319,10 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
                     </button>
                     <button
                       className="admin-btn admin-btn-warning"
-                      onClick={handleMigrateDriveMediaToStorage}
+                      onClick={openMediaMigration}
                       disabled={isSaving || isMigratingMedia}
                     >
-                      <IoRefresh size={18} /> {isMigratingMedia ? 'Migrating Media...' : 'Migrate Drive Media to Storage'}
+                      <IoRefresh size={18} /> Review &amp; Migrate Media
                     </button>
 
                     <button
@@ -4071,7 +4365,7 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
                       className="admin-btn admin-btn-warning"
                       onClick={() => { setIsBulkBackgroundRemovalOpen(true); showUploadFeedback('Opening bulk background removal', 'success'); }}
                       disabled={isSaving || editingPlayers.length === 0}
-                      title="Remove backgrounds from all player images in parallel"
+                      title="Select player images for background removal; already processed images are skipped"
                     >
                       <IoRemoveCircleOutline size={18} /> Bulk Remove Backgrounds
                     </button>
@@ -4094,9 +4388,9 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
                       className="admin-btn admin-btn-danger"
                       onClick={handleDeleteAllPlayers}
                       disabled={isSaving || editingPlayers.length === 0}
-                      title="Delete all players — will need to be re-imported via bulk import"
+                      title="Move all listed players to Trash"
                     >
-                      <IoTrash size={18} /> Delete All Players
+                      <IoTrash size={18} /> Move All to Trash
                     </button>
                     <label className="admin-page-size">
                       <span>Rows per page</span>
@@ -4135,22 +4429,28 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
                         <div className="admin-compact-main">
                           <div className="admin-player-name-row">
                             <strong>{player.name}</strong>
+                            {hasBackgroundRemoved(player) && <span className="admin-background-removed-flag">Background removed</span>}
                             {(() => { const cat = getAgeCategory(player.age); return cat ? <span className="admin-underage-chip" style={cat.color ? { background: cat.color } : undefined}>{cat.label}</span> : null; })()}
                           </div>
                           <small>
                             <span className="admin-role-dot" style={{ background: getRoleBadgeColor(player.role) }} />
                             {formatRoleDisplay(player.role)} | Base: ₹{player.basePrice}L
                           </small>
+                          {(processingPlayerIds[player.id] || processingPlayerLogs[player.id]?.at(-1)?.includes('ERROR')) && (
+                            <div className="admin-player-background-log" role={processingPlayerIds[player.id] ? 'log' : 'status'} aria-live="polite">
+                              {processingPlayerLogs[player.id]?.slice(-6).map((line, index) => <small key={`${index}-${line}`}>{line}</small>)}
+                            </div>
+                          )}
                         </div>
                         <div className="admin-compact-actions">
                           <button
                             type="button"
                             className="admin-btn admin-btn-warning admin-btn-sm"
                             onClick={() => { void processPlayerBackground(player); }}
-                            disabled={Boolean(processingPlayerIds[player.id]) || !player.imageUrl}
-                            title="Remove image background and save the processed PNG"
+                            disabled={Boolean(processingPlayerIds[player.id]) || !player.imageUrl || hasBackgroundRemoved(player)}
+                            title={hasBackgroundRemoved(player) ? 'Background already removed' : 'Remove image background and save the processed PNG'}
                           >
-                            {processingPlayerIds[player.id] ? 'Processing...' : 'Remove BG'}
+                            {processingPlayerIds[player.id] ? 'Processing...' : hasBackgroundRemoved(player) ? 'BG Removed' : 'Remove BG'}
                           </button>
                           <button
                             type="button"
@@ -4163,6 +4463,8 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
                             type="button"
                             className="admin-btn admin-btn-danger admin-btn-sm"
                             onClick={() => handleDeletePlayer(player.id)}
+                            disabled={isSaving}
+                            title="Move player to Trash"
                           >
                             <IoTrash size={16} />
                           </button>
@@ -4205,6 +4507,43 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
                       </button>
                     ))}
                   </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="admin-player-toolbar">
+                        <input
+                          type="text"
+                          value={playerSearch}
+                          onChange={(event) => setPlayerSearch(event.target.value)}
+                          placeholder="Search trashed players"
+                          className="admin-player-search"
+                        />
+                        <button type="button" className="admin-btn admin-btn-danger" onClick={() => void handleEmptyPlayerTrash()} disabled={isSaving || playerTrash.length === 0}>
+                          <IoTrash size={18} /> Permanently Delete All
+                        </button>
+                      </div>
+                      <div className="admin-compact-list">
+                        {filteredTrash.map(({ id, record }) => (
+                          <div key={id} className="admin-compact-item admin-compact-item--trash">
+                            <CompactPlayerAvatar imageUrl={record.player.imageUrl} playerName={record.player.name} />
+                            <div className="admin-compact-main">
+                              <strong>{record.player.name}</strong>
+                              <small>{formatRoleDisplay(record.player.role)} · Removed {record.deletedAt ? new Date(record.deletedAt).toLocaleString() : 'date unavailable'}</small>
+                            </div>
+                            <div className="admin-compact-actions">
+                              <button type="button" className="admin-btn admin-btn-success admin-btn-sm" onClick={() => void handleRestorePlayer(id)} disabled={isSaving}>
+                                <IoRefresh size={15} /> Restore
+                              </button>
+                              <button type="button" className="admin-btn admin-btn-danger admin-btn-sm" onClick={() => void handlePermanentlyDeletePlayer(id)} disabled={isSaving}>
+                                <IoTrash size={15} /> Delete permanently
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                        {filteredTrash.length === 0 && <div className="admin-empty-state">{playerTrash.length === 0 ? 'Trash is empty.' : 'No trashed players match your search.'}</div>}
+                      </div>
+                    </>
+                  )}
                 </div>
               )}
 
@@ -4793,6 +5132,7 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
                           type="text"
                           value={playerDraft.name}
                           onChange={(e) => setPlayerDraft({ ...playerDraft, name: e.target.value })}
+                          onBlur={() => setPlayerDraft(current => current ? { ...current, name: normalizePlayerName(current.name) } : current)}
                         />
                       </div>
                     </div>
@@ -5034,7 +5374,7 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
                         <input
                           type="text"
                           value={playerDraft.imageUrl}
-                          onChange={(e) => setPlayerDraft({ ...playerDraft, imageUrl: e.target.value })}
+                          onChange={(e) => setPlayerDraft({ ...playerDraft, imageUrl: e.target.value, originalImageUrl: e.target.value, processedImageUrl: undefined, isBackgroundRemoved: false, imageProcessingStatus: 'idle', imageProcessingError: undefined })}
                           placeholder="https://drive.google.com/..."
                         />
                       )}
@@ -5047,6 +5387,7 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
                           processing={processingEditorImage}
                           onChange={(imageEdit) => setPlayerDraft(current => current ? { ...current, imageEdit } : current)}
                           onSaveImage={saveEditedPlayerImage}
+                          processingLogs={editingPlayerId ? processingPlayerLogs[editingPlayerId] : undefined}
                           onRemoveBackground={() => { void processEditorBackground(); }}
                         />
                       )}

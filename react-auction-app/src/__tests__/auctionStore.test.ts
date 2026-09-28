@@ -135,6 +135,27 @@ describe('Auction Store', () => {
       const p = useAuctionStore.getState().availablePlayers[0];
       expect(p.name).toBe('Admin Override Name');
     });
+
+    it('keeps trashed players out of the base/override merge and restores them when trash is cleared', () => {
+      useAuctionStore.setState({
+        _adminPlayerOverrides: [
+          makePlayer({ id: 'P001', name: 'Trashed Override' }),
+          makePlayer({ id: 'P002', name: 'Active Override' }),
+        ],
+      });
+      useAuctionStore.getState().setRemovedPlayerIds(['P001']);
+      useAuctionStore.getState().setPlayers([
+        makePlayer({ id: 'P001', name: 'Trashed Player' }),
+        makePlayer({ id: 'P002', name: 'Active Player' }),
+      ]);
+
+      const state = useAuctionStore.getState();
+      expect(state.originalPlayers.map(player => player.id)).toEqual(['P002']);
+      expect(state.availablePlayers.map(player => player.id)).toEqual(['P002']);
+
+      useAuctionStore.getState().setRemovedPlayerIds([]);
+      expect(useAuctionStore.getState().availablePlayers.map(player => player.id)).toEqual(['P001', 'P002']);
+    });
   });
 
   describe('setTeams', () => {

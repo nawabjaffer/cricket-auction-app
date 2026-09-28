@@ -911,8 +911,18 @@
 
 .score-update__indicators {
   display: flex;
+  align-items: center;
   gap: 8px;
   padding: 4px 16px;
+}
+
+.score-update__powerplay-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #d4d4d8;
+  font-size: 0.75rem;
+  font-weight: 600;
 }
 
 .score-update__indicator {

@@ -13,13 +13,14 @@
 import { useEffect, useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { initializeApp, getApps } from 'firebase/app';
-import { getDatabase, ref, onValue } from 'firebase/database';
+import { getDatabase, ref, onValue, set } from 'firebase/database';
 import { tenantPath } from '../services/tenantPath';
 import { useBroadcastOverlaySurface } from '../hooks/useBroadcastOverlaySurface';
 import { ResolvedImage } from '../components/ResolvedImage';
 import { ScorecardLayoutView } from '../components/ScorecardCanvas';
 import { overlayMediaPreload, getPreloadedMediaUrl } from '../services/overlayMediaPreload';
 import { scorecardLayoutService } from '../services/scorecardLayoutService';
+import { mergeIconicKabaddiPlayers } from '../utils/kabaddiRoster';
 import type { ScorecardLayout, WidgetKind } from '../types/scorecardDesigner';
 import type { ScorecardDataContext } from '../utils/scorecardDataBinding';
 import {
@@ -31,7 +32,7 @@ import type {
   KabaddiOverlayControl, KabaddiAnimationConfig, KabaddiRulesConfig, KabaddiTeamState,
   KabaddiTeam, KabaddiTeamRef, KabaddiPlayer,
 } from '../types/kabaddi';
-import type { Team } from '../types';
+import type { Player, Team } from '../types';
 import type { SoldPlayerRecord } from '../services/auctionPersistence';
 import './KabaddiOBSOverlayPage.css';
 
@@ -65,6 +66,8 @@ function mergeKabaddiOverlayConfig(raw: Partial<KabaddiOverlayConfig> | null): K
     allOutAnimation: mergeAnimation(DEFAULT_KABADDI_OVERLAY_CONFIG.allOutAnimation, value.allOutAnimation),
     bonusAnimation: mergeAnimation(DEFAULT_KABADDI_OVERLAY_CONFIG.bonusAnimation, value.bonusAnimation),
     doOrDieAnimation: mergeAnimation(DEFAULT_KABADDI_OVERLAY_CONFIG.doOrDieAnimation, value.doOrDieAnimation),
+    teamBreakAnimation: mergeAnimation(DEFAULT_KABADDI_OVERLAY_CONFIG.teamBreakAnimation, value.teamBreakAnimation),
+    playerAwardAnimation: mergeAnimation(DEFAULT_KABADDI_OVERLAY_CONFIG.playerAwardAnimation, value.playerAwardAnimation),
   };
 }
 
@@ -83,6 +86,10 @@ function celebFor(type: KabaddiOverlayControl['activeOverlay'], config: KabaddiO
       return { anim: config.bonusAnimation, enabled: config.enableBonusAnimation, fallback: 'BONUS!', color: config.bonusAnimation?.color || '#22c55e' };
     case 'do_or_die':
       return { anim: config.doOrDieAnimation, enabled: config.enableDoOrDieAnimation, fallback: 'DO OR DIE RAID', color: config.doOrDieAnimation?.color || '#a855f7' };
+    case 'team_break':
+      return { anim: config.teamBreakAnimation, enabled: config.teamBreakAnimation?.enabled !== false, fallback: 'TEAM TIMEOUT', color: config.teamBreakAnimation?.color || '#0ea5e9' };
+    case 'player_award':
+      return { anim: config.playerAwardAnimation, enabled: config.playerAwardAnimation?.enabled !== false, fallback: 'PLAYER AWARD', color: config.playerAwardAnimation?.color || '#f59e0b' };
     default:
       return { enabled: true, fallback: '', color: config.accentColor };
   }
@@ -147,7 +154,7 @@ interface MatRosterEntry { player: KabaddiPlayer; onCourt: boolean }
  * instead of falling back to plain dots.
  */
 function mergedRosterPlayers(
-  players: KabaddiPlayer[], soldPlayers: SoldPlayerRecord[], match: KabaddiMatchSetup | null,
+  players: KabaddiPlayer[], soldPlayers: SoldPlayerRecord[], auctionTeams: Team[], auctionPlayers: Player[], match: KabaddiMatchSetup | null,
 ): KabaddiPlayer[] {
   if (!match) return players;
   const knownIds = new Set(players.flatMap(p => [p.id, p.sourcePlayerId].filter((v): v is string => !!v)));
@@ -173,7 +180,7 @@ function mergedRosterPlayers(
       updatedAt: sp.timestamp || Date.now(),
     }];
   });
-  return [...players, ...extras];
+  return mergeIconicKabaddiPlayers([...players, ...extras], auctionTeams, auctionPlayers, match);
 }
 
 /** The starting lineup for a team with each player's current on-mat status. */
@@ -204,6 +211,7 @@ export default function KabaddiOBSOverlayPage() {
   const [live, setLive] = useState<KabaddiLiveState | null>(null);
   const [teams, setTeams] = useState<KabaddiTeam[]>([]);
   const [auctionTeams, setAuctionTeams] = useState<Team[]>([]);
+  const [auctionPlayers, setAuctionPlayers] = useState<Player[]>([]);
   const [players, setPlayers] = useState<KabaddiPlayer[]>([]);
   const [soldPlayers, setSoldPlayers] = useState<SoldPlayerRecord[]>([]);
   const [config, setConfig] = useState<KabaddiOverlayConfig>(DEFAULT_KABADDI_OVERLAY_CONFIG);
@@ -280,6 +288,10 @@ export default function KabaddiOBSOverlayPage() {
         const val = s.val() as Team[] | Record<string, Team> | null;
         setAuctionTeams(val ? Object.values(val).filter((t): t is Team => !!t?.id) : []);
       }),
+      onValue(ref(fbDb, tenantPath('auction/adminPlayers')), s => {
+        const val = s.val() as Player[] | Record<string, Player> | null;
+        setAuctionPlayers(val ? Object.values(val).filter((player): player is Player => !!player?.id) : []);
+      }),
       // Players
       onValue(ref(fbDb, `${base}/players`), s => {
         const val = (s.val() as Record<string, KabaddiPlayer>) ?? {};
@@ -345,6 +357,10 @@ export default function KabaddiOBSOverlayPage() {
       config.bonusAnimation?.soundUrl,
       config.doOrDieAnimation?.mediaUrl,
       config.doOrDieAnimation?.soundUrl,
+      config.teamBreakAnimation?.mediaUrl,
+      config.teamBreakAnimation?.soundUrl,
+      config.playerAwardAnimation?.mediaUrl,
+      config.playerAwardAnimation?.soundUrl,
       config.tournamentLogo,
       config.broadcastPartnerLogo,
       match?.teamA?.animationUrl,
@@ -376,9 +392,13 @@ export default function KabaddiOBSOverlayPage() {
             aud.play().catch(() => {});
           }
         }
+        if (celebTimerRef.current) clearTimeout(celebTimerRef.current);
         setCeleb({ activeOverlay: type, lastUpdated: Date.now() });
         const duration = anim?.durationMs && anim.durationMs > 0 ? anim.durationMs : 8000;
-        setTimeout(() => setCeleb(null), duration);
+        celebTimerRef.current = setTimeout(() => {
+          setCeleb(null);
+          celebTimerRef.current = null;
+        }, duration);
       };
 
       if (key === 'r') trigger('super_raid');
@@ -386,11 +406,19 @@ export default function KabaddiOBSOverlayPage() {
       else if (key === 'a') trigger('all_out');
       else if (key === 'b') trigger('bonus_point');
       else if (key === 'd') trigger('do_or_die');
-      else if (key === 'escape') setCeleb(null);
+      else if (key === 'escape') {
+        if (celebTimerRef.current) clearTimeout(celebTimerRef.current);
+        celebTimerRef.current = null;
+        setCeleb(null);
+        void set(ref(fbDb, `${tenantPath('kabaddi')}/matches/${matchId}/overlay`), {
+          activeOverlay: 'none',
+          lastUpdated: Date.now(),
+        });
+      }
     };
     window.addEventListener('keydown', handleKey);
     return () => window.removeEventListener('keydown', handleKey);
-  }, [config]);
+  }, [config, matchId]);
 
   // Instant celebration display with preloaded media and sound (<10ms playback)
   useEffect(() => {
@@ -434,6 +462,10 @@ export default function KabaddiOBSOverlayPage() {
     celebTimerRef.current = setTimeout(() => {
       setCeleb(null);
       celebTimerRef.current = null;
+      void set(ref(fbDb, `${tenantPath('kabaddi')}/matches/${matchId}/overlay`), {
+        activeOverlay: 'none',
+        lastUpdated: Date.now(),
+      });
     }, duration);
     return () => {
       if (celebTimerRef.current) {
@@ -441,7 +473,7 @@ export default function KabaddiOBSOverlayPage() {
         celebTimerRef.current = null;
       }
     };
-  }, [control, config]);
+  }, [control, config, matchId]);
 
   if (!matchId || !match || !live) return <div className="kbo" data-empty="true" />;
 
@@ -450,7 +482,7 @@ export default function KabaddiOBSOverlayPage() {
   const raidLeft = config.showRaidClock ? raidSecondsRemaining(live, rules) : null;
   const teamA = enrichTeam(match.teamA, teams, auctionTeams);
   const teamB = enrichTeam(match.teamB, teams, auctionTeams);
-  const rosterPlayers = mergedRosterPlayers(players, soldPlayers, match);
+  const rosterPlayers = mergedRosterPlayers(players, soldPlayers, auctionTeams, auctionPlayers, match);
   const raidingA = live.raidingTeamId === teamA.id;
   const raidingB = live.raidingTeamId === teamB.id;
 
@@ -581,7 +613,7 @@ export default function KabaddiOBSOverlayPage() {
             </span>
           )}
 
-          {live.isDoOrDie && <span className="kbo__dod">DO OR DIE</span>}
+          {live.isDoOrDie && control?.activeOverlay !== 'none' && <span className="kbo__dod">DO OR DIE</span>}
         </div>
       </div>
 
@@ -730,6 +762,24 @@ function KabaddiCelebration({ control, config }: Readonly<{
           animate={{ opacity: [1, 0.65, 1] }} transition={{ repeat: Infinity, duration: 0.9 }}>
           {text}
         </motion.div>
+      </motion.div>
+    );
+  }
+
+  if (type === 'team_break' || type === 'player_award') {
+    return (
+      <motion.div className={`kbo__celeb ${type === 'team_break' ? 'kbo__celeb--break' : 'kbo__celeb--award'}`}
+        initial={{ opacity: 0, scale: 0.72, y: 24 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 1.08 }}
+        transition={{ type: 'spring', stiffness: 220, damping: 20 }}>
+        <motion.div className="kbo__celeb-big" style={{ color }}
+          animate={{ scale: [1, 1.06, 1] }} transition={{ repeat: Infinity, duration: 1.2 }}>
+          {text}
+        </motion.div>
+        <div className="kbo__celeb-sub">
+          {type === 'team_break'
+            ? ev?.teamName || ev?.teamId || 'OFFICIAL TEAM BREAK'
+            : `${ev?.playerName || 'PLAYER'} · ${ev?.teamName || ev?.teamId || ''} · +${ev?.points ?? 0} POINTS`}
+        </div>
       </motion.div>
     );
   }

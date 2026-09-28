@@ -12,6 +12,7 @@ import { realtimeSync } from '../services/realtimeSync';
 import { tenantPath } from '../services/tenantPath';
 import { obsService } from '../services/obsService';
 import { obsReplaySourceService } from '../services/scoring/obsReplaySourceService';
+import { normalizePlayerName } from '../utils/playerName';
 import type {
   MatchSetup, LiveScore, OverlayControlState, OverlayType,
   OBSReplayButton, OBSReplayConfig,
@@ -219,7 +220,14 @@ export default function ScoreOBSControlDock() {
   useEffect(() => {
     if (!selectedMatchId) return;
     const unsub = scoringService.subscribeLiveScore(selectedMatchId, (score) => {
-      setLiveScore(score);
+      setLiveScore({
+        ...score,
+        currentBatsmen: [
+          { ...score.currentBatsmen[0], playerName: normalizePlayerName(score.currentBatsmen[0]?.playerName ?? '') },
+          { ...score.currentBatsmen[1], playerName: normalizePlayerName(score.currentBatsmen[1]?.playerName ?? '') },
+        ],
+        currentBowler: { ...score.currentBowler, playerName: normalizePlayerName(score.currentBowler?.playerName ?? '') },
+      });
     });
     return unsub;
   }, [selectedMatchId]);
@@ -409,6 +417,19 @@ export default function ScoreOBSControlDock() {
       showFeedback(`Error: ${err}`);
     }
   }, [selectedMatchId, showFeedback]);
+
+  const handlePowerplayChange = useCallback(async (active: boolean) => {
+    if (!selectedMatchId || !liveScore) return;
+    const updated = { ...liveScore, isPowerplay: active, powerplayOverride: active, lastUpdated: Date.now() };
+    setLiveScore(updated);
+    try {
+      await scoringService.saveLiveScore(selectedMatchId, updated);
+      showFeedback(active ? 'Powerplay enabled' : 'Powerplay disabled');
+    } catch (err) {
+      setLiveScore(liveScore);
+      showFeedback(`Powerplay update failed: ${err}`);
+    }
+  }, [selectedMatchId, liveScore, showFeedback]);
 
   const handleStartNextMatch = useCallback(async () => {
     const next = [...matches]
@@ -620,6 +641,10 @@ export default function ScoreOBSControlDock() {
       {/* Live Score Preview */}
       {liveScore && selectedMatch && (
         <div className="score-dock__score-preview">
+          <label className="score-dock__powerplay-toggle">
+            <input type="checkbox" checked={liveScore.isPowerplay} onChange={e => void handlePowerplayChange(e.target.checked)} />
+            Powerplay
+          </label>
           <div className="score-dock__score-teams">
             <span className="score-dock__batting-team">{liveScore.battingTeamId === selectedMatch.teamA.id ? selectedMatch.teamA.name : selectedMatch.teamB.name}</span>
             <span className="score-dock__score-value">{liveScore.runs}/{liveScore.wickets}</span>

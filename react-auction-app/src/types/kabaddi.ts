@@ -121,6 +121,9 @@ export type KabaddiEventType =
   | 'touch_point'      // raider tags defender(s) and returns safely
   | 'bonus_point'      // raider crosses the bonus line
   | 'tackle_point'     // defence stops the raider
+  | 'defender_out'     // defender steps beyond the boundary during a raid
+  | 'team_break'      // team timeout announcement
+  | 'player_award'    // official awards points to a named player
   | 'super_raid'       // 3+ points in a single raid
   | 'super_tackle'     // tackle made with 3 or fewer defenders on court
   | 'all_out'          // whole side out → 2 bonus points + full revival
@@ -137,6 +140,7 @@ export interface KabaddiMatchEvent {
   teamId: string;          // team credited with the event
   playerId?: string;
   playerName?: string;
+  teamName?: string;
   /** Defenders tagged / raider tackled, for raid and tackle events. */
   opponentIds?: string[];
   opponentNames?: string[];
@@ -176,6 +180,7 @@ export interface KabaddiTeamState {
   startingIds?: string[];
   /** Players sent off the mat, oldest-first — revivals pop from the front (FIFO). */
   benchQueue?: string[];
+  teamBreaksUsed?: number;
   /** Consecutive empty raids — the 3rd raid becomes do-or-die. */
   consecutiveEmptyRaids: number;
   allOutsConceded: number;
@@ -250,7 +255,8 @@ export function createEmptyKabaddiLiveState(
 
 export type KabaddiOverlayType =
   | 'none' | 'super_raid' | 'super_tackle' | 'all_out' | 'bonus_point'
-  | 'do_or_die' | 'toss' | 'half_time' | 'full_time' | 'lineup' | 'match_stats';
+  | 'do_or_die' | 'toss' | 'half_time' | 'full_time' | 'lineup' | 'match_stats'
+  | 'team_break' | 'player_award';
 
 export interface KabaddiOverlayControl {
   activeOverlay: KabaddiOverlayType;
@@ -297,6 +303,8 @@ export interface KabaddiOverlayConfig {
   allOutAnimation?: KabaddiAnimationConfig;
   bonusAnimation?: KabaddiAnimationConfig;
   doOrDieAnimation?: KabaddiAnimationConfig;
+  teamBreakAnimation?: KabaddiAnimationConfig;
+  playerAwardAnimation?: KabaddiAnimationConfig;
   statsSheetUrl?: string;
   // Single Overlay Mode: one tenant-wide overlay/dock/scorer link that auto-follows
   // whichever match is marked active (or live).
@@ -325,6 +333,8 @@ export const DEFAULT_KABADDI_OVERLAY_CONFIG: KabaddiOverlayConfig = {
   allOutAnimation: { enabled: true, durationMs: 8000, text: 'ALL OUT!', color: '#ef4444' },
   bonusAnimation: { enabled: true, durationMs: 8000, text: 'BONUS!', color: '#22c55e' },
   doOrDieAnimation: { enabled: true, durationMs: 8000, text: 'DO OR DIE RAID', color: '#a855f7' },
+  teamBreakAnimation: { enabled: true, durationMs: 7000, text: 'TEAM TIMEOUT', color: '#0ea5e9' },
+  playerAwardAnimation: { enabled: true, durationMs: 8000, text: 'PLAYER AWARD', color: '#f59e0b' },
 };
 
 // ── Rules & regulations (per-tournament, configured from Platform Admin) ─────
@@ -346,6 +356,7 @@ export interface KabaddiRulesConfig {
   halfDurationMin: number;     // 20
   numberOfHalves: number;      // 2
   halfTimeBreakMin: number;    // 5
+  teamBreaksPerSide: number;   // official timeouts available to each team
   raidDurationSec: number;     // 30
   raidInputGraceSec: number;   // scorer input grace after the raid clock expires
   // Extra time
@@ -373,7 +384,7 @@ export interface KabaddiRulesConfig {
 export const KABADDI_FORMAT_PRESETS: Record<KabaddiFormat, KabaddiRulesConfig> = {
   standard: {
     format: 'standard', playersPerSide: 7, substitutesAllowed: 5,
-    halfDurationMin: 20, numberOfHalves: 2, halfTimeBreakMin: 5, raidDurationSec: 30, raidInputGraceSec: 15,
+    halfDurationMin: 20, numberOfHalves: 2, halfTimeBreakMin: 5, teamBreaksPerSide: 1, raidDurationSec: 30, raidInputGraceSec: 15,
     extraTimeEnabled: false, extraTimeHalfMin: 5,
     bonusLineEnabled: true, bonusMinDefenders: 6, allOutBonusPoints: 2,
     superRaidPoints: 3, superTackleMaxDefenders: 3, superTacklePoints: 2,
@@ -382,7 +393,7 @@ export const KABADDI_FORMAT_PRESETS: Record<KabaddiFormat, KabaddiRulesConfig> =
   },
   circle: {
     format: 'circle', playersPerSide: 7, substitutesAllowed: 4,
-    halfDurationMin: 20, numberOfHalves: 2, halfTimeBreakMin: 5, raidDurationSec: 30, raidInputGraceSec: 15,
+    halfDurationMin: 20, numberOfHalves: 2, halfTimeBreakMin: 5, teamBreaksPerSide: 1, raidDurationSec: 30, raidInputGraceSec: 15,
     extraTimeEnabled: false, extraTimeHalfMin: 5,
     bonusLineEnabled: false, bonusMinDefenders: 6, allOutBonusPoints: 2,
     superRaidPoints: 3, superTackleMaxDefenders: 3, superTacklePoints: 2,
@@ -391,7 +402,7 @@ export const KABADDI_FORMAT_PRESETS: Record<KabaddiFormat, KabaddiRulesConfig> =
   },
   youth: {
     format: 'youth', playersPerSide: 7, substitutesAllowed: 5,
-    halfDurationMin: 15, numberOfHalves: 2, halfTimeBreakMin: 5, raidDurationSec: 30, raidInputGraceSec: 15,
+    halfDurationMin: 15, numberOfHalves: 2, halfTimeBreakMin: 5, teamBreaksPerSide: 1, raidDurationSec: 30, raidInputGraceSec: 15,
     extraTimeEnabled: false, extraTimeHalfMin: 5,
     bonusLineEnabled: true, bonusMinDefenders: 6, allOutBonusPoints: 2,
     superRaidPoints: 3, superTackleMaxDefenders: 3, superTacklePoints: 2,
@@ -400,7 +411,7 @@ export const KABADDI_FORMAT_PRESETS: Record<KabaddiFormat, KabaddiRulesConfig> =
   },
   beach: {
     format: 'beach', playersPerSide: 6, substitutesAllowed: 4,
-    halfDurationMin: 15, numberOfHalves: 2, halfTimeBreakMin: 5, raidDurationSec: 30, raidInputGraceSec: 15,
+    halfDurationMin: 15, numberOfHalves: 2, halfTimeBreakMin: 5, teamBreaksPerSide: 1, raidDurationSec: 30, raidInputGraceSec: 15,
     extraTimeEnabled: false, extraTimeHalfMin: 5,
     bonusLineEnabled: false, bonusMinDefenders: 5, allOutBonusPoints: 2,
     superRaidPoints: 3, superTackleMaxDefenders: 2, superTacklePoints: 2,

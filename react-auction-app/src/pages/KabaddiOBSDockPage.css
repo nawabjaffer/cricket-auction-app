@@ -151,6 +151,42 @@
   border-radius: 4px;
 }
 
+.kbd__broadcast-tools {
+  display: grid;
+  gap: 6px;
+  padding: 8px 14px;
+  background: rgba(0, 0, 0, 0.22);
+}
+
+.kbd__award-controls,
+.kbd__break-controls {
+  display: flex;
+  gap: 6px;
+}
+
+.kbd__award-controls select { flex: 1; min-width: 0; }
+.kbd__award-controls input { width: 58px; }
+
+.kbd__award-controls select,
+.kbd__award-controls input,
+.kbd__award-controls button,
+.kbd__break-controls button {
+  min-height: 30px;
+  padding: 5px 7px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.07);
+  color: #f4f4f5;
+  font: inherit;
+  font-size: 0.68rem;
+}
+
+.kbd__award-controls button,
+.kbd__break-controls button { cursor: pointer; }
+.kbd__award-controls button:disabled,
+.kbd__break-controls button:disabled { opacity: 0.42; cursor: not-allowed; }
+.kbd__break-controls button { flex: 1; }
+
 /* ── Overlay Control Buttons ── */
 .kbd__controls {
   display: grid;

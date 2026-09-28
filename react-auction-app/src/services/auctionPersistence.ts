@@ -8,10 +8,13 @@ import {
   set, 
   get,
   onValue,
+  update,
   type Database 
 } from 'firebase/database';
 import type { Player, Team, SoldPlayer, AuctionRoleCategory } from '../types';
+import { normalizePlayerName } from '../utils/playerName';
 import { tenantPath, tenantPathFor } from './tenantPath';
+import { deletePlayerImageAssets } from './firebaseStorageService';
 
 // Database paths. Each value is resolved through `tenantPath()` at access time,
 // so the same literal `DB_PATHS.SOLD_PLAYERS` returns
@@ -23,6 +26,8 @@ const DB_PATH_KEYS = {
   ADMIN_SETTINGS:   'auction/adminSettings',
   TEAMS:            'auction/teams',
   ADMIN_PLAYERS:    'auction/adminPlayers',
+  PLAYER_TRASH:     'auction/playerTrash',
+  REMOVED_PLAYER_IDS: 'auction/removedPlayerIds',
   SPONSORS:         'auction/sponsors',
 } as const;
 
@@ -36,6 +41,43 @@ const DB_PATHS = new Proxy({} as Record<DbPathKey, string>, {
     return undefined;
   },
 });
+
+function asRecords<T>(raw: unknown): T[] {
+  if (Array.isArray(raw)) return raw.filter((item): item is T => item != null);
+  if (raw && typeof raw === 'object') return Object.values(raw).filter((item): item is T => item != null);
+  return [];
+}
+
+function removePlayerFromCollection(raw: unknown, playerId: string): unknown {
+  if (Array.isArray(raw)) {
+    const filtered = raw.filter(item => item && item.id !== playerId);
+    return filtered.length > 0 ? filtered : null;
+  }
+  if (!raw || typeof raw !== 'object') return null;
+  const filtered = Object.fromEntries(Object.entries(raw as Record<string, unknown>)
+    .filter(([key, value]) => key !== playerId && (!value || typeof value !== 'object' || (value as { id?: string }).id !== playerId)));
+  return Object.keys(filtered).length > 0 ? filtered : null;
+}
+
+function firebaseKey(value: string): string {
+  return encodeURIComponent(value).replace(/\./g, '%2E');
+}
+
+function playerIdFromFirebaseKey(value: string): string {
+  try { return decodeURIComponent(value.replace(/%2E/gi, '.')); } catch { return value; }
+}
+
+function playerImageUrls(value: unknown): string[] {
+  if (!value || typeof value !== 'object') return [];
+  const player = value as { imageUrl?: string; originalImageUrl?: string; processedImageUrl?: string; photoUrl?: string };
+  return [player.imageUrl, player.originalImageUrl, player.processedImageUrl, player.photoUrl]
+    .filter((url): url is string => typeof url === 'string' && url.length > 0);
+}
+
+function withCompressedImages(player: Player, urls: string[]): Promise<Player> {
+  return Promise.all(urls.map(url => compressImageUrl(url))).then(([imageUrl, originalImageUrl, processedImageUrl]) =>
+    JSON.parse(JSON.stringify({ ...player, imageUrl, originalImageUrl, processedImageUrl })) as Player);
+}
 
 // ── Image compression for Firebase RTDB ──
 // Compresses data: URLs to small JPEG thumbnails (~15-30KB) to fit RTDB write limits
@@ -191,6 +233,11 @@ export interface InitialSnapshot {
   teams: Team[];
   capturedAt: number;
   source: 'google-sheets';
+}
+
+export interface PlayerTrashRecord {
+  player: Player;
+  deletedAt: number;
 }
 
 // Special player category (e.g. Under-19, Over-40)
@@ -389,7 +436,7 @@ class AuctionPersistenceService {
 
     const record: SoldPlayerRecord = {
       id: player.id,
-      playerName: player.name,
+      playerName: normalizePlayerName(player.name),
       role: player.role,
       age: player.age ?? null,
       matches: player.matches ?? '',
@@ -409,7 +456,7 @@ class AuctionPersistenceService {
     if (!this.db) throw new Error('Database not initialized');
     const record: SoldPlayerRecord = {
       id: player.id,
-      playerName: player.name,
+      playerName: normalizePlayerName(player.name),
       role: player.role,
       age: player.age ?? null,
       matches: player.matches ?? '',
@@ -488,7 +535,7 @@ class AuctionPersistenceService {
 
     const record: UnsoldPlayerRecord = {
       id: player.id,
-      name: player.name,
+      name: normalizePlayerName(player.name),
       role: player.role,
       age: player.age ?? null,
       matches: player.matches ?? '',
@@ -641,12 +688,14 @@ class AuctionPersistenceService {
         allocatedAmount: t.allocatedAmount ?? 0,
         remainingPurse: t.remainingPurse ?? 0,
         highestBid: t.highestBid ?? 0,
-        captain: t.captain ?? '',
+        captain: normalizePlayerName(t.captain ?? ''),
         underAgePlayers: t.underAgePlayers ?? 0,
       };
+      if (t.iconicPlayers?.length) record.iconicPlayers = t.iconicPlayers.map(normalizePlayerName);
       if (t.primaryColor) record.primaryColor = t.primaryColor;
       if (t.secondaryColor) record.secondaryColor = t.secondaryColor;
       if (t.brandLogoUrl) record.brandLogoUrl = t.brandLogoUrl;
+      if (t.iconicPlayers?.length) record.iconicPlayers = t.iconicPlayers.map(normalizePlayerName);
       if (t.ownerCompany) record.ownerCompany = t.ownerCompany;
       if (t.brandTagline) record.brandTagline = t.brandTagline;
       if (t.authUsername) record.authUsername = t.authUsername;
@@ -669,7 +718,11 @@ class AuctionPersistenceService {
     
     if (!snapshot.exists()) return null;
 
-    return snapshot.val() as Team[];
+    return (snapshot.val() as Team[]).map(team => ({
+      ...team,
+      captain: normalizePlayerName(team.captain ?? ''),
+      iconicPlayers: team.iconicPlayers?.map(normalizePlayerName),
+    }));
   }
 
   // ==================== ADMIN PLAYERS ====================
@@ -689,7 +742,7 @@ class AuctionPersistenceService {
     const cleaned = players.map((p, i) => {
       const record: Record<string, unknown> = {
         id: p.id,
-        name: p.name,
+        name: normalizePlayerName(p.name),
         imageUrl: compressedUrls[i],
         role: p.role,
         age: p.age ?? null,
@@ -713,6 +766,7 @@ class AuctionPersistenceService {
       if (p.imageEdit) record.imageEdit = p.imageEdit;
       if (p.imageProcessingStatus) record.imageProcessingStatus = p.imageProcessingStatus;
       if (p.imageProcessingError) record.imageProcessingError = p.imageProcessingError;
+      if (p.isBackgroundRemoved) record.isBackgroundRemoved = true;
       return record;
     });
 
@@ -737,7 +791,7 @@ class AuctionPersistenceService {
     // Filter out null/undefined entries and ensure each has at least an id
     return arr.filter(
       (p): p is Player => p != null && typeof p === 'object' && 'id' in (p as Record<string, unknown>)
-    );
+    ).map(player => ({ ...player, name: normalizePlayerName(player.name) }));
   }
 
   /**
@@ -747,6 +801,180 @@ class AuctionPersistenceService {
     if (!this.db) throw new Error('Database not initialized');
 
     await set(ref(this.db, DB_PATHS.ADMIN_PLAYERS), null);
+  }
+
+  async getTrashedPlayers(): Promise<Array<{ id: string; record: PlayerTrashRecord }>> {
+    if (!this.db) throw new Error('Database not initialized');
+    const snapshot = await get(ref(this.db, DB_PATHS.PLAYER_TRASH));
+    if (!snapshot.exists()) return [];
+    const raw = snapshot.val() as Record<string, PlayerTrashRecord | Player> | Player[];
+    const entries = Array.isArray(raw) ? raw.map((record, index) => [String(index), record] as const) : Object.entries(raw);
+    return entries.flatMap(([, value]) => {
+      if (!value) return [];
+      const record = 'player' in value
+        ? value as PlayerTrashRecord
+        : { player: value as Player, deletedAt: 0 };
+      if (!record.player?.id) return [];
+      const normalizedRecord = {
+        ...record,
+        player: { ...record.player, name: normalizePlayerName(record.player.name) },
+      };
+      return [{ id: normalizedRecord.player.id, record: normalizedRecord }];
+    });
+  }
+
+  async getRemovedPlayerIds(): Promise<string[]> {
+    if (!this.db) throw new Error('Database not initialized');
+    const [trash, removedSnapshot] = await Promise.all([
+      this.getTrashedPlayers(),
+      get(ref(this.db, DB_PATHS.REMOVED_PLAYER_IDS)),
+    ]);
+    const raw = removedSnapshot.val() as Record<string, boolean> | null;
+    const permanentIds = raw ? Object.entries(raw).filter(([, removed]) => removed).map(([key]) => playerIdFromFirebaseKey(key)) : [];
+    return [...new Set([...trash.map(item => item.id), ...permanentIds])];
+  }
+
+  async movePlayerToTrash(player: Player): Promise<PlayerTrashRecord> {
+    return (await this.movePlayersToTrash([player]))[0];
+  }
+
+  async movePlayersToTrash(players: Player[]): Promise<PlayerTrashRecord[]> {
+    if (!this.db) throw new Error('Database not initialized');
+    if (players.length === 0) return [];
+    const currentPlayers = await this.getAdminPlayers() ?? [];
+    const removedIds = new Set(players.map(player => player.id));
+    const activePlayers = currentPlayers.filter(item => !removedIds.has(item.id));
+    const records = await Promise.all(players.map(async player => ({
+      id: player.id,
+      record: {
+        player: await withCompressedImages(player, [player.imageUrl, player.originalImageUrl || '', player.processedImageUrl || '']),
+        deletedAt: Date.now(),
+      } satisfies PlayerTrashRecord,
+    })));
+    const currentStateSnapshot = await get(ref(this.db, tenantPath('auction/currentState')));
+    const currentState = currentStateSnapshot.val() as { currentPlayer?: { id?: string } | null } | null;
+    const updates: Record<string, unknown> = {
+      adminPlayers: activePlayers.length > 0 ? activePlayers : null,
+    };
+    for (const item of records) updates[`playerTrash/${firebaseKey(item.id)}`] = item.record;
+    if (currentState?.currentPlayer?.id && removedIds.has(currentState.currentPlayer.id)) {
+      updates['currentState/currentPlayer'] = null;
+      updates['currentState/auctionActive'] = false;
+      updates['currentState/activeOverlay'] = null;
+      updates['currentState/selectedTeam'] = null;
+      updates['currentState/bidHistory'] = [];
+    }
+    await update(ref(this.db, tenantPath('auction')), updates);
+    return records.map(item => item.record);
+  }
+
+  async restorePlayerFromTrash(playerId: string): Promise<Player> {
+    if (!this.db) throw new Error('Database not initialized');
+    const key = firebaseKey(playerId);
+    const trashSnapshot = await get(ref(this.db, `${DB_PATHS.PLAYER_TRASH}/${key}`));
+    if (!trashSnapshot.exists()) throw new Error('This player is no longer in trash.');
+    const value = trashSnapshot.val() as PlayerTrashRecord | Player;
+    const player = 'player' in value ? value.player : value;
+    const activePlayers = await this.getAdminPlayers() ?? [];
+    const nextPlayers = activePlayers.some(item => item.id === playerId) ? activePlayers : [...activePlayers, player];
+    await update(ref(this.db, tenantPath('auction')), {
+      adminPlayers: nextPlayers,
+      [`playerTrash/${key}`]: null,
+    });
+    return player;
+  }
+
+  async permanentlyDeletePlayer(playerId: string): Promise<void> {
+    if (!this.db) throw new Error('Database not initialized');
+    const key = firebaseKey(playerId);
+    const root = tenantPath('auction');
+    const [trashSnap, adminSnap, soldSnap, unsoldSnap, snapshotSnap, registrationsSnap, allTrashSnap, currentSnap, teamsSnap] = await Promise.all([
+      get(ref(this.db, `${DB_PATHS.PLAYER_TRASH}/${key}`)),
+      get(ref(this.db, DB_PATHS.ADMIN_PLAYERS)),
+      get(ref(this.db, DB_PATHS.SOLD_PLAYERS)),
+      get(ref(this.db, DB_PATHS.UNSOLD_PLAYERS)),
+      get(ref(this.db, DB_PATHS.INITIAL_SNAPSHOT)),
+      get(ref(this.db, tenantPath('auction/playerRegistrations'))),
+      get(ref(this.db, DB_PATHS.PLAYER_TRASH)),
+      get(ref(this.db, tenantPath('auction/currentState'))),
+      get(ref(this.db, DB_PATHS.TEAMS)),
+    ]);
+    const trashValue = trashSnap.val() as PlayerTrashRecord | Player | null;
+    const player = trashValue && 'player' in trashValue ? trashValue.player : trashValue as Player | null;
+    const adminRaw = adminSnap.val();
+    const soldRaw = soldSnap.val();
+    const unsoldRaw = unsoldSnap.val();
+    const snapshot = snapshotSnap.val() as InitialSnapshot | null;
+    const registrationsRaw = registrationsSnap.val();
+    const allTrash = asRecords<PlayerTrashRecord | Player>(allTrashSnap.val())
+      .map(value => 'player' in value ? value.player : value)
+      .filter(value => value?.id !== playerId);
+    const activePlayers = asRecords<Player>(adminRaw).filter(value => value.id !== playerId);
+    const soldPlayers = asRecords<SoldPlayerRecord>(soldRaw).filter(value => value.id !== playerId);
+    const unsoldPlayers = asRecords<UnsoldPlayerRecord>(unsoldRaw).filter(value => value.id !== playerId);
+    const registrations = asRecords<{ id: string; photoUrl?: string }>(registrationsRaw).filter(value => value.id !== playerId);
+    const currentState = currentSnap.val() as { currentPlayer?: { id?: string; imageUrl?: string } | null } | null;
+    const initialSnapshotPlayers = asRecords<Player>(snapshot?.players).filter(value => value.id !== playerId);
+    const protectedUrls = [
+      ...activePlayers.flatMap(playerImageUrls),
+      ...soldPlayers.flatMap(playerImageUrls),
+      ...unsoldPlayers.flatMap(playerImageUrls),
+      ...allTrash.flatMap(playerImageUrls),
+      ...registrations.flatMap(playerImageUrls),
+      ...initialSnapshotPlayers.flatMap(playerImageUrls),
+      ...(currentState?.currentPlayer?.id !== playerId ? playerImageUrls(currentState?.currentPlayer) : []),
+    ];
+    const registration = registrationsRaw && typeof registrationsRaw === 'object'
+      ? (registrationsRaw as Record<string, { id?: string; photoUrl?: string }>)[key]
+      : undefined;
+    if (player) {
+      await deletePlayerImageAssets(
+        [...playerImageUrls(player), ...playerImageUrls(registration)],
+        protectedUrls,
+      );
+    }
+
+    const updates: Record<string, unknown> = {
+      adminPlayers: activePlayers.length > 0 ? activePlayers : null,
+      soldPlayers: removePlayerFromCollection(soldRaw, playerId),
+      unsoldPlayers: removePlayerFromCollection(unsoldRaw, playerId),
+      [`playerTrash/${key}`]: null,
+      [`removedPlayerIds/${key}`]: true,
+      [`playerRegistrations/${key}`]: null,
+    };
+    if (snapshot?.players) {
+      updates.initialSnapshot = { ...snapshot, players: initialSnapshotPlayers };
+    }
+    if (currentState?.currentPlayer?.id === playerId) {
+      updates['currentState/currentPlayer'] = null;
+      updates['currentState/auctionActive'] = false;
+      updates['currentState/activeOverlay'] = null;
+      updates['currentState/selectedTeam'] = null;
+      updates['currentState/bidHistory'] = [];
+    }
+    if (soldPlayers.length !== asRecords<SoldPlayerRecord>(soldRaw).length) {
+      const rawTeams = teamsSnap.val();
+      const recalculate = (team: Team): Team => {
+        const soldForTeam = soldPlayers.filter(item => item.teamId === team.id || item.teamName === team.name);
+        const playersBought = soldForTeam.length;
+        const allocatedAmount = Math.max(0, team.allocatedAmount || 0);
+        const spent = soldForTeam.reduce((sum, item) => sum + (item.soldAmount || 0), 0);
+        const totalPlayerThreshold = Math.max(0, team.totalPlayerThreshold || 0);
+        return {
+          ...team,
+          playersBought,
+          remainingPlayers: Math.max(totalPlayerThreshold - playersBought, 0),
+          remainingPurse: Math.max(0, allocatedAmount - spent),
+          highestBid: Math.max(0, ...soldForTeam.map(item => item.soldAmount || 0)),
+        };
+      };
+      updates.teams = Array.isArray(rawTeams)
+        ? rawTeams.map(recalculate)
+        : rawTeams && typeof rawTeams === 'object'
+          ? Object.fromEntries(Object.entries(rawTeams as Record<string, Team>).map(([teamId, team]) => [teamId, recalculate(team)]))
+          : rawTeams;
+    }
+    await update(ref(this.db, root), updates);
   }
 
   // ==================== SPONSORS ====================

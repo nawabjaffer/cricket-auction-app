@@ -32,7 +32,27 @@ async function enqueueModelJob<T>(job: () => Promise<T>): Promise<T> {
   }
 }
 
-/** Process local uploads in-browser so Firebase Storage CORS is not required. */
+async function fetchSourceImage(sourceUrl: string): Promise<Blob> {
+  let response: Response;
+  try {
+    response = await fetch(sourceUrl, { cache: 'no-store' });
+  } catch (error) {
+    if (error instanceof TypeError && sourceUrl.includes('firebasestorage.googleapis.com')) {
+      throw new Error('Could not fetch the Firebase Storage source image. Apply the bucket CORS policy from storage.cors.json, then retry.');
+    }
+    if (error instanceof TypeError) {
+      throw new Error('Could not fetch the source image. Its origin may block browser access through CORS.');
+    }
+    throw error;
+  }
+
+  if (!response.ok) throw new Error(`Could not fetch the source image (HTTP ${response.status}).`);
+  const blob = await response.blob();
+  if (!blob.type.startsWith('image/')) throw new Error(`Source URL did not return an image (${blob.type || 'unknown content type'}).`);
+  return blob;
+}
+
+/** Run local inference on a Blob; remote sources must permit browser CORS. */
 export async function processPlayerImage({
   playerId,
   playerName,
@@ -46,10 +66,11 @@ export async function processPlayerImage({
 
   onStatus?.('queued');
   onProgress?.('Waiting for the background-removal worker...', 5);
+  const inputBlob = sourceBlob ?? await fetchSourceImage(sourceUrl!);
   let highestProgress = 35;
   const processedBlob = await enqueueModelJob(async () => {
     onStatus?.('loading-model');
-    onProgress?.('Loading the background-removal model...', 12);
+    onProgress?.('Loading the background-removal model...', 25);
     const { removeBackground } = await loadBackgroundRemoval();
     onStatus?.('processing');
     onProgress?.('Removing the background from the portrait...', 35);
@@ -57,7 +78,7 @@ export async function processPlayerImage({
     let lastError: unknown;
     for (let attempt = 1; attempt <= 3; attempt += 1) {
       try {
-        return await removeBackground(sourceBlob ?? sourceUrl!, {
+        return await removeBackground(inputBlob, {
           progress: (key: string, current: number, total: number) => {
             if (total > 0) {
               // The model reports separate file phases, each starting at 0. Map the

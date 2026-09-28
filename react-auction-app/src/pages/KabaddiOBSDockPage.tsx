@@ -12,10 +12,12 @@ import { initializeApp, getApps } from 'firebase/app';
 import { getDatabase, ref, onValue, set } from 'firebase/database';
 import { tenantPath } from '../services/tenantPath';
 import { ResolvedImage } from '../components/ResolvedImage';
-import { DEFAULT_KABADDI_OVERLAY_CONFIG } from '../types/kabaddi';
+import { DEFAULT_KABADDI_OVERLAY_CONFIG, DEFAULT_KABADDI_RULES } from '../types/kabaddi';
+import { kabaddiService } from '../services/kabaddi';
 import type {
   KabaddiPlayer, KabaddiTeam, KabaddiOverlayConfig, KabaddiTopPerformer,
   KabaddiMatchSetup, KabaddiLiveState, KabaddiOverlayType,
+  KabaddiMatchEvent, KabaddiRulesConfig,
 } from '../types/kabaddi';
 import './KabaddiOBSDockPage.css';
 
@@ -50,7 +52,10 @@ export default function KabaddiOBSDockPage() {
   const [players, setPlayers] = useState<KabaddiPlayer[]>([]);
   const [teams, setTeams] = useState<KabaddiTeam[]>([]);
   const [config, setConfig] = useState<KabaddiOverlayConfig>(DEFAULT_KABADDI_OVERLAY_CONFIG);
+  const [rules, setRules] = useState<KabaddiRulesConfig>(DEFAULT_KABADDI_RULES);
   const [boardIdx, setBoardIdx] = useState(0);
+  const [awardPlayerId, setAwardPlayerId] = useState('');
+  const [awardPoints, setAwardPoints] = useState('1');
 
   // Parse URL parameters
   useEffect(() => {
@@ -64,10 +69,12 @@ export default function KabaddiOBSDockPage() {
   // Shared tenant subscriptions: players, teams, overlayConfig, activeMatchId, and all matches
   useEffect(() => {
     const base = tenantPath('kabaddi');
+    kabaddiService.initialize(fbDb, base);
     const unsubs = [
       onValue(ref(fbDb, `${base}/players`), s => setPlayers(s.exists() ? Object.values(s.val() as Record<string, KabaddiPlayer>).filter(p => !!p?.id) : [])),
       onValue(ref(fbDb, `${base}/teams`), s => setTeams(s.exists() ? Object.values(s.val() as Record<string, KabaddiTeam>).filter(t => !!t?.id) : [])),
       onValue(ref(fbDb, `${base}/overlayConfig`), s => setConfig(s.exists() ? { ...DEFAULT_KABADDI_OVERLAY_CONFIG, ...s.val() } : DEFAULT_KABADDI_OVERLAY_CONFIG)),
+      onValue(ref(fbDb, `${base}/rules`), s => setRules(s.exists() ? { ...DEFAULT_KABADDI_RULES, ...s.val() } : DEFAULT_KABADDI_RULES)),
       onValue(ref(fbDb, `${base}/activeMatch/matchId`), s => setActiveMatchId(s.exists() ? (s.val() as string) : null)),
       onValue(ref(fbDb, `${base}/matches`), s => {
         if (!s.exists()) { setLiveFallbackMatchId(null); return; }
@@ -116,13 +123,42 @@ export default function KabaddiOBSDockPage() {
     return () => unsubs.forEach(u => u());
   }, [matchId]);
 
-  const triggerOverlay = async (type: KabaddiOverlayType) => {
+  const triggerOverlay = async (type: KabaddiOverlayType, activeEvent?: KabaddiMatchEvent) => {
     if (!matchId) return;
     const base = tenantPath('kabaddi');
     await set(ref(fbDb, `${base}/matches/${matchId}/overlay`), {
       activeOverlay: type,
+      ...(activeEvent ? { activeEvent } : {}),
       lastUpdated: Date.now(),
     });
+  };
+
+  const callDockBreak = async (teamId: string) => {
+    if (!matchId || !live || !match) return;
+    try {
+      const result = kabaddiService.recordTeamBreak(live, teamId, rules.teamBreaksPerSide);
+      await kabaddiService.saveLive(result.live);
+      const teamName = teamId === match.teamA.id ? match.teamA.name : match.teamB.name;
+      await triggerOverlay('team_break', { ...result.event, teamName });
+    } catch (error) {
+      console.warn('[Kabaddi OBS Dock] Could not call team break:', error);
+    }
+  };
+
+  const awardDockPlayer = async () => {
+    if (!matchId || !live || !match) return;
+    const player = players.find(candidate => candidate.id === awardPlayerId);
+    if (!player) return;
+    try {
+      const result = kabaddiService.awardPlayerPoints(live, player.teamId, player.id, player.name, Number(awardPoints));
+      await kabaddiService.saveLive(result.live);
+      await kabaddiService.incrementPlayerStat(player.id, 'raidPoints', result.event.points);
+      const teamName = player.teamId === match.teamA.id ? match.teamA.name : match.teamB.name;
+      await triggerOverlay('player_award', { ...result.event, teamName });
+      setAwardPlayerId('');
+    } catch (error) {
+      console.warn('[Kabaddi OBS Dock] Could not award player points:', error);
+    }
   };
 
   useEffect(() => {
@@ -214,6 +250,30 @@ export default function KabaddiOBSDockPage() {
             ))}
           </motion.div>
         </AnimatePresence>
+
+        {matchId && (
+          <div className="kbd__broadcast-tools">
+            <div className="kbd__award-controls">
+              <select value={awardPlayerId} onChange={event => setAwardPlayerId(event.target.value)} aria-label="Select player for point award">
+                <option value="">Select player</option>
+                {players.map(player => {
+                  const teamName = teams.find(team => team.id === player.teamId)?.name || '';
+                  return <option key={player.id} value={player.id}>{player.name} · {teamName}</option>;
+                })}
+              </select>
+              <input type="number" min={1} max={99} value={awardPoints} onChange={event => setAwardPoints(event.target.value)} aria-label="Points to award" />
+              <button type="button" disabled={!awardPlayerId || Number(awardPoints) < 1} onClick={() => void awardDockPlayer()}>Award + announce</button>
+            </div>
+            {match && live && <div className="kbd__break-controls">
+              {[match.teamA, match.teamB].map((team, index) => {
+                const used = (index === 0 ? live.teamA : live.teamB).teamBreaksUsed ?? 0;
+                return <button key={team.id} type="button" disabled={used >= rules.teamBreaksPerSide} onClick={() => void callDockBreak(team.id)}>
+                  {team.shortName} break {used}/{rules.teamBreaksPerSide}
+                </button>;
+              })}
+            </div>}
+          </div>
+        )}
 
         {matchId && (
           <div className="kbd__controls">

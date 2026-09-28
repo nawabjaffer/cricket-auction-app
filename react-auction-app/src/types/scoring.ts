@@ -31,12 +31,14 @@ export const MATCH_STAGE_LABELS: Record<MatchStage, string> = {
 
 export interface MatchSetup {
   id: string;
-  teamA: { id: string; name: string; logoUrl?: string; primaryColor?: string };
-  teamB: { id: string; name: string; logoUrl?: string; primaryColor?: string };
+  teamA: { id: string; name: string; logoUrl?: string; brandLogoUrl?: string; primaryColor?: string };
+  teamB: { id: string; name: string; logoUrl?: string; brandLogoUrl?: string; primaryColor?: string };
   venue: string;
   date: string;           // ISO date-time
   maxOvers: number;       // e.g. 20 for T20
   powerplayOvers?: number; // e.g. 6 for T20 (default: maxOvers <= 20 ? 6 : 10)
+  powerplayEnabled?: boolean;
+  powerplayOversSelected?: string; // e.g. "1-6, 10-12"
   stage?: MatchStage;     // league / qualifier / eliminator / final
   tossWonBy?: string;     // team ID
   tossElected?: 'bat' | 'bowl';
@@ -245,6 +247,9 @@ export interface LiveScore {
   // Powerplay & free hit tracking
   isPowerplay: boolean;
   powerplayOvers: number;       // e.g. 6 for T20
+  powerplayEnabled?: boolean;
+  powerplayOversSelected?: string;
+  powerplayOverride?: boolean;
   isFreehit: boolean;
   // Previous bowler (to prevent consecutive overs)
   previousBowlerId?: string;

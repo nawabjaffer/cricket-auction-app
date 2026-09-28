@@ -315,7 +315,7 @@ export default withScorerAdminChrome(ScoringAdminPageContent, {
 
 function MatchesTab({ matches, teams, soldPlayers, onFeedback, saving, setSaving, navigate, baseUrl, config, sync, nameMappings, setNameMappings }: {
   matches: MatchSetup[];
-  teams: { id: string; name: string; logoUrl?: string; primaryColor?: string }[];
+  teams: { id: string; name: string; logoUrl?: string; brandLogoUrl?: string; primaryColor?: string }[];
   soldPlayers: SoldPlayer[];
   onFeedback: (msg: string) => void;
   saving: boolean;
@@ -372,6 +372,8 @@ function MatchesTab({ matches, teams, soldPlayers, onFeedback, saving, setSaving
     date: string;
     maxOvers: number;
     powerplayOvers: number;
+    powerplayEnabled: boolean;
+    powerplayOversSelected: string;
     stage: MatchStage;
     gapMinutes: number;
   };
@@ -382,6 +384,8 @@ function MatchesTab({ matches, teams, soldPlayers, onFeedback, saving, setSaving
     date: localNowInputValue(),
     maxOvers: 20,
     powerplayOvers: 6,
+    powerplayEnabled: true,
+    powerplayOversSelected: '1-6',
     stage: 'league',
     gapMinutes: 30,
   };
@@ -420,6 +424,8 @@ function MatchesTab({ matches, teams, soldPlayers, onFeedback, saving, setSaving
     date: getNextScheduledDate(scheduleDefaults.date, scheduleDefaults.maxOvers, scheduleDefaults.gapMinutes),
     maxOvers: scheduleDefaults.maxOvers,
     powerplayOvers: scheduleDefaults.powerplayOvers,
+    powerplayEnabled: scheduleDefaults.powerplayEnabled,
+    powerplayOversSelected: scheduleDefaults.powerplayOversSelected,
     stage: scheduleDefaults.stage,
   }));
   const [activeMatchId, setActiveMatchId] = useState<string | null>(null);
@@ -457,6 +463,8 @@ function MatchesTab({ matches, teams, soldPlayers, onFeedback, saving, setSaving
       date: nextDate,
       maxOvers: scheduleDefaults.maxOvers,
       powerplayOvers: scheduleDefaults.powerplayOvers,
+      powerplayEnabled: scheduleDefaults.powerplayEnabled,
+      powerplayOversSelected: scheduleDefaults.powerplayOversSelected,
       stage: scheduleDefaults.stage,
     });
     setEditId(null);
@@ -495,12 +503,14 @@ function MatchesTab({ matches, teams, soldPlayers, onFeedback, saving, setSaving
       const matchId = editId || `match_${Date.now()}`;
       const match: MatchSetup = {
         id: matchId,
-        teamA: { id: teamA.id, name: teamA.name, logoUrl: teamA.logoUrl, primaryColor: teamA.primaryColor },
-        teamB: { id: teamB.id, name: teamB.name, logoUrl: teamB.logoUrl, primaryColor: teamB.primaryColor },
+        teamA: { id: teamA.id, name: teamA.name, logoUrl: teamA.brandLogoUrl || teamA.logoUrl, brandLogoUrl: teamA.brandLogoUrl, primaryColor: teamA.primaryColor },
+        teamB: { id: teamB.id, name: teamB.name, logoUrl: teamB.brandLogoUrl || teamB.logoUrl, brandLogoUrl: teamB.brandLogoUrl, primaryColor: teamB.primaryColor },
         venue: form.venue,
         date: new Date(form.date).toISOString(),
         maxOvers: form.maxOvers,
         powerplayOvers: form.powerplayOvers,
+        powerplayEnabled: form.powerplayEnabled,
+        powerplayOversSelected: form.powerplayOversSelected,
         stage: form.stage,
         status: 'scheduled',
         createdAt: editId ? (matches.find(m => m.id === editId)?.createdAt ?? Date.now()) : Date.now(),
@@ -518,6 +528,8 @@ function MatchesTab({ matches, teams, soldPlayers, onFeedback, saving, setSaving
         date: nextDate,
         maxOvers: form.maxOvers,
         powerplayOvers: form.powerplayOvers,
+        powerplayEnabled: form.powerplayEnabled,
+        powerplayOversSelected: form.powerplayOversSelected,
         stage: form.stage,
       };
       setScheduleDefaults(nextDefaults);
@@ -528,6 +540,8 @@ function MatchesTab({ matches, teams, soldPlayers, onFeedback, saving, setSaving
         date: nextDefaults.date,
         maxOvers: nextDefaults.maxOvers,
         powerplayOvers: nextDefaults.powerplayOvers,
+        powerplayEnabled: nextDefaults.powerplayEnabled,
+        powerplayOversSelected: nextDefaults.powerplayOversSelected,
         stage: nextDefaults.stage,
       });
 
@@ -549,6 +563,8 @@ function MatchesTab({ matches, teams, soldPlayers, onFeedback, saving, setSaving
       date: formatDateTimeInput(match.date),
       maxOvers: match.maxOvers,
       powerplayOvers: match.powerplayOvers || (match.maxOvers <= 20 ? 6 : 10),
+      powerplayEnabled: match.powerplayEnabled ?? true,
+      powerplayOversSelected: match.powerplayOversSelected || `1-${match.powerplayOvers || (match.maxOvers <= 20 ? 6 : 10)}`,
       stage: match.stage || 'league',
     });
     setEditId(match.id);
@@ -894,7 +910,7 @@ function MatchesTab({ matches, teams, soldPlayers, onFeedback, saving, setSaving
                   onClick={() => {
                     const nextDate = getNextScheduledDate(scheduleDefaults.date, scheduleDefaults.maxOvers, scheduleDefaults.gapMinutes);
                     setScheduleDefaults(f => ({ ...f, date: nextDate }));
-                    setForm(f => ({ ...f, venue: scheduleDefaults.venue, date: nextDate, maxOvers: scheduleDefaults.maxOvers, powerplayOvers: scheduleDefaults.powerplayOvers, stage: scheduleDefaults.stage }));
+                    setForm(f => ({ ...f, venue: scheduleDefaults.venue, date: nextDate, maxOvers: scheduleDefaults.maxOvers, powerplayOvers: scheduleDefaults.powerplayOvers, powerplayEnabled: true, powerplayOversSelected: `1-${scheduleDefaults.powerplayOvers}`, stage: scheduleDefaults.stage }));
                   }}
                 >
                   Use Next Slot
@@ -907,6 +923,8 @@ function MatchesTab({ matches, teams, soldPlayers, onFeedback, saving, setSaving
                     date: getNextScheduledDate(scheduleDefaults.date, scheduleDefaults.maxOvers, scheduleDefaults.gapMinutes),
                     maxOvers: scheduleDefaults.maxOvers,
                     powerplayOvers: scheduleDefaults.powerplayOvers,
+                    powerplayEnabled: true,
+                    powerplayOversSelected: `1-${scheduleDefaults.powerplayOvers}`,
                     stage: scheduleDefaults.stage,
                   }))}
                 >
@@ -1009,12 +1027,17 @@ function MatchesTab({ matches, teams, soldPlayers, onFeedback, saving, setSaving
                 const overs = Number(e.target.value);
                 // Auto-calculate powerplay: T20=6, T10=3, 50-over=10, otherwise ~30% of overs (min 2)
                 const pp = overs >= 40 ? 10 : overs >= 16 ? 6 : overs >= 8 ? 3 : Math.max(2, Math.round(overs * 0.3));
-                setForm(f => ({ ...f, maxOvers: overs, powerplayOvers: pp }));
+                setForm(f => ({ ...f, maxOvers: overs, powerplayOvers: pp, powerplayOversSelected: `1-${pp}` }));
               }} className="scoring-admin__input" />
             </div>
             <div className="scoring-admin__field">
-              <label>Powerplay Overs</label>
-              <input type="number" min={1} max={form.maxOvers} value={form.powerplayOvers} onChange={e => setForm(f => ({ ...f, powerplayOvers: Number(e.target.value) }))} className="scoring-admin__input" />
+              <label>Match Rules: Powerplay</label>
+              <label className="scoring-admin__checkbox-row">
+                <input type="checkbox" checked={form.powerplayEnabled} onChange={e => setForm(f => ({ ...f, powerplayEnabled: e.target.checked }))} />
+                Enabled
+              </label>
+              <input type="text" value={form.powerplayOversSelected} disabled={!form.powerplayEnabled} onChange={e => setForm(f => ({ ...f, powerplayOversSelected: e.target.value }))} placeholder="1-6, 10-12" className="scoring-admin__input" />
+              <small className="scoring-admin__hint">Overs or inclusive ranges, comma-separated (for example, 1-6, 10-12).</small>
             </div>
             <div className="scoring-admin__field">
               <label>Match Type</label>

@@ -21,6 +21,7 @@
 .player-image-editor__rotate::after { position: absolute; top: 100%; width: 1px; height: .65rem; background: #0f766e; content: ''; }
 .player-image-editor__progress { position: absolute; left: 7%; right: 7%; bottom: 5%; z-index: 4; padding: .55rem .65rem; border: 1px solid #93c5fd; border-radius: 8px; background: rgba(15,23,42,.88); color: #e0f2fe; font-size: .72rem; font-weight: 700; box-shadow: 0 8px 20px rgba(15,23,42,.2); }
 .player-image-editor__progress-label { margin-bottom: .35rem; text-align: center; }.player-image-editor__progress-track { height: 7px; overflow: hidden; border-radius: 999px; background: rgba(226,232,240,.35); }.player-image-editor__progress-bar { height: 100%; border-radius: inherit; background: linear-gradient(90deg,#38bdf8,#22c55e); transition: width .2s ease; }
+.player-image-editor__log { display: grid; gap: .2rem; max-height: 128px; overflow: auto; padding: .55rem .65rem; border: 1px solid #cbd5e1; border-radius: 6px; background: #fff; color: #334155; font: .68rem/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; overflow-wrap: anywhere; }
 .player-image-editor__controls { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.55rem 0.8rem; }
 .player-image-editor__hint { display: grid; grid-column: 1 / -1; gap: .15rem; padding: .6rem .7rem; border: 1px solid #bfdbfe; border-radius: 7px; background: #eff6ff; color: #1e3a8a; font-size: .75rem; }
 .player-image-editor__hint span { color: #475569; font-size: .7rem; }

@@ -91,6 +91,8 @@ const ANIMATION_FIELDS = [
   { key: 'allOutAnimation', flag: 'enableAllOutAnimation', label: 'All Out', hint: 'Whole side out — 2 bonus points' },
   { key: 'bonusAnimation', flag: 'enableBonusAnimation', label: 'Bonus Point', hint: 'Raider crosses the bonus line' },
   { key: 'doOrDieAnimation', flag: 'enableDoOrDieAnimation', label: 'Do or Die', hint: 'Third consecutive empty raid' },
+  { key: 'teamBreakAnimation', flag: null, label: 'Team Break', hint: 'Official timeout called for either team' },
+  { key: 'playerAwardAnimation', flag: null, label: 'Player Award', hint: 'Manual points awarded to a named player' },
 ] as const;
 
 function KabaddiAdminPageContent() {
@@ -1044,13 +1046,15 @@ function KabaddiAdminPageContent() {
             <p className="kba__hint">Leave the media URL blank to use the built-in animated text.</p>
             {ANIMATION_FIELDS.map(field => {
               const anim = overlayConfig[field.key] as KabaddiAnimationConfig | undefined;
-              const on = overlayConfig[field.flag];
+              const on = field.flag ? overlayConfig[field.flag] : anim?.enabled !== false;
               return (
                 <div key={field.key} className={`kba__anim ${on ? '' : 'is-off'}`}>
                   <div className="kba__anim-head">
                     <button
                       className={`kba__anim-toggle ${on ? 'is-on' : ''}`}
-                      onClick={() => setOverlayConfig(c => ({ ...c, [field.flag]: !c[field.flag] }))}
+                      onClick={() => field.flag
+                        ? setOverlayConfig(c => ({ ...c, [field.flag!]: !c[field.flag!] }))
+                        : setAnim(field.key, { enabled: !on })}
                     >
                       {on ? 'ON' : 'OFF'}
                     </button>

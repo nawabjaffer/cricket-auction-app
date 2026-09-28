@@ -15,6 +15,7 @@
     "test:coverage": "vitest run --coverage",
     "deploy": "node scripts/run-with-timing.mjs npm run build && node scripts/run-with-timing.mjs firebase deploy --only hosting",
     "deploy:rules": "node scripts/run-with-timing.mjs firebase deploy --only database",
+    "storage:apply-cors": "gcloud storage buckets update gs://e-auction-store.firebasestorage.app --cors-file=storage.cors.json",
     "deploy:all": "node scripts/run-with-timing.mjs npm run build && node scripts/run-with-timing.mjs firebase deploy"
   },
   "dependencies": {

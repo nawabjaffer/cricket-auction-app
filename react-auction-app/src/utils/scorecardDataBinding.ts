@@ -65,10 +65,16 @@ export function resolveWidgetKind(kind: WidgetKind, ctx: ScorecardDataContext): 
   const { match } = ctx;
 
   switch (kind) {
-    case 'team_a_logo':
-      return match?.teamA.logoUrl ? { imageUrl: match.teamA.logoUrl } : EMPTY;
-    case 'team_b_logo':
-      return match?.teamB.logoUrl ? { imageUrl: match.teamB.logoUrl } : EMPTY;
+    case 'team_a_logo': {
+      const team = match?.teamA;
+      const imageUrl = team && (('brandLogoUrl' in team ? team.brandLogoUrl : undefined) || team.logoUrl);
+      return imageUrl ? { imageUrl } : EMPTY;
+    }
+    case 'team_b_logo': {
+      const team = match?.teamB;
+      const imageUrl = team && (('brandLogoUrl' in team ? team.brandLogoUrl : undefined) || team.logoUrl);
+      return imageUrl ? { imageUrl } : EMPTY;
+    }
     case 'team_a_name':
       return match ? { text: match.teamA.name } : EMPTY;
     case 'team_b_name':
@@ -114,7 +120,10 @@ export function resolveWidgetKind(kind: WidgetKind, ctx: ScorecardDataContext): 
 
 function resolveKabaddiOverlay(type: NonNullable<KabaddiOverlayControl>['activeOverlay'], ctx: ScorecardDataContext, text: string, imageUrl?: string): ResolvedWidgetContent {
   if (ctx.sport !== 'kabaddi') return EMPTY;
-  const active = type === 'do_or_die' ? (ctx.live?.isDoOrDie || ctx.overlay?.activeOverlay === type) : ctx.overlay?.activeOverlay === type;
+  const explicitlyCleared = ctx.overlay?.activeOverlay === 'none';
+  const active = type === 'do_or_die'
+    ? !explicitlyCleared && (ctx.live?.isDoOrDie || ctx.overlay?.activeOverlay === type)
+    : ctx.overlay?.activeOverlay === type;
   if (!active) return EMPTY;
   return imageUrl ? { imageUrl } : { text };
 }

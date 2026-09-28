@@ -376,6 +376,7 @@ function KabaddiRulesModal({ tenant, onClose, onSaved }: Readonly<{
             <NumField label="Half duration (min)" value={rules.halfDurationMin} onChange={(v) => set('halfDurationMin', v)} />
             <NumField label="Number of halves" value={rules.numberOfHalves} onChange={(v) => set('numberOfHalves', v)} />
             <NumField label="Half-time break (min)" value={rules.halfTimeBreakMin} onChange={(v) => set('halfTimeBreakMin', v)} />
+            <NumField label="Team breaks per side" value={rules.teamBreaksPerSide} onChange={(v) => set('teamBreaksPerSide', v)} />
           </div>
           <div style={grid3}>
             <NumField label="Raid clock (sec)" value={rules.raidDurationSec} onChange={(v) => set('raidDurationSec', v)} />

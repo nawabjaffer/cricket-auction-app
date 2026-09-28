@@ -96,6 +96,7 @@ export interface Player {
   originalImageUrl?: string;
   /** Background-removed Firebase Storage image used by auction surfaces. */
   processedImageUrl?: string;
+  isBackgroundRemoved?: boolean;
   imageEdit?: PlayerImageEdit;
   imageProcessingStatus?: PlayerImageProcessingStatus;
   imageProcessingError?: string;

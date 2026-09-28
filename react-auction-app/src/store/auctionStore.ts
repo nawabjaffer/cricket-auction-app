@@ -24,6 +24,7 @@ import { auctionPersistence } from '../services/auctionPersistence';
 import { realtimeSync } from '../services/realtimeSync';
 import { premiumService } from '../services/premiumService';
 import { inferRoleCategoryFromPlayer } from '../utils/roleFormatter';
+import { normalizePlayerName } from '../utils/playerName';
 
 // ── Synchronous localStorage read for instant logo on first render ───────
 // Zustand persist hydrates asynchronously (one tick after mount). Reading
@@ -134,6 +135,7 @@ interface AuctionStore {
   availablePlayers: Player[];
   originalPlayers: Player[]; // Track original list for jump-to-player functionality
   _adminPlayerOverrides: Player[] | null; // Admin-edited players from Firebase
+  _removedPlayerIds: string[];
   soldPlayers: SoldPlayer[];
   unsoldPlayers: UnsoldPlayer[];
   
@@ -191,6 +193,7 @@ interface AuctionStore {
   // Data loading
   setPlayers: (players: Player[]) => void;
   setAdminPlayerOverrides: (overrides: Player[]) => void;
+  setRemovedPlayerIds: (playerIds: string[]) => void;
   setTeams: (teams: Team[]) => void;
   setSoldPlayers: (players: SoldPlayer[]) => void;
   setUnsoldPlayers: (players: UnsoldPlayer[]) => void;
@@ -280,6 +283,7 @@ export const useAuctionStore = create<AuctionStore>()(
         availablePlayers: [],
         originalPlayers: [],
         _adminPlayerOverrides: null,
+        _removedPlayerIds: [],
         soldPlayers: [],
         unsoldPlayers: [],
         teams: [],
@@ -309,19 +313,20 @@ export const useAuctionStore = create<AuctionStore>()(
 
         // === Data Loading Actions ===
         setPlayers: (players) => {
-          const { _adminPlayerOverrides, soldPlayers, unsoldPlayers, teams, auctionRoleOrder } = get();
+          const { _adminPlayerOverrides, _removedPlayerIds, soldPlayers, unsoldPlayers, teams, auctionRoleOrder } = get();
+          const normalizedPlayers = players.map(player => ({ ...player, name: normalizePlayerName(player.name) }));
 
           // Merge admin overrides on top of incoming players (e.g. Google Sheets)
           // Admin overrides contain the full edited list including manually-added players
-          let mergedPlayers = players;
+          let mergedPlayers = normalizedPlayers;
           if (_adminPlayerOverrides && _adminPlayerOverrides.length > 0) {
-            const baseMap = new Map(players.map(p => [p.id, p]));
+            const baseMap = new Map(normalizedPlayers.map(p => [p.id, p]));
             const result: Player[] = [];
             for (const op of _adminPlayerOverrides) {
               const base = baseMap.get(op.id);
               // Admin data wins, but fill in images from base if admin has empty
               const imageUrl = op.imageUrl || base?.imageUrl || '';
-              result.push({ ...op, imageUrl });
+              result.push({ ...op, name: normalizePlayerName(op.name), imageUrl });
               baseMap.delete(op.id);
             }
             // Add any base players not in overrides
@@ -331,6 +336,8 @@ export const useAuctionStore = create<AuctionStore>()(
             mergedPlayers = result;
           }
 
+          const removedIds = new Set(_removedPlayerIds);
+          const activePlayers = mergedPlayers.filter(player => !removedIds.has(player.id));
           const blockedIds = new Set([
             ...soldPlayers.map(p => p.id),
             ...unsoldPlayers.map(p => p.id),
@@ -340,7 +347,7 @@ export const useAuctionStore = create<AuctionStore>()(
               .map(t => (t.captain || '').trim().toLowerCase())
               .filter(Boolean)
           );
-          const filtered = mergedPlayers.filter(
+          const filtered = activePlayers.filter(
             p => !blockedIds.has(p.id) && !captainNames.has(p.name.trim().toLowerCase())
           );
 
@@ -353,11 +360,12 @@ export const useAuctionStore = create<AuctionStore>()(
             return aIdx - bIdx;
           });
 
-          set({ availablePlayers: sorted, originalPlayers: mergedPlayers });
+          set({ availablePlayers: sorted, originalPlayers: activePlayers });
         },
 
         setAdminPlayerOverrides: (overrides) => {
-          set({ _adminPlayerOverrides: overrides });
+          const normalizedOverrides = overrides.map(player => ({ ...player, name: normalizePlayerName(player.name) }));
+          set({ _adminPlayerOverrides: normalizedOverrides });
           // Re-apply merge with current base players
           const { originalPlayers } = get();
           if (originalPlayers.length > 0) {
@@ -365,21 +373,34 @@ export const useAuctionStore = create<AuctionStore>()(
             // Use the base players (strip out old admin overrides to get clean base)
             get().setPlayers(originalPlayers);
           } else {
-            get().setPlayers(overrides);
+            get().setPlayers(normalizedOverrides);
           }
+        },
+        setRemovedPlayerIds: (playerIds) => {
+          const removedIds = [...new Set(playerIds)];
+          const currentPlayerId = get().currentPlayer?.id;
+          set({ _removedPlayerIds: removedIds });
+          if (currentPlayerId && removedIds.includes(currentPlayerId)) get().clearCurrentPlayer();
+          get().setPlayers(get().originalPlayers);
         },
         
         setTeams: (teams) => {
           const { soldPlayers } = get();
-          set({ teams: reconcileTeamsWithSoldPlayers(teams, soldPlayers) });
+          const normalizedTeams = teams.map(team => ({
+            ...team,
+            captain: normalizePlayerName(team.captain || ''),
+            iconicPlayers: team.iconicPlayers?.map(normalizePlayerName),
+          }));
+          set({ teams: reconcileTeamsWithSoldPlayers(normalizedTeams, soldPlayers) });
         },
         
         setSoldPlayers: (players) => {
+          const normalizedPlayers = players.map(player => ({ ...player, name: normalizePlayerName(player.name) }));
           const { teams } = get();
-          set({ soldPlayers: players, teams: reconcileTeamsWithSoldPlayers(teams, players) });
+          set({ soldPlayers: normalizedPlayers, teams: reconcileTeamsWithSoldPlayers(teams, normalizedPlayers) });
         },
         
-        setUnsoldPlayers: (players) => set({ unsoldPlayers: players }),
+        setUnsoldPlayers: (players) => set({ unsoldPlayers: players.map(player => ({ ...player, name: normalizePlayerName(player.name) })) }),
 
         setBidIncrementRanges: (ranges) => set({ bidIncrementRanges: ranges }),
         setBudgetMode: (mode) => set({ budgetMode: mode }),
@@ -423,16 +444,17 @@ export const useAuctionStore = create<AuctionStore>()(
 
         // === Player Selection Actions ===
         selectPlayer: (player) => {
-          const safeBasePrice = Number(player.basePrice) || activeConfig.auction.basePrice;
+          const normalizedPlayer = { ...player, name: normalizePlayerName(player.name) };
+          const safeBasePrice = Number(normalizedPlayer.basePrice) || activeConfig.auction.basePrice;
           console.log('[Auction] Player Selected:', {
-            id: player.id,
-            name: player.name,
-            role: player.role,
-            imageUrl: player.imageUrl,
+            id: normalizedPlayer.id,
+            name: normalizedPlayer.name,
+            role: normalizedPlayer.role,
+            imageUrl: normalizedPlayer.imageUrl,
             basePrice: safeBasePrice,
           });
           set({
-            currentPlayer: player,
+            currentPlayer: normalizedPlayer,
             currentBid: safeBasePrice,
             previousBid: 0,
             selectedTeam: null,
@@ -441,7 +463,7 @@ export const useAuctionStore = create<AuctionStore>()(
             activeOverlay: null,
             auctionState: {
               ...get().auctionState,
-              currentPlayer: player,
+              currentPlayer: normalizedPlayer,
               currentBid: safeBasePrice,
               selectedTeam: null,
               bidHistory: [],
@@ -1439,6 +1461,11 @@ export const useAuctionStore = create<AuctionStore>()(
       }),
       {
         name: 'auction-storage',
+        onRehydrateStorage: () => (state) => {
+          if (!state) return;
+          state.setSoldPlayers(state.soldPlayers);
+          state.setUnsoldPlayers(state.unsoldPlayers);
+        },
         // Only persist specific fields
         partialize: (state) => ({
           soldPlayers: state.soldPlayers,

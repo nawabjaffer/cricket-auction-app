@@ -129,7 +129,7 @@ export function useInitialData() {
         // tenant has its own sheet; otherwise admin players are the only source.
         // Also load adminSettings here so organizerLogo is always available
         // even on fresh tenants with no sold players (hasExistingData = false).
-        const [adminPlayers, sheetPlayers, adminSettings] = await Promise.all([
+        const [adminPlayers, sheetPlayers, adminSettings, removedPlayerIds] = await Promise.all([
           auctionPersistence.getAdminPlayers().catch(() => null),
           sheetIdOverride
             ? googleSheetsService.fetchPlayers([], sheetIdOverride).catch((err) => {
@@ -138,7 +138,10 @@ export function useInitialData() {
               })
             : Promise.resolve([] as Player[]),
           auctionPersistence.getAdminSettings().catch(() => null),
+          auctionPersistence.getRemovedPlayerIds().catch(() => []),
         ]);
+
+        useAuctionStore.getState().setRemovedPlayerIds(removedPlayerIds);
 
         // Push branding settings into store immediately — before the preload
         // phase — so the organizer logo renders on the first frame.

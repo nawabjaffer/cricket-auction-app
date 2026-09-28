@@ -121,6 +121,16 @@
   background: rgba(59, 130, 246, 0.04);
 }
 
+.score-dock__powerplay-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+  color: #e2e8f0;
+  font-size: 12px;
+  font-weight: 600;
+}
+
 .score-dock__score-teams {
   display: flex;
   align-items: baseline;

@@ -12,6 +12,7 @@ import { realtimeSync } from '../services/realtimeSync';
 import { scoringService } from '../services/scoring';
 import { statsEngine } from '../services/scoring/statsEngine';
 import { ManualScoringAdapter } from '../services/scoring/ManualScoringAdapter';
+import { normalizePlayerName } from '../utils/playerName';
 import type {
   LiveScore, MatchSetup, MatchLineup, Innings, BallOutcome,
   WicketDetail, MatchSquadPlayer, OverlayControlState, OverlayType,
@@ -38,14 +39,35 @@ interface UndoEntry {
 
 /** Firebase RTDB drops empty arrays — restore defaults when reading LiveScore */
 function normalizeLive(live: LiveScore): LiveScore {
+  const currentBatsmen = live.currentBatsmen ?? [];
   return {
     ...live,
     currentOverBalls: live.currentOverBalls ?? [],
     recentOvers: live.recentOvers ?? [],
-    currentBatsmen: live.currentBatsmen ?? [],
+    currentBatsmen: [
+      { ...currentBatsmen[0], playerName: normalizePlayerName(currentBatsmen[0]?.playerName ?? '') },
+      { ...currentBatsmen[1], playerName: normalizePlayerName(currentBatsmen[1]?.playerName ?? '') },
+    ],
+    currentBowler: { ...live.currentBowler, playerName: normalizePlayerName(live.currentBowler?.playerName ?? '') },
     partnership: live.partnership ?? { runs: 0, balls: 0 },
-    allBatsmen: live.allBatsmen ?? [],
-    allBowlers: live.allBowlers ?? [],
+    allBatsmen: (live.allBatsmen ?? []).map(batsman => ({ ...batsman, playerName: normalizePlayerName(batsman.playerName) })),
+    allBowlers: (live.allBowlers ?? []).map(bowler => ({ ...bowler, playerName: normalizePlayerName(bowler.playerName) })),
+  };
+}
+
+function normalizeLineup(lineup: MatchLineup | null): MatchLineup | null {
+  return lineup ? {
+    ...lineup,
+    players: lineup.players.map(player => ({ ...player, playerName: normalizePlayerName(player.playerName) })),
+  } : null;
+}
+
+function normalizeInnings(innings: Innings): Innings {
+  return {
+    ...innings,
+    batsmen: (innings.batsmen ?? []).map(batsman => ({ ...batsman, playerName: normalizePlayerName(batsman.playerName) })),
+    bowlers: (innings.bowlers ?? []).map(bowler => ({ ...bowler, playerName: normalizePlayerName(bowler.playerName) })),
+    fallOfWickets: (innings.fallOfWickets ?? []).map(wicket => ({ ...wicket, batsmanName: normalizePlayerName(wicket.batsmanName) })),
   };
 }
 
@@ -100,7 +122,7 @@ export function useScoringState(matchId: string | undefined) {
               }>;
               const toSquadPlayer = (p: typeof allSold[number], idx: number): MatchSquadPlayer => ({
                 playerId: p.id,
-                playerName: p.playerName,
+                playerName: normalizePlayerName(p.playerName),
                 role: p.role || 'Uncategorized',
                 battingOrder: idx + 1,
                 imageUrl: p.imageUrl || undefined,
@@ -136,7 +158,7 @@ export function useScoringState(matchId: string | undefined) {
         setState(s => ({
           ...s,
           match,
-          lineups: { teamA: lineupA, teamB: lineupB },
+          lineups: { teamA: normalizeLineup(lineupA), teamB: normalizeLineup(lineupB) },
           loading: false,
         }));
       } catch (err) {
@@ -164,8 +186,9 @@ export function useScoringState(matchId: string | undefined) {
         const keys = Object.keys(data).sort();
         const latestKey = keys[keys.length - 1];
         if (latestKey) {
-          inningsRef.current = data[latestKey];
-          setState(s => ({ ...s, currentInnings: data[latestKey] }));
+          const innings = normalizeInnings(data[latestKey]);
+          inningsRef.current = innings;
+          setState(s => ({ ...s, currentInnings: innings }));
         }
       }
     });
@@ -312,18 +335,19 @@ export function useScoringState(matchId: string | undefined) {
     recordingRef.current = true;
     setRecording(true);
     try {
-      await scoringService.saveLiveScore(matchId, live);
-      await scoringService.saveInnings(matchId, live.currentInnings, innings);
-      await scoringService.updateMatch(matchId, { status: 'live' });
       const normalized = normalizeLive(live);
+      const normalizedInnings = normalizeInnings(innings);
+      await scoringService.saveLiveScore(matchId, normalized);
+      await scoringService.saveInnings(matchId, normalized.currentInnings, normalizedInnings);
+      await scoringService.updateMatch(matchId, { status: 'live' });
       liveScoreRef.current = normalized;
-      inningsRef.current = innings;
+      inningsRef.current = normalizedInnings;
       setUndoStack([]);
       setState(current => ({
         ...current,
         match: current.match ? { ...current.match, status: 'live' } : current.match,
         liveScore: normalized,
-        currentInnings: innings,
+        currentInnings: normalizedInnings,
         isInningsComplete: false,
         isMatchComplete: false,
         needsBowlerChange: false,
@@ -358,6 +382,11 @@ export function useScoringState(matchId: string | undefined) {
         { id: openingBowler.playerId, name: openingBowler.playerName },
         target,
         state.match?.maxOvers,
+        {
+          enabled: state.match?.powerplayEnabled,
+          selectedOvers: state.match?.powerplayOversSelected,
+          legacyOvers: state.match?.powerplayOvers,
+        },
       );
       setUndoStack([]);
       setState(s => ({ ...s, isInningsComplete: false, needsBowlerChange: false, isMatchComplete: false }));
@@ -365,6 +394,24 @@ export function useScoringState(matchId: string | undefined) {
       setState(s => ({ ...s, error: `Init innings failed: ${err}` }));
     }
   }, [matchId, state.match]);
+
+  const setPowerplayActive = useCallback(async (active: boolean) => {
+    const current = liveScoreRef.current;
+    if (!matchId || !current || !dbRef.current) return;
+    const updated: LiveScore = {
+      ...current,
+      isPowerplay: active,
+      powerplayOverride: active,
+      lastUpdated: Date.now(),
+    };
+    liveScoreRef.current = updated;
+    setState(s => ({ ...s, liveScore: updated }));
+    try {
+      await scoringService.saveLiveScore(matchId, updated);
+    } catch (err) {
+      setState(s => ({ ...s, error: `Powerplay update failed: ${err}` }));
+    }
+  }, [matchId]);
 
   // Set overlay
   const setOverlay = useCallback(async (overlayType: OverlayType, data?: Record<string, unknown>) => {
@@ -390,7 +437,7 @@ export function useScoringState(matchId: string | undefined) {
     const idx = position === 'striker' ? 0 : 1;
     live.currentBatsmen[idx] = {
       playerId: newBatsman.playerId,
-      playerName: newBatsman.playerName,
+      playerName: normalizePlayerName(newBatsman.playerName),
       runs: 0,
       balls: 0,
       fours: 0,
@@ -441,7 +488,7 @@ export function useScoringState(matchId: string | undefined) {
     
     live.currentBowler = {
       playerId: newBowler.playerId,
-      playerName: newBowler.playerName,
+      playerName: normalizePlayerName(newBowler.playerName),
       overs: existingBowler?.overs || 0,
       maidens: existingBowler?.maidens || 0,
       runs: existingBowler?.runs || 0,
@@ -457,7 +504,7 @@ export function useScoringState(matchId: string | undefined) {
     if (live.allBowlers && !existingBowler) {
       live.allBowlers.push({
         playerId: newBowler.playerId,
-        playerName: newBowler.playerName,
+        playerName: normalizePlayerName(newBowler.playerName),
         overs: 0, maidens: 0, runs: 0, wickets: 0,
         economy: 0, wides: 0, noBalls: 0, dots: 0,
       });
@@ -494,7 +541,7 @@ export function useScoringState(matchId: string | undefined) {
 
     const updatedLineup = {
       ...currentLineup,
-      players: [...currentLineup.players, player],
+      players: [...currentLineup.players, { ...player, playerName: normalizePlayerName(player.playerName) }],
     };
 
     // Save to Firebase
@@ -546,6 +593,7 @@ export function useScoringState(matchId: string | undefined) {
     undoLastBall,
     seedLiveScore,
     initInnings,
+    setPowerplayActive,
     setOverlay,
     changeBatsman,
     changeBowler,

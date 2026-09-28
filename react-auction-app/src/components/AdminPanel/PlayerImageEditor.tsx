@@ -34,6 +34,7 @@ interface PlayerImageEditorProps {
   edit?: PlayerImageEdit;
   processing?: boolean;
   processingProgress?: number;
+  processingLogs?: string[];
   onChange: (edit: PlayerImageEdit) => void;
   onSaveImage?: (file: File) => Promise<void>;
   onRemoveBackground?: () => void;
@@ -79,7 +80,7 @@ async function createEditedImageFile(imageUrl: string, sourceBlob: Blob | undefi
   }
 }
 
-export function PlayerImageEditor({ imageUrl, sourceBlob, auctionLayout, edit, processing, processingProgress = 0, onChange, onSaveImage, onRemoveBackground }: Readonly<PlayerImageEditorProps>) {
+export function PlayerImageEditor({ imageUrl, sourceBlob, auctionLayout, edit, processing, processingProgress = 0, processingLogs = [], onChange, onSaveImage, onRemoveBackground }: Readonly<PlayerImageEditorProps>) {
   const [guideUrl, setGuideUrl] = useState(DEFAULT_PHOTO_GUIDE_URL);
   const [previewLayout, setPreviewLayout] = useState<AuctionLayoutStyle>(auctionLayout ?? 'classic');
   const [placementMode, setPlacementMode] = useState<'canvas' | 'auction'>('canvas');
@@ -324,6 +325,9 @@ export function PlayerImageEditor({ imageUrl, sourceBlob, auctionLayout, edit, p
             <button key={layoutStyle} type="button" className={previewLayout === layoutStyle ? 'is-active' : ''} onClick={() => setPreviewLayout(layoutStyle)}>{layoutStyle}</button>
           ))}
         </div>
+      </div>}
+      {processingLogs.length > 0 && <div className="player-image-editor__log" role="log" aria-live="polite" aria-label="Background removal process log">
+        {processingLogs.map((line, index) => <div key={`${index}-${line}`}>{line}</div>)}
       </div>}
       <div className="player-image-editor__controls">
         <div className="player-image-editor__hint"><strong>Direct manipulation</strong><span>Drag inside the box to position. Pull a corner to scale. Use the rotate handle above the box to turn the image. Keyboard: <kbd>Arrow keys</kbd> position, <kbd>+</kbd>/<kbd>-</kbd> scale, <kbd>[</kbd>/<kbd>]</kbd> rotate, <kbd>P</kbd> flip.</span></div>

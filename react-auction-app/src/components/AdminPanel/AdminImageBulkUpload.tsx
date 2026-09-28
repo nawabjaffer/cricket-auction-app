@@ -64,7 +64,15 @@ export default function AdminImageBulkUpload({ players, page, pageSize, isOpen, 
 
         const playerIdx = updatedPlayers.findIndex(p => p.id === playerId);
         if (playerIdx >= 0) {
-          updatedPlayers[playerIdx] = { ...updatedPlayers[playerIdx], imageUrl };
+          updatedPlayers[playerIdx] = {
+            ...updatedPlayers[playerIdx],
+            imageUrl,
+            originalImageUrl: imageUrl,
+            processedImageUrl: undefined,
+            isBackgroundRemoved: false,
+            imageProcessingStatus: 'idle',
+            imageProcessingError: undefined,
+          };
           count++;
         }
       }
@@ -122,7 +130,17 @@ export default function AdminImageBulkUpload({ players, page, pageSize, isOpen, 
     }
     // Build updated players list
     if (Object.keys(uploadedMap).length > 0) {
-      const updatedPlayers = players.map((pl) => ({ ...(pl as Player), imageUrl: uploadedMap[pl.id] ?? pl.imageUrl }));
+      const updatedPlayers = players.map((pl) => uploadedMap[pl.id]
+        ? {
+          ...pl,
+          imageUrl: uploadedMap[pl.id],
+          originalImageUrl: uploadedMap[pl.id],
+          processedImageUrl: undefined,
+          isBackgroundRemoved: false,
+          imageProcessingStatus: 'idle' as const,
+          imageProcessingError: undefined,
+        }
+        : pl);
       try {
         await onBulkSave(updatedPlayers);
       } catch (_e) {

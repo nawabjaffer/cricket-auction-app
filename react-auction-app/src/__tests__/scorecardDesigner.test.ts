@@ -90,6 +90,19 @@ describe('scorecard data binding — cricket', () => {
     expect(resolveWidgetKind('team_a_logo', ctx).hidden).toBe(true); // no logoUrl set
   });
 
+  it('uses the team brand logo in a live layout when no match logoUrl is set', () => {
+    const brandedContext: ScorecardDataContext = {
+      ...ctx,
+      match: {
+        ...ctx.match!,
+        teamA: { ...ctx.match!.teamA, logoUrl: 'https://example.com/alpha-legacy.png', brandLogoUrl: 'https://example.com/alpha-brand.png' },
+        teamB: { ...ctx.match!.teamB, logoUrl: 'https://example.com/bravo-legacy.png', brandLogoUrl: 'https://example.com/bravo-brand.png' },
+      },
+    };
+    expect(resolveWidgetKind('team_a_logo', brandedContext).imageUrl).toBe('https://example.com/alpha-brand.png');
+    expect(resolveWidgetKind('team_b_logo', brandedContext).imageUrl).toBe('https://example.com/bravo-brand.png');
+  });
+
   it('hides the target widget when there is no chase target', () => {
     expect(resolveWidgetKind('cricket_target', ctx).hidden).toBe(true);
   });
@@ -120,6 +133,10 @@ describe('scorecard data binding — football & kabaddi', () => {
     };
     expect(resolveWidgetKind('kabaddi_score', ctx).text).toBe('20 - 15');
     expect(resolveWidgetKind('kabaddi_do_or_die_flag', ctx).text).toBe('DO OR DIE');
+    expect(resolveWidgetContent(baseWidget({ kind: 'kabaddi_do_or_die_flag' }), {
+      ...ctx,
+      overlay: { activeOverlay: 'none', lastUpdated: Date.now() },
+    }).hidden).toBe(true);
     expect(resolveWidgetKind('kabaddi_players_on_mat', ctx).text).toBe('5 - 6');
   });
 });

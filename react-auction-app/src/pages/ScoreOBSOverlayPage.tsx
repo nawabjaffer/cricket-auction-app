@@ -17,6 +17,7 @@ import { useBroadcastOverlaySurface } from '../hooks/useBroadcastOverlaySurface'
 import { overlayMediaPreload, getPreloadedMediaUrl } from '../services/overlayMediaPreload';
 import { ScorecardLayoutView } from '../components/ScorecardCanvas';
 import { scorecardLayoutService } from '../services/scorecardLayoutService';
+import { normalizePlayerName } from '../utils/playerName';
 import type { ScorecardLayout } from '../types/scorecardDesigner';
 import type { ScorecardDataContext } from '../utils/scorecardDataBinding';
 import type {
@@ -43,6 +44,65 @@ const DEFAULT_OVERLAY_CONFIG: ScoringOverlayConfig = {
   autoOverlayIntervalSeconds: 30,
   liveQuestions: [],
 };
+
+function normalizePlayerEntry<T extends { playerName: string }>(entry: T): T {
+  return { ...entry, playerName: normalizePlayerName(entry.playerName) };
+}
+
+function normalizePlayerEntries<T extends { playerName: string }>(entries: T[] | undefined): T[] {
+  return (entries ?? []).map(normalizePlayerEntry);
+}
+
+function normalizeLivePlayerNames(live: LiveScore): LiveScore {
+  return {
+    ...live,
+    currentBatsmen: [
+      normalizePlayerEntry(live.currentBatsmen[0]),
+      normalizePlayerEntry(live.currentBatsmen[1]),
+    ],
+    currentBowler: normalizePlayerEntry(live.currentBowler),
+    allBatsmen: normalizePlayerEntries(live.allBatsmen),
+    allBowlers: normalizePlayerEntries(live.allBowlers),
+  };
+}
+
+function normalizeMatchStatsNames(stats: MatchStatsSnapshot): MatchStatsSnapshot {
+  return {
+    ...stats,
+    highestDotBallBowler: stats.highestDotBallBowler ? normalizePlayerEntry(stats.highestDotBallBowler) : null,
+    highestFourScorer: stats.highestFourScorer ? normalizePlayerEntry(stats.highestFourScorer) : null,
+    highestSixScorer: stats.highestSixScorer ? normalizePlayerEntry(stats.highestSixScorer) : null,
+    highestStrikeRate: stats.highestStrikeRate ? normalizePlayerEntry(stats.highestStrikeRate) : null,
+    mvpLeaderboard: normalizePlayerEntries(stats.mvpLeaderboard),
+    topRunScorers: normalizePlayerEntries(stats.topRunScorers),
+    topWicketTakers: normalizePlayerEntries(stats.topWicketTakers),
+    topFours: normalizePlayerEntries(stats.topFours),
+    topSixes: normalizePlayerEntries(stats.topSixes),
+    topStrikeRates: normalizePlayerEntries(stats.topStrikeRates),
+    topDotBowlers: normalizePlayerEntries(stats.topDotBowlers),
+    mvpPoints: normalizePlayerEntries(stats.mvpPoints),
+  };
+}
+
+function normalizeTournamentStatsNames(stats: TournamentStats): TournamentStats {
+  return {
+    ...stats,
+    orangeCap: stats.orangeCap ? normalizePlayerEntry(stats.orangeCap) : null,
+    purpleCap: stats.purpleCap ? normalizePlayerEntry(stats.purpleCap) : null,
+    mostSixes: stats.mostSixes ? normalizePlayerEntry(stats.mostSixes) : null,
+    mostFours: stats.mostFours ? normalizePlayerEntry(stats.mostFours) : null,
+    bestEconomy: stats.bestEconomy ? normalizePlayerEntry(stats.bestEconomy) : null,
+    bestStrikeRate: stats.bestStrikeRate ? normalizePlayerEntry(stats.bestStrikeRate) : null,
+    mostDotBalls: stats.mostDotBalls ? normalizePlayerEntry(stats.mostDotBalls) : null,
+    mvpLeaderboard: normalizePlayerEntries(stats.mvpLeaderboard),
+    topRunScorers: normalizePlayerEntries(stats.topRunScorers),
+    topWicketTakers: normalizePlayerEntries(stats.topWicketTakers),
+    topSixHitters: normalizePlayerEntries(stats.topSixHitters),
+    topFourHitters: normalizePlayerEntries(stats.topFourHitters),
+    topStrikeRates: normalizePlayerEntries(stats.topStrikeRates),
+    highestIndividualScore: stats.highestIndividualScore ? normalizePlayerEntry(stats.highestIndividualScore) : null,
+  };
+}
 
 // ── Firebase: module-level synchronous init (dedicated app) ──────────────────
 const FB_CONFIG = {
@@ -120,7 +180,7 @@ export default function ScoreOBSOverlayPage() {
   const [, setReplayTrigger] = useState<ReplayTrigger | null>(null);
   const [tickerVisible, setTickerVisible] = useState(false);
   const [allMatches, setAllMatches] = useState<Record<string, { setup: MatchSetup; final?: MatchScore }>>({});
-  const [allTeams, setAllTeams] = useState<{ id: string; name: string; logoUrl?: string }[]>([]);
+  const [allTeams, setAllTeams] = useState<{ id: string; name: string; logoUrl?: string; brandLogoUrl?: string }[]>([]);
   const [inningsIntroPhase, setInningsIntroPhase] = useState<'batsmen' | 'bowler' | 'done'>('done');
   const inningsIntroShownRef = useRef(false);
   const [activeFieldPlacement, setActiveFieldPlacement] = useState<FieldPlacement | null>(null);
@@ -252,7 +312,7 @@ export default function ScoreOBSOverlayPage() {
 
     // Live score
     unsubs.push(onValue(ref(obsDb, `${basePath}/matches/${matchId}/live`), snap => {
-      if (snap.exists()) setLive(snap.val());
+      if (snap.exists()) setLive(normalizeLivePlayerNames(snap.val() as LiveScore));
     }));
 
     // Overlay control (from admin/scorer)
@@ -305,7 +365,16 @@ export default function ScoreOBSOverlayPage() {
 
     // Pre-match state
     unsubs.push(onValue(ref(obsDb, `${basePath}/matches/${matchId}/preMatch`), snap => {
-      if (snap.exists()) setPreMatch(snap.val());
+      if (snap.exists()) {
+        const state = snap.val() as PreMatchState;
+        setPreMatch({
+          ...state,
+          impactPlayers: {
+            teamA: normalizePlayerEntries(state.impactPlayers?.teamA),
+            teamB: normalizePlayerEntries(state.impactPlayers?.teamB),
+          },
+        });
+      }
       else setPreMatch(null);
     }));
 
@@ -314,21 +383,24 @@ export default function ScoreOBSOverlayPage() {
       if (snap.exists()) {
         const data = snap.val() as Record<string, MatchLineup>;
         // Store raw data; resolve teamA/teamB at render using match.teamA.id
-        setRawLineups(data);
+        setRawLineups(Object.fromEntries(Object.entries(data).map(([teamId, lineup]) => [teamId, {
+          ...lineup,
+          players: normalizePlayerEntries(lineup.players),
+        }])));
       }
     }));
 
     // Match stats (check both paths for compatibility)
     unsubs.push(onValue(ref(obsDb, `${basePath}/matches/${matchId}/stats`), snap => {
-      if (snap.exists()) setMatchStats(snap.val());
+      if (snap.exists()) setMatchStats(normalizeMatchStatsNames(snap.val() as MatchStatsSnapshot));
     }));
     unsubs.push(onValue(ref(obsDb, `${basePath}/matchStats/${matchId}`), snap => {
-      if (snap.exists()) setMatchStats(snap.val());
+      if (snap.exists()) setMatchStats(normalizeMatchStatsNames(snap.val() as MatchStatsSnapshot));
     }));
 
     // Tournament stats
     unsubs.push(onValue(ref(obsDb, `${basePath}/tournamentStats`), snap => {
-      if (snap.exists()) setTournamentStats(snap.val());
+      if (snap.exists()) setTournamentStats(normalizeTournamentStatsNames(snap.val() as TournamentStats));
     }));
 
     // Innings data (for full scorecard)
@@ -370,8 +442,8 @@ export default function ScoreOBSOverlayPage() {
     const teamsPath = tenantPath('auction/teams');
     unsubs.push(onValue(ref(obsDb, teamsPath), snap => {
       if (!snap.exists()) return;
-      const data = snap.val() as Record<string, { id: string; name: string; logoUrl?: string }>;
-      setAllTeams(Object.values(data).map(t => ({ id: t.id, name: t.name, logoUrl: t.logoUrl })));
+      const data = snap.val() as Record<string, { id: string; name: string; logoUrl?: string; brandLogoUrl?: string }>;
+      setAllTeams(Object.values(data).map(t => ({ id: t.id, name: t.name, logoUrl: t.logoUrl, brandLogoUrl: t.brandLogoUrl })));
     }));
 
     // Active field placement (bottom-left mini overlay)
@@ -547,11 +619,22 @@ export default function ScoreOBSOverlayPage() {
 
   if (!matchId) return null;
 
+  const logoForTeam = (team: NonNullable<typeof match>['teamA']) => {
+    const auctionTeam = allTeams.find(candidate => candidate.id === team.id)
+      || allTeams.find(candidate => candidate.name.trim().toLowerCase() === team.name.trim().toLowerCase());
+    return auctionTeam?.brandLogoUrl || auctionTeam?.logoUrl || team.brandLogoUrl || team.logoUrl;
+  };
+  const scorecardMatch = match ? {
+    ...match,
+    teamA: { ...match.teamA, logoUrl: logoForTeam(match.teamA) || match.teamA.logoUrl, brandLogoUrl: logoForTeam(match.teamA) || match.teamA.brandLogoUrl },
+    teamB: { ...match.teamB, logoUrl: logoForTeam(match.teamB) || match.teamB.logoUrl, brandLogoUrl: logoForTeam(match.teamB) || match.teamB.brandLogoUrl },
+  } : null;
+
   // Custom Scorecard Designer template takes over the entire scoreboard region
   // (pre-match, intro & live states) when one has been set Active.
   if (customLayout && customLayout.widgets.length > 0) {
     const dataCtx: ScorecardDataContext = {
-      sport: 'cricket', match, live,
+      sport: 'cricket', match: scorecardMatch, live,
       branding: { tournamentLogo: config.tournamentLogo, partnerLogo: config.broadcastPartnerLogo },
     };
     return (
@@ -578,7 +661,7 @@ export default function ScoreOBSOverlayPage() {
   // squad_display / squad_reveal phases, once a squad template is Active.
   const isSquadPhase = preMatch?.phase === 'squad_display' || preMatch?.phase === 'squad_reveal_teamA' || preMatch?.phase === 'squad_reveal_teamB';
   if (isSquadPhase && match && squadLayout && squadLayout.widgets.length > 0) {
-    const dataCtx: ScorecardDataContext = { sport: 'cricket', match, live, lineups };
+    const dataCtx: ScorecardDataContext = { sport: 'cricket', match: scorecardMatch, live, lineups };
     return (
       <div className="score-obs score-obs--custom">
         <ScorecardLayoutView layout={squadLayout} ctx={dataCtx} />
@@ -595,7 +678,7 @@ export default function ScoreOBSOverlayPage() {
     'award_orange_cap_match', 'award_purple_cap_match',
   ];
   if (match && STATS_TRIGGER_TYPES.includes(localOverlay) && statsLayout && statsLayout.widgets.length > 0) {
-    const dataCtx: ScorecardDataContext = { sport: 'cricket', match, live, matchStats, tournamentStats };
+    const dataCtx: ScorecardDataContext = { sport: 'cricket', match: scorecardMatch, live, matchStats, tournamentStats };
     return (
       <div className="score-obs score-obs--custom">
         <ScorecardLayoutView layout={statsLayout} ctx={dataCtx} />
@@ -2421,8 +2504,7 @@ function ScorecardTicker({ live, match, battingTeam, bowlingTeam, config, lineup
           <div className="score-ticker__prem-score-row">
             <span className="score-ticker__prem-score">{live.runs}-{live.wickets}</span>
             <span className="score-ticker__prem-overs">({live.overs} ov)</span>
-          </div>
-          {widgetPills.length > 0 && (
+             {widgetPills.length > 0 && (
             <div className="score-ticker__prem-stats-row">
               {widgetPills.map(widget => (
                 <div key={widget.key} className="score-ticker__prem-widget-pill">
@@ -2432,6 +2514,7 @@ function ScorecardTicker({ live, match, battingTeam, bowlingTeam, config, lineup
               ))}
             </div>
           )}
+          </div>
         </div>
 
         {/* Middle: Batsmen with full-height transparent PNG portraits */}

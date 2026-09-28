@@ -10,6 +10,7 @@ import { formatRoleDisplay } from '../../utils/roleFormatter';
 import { extractDriveFileId } from '../../utils/driveImage';
 import { getCachedStorageUrl, resolveImageAsync } from '../../services/firebaseStorageService';
 import { useAuctionStore } from '../../store/auctionStore';
+import { normalizePlayerName } from '../../utils/playerName';
 import './SoldAnimation.css';
 
 interface SoldAnimationProps {
@@ -66,7 +67,7 @@ export default function SoldAnimation({
 }: SoldAnimationProps) {
   const suffix = suffixProp || useAuctionStore.getState().currencySuffix || 'L';
   const isSold = type === 'sold';
-  const safePlayerName = typeof player?.name === 'string' && player.name.trim() ? player.name.trim() : 'Unknown Player';
+  const safePlayerName = typeof player?.name === 'string' && player.name.trim() ? normalizePlayerName(player.name) : 'Unknown Player';
   const safeTeamName = typeof team?.name === 'string' && team.name.trim() ? team.name.trim() : '';
   const safePlayerRole = typeof player?.role === 'string' ? player.role : 'Player';
 

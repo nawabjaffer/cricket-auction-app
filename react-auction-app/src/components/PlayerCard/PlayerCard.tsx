@@ -16,6 +16,7 @@ import { getCachedStorageUrl, resolveImageAsync } from '../../services/firebaseS
 import { extractDriveFileId } from '../../utils/driveImage';
 import { getLiveBlobUrl } from '../../services/mediaBlobCache';
 import { useCurrencySuffix, useAuctionStore } from '../../store';
+import { normalizePlayerName } from '../../utils/playerName';
 import { ImageLightbox } from '../ImageLightbox';
 
 interface PlayerCardProps {
@@ -36,6 +37,7 @@ export function PlayerCard({
   size = 'large',
 }: PlayerCardProps) {
   const currencySuffix = useCurrencySuffix();
+  const playerName = normalizePlayerName(player.name);
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const getRoleIcon = (role: Player['role']) => {
     switch (getKabaddiRoleCategory(role)) {
@@ -82,14 +84,14 @@ export function PlayerCard({
       setResolvedImg(blob || cached);
       return () => { alive = false; };
     }
-    const storagePath = `images/players/${player.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
+    const storagePath = `images/players/${playerName.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
     resolveImageAsync(player.imageUrl, storagePath, (url) => {
       if (!alive) return;
       const blob = getLiveBlobUrl(url);
       setResolvedImg(blob || url);
     });
     return () => { alive = false; };
-  }, [player.imageUrl, player.name]);
+  }, [player.imageUrl, playerName]);
 
   const isUnderAge = useAuctionStore(s => s.enableSpecialCategories) && player.age !== null && player.age < activeConfig.auction.rules.underAgeLimit;
 
@@ -131,7 +133,7 @@ export function PlayerCard({
       >
         <img
           src={resolvedImg}
-          alt={player.name}
+          alt={playerName}
           className="w-full h-full object-cover object-top"
           style={player.imageEdit ? {
             transform: `translate(${player.imageEdit.xPct / 4}%, ${player.imageEdit.yPct / 4}%) rotate(${player.imageEdit.rotationDeg}deg) scaleX(${player.imageEdit.flipX ? -1 : 1}) scaleY(${player.imageEdit.flipY ? -1 : 1}) scale(${player.imageEdit.scale})`,
@@ -183,7 +185,7 @@ export function PlayerCard({
       <div className="p-4 space-y-3">
         {/* Name */}
         <h3 className="text-xl font-bold text-[var(--theme-text-primary)] truncate">
-          {player.name}
+          {playerName}
         </h3>
 
         {/* Age */}
@@ -227,7 +229,7 @@ export function PlayerCard({
       {/* Full-view lightbox */}
       <ImageLightbox
         src={resolvedImg}
-        alt={player.name}
+        alt={playerName}
         isOpen={lightboxOpen}
         onClose={() => setLightboxOpen(false)}
       />

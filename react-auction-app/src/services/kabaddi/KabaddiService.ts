@@ -376,6 +376,42 @@ class KabaddiService {
     return { live: next, event: this.makeEvent(next, 'all_out', otherTeamId, rules.allOutBonusPoints) };
   }
 
+  recordTeamBreak(live: KabaddiLiveState, teamId: string, limit: number): { live: KabaddiLiveState; event: KabaddiMatchEvent } {
+    if (teamId !== live.teamAId && teamId !== live.teamBId) throw new Error(`Unknown team: ${teamId}`);
+    const side = this.sideOf(live, teamId);
+    const used = live[side].teamBreaksUsed ?? 0;
+    if (used >= Math.max(0, limit)) throw new Error('This team has used all available breaks');
+    const next: KabaddiLiveState = {
+      ...live,
+      [side]: { ...live[side], teamBreaksUsed: used + 1 },
+      lastUpdated: Date.now(),
+    };
+    const event = this.makeEvent(next, 'team_break', teamId, 0);
+    next.events = [...next.events, event].slice(-200);
+    return { live: next, event };
+  }
+
+  awardPlayerPoints(
+    live: KabaddiLiveState, teamId: string, playerId: string, playerName: string, points: number,
+  ): { live: KabaddiLiveState; event: KabaddiMatchEvent } {
+    if (teamId !== live.teamAId && teamId !== live.teamBId) throw new Error(`Unknown team: ${teamId}`);
+    const awardedPoints = Math.max(0, Math.floor(points));
+    if (awardedPoints < 1) throw new Error('Award must be at least one point');
+    const side = this.sideOf(live, teamId);
+    const next: KabaddiLiveState = {
+      ...live,
+      [side]: {
+        ...live[side],
+        score: live[side].score + awardedPoints,
+        totalRaidPoints: live[side].totalRaidPoints + awardedPoints,
+      },
+      lastUpdated: Date.now(),
+    };
+    const event = this.makeEvent(next, 'player_award', teamId, awardedPoints, { playerId, playerName });
+    next.events = [...next.events, event].slice(-200);
+    return { live: next, event };
+  }
+
   /**
    * Removes `count` players from the mat — specific IDs when known, else just
    * the tally. Removed IDs are appended to `benchQueue` (oldest-first) so the
@@ -434,6 +470,8 @@ class KabaddiService {
       touchedNames?: string[];
       tacklerIds?: string[];
       tacklerNames?: string[];
+      defendersOutIds?: string[];
+      defendersOutNames?: string[];
     },
     rules: KabaddiRulesConfig = DEFAULT_KABADDI_RULES,
   ): RaidResolution {
@@ -450,23 +488,25 @@ class KabaddiService {
     let next: KabaddiLiveState = { ...live, raidNumber: live.raidNumber + 1 };
 
     const touches = Math.max(0, input.touches);
+    const defendersOutIds = [...new Set(input.defendersOutIds ?? [])];
+    const defendersOutCount = defendersOutIds.length;
     const bonusAwarded = input.bonus && rules.bonusLineEnabled
       && next[defSide].playersOnCourt >= rules.bonusMinDefenders;
     const raidPoints = touches + (bonusAwarded ? 1 : 0);
 
-    if (raidPoints > 0 && !input.raiderOut) {
+    if ((raidPoints > 0 || defendersOutCount > 0) && !input.raiderOut) {
       // Raider banks points; every tagged defender leaves the mat and one
       // team-mate is revived per touch.
       next = {
         ...next,
         [raidSide]: {
-          ...this.revive(next[raidSide], touches, rules),
-          score: next[raidSide].score + raidPoints,
-          totalRaidPoints: next[raidSide].totalRaidPoints + touches,
+          ...this.revive(next[raidSide], touches + defendersOutCount, rules),
+          score: next[raidSide].score + raidPoints + defendersOutCount,
+          totalRaidPoints: next[raidSide].totalRaidPoints + touches + defendersOutCount,
           totalBonusPoints: next[raidSide].totalBonusPoints + (bonusAwarded ? 1 : 0),
           consecutiveEmptyRaids: 0,
         },
-        [defSide]: this.sendOut(next[defSide], touches, input.touchedIds),
+        [defSide]: this.sendOut(next[defSide], touches + defendersOutCount, [...(input.touchedIds ?? []), ...defendersOutIds]),
       };
 
       if (touches > 0) {
@@ -482,6 +522,13 @@ class KabaddiService {
         }));
         celebration = 'bonus_point';
       }
+      if (defendersOutCount > 0) {
+        events.push(this.makeEvent(next, 'defender_out', input.raidingTeamId, defendersOutCount, {
+          playerId: input.raiderId, playerName: input.raiderName,
+          opponentIds: defendersOutIds,
+          opponentNames: input.defendersOutNames,
+        }));
+      }
       if (raidPoints >= rules.superRaidPoints) {
         events.push(this.makeEvent(next, 'super_raid', input.raidingTeamId, 0, {
           playerId: input.raiderId, playerName: input.raiderName,
@@ -495,12 +542,14 @@ class KabaddiService {
       next = {
         ...next,
         [defSide]: {
-          ...this.revive(next[defSide], 1, rules),
+          ...this.sendOut(next[defSide], defendersOutCount, defendersOutIds),
           score: next[defSide].score + points,
           totalTacklePoints: next[defSide].totalTacklePoints + points,
         },
         [raidSide]: {
-          ...this.sendOut(next[raidSide], 1, input.raiderId ? [input.raiderId] : undefined),
+          ...this.sendOut(this.revive(next[raidSide], defendersOutCount, rules), 1, input.raiderId ? [input.raiderId] : undefined),
+          score: next[raidSide].score + defendersOutCount,
+          totalRaidPoints: next[raidSide].totalRaidPoints + defendersOutCount,
           consecutiveEmptyRaids: 0,
         },
       };
@@ -510,6 +559,13 @@ class KabaddiService {
         playerId: input.tacklerIds?.[0],
         playerName: input.tacklerNames?.[0],
       }));
+      if (defendersOutCount > 0) {
+        events.push(this.makeEvent(next, 'defender_out', input.raidingTeamId, defendersOutCount, {
+          playerId: input.raiderId, playerName: input.raiderName,
+          opponentIds: defendersOutIds,
+          opponentNames: input.defendersOutNames,
+        }));
+      }
       if (superTackle) celebration = 'super_tackle';
     } else if (live.isDoOrDie && input.raiderId) {
       // A failed do-or-die raid eliminates the raider and awards the defence.

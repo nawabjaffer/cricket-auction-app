@@ -5,6 +5,9 @@ import {
   isSuperTackle, isBonusAvailable, raidSecondsRemaining,
 } from '../types/kabaddi';
 import type { KabaddiLiveState } from '../types/kabaddi';
+import type { KabaddiMatchSetup, KabaddiPlayer } from '../types/kabaddi';
+import type { Player, Team } from '../types';
+import { mergeIconicKabaddiPlayers } from '../utils/kabaddiRoster';
 import {
   getKabaddiRoleCategory, isKabaddiRole, getKabaddiRoleBadgeClass,
 } from '../utils/kabaddiRoles';
@@ -45,7 +48,53 @@ describe('kabaddi rules helpers', () => {
   });
 });
 
+describe('Kabaddi auction roster integration', () => {
+  it('adds a captain/icon player with auction role and photo without duplicating a registered player', () => {
+    const match = {
+      teamA: { id: 'kabaddi-a', name: 'Falcons' },
+      teamB: { id: 'kabaddi-b', name: 'Tigers' },
+    } as KabaddiMatchSetup;
+    const auctionTeams = [{ id: 'auction-a', name: 'Falcons', iconicPlayers: ['Ravi Star'] }] as Team[];
+    const auctionPlayers = [{ id: 'player-1', name: 'Ravi Star', role: 'Raider', processedImageUrl: 'ravi.webp' }] as unknown as Player[];
+    const existing = [{ id: 'player-1', teamId: 'kabaddi-a', name: 'Ravi Star', position: 'RAIDER', createdAt: 1, updatedAt: 1 }] as KabaddiPlayer[];
+
+    const merged = mergeIconicKabaddiPlayers(existing, auctionTeams, auctionPlayers, match);
+
+    expect(merged).toHaveLength(1);
+    expect(merged[0].photoUrl).toBe('ravi.webp');
+  });
+
+  it('adds a captain from Auction Admin even when no imported player record exists', () => {
+    const match = {
+      teamA: { id: 'kabaddi-a', name: 'Falcons' },
+      teamB: { id: 'kabaddi-b', name: 'Tigers' },
+    } as KabaddiMatchSetup;
+    const auctionTeams = [{ id: 'auction-a', name: 'Falcons', captain: 'Ravi Star' }] as Team[];
+
+    const merged = mergeIconicKabaddiPlayers([], auctionTeams, [], match);
+
+    expect(merged).toHaveLength(1);
+    expect(merged[0]).toMatchObject({ name: 'Ravi Star', teamId: 'kabaddi-a', isCaptain: true, isStarter: true });
+  });
+});
+
 describe('resolveRaid', () => {
+  it('limits team breaks per side and appends an official break event', () => {
+    const first = kabaddiService.recordTeamBreak(freshLive(), A, 1);
+    expect(first.live.teamA.teamBreaksUsed).toBe(1);
+    expect(first.event.type).toBe('team_break');
+    expect(() => kabaddiService.recordTeamBreak(first.live, A, 1)).toThrow('used all available breaks');
+    expect(kabaddiService.recordTeamBreak(first.live, B, 1).live.teamB.teamBreaksUsed).toBe(1);
+  });
+
+  it('awards manual points to the selected team and records the player award', () => {
+    const result = kabaddiService.awardPlayerPoints(freshLive(), B, 'b1', 'Defender 1', 3);
+    expect(result.live.teamB.score).toBe(3);
+    expect(result.live.teamB.totalRaidPoints).toBe(3);
+    expect(result.event).toMatchObject({ type: 'player_award', teamId: B, playerId: 'b1', playerName: 'Defender 1', points: 3 });
+    expect(result.live.events).toContainEqual(result.event);
+  });
+
   it('awards touch points and sends tagged defenders off the mat', () => {
     const live = freshLive({ raidingTeamId: A });
     const { live: next } = kabaddiService.resolveRaid(
@@ -92,6 +141,39 @@ describe('resolveRaid', () => {
     expect(next.teamB.score).toBe(1);
     expect(next.teamA.playersOnCourt).toBe(6);
     expect(celebration).toBeNull();
+  });
+
+  it('awards the raider a point and sends the defender out when a defender steps off during an empty raid', () => {
+    const base = freshLive();
+    const live = freshLive({
+      raidingTeamId: A,
+      teamB: { ...base.teamB, playersOnCourt: 3, onCourtIds: ['b1', 'b2', 'b3'], startingIds: ['b1', 'b2', 'b3'] },
+    });
+    const { live: next, events } = kabaddiService.resolveRaid(live, {
+      raidingTeamId: A, touches: 0, bonus: false, raiderOut: false,
+      raiderId: 'a1', raiderName: 'Raider', defendersOutIds: ['b2'], defendersOutNames: ['Defender'],
+    }, RULES);
+    expect(next.teamA.score).toBe(1);
+    expect(next.teamB.playersOnCourt).toBe(2);
+    expect(next.teamA.totalRaidPoints).toBe(1);
+    expect(events.some(event => event.type === 'defender_out' && event.points === 1)).toBe(true);
+  });
+
+  it('awards one point to each team when the raider is tackled as a defender steps out', () => {
+    const base = freshLive();
+    const live = freshLive({
+      raidingTeamId: A,
+      teamA: { ...base.teamA, onCourtIds: ['a1', 'a2', 'a3'], startingIds: ['a1', 'a2', 'a3'] },
+      teamB: { ...base.teamB, onCourtIds: ['b1', 'b2', 'b3', 'b4'], startingIds: ['b1', 'b2', 'b3', 'b4'] },
+    });
+    const { live: next } = kabaddiService.resolveRaid(live, {
+      raidingTeamId: A, touches: 0, bonus: false, raiderOut: true,
+      raiderId: 'a1', defendersOutIds: ['b4'],
+    }, RULES);
+    expect(next.teamA.score).toBe(1);
+    expect(next.teamB.score).toBe(1);
+    expect(next.teamA.playersOnCourt).toBe(2);
+    expect(next.teamB.playersOnCourt).toBe(3);
   });
 
   it('gives the defence the tackle when touches were entered before the raider was caught', () => {

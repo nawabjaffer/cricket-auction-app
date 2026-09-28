@@ -9,6 +9,7 @@
 // ============================================================================
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { onValue, ref } from 'firebase/database';
 import {
   IoPlay, IoPause, IoArrowBack, IoFlash, IoShieldCheckmark,
   IoArrowUndo, IoArrowRedo, IoTimer, IoPeople, IoWarning, IoSwapHorizontal, IoPencil,
@@ -20,7 +21,9 @@ import { auctionPersistence, type SoldPlayerRecord } from '../services/auctionPe
 import { tenantPath } from '../services/tenantPath';
 import { useTenantNavigate as useNavigate } from '../hooks/useTenantNavigate';
 import { getKabaddiRoleCategory } from '../utils/kabaddiRoles';
+import { mergeIconicKabaddiPlayers } from '../utils/kabaddiRoster';
 import { ResolvedImage } from '../components/ResolvedImage';
+import type { Player, Team } from '../types';
 import {
   computeKabaddiClock, raidSecondsRemaining, raidInputGraceRemaining, KABADDI_HALF_LABELS,
   createEmptyKabaddiLiveState, DEFAULT_KABADDI_RULES, isBonusAvailable, playerMatchPoints,
@@ -47,6 +50,8 @@ export default function KabaddiUpdatePage() {
   const [match, setMatch] = useState<KabaddiMatchSetup | null>(null);
   const [live, setLive] = useState<KabaddiLiveState | null>(null);
   const [players, setPlayers] = useState<KabaddiPlayer[]>([]);
+  const [auctionTeams, setAuctionTeams] = useState<Team[]>([]);
+  const [auctionPlayers, setAuctionPlayers] = useState<Player[]>([]);
   const [soldPlayers, setSoldPlayers] = useState<SoldPlayerRecord[]>([]);
   const [rules, setRules] = useState<KabaddiRulesConfig>(DEFAULT_KABADDI_RULES);
   const [tick, setTick] = useState(0);
@@ -57,10 +62,17 @@ export default function KabaddiUpdatePage() {
   const [raiderId, setRaiderId] = useState('');
   const [touches, setTouches] = useState(0);
   const [touchedDefenderIds, setTouchedDefenderIds] = useState<string[]>([]);
+  const [defendersOutIds, setDefendersOutIds] = useState<string[]>([]);
   const [bonus, setBonus] = useState(false);
   const [tacklerIds, setTacklerIds] = useState<string[]>([]);
+  const [awardPlayerId, setAwardPlayerId] = useState('');
+  const [awardPoints, setAwardPoints] = useState('1');
   const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
   const [showCorrections, setShowCorrections] = useState(false);
+  const [activeCountDraftA, setActiveCountDraftA] = useState('');
+  const [activeCountDraftB, setActiveCountDraftB] = useState('');
+  const [scoreDraftA, setScoreDraftA] = useState('');
+  const [scoreDraftB, setScoreDraftB] = useState('');
   const [subOutId, setSubOutId] = useState<Record<string, string>>({});
 
   // 7 Main Players / Starting Lineup state
@@ -73,6 +85,7 @@ export default function KabaddiUpdatePage() {
   const undoStack = useRef<KabaddiLiveState[]>([]);
   const redoStack = useRef<KabaddiLiveState[]>([]);
   const autoResolvedRaidRef = useRef<number>(-1);
+  const overlayClearTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const flash = useCallback((m: string) => {
     setToast(m);
@@ -116,6 +129,17 @@ export default function KabaddiUpdatePage() {
       kabaddiService.subscribePlayers(setPlayers),
       kabaddiService.subscribeRules(setRules),
     ];
+    const db = realtimeSync.getDatabase();
+    if (db) {
+      unsubs.push(onValue(ref(db, tenantPath('auction/teams')), snapshot => {
+        const value = snapshot.val() as Team[] | Record<string, Team> | null;
+        setAuctionTeams(value ? Object.values(value).filter((team): team is Team => !!team?.id) : []);
+      }));
+      unsubs.push(onValue(ref(db, tenantPath('auction/adminPlayers')), snapshot => {
+        const value = snapshot.val() as Player[] | Record<string, Player> | null;
+        setAuctionPlayers(value ? Object.values(value).filter((player): player is Player => !!player?.id && !!player.name) : []);
+      }));
+    }
 
     const fetchMatches = async () => {
       try {
@@ -211,8 +235,8 @@ export default function KabaddiUpdatePage() {
         updatedAt: sp.timestamp || Date.now(),
       }];
     });
-    return [...players, ...extras];
-  }, [players, soldPlayers, match, kabaddiPositionFor]);
+    return mergeIconicKabaddiPlayers([...players, ...extras], auctionTeams, auctionPlayers, match);
+  }, [players, soldPlayers, match, kabaddiPositionFor, auctionTeams, auctionPlayers]);
 
   const ensureLive = useCallback(async (): Promise<KabaddiLiveState | null> => {
     if (live) return live;
@@ -241,13 +265,22 @@ export default function KabaddiUpdatePage() {
 
   const triggerOverlay = useCallback(async (type: KabaddiOverlayType, event?: KabaddiLiveState['events'][number]) => {
     if (!matchId) return;
+    if (overlayClearTimerRef.current) clearTimeout(overlayClearTimerRef.current);
+    overlayClearTimerRef.current = null;
+    if (type === 'none') {
+      await kabaddiService.clearOverlay(matchId);
+      return;
+    }
     await kabaddiService.triggerOverlay(matchId, {
       activeOverlay: type,
       activeEvent: event,
       lastUpdated: Date.now(),
     });
-    setTimeout(() => { void kabaddiService.clearOverlay(matchId); }, 8000);
   }, [matchId]);
+
+  useEffect(() => () => {
+    if (overlayClearTimerRef.current) clearTimeout(overlayClearTimerRef.current);
+  }, []);
 
   // ── Clock ──
   const toggleClock = async () => {
@@ -307,6 +340,7 @@ export default function KabaddiUpdatePage() {
     };
     await persist(next, false);
     setTouchedDefenderIds([]);
+    setDefendersOutIds([]);
     setTacklerIds([]);
     if (next.isDoOrDie) await triggerOverlay('do_or_die');
   };
@@ -326,6 +360,7 @@ export default function KabaddiUpdatePage() {
       const player = scorerPlayers.find(p => p.id === cur.raiderId);
       const tacklers = opts.raiderOut ? scorerPlayers.filter(p => tacklerIds.includes(p.id)) : [];
       const touchedDefenders = scorerPlayers.filter(p => touchedDefenderIds.includes(p.id));
+      const defendersOut = scorerPlayers.filter(p => defendersOutIds.includes(p.id));
       const result = kabaddiService.resolveRaid(cur, {
         raidingTeamId: cur.raidingTeamId,
         touches,
@@ -335,6 +370,8 @@ export default function KabaddiUpdatePage() {
         raiderName: player?.name,
         touchedIds: touchedDefenders.map(p => p.id),
         touchedNames: touchedDefenders.map(p => p.name),
+        defendersOutIds: defendersOut.map(p => p.id),
+        defendersOutNames: defendersOut.map(p => p.name),
         tacklerIds: tacklers.length ? tacklers.map(p => p.id) : undefined,
         tacklerNames: tacklers.length ? tacklers.map(p => p.name) : undefined,
       }, rules);
@@ -345,7 +382,7 @@ export default function KabaddiUpdatePage() {
       // plays are recorded for the actual player involved.
       const statUpdates: Promise<void>[] = [];
       for (const event of result.events) {
-        if (event.type === 'touch_point' || event.type === 'bonus_point') {
+        if (event.type === 'touch_point' || event.type === 'bonus_point' || event.type === 'defender_out') {
           if (event.playerId && event.points > 0) {
             statUpdates.push(kabaddiService.incrementPlayerStat(event.playerId, 'raidPoints', event.points));
           }
@@ -362,6 +399,7 @@ export default function KabaddiUpdatePage() {
       }
       for (const statUpdate of statUpdates) await statUpdate;
 
+      await triggerOverlay('none');
       if (result.celebration) {
         const ev = result.events.find(e =>
           e.type === result.celebration || (result.celebration === 'all_out' && e.type === 'all_out'));
@@ -372,6 +410,7 @@ export default function KabaddiUpdatePage() {
       setBonus(false);
       setRaiderId('');
       setTouchedDefenderIds([]);
+      setDefendersOutIds([]);
       setTacklerIds([]);
       if (result.live.isDoOrDie) await triggerOverlay('do_or_die');
     } catch (e) {
@@ -448,6 +487,71 @@ export default function KabaddiUpdatePage() {
       [side]: { ...live[side], score: Math.max(0, live[side].score + appliedDelta) },
     });
     flash('Score corrected');
+  };
+
+  const adjustActivePlayers = async (teamId: string, requestedCount: number) => {
+    if (!live || !match) return;
+    const sideKey = teamId === match.teamA.id ? 'teamA' : 'teamB';
+    const side = live[sideKey];
+    const squad = scorerPlayers.filter(player => player.teamId === teamId);
+    const count = Math.max(0, Math.min(Math.floor(requestedCount), rules.playersPerSide, squad.length));
+    const allowedIds = new Set(squad.map(player => player.id));
+    const onCourtIds = (side.onCourtIds ?? []).filter(id => allowedIds.has(id)).slice(0, count);
+    const candidates = [
+      ...(side.startingIds ?? []).map(id => squad.find(player => player.id === id)).filter((player): player is KabaddiPlayer => !!player),
+      ...[...squad].sort(startersFirst),
+    ];
+    for (const player of candidates) {
+      if (onCourtIds.length >= count) break;
+      if (!onCourtIds.includes(player.id)) onCourtIds.push(player.id);
+    }
+    const updatedSide = {
+      ...side,
+      onCourtIds,
+      playersOnCourt: onCourtIds.length,
+      benchQueue: (side.startingIds ?? []).filter(id => !onCourtIds.includes(id)),
+    };
+    await persist({ ...live, [sideKey]: updatedSide }, false);
+    const teamName = sideKey === 'teamA' ? match.teamA.name : match.teamB.name;
+    flash(`${teamName}: active players set to ${onCourtIds.length}`);
+  };
+
+  const setTeamScore = async (teamId: string, requestedScore: number) => {
+    if (!live || !match || !Number.isFinite(requestedScore)) return;
+    const sideKey = teamId === match.teamA.id ? 'teamA' : 'teamB';
+    const score = Math.max(0, Math.floor(requestedScore));
+    await persist({ ...live, [sideKey]: { ...live[sideKey], score } }, false);
+    flash(`${sideKey === 'teamA' ? match.teamA.name : match.teamB.name}: score set to ${score}`);
+  };
+
+  const callTeamBreak = async (teamId: string) => {
+    if (!live || !match) return;
+    try {
+      const result = kabaddiService.recordTeamBreak(live, teamId, rules.teamBreaksPerSide);
+      await persist(result.live, false);
+      const teamName = teamId === match.teamA.id ? match.teamA.name : match.teamB.name;
+      await triggerOverlay('team_break', { ...result.event, teamName });
+      flash(`${teamName} break announced`);
+    } catch (error) {
+      flash(error instanceof Error ? error.message : 'Unable to call team break');
+    }
+  };
+
+  const awardSelectedPlayer = async () => {
+    if (!live || !match) return;
+    const player = scorerPlayers.find(candidate => candidate.id === awardPlayerId);
+    if (!player) { flash('Select a player first'); return; }
+    try {
+      const result = kabaddiService.awardPlayerPoints(live, player.teamId, player.id, player.name, Number(awardPoints));
+      await persist(result.live);
+      await kabaddiService.incrementPlayerStat(player.id, 'raidPoints', result.event.points);
+      const teamName = player.teamId === match.teamA.id ? match.teamA.name : match.teamB.name;
+      await triggerOverlay('player_award', { ...result.event, teamName });
+      setAwardPlayerId('');
+      flash(`${player.name} awarded ${result.event.points} point(s)`);
+    } catch (error) {
+      flash(error instanceof Error ? error.message : 'Unable to award player points');
+    }
   };
 
   // ── Derived ──
@@ -709,11 +813,17 @@ export default function KabaddiUpdatePage() {
   }, [live, match, scorerPlayers, defaultLineup]);
 
   const toggleTouchedDefender = (playerId: string) => {
+    setDefendersOutIds(ids => ids.filter(id => id !== playerId));
     setTouchedDefenderIds(ids => {
       const next = ids.includes(playerId) ? ids.filter(id => id !== playerId) : [...ids, playerId];
       setTouches(next.length);
       return next;
     });
+  };
+
+  const toggleDefenderOut = (playerId: string) => {
+    setTouchedDefenderIds(ids => ids.filter(id => id !== playerId));
+    setDefendersOutIds(ids => (ids.includes(playerId) ? ids.filter(id => id !== playerId) : [...ids, playerId]));
   };
 
   const toggleTackler = (playerId: string) => {
@@ -1022,6 +1132,35 @@ export default function KabaddiUpdatePage() {
         ))}
       </section>
 
+      {live && match && (
+        <section className="kbu__official-tools">
+          <div className="kbu__tool-group">
+            <h2>Team breaks</h2>
+            {[match.teamA, match.teamB].map((team, index) => {
+              const side = index === 0 ? live.teamA : live.teamB;
+              const used = side.teamBreaksUsed ?? 0;
+              return (
+                <button key={team.id} type="button" className="kbu__break-btn" disabled={used >= rules.teamBreaksPerSide} onClick={() => void callTeamBreak(team.id)}>
+                  {team.name} · break {used}/{rules.teamBreaksPerSide}
+                </button>
+              );
+            })}
+          </div>
+          <div className="kbu__tool-group">
+            <h2>Player point award</h2>
+            <select value={awardPlayerId} onChange={event => setAwardPlayerId(event.target.value)} aria-label="Player to award points">
+              <option value="">Select player</option>
+              {scorerPlayers.map(player => {
+                const teamName = player.teamId === match.teamA.id ? match.teamA.name : match.teamB.name;
+                return <option key={player.id} value={player.id}>{player.name} · {teamName}</option>;
+              })}
+            </select>
+            <input type="number" min={1} max={99} value={awardPoints} onChange={event => setAwardPoints(event.target.value)} aria-label="Award points" />
+            <button type="button" className="kbu__award-btn" disabled={!awardPlayerId || Number(awardPoints) < 1} onClick={() => void awardSelectedPlayer()}>Award and announce</button>
+          </div>
+        </section>
+      )}
+
       {/* ── Raid workflow ── */}
       <section className="kbu__card">
         <h2><IoFlash size={16} /> Raid</h2>
@@ -1122,6 +1261,14 @@ export default function KabaddiUpdatePage() {
                   live={live}
                 />
                 <p className="kbu__hint">Selected touched defenders disappear from the next raid list.</p>
+                <h3>Defender(s) who stepped out</h3>
+                <PlayerPicker
+                  players={defenderOptions}
+                  selectedIds={defendersOutIds}
+                  onPick={toggleDefenderOut}
+                  live={live}
+                />
+                <p className="kbu__hint">Each selected defender awards one raid point, including on an empty raid or when the raider is tackled.</p>
                 <h3>Defender(s) who tackled</h3>
                 <PlayerPicker
                   players={defenderOptions}
@@ -1245,10 +1392,36 @@ export default function KabaddiUpdatePage() {
       <section className="kbu__card">
         <div className="kbu__log-header">
           <h2><IoPeople size={16} /> Match log</h2>
-          <button type="button" className="kbu__advanced-toggle" onClick={() => setShowCorrections(v => !v)}>
+          <button type="button" className="kbu__advanced-toggle" onClick={() => {
+            setShowCorrections(v => !v);
+            setActiveCountDraftA(String(live?.teamA.playersOnCourt ?? 0));
+            setActiveCountDraftB(String(live?.teamB.playersOnCourt ?? 0));
+            setScoreDraftA(String(live?.teamA.score ?? 0));
+            setScoreDraftB(String(live?.teamB.score ?? 0));
+          }}>
             <IoPencil size={13} /> {showCorrections ? 'Done correcting' : 'Correct scores'}
           </button>
         </div>
+        {showCorrections && live && match && (
+          <div className="kbu__active-count-correction">
+            {[{ team: match.teamA, side: live.teamA, value: scoreDraftA, setValue: setScoreDraftA }, { team: match.teamB, side: live.teamB, value: scoreDraftB, setValue: setScoreDraftB }].map(row => (
+              <label key={`${row.team.id}-score`}>
+                <span>{row.team.name} · total score</span>
+                <input type="number" min={0} step={1} value={row.value} onChange={event => row.setValue(event.target.value)} />
+                <button type="button" onClick={() => void setTeamScore(row.team.id, Number(row.value))}>Apply</button>
+                <small>Current: {row.side.score}</small>
+              </label>
+            ))}
+            {[{ team: match.teamA, side: live.teamA, value: activeCountDraftA, setValue: setActiveCountDraftA }, { team: match.teamB, side: live.teamB, value: activeCountDraftB, setValue: setActiveCountDraftB }].map(row => (
+              <label key={row.team.id}>
+                <span>{row.team.name} · active players</span>
+                <input type="number" min={0} max={Math.min(rules.playersPerSide, scorerPlayers.filter(player => player.teamId === row.team.id).length)} value={row.value} onChange={event => row.setValue(event.target.value)} />
+                <button type="button" onClick={() => void adjustActivePlayers(row.team.id, Number(row.value))}>Apply</button>
+                <small>Current: {row.side.playersOnCourt}</small>
+              </label>
+            ))}
+          </div>
+        )}
         {(!live?.events || live.events.length === 0) ? (
           <p className="kbu__hint">No events yet.</p>
         ) : (
@@ -1257,6 +1430,7 @@ export default function KabaddiUpdatePage() {
               <li key={ev.id}>
                 <span className="kbu__log-min">{ev.minute}&apos;</span>
                 <span className={`kbu__log-type kbu__log-type--${ev.type}`}>{ev.type.replace(/_/g, ' ')}</span>
+                <span className="kbu__log-team">{ev.teamId === match?.teamA.id ? match.teamA.name : ev.teamId === match?.teamB.id ? match.teamB.name : 'Unknown team'}</span>
                 <span className="kbu__log-name">{ev.playerName || ''}</span>
                 {ev.points > 0 && <span className="kbu__log-pts">+{ev.points}</span>}
                 {showCorrections && (

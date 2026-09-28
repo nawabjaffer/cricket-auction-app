@@ -11,6 +11,7 @@ import { extractDriveFileId } from '../../utils/driveImage';
 import { getCachedStorageUrl, resolveImageAsync } from '../../services/firebaseStorageService';
 import { getRoleBadgeColor, getRoleCategory } from '../../utils/roleFormatter';
 import { getRoleBasedStats } from '../../utils/playerStats';
+import { normalizePlayerName } from '../../utils/playerName';
 
 interface PlayerOverlayProps {
   player: Player;
@@ -105,7 +106,7 @@ export default function PlayerOverlay({ player, maxStats = 6 }: PlayerOverlayPro
 
   const safePlayer = useMemo(() => {
     const safeId = player?.id ? String(player.id) : 'unknown-player';
-    const safeName = typeof player?.name === 'string' && player.name.trim() ? player.name.trim() : 'Unknown Player';
+    const safeName = typeof player?.name === 'string' && player.name.trim() ? normalizePlayerName(player.name) : 'Unknown Player';
     const safeImageUrl = sanitizeImageUrl(player?.imageUrl);
     const safeRole = typeof player?.role === 'string' ? player.role : 'Player';
     const safeBasePrice = Number.isFinite(Number(player?.basePrice)) ? Number(player.basePrice) : 0;
