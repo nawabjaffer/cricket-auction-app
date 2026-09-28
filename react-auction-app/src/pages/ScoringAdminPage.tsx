@@ -5,6 +5,7 @@
 
 import { Fragment, useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { get, onValue, ref, set as fbSet } from 'firebase/database';
 import { IoAdd, IoTrash, IoSave, IoClose, IoPlay, IoStop, IoTrophy, IoSettings, IoImage, IoFlash, IoVideocam, IoLink, IoDesktop, IoPencil, IoPeople, IoGameController } from 'react-icons/io5';
 import { useAdminAuth } from '../hooks/useAdminAuth';
 import { useTenantNavigate as useNavigate } from '../hooks/useTenantNavigate';
@@ -15,6 +16,7 @@ import { useTeams, useSoldPlayers } from '../store';
 import { tenantPath } from '../services/tenantPath';
 import { realtimeSync } from '../services/realtimeSync';
 import { scoringService } from '../services/scoring';
+import PreMatchPreviewModal from '../components/PreMatchPreviewModal';
 import { initializeSharedOBSProfileService, sharedOBSProfileService } from '../services/sharedOBSProfileService';
 import { getActiveTenant } from '../services/tenantPath';
 import { cricHeroesReader, isValidCricHeroesUrl } from '../services/scoring/cricHeroesReader';
@@ -22,12 +24,23 @@ import type { CricHeroesSnapshot } from '../services/scoring/cricHeroesReader';
 import { useCricHeroesSyncAdapter } from '../hooks/useCricHeroesSyncAdapter';
 import { uploadFileToStorage } from '../services';
 import { DEFAULT_MVP_WEIGHTS, MATCH_STAGE_LABELS } from '../types/scoring';
-import type { MatchSetup, MatchStage, ScoringAd, ScoringOverlayConfig, LiveQuestion, MatchScoringConfig, PreMatchState, PreMatchPhase, ImpactPlayer, TossConfig, MatchLineup, MatchSquadPlayer, TickerConfig, OBSWebSocketConfig, MVPWeights, AnimationConfig, OBSReplayButton, OBSButtonSeriesStep, OBSReplayConfig, TickerStatWidget, SharedOBSProfile } from '../types/scoring';
+import type { MatchSetup, MatchStage, ScoringAd, ScoringOverlayConfig, LiveQuestion, MatchScoringConfig, PreMatchState, ImpactPlayer, TossConfig, MatchLineup, MatchSquadPlayer, TickerConfig, OBSWebSocketConfig, MVPWeights, AnimationConfig, OBSReplayButton, OBSButtonSeriesStep, OBSReplayConfig, TickerStatWidget, SharedOBSProfile, PlayerStatsSequenceItem } from '../types/scoring';
 import type { SoldPlayer } from '../types';
+import { DEFAULT_MATCH_SQUAD_OVERLAY_DESIGN, type MatchSquadOverlayDesign } from '../types/matchSquadOverlay';
+import { normalizeMatchSquadOverlayDesign } from '../utils/matchSquadOverlayDesign';
+import { buildPreMatchSequence } from '../utils/preMatchSequence';
+import { DEFAULT_PLAYER_STATS_SEQUENCE_CONFIG, normalizePlayerStatsSequenceConfig } from '../utils/playerStatsSequence';
 import { withScorerAdminChrome } from './withScorerAdminChrome';
 import './ScoringAdminPage.css';
 
 type Tab = 'matches' | 'provider' | 'ads' | 'overlay' | 'animations' | 'prematch' | 'ticker' | 'stats' | 'obs';
+const prematchSequenceTimers = new Map<string, ReturnType<typeof setTimeout>[]>();
+
+function cancelPreMatchSequence(matchId: string): void {
+  prematchSequenceTimers.get(matchId)?.forEach(clearTimeout);
+  prematchSequenceTimers.delete(matchId);
+}
+
 type CricHeroesSyncState = ReturnType<typeof useCricHeroesSyncAdapter>;
 type CricHeroesSelectorConfig = Record<'teamContainers' | 'teamName' | 'teamActive' | 'teamOvers' | 'batterTable' | 'bowlerTable' | 'latestCommentary' | 'fullCommentaryTab' | 'scorecardHead' | 'scorecardWrapper' | 'teamNameAndScore' | 'scorecardOvers' | 'scorecardSelectedTeam' | 'teamRosterRoot' | 'teamRosterHeader', string>;
 
@@ -574,6 +587,7 @@ function MatchesTab({ matches, teams, soldPlayers, onFeedback, saving, setSaving
   const handleDelete = async (matchId: string) => {
     if (!confirm('Delete this match and all associated data?')) return;
     try {
+      cancelPreMatchSequence(matchId);
       await scoringService.deleteMatch(matchId);
       onFeedback('Match deleted');
     } catch {
@@ -597,6 +611,7 @@ function MatchesTab({ matches, teams, soldPlayers, onFeedback, saving, setSaving
         }
       }
 
+      cancelPreMatchSequence(matchId);
       await scoringService.updateMatch(matchId, { status });
 
       // When starting a match, auto-populate default squads and run prematch ceremony
@@ -642,22 +657,38 @@ function MatchesTab({ matches, teams, soldPlayers, onFeedback, saving, setSaving
           }
 
           // Build full prematch state with toss info from match setup
+          const savedPreMatchState = await scoringService.getPreMatchState(matchId);
+          const db = realtimeSync.getDatabase();
+          const designSnapshot = db
+            ? await get(ref(db, tenantPath('scorecardDesigner/cricket/squadOverlayDesign')))
+            : null;
+          const squadDesign = normalizeMatchSquadOverlayDesign(designSnapshot?.val());
+          const savedRevealConfig = savedPreMatchState?.squadRevealConfig;
+          const revealConfig = {
+            autoReveal: savedRevealConfig?.autoReveal ?? true,
+            delayAfterTossSeconds: squadDesign.delayAfterTossMs / 1000,
+            playerRevealIntervalMs: squadDesign.playerRevealIntervalMs,
+          };
           const tossResult = match.tossWonBy && match.tossElected ? {
             wonBy: match.tossWonBy,
             elected: match.tossElected,
             coinSide: 'heads' as const,
           } : undefined;
 
+          const hasToss = Boolean(tossResult);
+          const impactPlayers = savedPreMatchState?.impactPlayers || { teamA: [], teamB: [] };
+          const sequence = buildPreMatchSequence(squadDesign, {
+            hasToss,
+            hasImpactPlayers: impactPlayers.teamA.length > 0 || impactPlayers.teamB.length > 0,
+            playerCount: 11,
+            playerRevealIntervalMs: revealConfig.autoReveal ? revealConfig.playerRevealIntervalMs : 0,
+          });
           const fullPreMatchState: PreMatchState = {
             matchId,
-            phase: 'squad_display',
+            phase: sequence[0]?.phase || 'match_ready',
             tossResult,
-            squadRevealConfig: {
-              autoReveal: true,
-              delayAfterTossSeconds: 2,
-              playerRevealIntervalMs: 800,
-            },
-            impactPlayers: { teamA: [], teamB: [] },
+            squadRevealConfig: revealConfig,
+            impactPlayers,
             revealedPlayersTeamA: [],
             revealedPlayersTeamB: [],
             lastUpdated: Date.now(),
@@ -666,29 +697,15 @@ function MatchesTab({ matches, teams, soldPlayers, onFeedback, saving, setSaving
           // Save full prematch state so all overlay components have proper data
           await scoringService.savePreMatchState(matchId, fullPreMatchState);
 
-          // Auto-progress through prematch phases with proper timing
-          // Build sequence based on available data (skip toss if not set)
-          const hasToss = Boolean(tossResult);
-          const delays: Array<[number, PreMatchPhase]> = [];
-          let t = 8000; // squad_display duration
-          if (hasToss) {
-            delays.push([t, 'toss_animation']);
-            t += 5000;
-            delays.push([t, 'toss_result']);
-            t += 5000;
-          }
-          delays.push([t, 'squad_reveal_teamA']);
-          t += 10000;
-          delays.push([t, 'squad_reveal_teamB']);
-          t += 10000;
-          delays.push([t, 'match_ready']);
-          for (const [delay, phase] of delays) {
-            setTimeout(async () => {
-              try {
-                await scoringService.updatePreMatchPhase(matchId, phase);
-              } catch { /* ignore if match ended */ }
-            }, delay);
-          }
+          const transitions = sequence.slice(1);
+          const timers = transitions.map((step, index) => setTimeout(async () => {
+            if (!prematchSequenceTimers.has(matchId)) return;
+            try {
+              await scoringService.updatePreMatchPhase(matchId, step.phase);
+            } catch { /* ignore if match ended */ }
+            if (index === transitions.length - 1) prematchSequenceTimers.delete(matchId);
+          }, step.atMs));
+          if (timers.length) prematchSequenceTimers.set(matchId, timers);
         }
       }
       onFeedback(`Match status: ${status}`);
@@ -766,7 +783,7 @@ function MatchesTab({ matches, teams, soldPlayers, onFeedback, saving, setSaving
     const syncMatch = matches.find(match => match.id === syncMatchId);
 
   return (
-    <div className="scoring-admin__section">
+    <div className="scoring-admin__section scoring-admin__section--prematch">
       <div className="scoring-admin__section-header">
         <h2>Matches</h2>
         <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', marginLeft: 'auto' }}>
@@ -2475,6 +2492,54 @@ function AnimationsTab({ config, setConfig, onFeedback }: {
                 </label>
               </div>
 
+              <div className="scoring-admin__field" style={{ gridColumn: '1 / -1' }}>
+                <label>Automatic OBS Action</label>
+                <select
+                  value={anim.actionMode || 'animation'}
+                  onChange={e => updateAnim({ actionMode: e.target.value as AnimationConfig['actionMode'] })}
+                  className="scoring-admin__select"
+                >
+                  <option value="animation">Animation only</option>
+                  <option value="animation_and_obs">Animation, then OBS action</option>
+                  <option value="obs_only">OBS action only</option>
+                </select>
+              </div>
+              {anim.actionMode && anim.actionMode !== 'animation' && (
+                <>
+                  <div className="scoring-admin__field">
+                    <label>OBS Action Button</label>
+                    <select
+                      value={anim.obsActionButtonId || ''}
+                      onChange={e => updateAnim({ obsActionButtonId: e.target.value || undefined })}
+                      className="scoring-admin__select"
+                    >
+                      <option value="">Select an OBS button</option>
+                      {(config.obsReplayConfig?.buttons || []).map(button => (
+                        <option key={button.id} value={button.id}>{button.label}{button.action === 'series' ? ' · Series' : ''}</option>
+                      ))}
+                    </select>
+                    {(config.obsReplayConfig?.buttons || []).length === 0 && (
+                      <span className="scoring-admin__hint">Create buttons or OBS series in OBS WebSocket &amp; Replay Control first.</span>
+                    )}
+                  </div>
+                  <div className="scoring-admin__field">
+                    <label>{anim.actionMode === 'animation_and_obs' ? 'Delay after animation (ms)' : 'Delay before OBS action (ms)'}</label>
+                    <input
+                      type="number"
+                      min={0}
+                      max={60000}
+                      step={50}
+                      value={anim.obsActionDelayMs ?? 0}
+                      onChange={e => updateAnim({ obsActionDelayMs: Math.max(0, Number(e.target.value) || 0) })}
+                      className="scoring-admin__input"
+                    />
+                    {anim.actionMode === 'animation_and_obs' && (
+                      <span className="scoring-admin__hint">The OBS action runs when the animation finishes, plus this delay.</span>
+                    )}
+                  </div>
+                </>
+              )}
+
               {/* Radio: Default vs Custom Upload */}
               <div className="scoring-admin__field" style={{ gridColumn: '1 / -1' }}>
                 <label style={{ fontWeight: 600, marginBottom: '0.4rem', display: 'block' }}>Animation Source</label>
@@ -2681,10 +2746,13 @@ function PreMatchTab({ matches, config, setConfig, onFeedback, soldPlayers }: {
   onFeedback: (msg: string) => void;
   soldPlayers: SoldPlayer[];
 }) {
+  const navigate = useNavigate();
   const [selectedMatchId, setSelectedMatchId] = useState<string>('');
   const [preMatchState, setPreMatchState] = useState<PreMatchState | null>(null);
   const [lineups, setLineups] = useState<{ teamA: MatchLineup | null; teamB: MatchLineup | null }>({ teamA: null, teamB: null });
   const [saving, setSaving] = useState(false);
+  const [showPreview, setShowPreview] = useState(false);
+  const [squadDesign, setSquadDesign] = useState<MatchSquadOverlayDesign>(DEFAULT_MATCH_SQUAD_OVERLAY_DESIGN);
 
   // Toss config state
   const [tossConfig, setTossConfig] = useState<TossConfig>({
@@ -2695,13 +2763,25 @@ function PreMatchTab({ matches, config, setConfig, onFeedback, soldPlayers }: {
   // Squad reveal config
   const [autoReveal, setAutoReveal] = useState(true);
   const [delayAfterToss, setDelayAfterToss] = useState(10);
-  const [playerRevealInterval, setPlayerRevealInterval] = useState(2000);
+  const [playerRevealInterval, setPlayerRevealInterval] = useState(DEFAULT_MATCH_SQUAD_OVERLAY_DESIGN.playerRevealIntervalMs);
 
   // Impact players
   const [impactPlayersA, setImpactPlayersA] = useState<ImpactPlayer[]>([]);
   const [impactPlayersB, setImpactPlayersB] = useState<ImpactPlayer[]>([]);
 
   const selectedMatch = matches.find(m => m.id === selectedMatchId);
+
+  useEffect(() => {
+    const db = realtimeSync.getDatabase();
+    if (!db) return;
+    return onValue(ref(db, tenantPath('scorecardDesigner/cricket/squadOverlayDesign')), snapshot => {
+      const design = normalizeMatchSquadOverlayDesign(snapshot.val());
+      setSquadDesign(design);
+      setDelayAfterToss(design.delayAfterTossMs / 1000);
+      setPlayerRevealInterval(design.playerRevealIntervalMs);
+      setTossConfig(current => ({ ...current, tossDurationSeconds: design.tossAnimationDurationMs / 1000 }));
+    });
+  }, []);
 
   // Load pre-match state and lineups when match is selected
   useEffect(() => {
@@ -2713,8 +2793,6 @@ function PreMatchTab({ matches, config, setConfig, onFeedback, soldPlayers }: {
         setPreMatchState(state);
         if (state.squadRevealConfig) {
           setAutoReveal(state.squadRevealConfig.autoReveal);
-          setDelayAfterToss(state.squadRevealConfig.delayAfterTossSeconds);
-          setPlayerRevealInterval(state.squadRevealConfig.playerRevealIntervalMs);
         }
         if (state.impactPlayers) {
           setImpactPlayersA(state.impactPlayers.teamA || []);
@@ -2749,8 +2827,15 @@ function PreMatchTab({ matches, config, setConfig, onFeedback, soldPlayers }: {
   const handleSaveTossConfig = async () => {
     setSaving(true);
     try {
+      const updatedDesign = normalizeMatchSquadOverlayDesign({
+        ...squadDesign,
+        tossAnimationDurationMs: (tossConfig.tossDurationSeconds || 5) * 1000,
+      });
       await scoringService.saveOverlayConfig({ ...config, tossConfig });
+      const db = realtimeSync.getDatabase();
+      if (db) await fbSet(ref(db, tenantPath('scorecardDesigner/cricket/squadOverlayDesign')), updatedDesign);
       setConfig({ ...config, tossConfig });
+      setSquadDesign(updatedDesign);
       onFeedback('Toss video config saved');
     } catch { onFeedback('Failed to save toss config'); }
     finally { setSaving(false); }
@@ -2786,6 +2871,16 @@ function PreMatchTab({ matches, config, setConfig, onFeedback, soldPlayers }: {
         lastUpdated: Date.now(),
       };
       await scoringService.savePreMatchState(selectedMatchId, state);
+      const db = realtimeSync.getDatabase();
+      if (db) {
+        const updatedDesign = normalizeMatchSquadOverlayDesign({
+          ...squadDesign,
+          delayAfterTossMs: delayAfterToss * 1000,
+          playerRevealIntervalMs: playerRevealInterval,
+        });
+        await fbSet(ref(db, tenantPath('scorecardDesigner/cricket/squadOverlayDesign')), updatedDesign);
+        setSquadDesign(updatedDesign);
+      }
       onFeedback('Pre-match config saved');
     } catch { onFeedback('Failed to save pre-match config'); }
     finally { setSaving(false); }
@@ -2794,6 +2889,7 @@ function PreMatchTab({ matches, config, setConfig, onFeedback, soldPlayers }: {
   const handleTriggerPhase = async (phase: PreMatchState['phase']) => {
     if (!selectedMatchId) { onFeedback('Select a match first'); return; }
     try {
+      cancelPreMatchSequence(selectedMatchId);
       await scoringService.updatePreMatchPhase(selectedMatchId, phase);
       onFeedback(`Phase: ${phase}`);
     } catch { onFeedback('Failed to update phase'); }
@@ -2802,6 +2898,7 @@ function PreMatchTab({ matches, config, setConfig, onFeedback, soldPlayers }: {
   const handleSetTossResult = async (wonBy: string, elected: 'bat' | 'bowl', coinSide: 'heads' | 'tails') => {
     if (!selectedMatchId) return;
     try {
+      cancelPreMatchSequence(selectedMatchId);
       const base: PreMatchState = preMatchState || {
         matchId: selectedMatchId,
         phase: 'idle' as const,
@@ -2842,10 +2939,35 @@ function PreMatchTab({ matches, config, setConfig, onFeedback, soldPlayers }: {
     <div className="scoring-admin__section">
       <div className="scoring-admin__section-header">
         <h2>Pre-Match Setup</h2>
-        <button className="scoring-admin__btn scoring-admin__btn--primary" onClick={handleSavePreMatch} disabled={saving}>
-          <IoSave size={16} /> Save All
-        </button>
+        <div className="scoring-admin__prematch-actions">
+          <button className="scoring-admin__btn scoring-admin__btn--secondary" onClick={() => setShowPreview(true)}>
+            <IoPlay size={16} /> Preview Overlay
+          </button>
+          <button className="scoring-admin__btn scoring-admin__btn--secondary" onClick={() => navigate('/cricket/scorer/designer?mode=squad')}>
+            <IoPencil size={16} /> Edit Design
+          </button>
+          <button className="scoring-admin__btn scoring-admin__btn--primary" onClick={handleSavePreMatch} disabled={saving}>
+            <IoSave size={16} /> Save All
+          </button>
+        </div>
       </div>
+
+      {showPreview && (
+        <PreMatchPreviewModal
+          match={selectedMatch || null}
+          lineups={lineups}
+          state={preMatchState}
+          config={{ ...config, tossConfig }}
+          squadDesign={{ ...squadDesign, tossAnimationDurationMs: (tossConfig.tossDurationSeconds || 5) * 1000, delayAfterTossMs: delayAfterToss * 1000, playerRevealIntervalMs: playerRevealInterval }}
+          autoReveal={autoReveal}
+          delayAfterToss={delayAfterToss}
+          playerRevealInterval={playerRevealInterval}
+          impactPlayersA={impactPlayersA}
+          impactPlayersB={impactPlayersB}
+          onClose={() => setShowPreview(false)}
+          onEdit={() => { setShowPreview(false); navigate('/cricket/scorer/designer?mode=squad'); }}
+        />
+      )}
 
       {/* Match Selector */}
       <div className="scoring-admin__form-card">
@@ -2993,7 +3115,11 @@ function PreMatchTab({ matches, config, setConfig, onFeedback, soldPlayers }: {
           </div>
           <div className="scoring-admin__field">
             <label>Player reveal interval (ms)</label>
-            <input type="number" min={500} max={5000} step={100} value={playerRevealInterval} onChange={e => setPlayerRevealInterval(Number(e.target.value))} className="scoring-admin__input" />
+            <input type="number" min={100} max={2000} step={50} value={playerRevealInterval} onChange={e => setPlayerRevealInterval(Number(e.target.value))} className="scoring-admin__input" />
+          </div>
+          <div className="scoring-admin__field">
+            <label>Hold full lineup after reveal (seconds)</label>
+            <input type="number" min={0} max={60} step={0.5} value={squadDesign.squadRevealHoldDurationMs / 1000} onChange={e => setSquadDesign(current => ({ ...current, squadRevealHoldDurationMs: Math.round(Number(e.target.value) * 1000) }))} className="scoring-admin__input" />
           </div>
         </div>
       </div>
@@ -3678,6 +3804,13 @@ function formatWeightLabel(key: string): string {
 
 const DEFAULT_BUTTON_ICONS = ['▶', '⏸', '⏩', '⏪', '⏭', '⏮', '⏯', '📹', '🔍', '💾', '🎬', '⚡'];
 const DEFAULT_BUTTON_COLORS = ['#22c55e', '#f59e0b', '#3b82f6', '#8b5cf6', '#06b6d4', '#ec4899', '#ef4444', '#f97316', '#64748b'];
+const PLAYER_STATS_SEQUENCE_OPTIONS: Array<{ key: PlayerStatsSequenceItem; label: string }> = [
+  { key: 'player_stats_notes', label: 'Player Stats & Notes' },
+  { key: 'stats_fours', label: 'Match fours' },
+  { key: 'stats_sixes', label: 'Match sixes' },
+  { key: 'stats_sr', label: 'Match strike rate' },
+  { key: 'stats_mvp', label: 'Match MVP' },
+];
 
 interface HotkeyDescriptor {
   raw: string;
@@ -3725,6 +3858,7 @@ function OBSWebSocketTab({ config, setConfig, onFeedback, baseUrl }: {
   const [saving, setSaving] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<'disconnected' | 'connected' | 'connecting' | 'error'>('disconnected');
   const [availableHotkeys, setAvailableHotkeys] = useState<string[]>([]);
+  const [availableScenes, setAvailableScenes] = useState<string[]>([]);
   const [discoveringHotkeys, setDiscoveringHotkeys] = useState(false);
   const [editingButtonIdx, setEditingButtonIdx] = useState<number | null>(null);
   const [sharedProfiles, setSharedProfiles] = useState<SharedOBSProfile[]>([]);
@@ -3765,6 +3899,7 @@ function OBSWebSocketTab({ config, setConfig, onFeedback, baseUrl }: {
   };
 
   const replayConfig: OBSReplayConfig = config.obsReplayConfig ?? { buttons: [] };
+  const statsSequence = normalizePlayerStatsSequenceConfig(config.playerStatsSequence || DEFAULT_PLAYER_STATS_SEQUENCE_CONFIG);
 
   const updateOBS = (updates: Partial<OBSWebSocketConfig>) => {
     setConfig({ ...config, obsWebSocketConfig: { ...obsConfig, ...updates } });
@@ -3772,6 +3907,10 @@ function OBSWebSocketTab({ config, setConfig, onFeedback, baseUrl }: {
 
   const updateReplayConfig = (updates: Partial<OBSReplayConfig>) => {
     setConfig({ ...config, obsReplayConfig: { ...replayConfig, ...updates } });
+  };
+
+  const updateStatsSequence = (updates: Partial<typeof statsSequence>) => {
+    setConfig({ ...config, playerStatsSequence: { ...statsSequence, ...updates } });
   };
 
   const applySharedProfile = async (profile: SharedOBSProfile) => {
@@ -3893,11 +4032,20 @@ function OBSWebSocketTab({ config, setConfig, onFeedback, baseUrl }: {
       const { obsService } = await import('../services/obsService');
       const ok = await obsService.connect(obsConfig.host, obsConfig.port, obsConfig.password);
       setConnectionStatus(ok ? 'connected' : 'error');
+      if (ok) setAvailableScenes(obsService.getScenes());
       onFeedback(ok ? 'Connected to OBS' : 'Failed to connect to OBS');
     } catch {
       setConnectionStatus('error');
       onFeedback('Failed to connect to OBS');
     }
+  };
+
+  const handleRefreshScenes = async () => {
+    if (connectionStatus !== 'connected') { onFeedback('Connect to OBS first'); return; }
+    const { obsService } = await import('../services/obsService');
+    const scenes = await obsService.refreshScenes();
+    setAvailableScenes(scenes);
+    onFeedback(scenes.length ? `Loaded ${scenes.length} OBS scenes` : 'No scenes returned by OBS');
   };
 
   const handleDiscoverHotkeys = async () => {
@@ -4062,6 +4210,52 @@ function OBSWebSocketTab({ config, setConfig, onFeedback, baseUrl }: {
         </div>
       )}
 
+      <div className="scoring-admin__form-card" style={{ marginBottom: '1.25rem' }}>
+        <h3 className="scoring-admin__subsection-title">Player Stats &amp; Notes Rotation</h3>
+        <p className="scoring-admin__hint">Rotate selected player leaderboards and scorer-entered notes over the OBS overlay during live play.</p>
+        <div className="scoring-admin__field scoring-admin__field--checkbox">
+          <label>
+            <input
+              type="checkbox"
+              checked={statsSequence.enabled}
+              onChange={e => updateStatsSequence({ enabled: e.target.checked })}
+            />
+            Show selected stats in sequence automatically
+          </label>
+        </div>
+        <div className="scoring-admin__form-grid">
+          {PLAYER_STATS_SEQUENCE_OPTIONS.map(option => (
+            <div key={option.key} className="scoring-admin__field scoring-admin__field--checkbox">
+              <label>
+                <input
+                  type="checkbox"
+                  checked={statsSequence.items.includes(option.key)}
+                  onChange={e => {
+                    const selected = new Set(statsSequence.items);
+                    if (e.target.checked) selected.add(option.key);
+                    else selected.delete(option.key);
+                    updateStatsSequence({ items: Array.from(selected) });
+                  }}
+                />
+                {option.label}
+              </label>
+            </div>
+          ))}
+          <div className="scoring-admin__field">
+            <label>Display each stat (ms)</label>
+            <input className="scoring-admin__input" type="number" min={1000} max={60000} step={500} value={statsSequence.displayDurationMs} onChange={e => updateStatsSequence({ displayDurationMs: Number(e.target.value) })} />
+          </div>
+          <div className="scoring-admin__field">
+            <label>Gap between stats (ms)</label>
+            <input className="scoring-admin__input" type="number" min={0} max={30000} step={250} value={statsSequence.gapBetweenItemsMs} onChange={e => updateStatsSequence({ gapBetweenItemsMs: Number(e.target.value) })} />
+          </div>
+          <div className="scoring-admin__field">
+            <label>Repeat sequence every (seconds)</label>
+            <input className="scoring-admin__input" type="number" min={10} max={600} step={5} value={statsSequence.repeatIntervalMs / 1000} onChange={e => updateStatsSequence({ repeatIntervalMs: Number(e.target.value) * 1000 })} />
+          </div>
+        </div>
+      </div>
+
       {/* Replay Source Scene Config */}
       <h3 className="scoring-admin__subsection-title">Replay Source Scene Mapping</h3>
       <p className="scoring-admin__hint" style={{ marginBottom: '0.75rem' }}>
@@ -4087,6 +4281,34 @@ function OBSWebSocketTab({ config, setConfig, onFeedback, baseUrl }: {
             onChange={e => updateReplayConfig({ drsSceneName: e.target.value || undefined })}
             placeholder="e.g. DRS Review"
           />
+        </div>
+      </div>
+
+      <h3 className="scoring-admin__subsection-title" style={{ marginTop: '1.5rem' }}>Innings Break Scene</h3>
+      <p className="scoring-admin__hint" style={{ marginBottom: '0.75rem' }}>
+        The OBS dock switches to the Ads scene when the first innings ends, then returns to the selected live scene when the second innings starts. Connect to OBS to load its scene list.
+      </p>
+      <div className="scoring-admin__actions" style={{ marginBottom: '0.75rem' }}>
+        <button className="scoring-admin__btn scoring-admin__btn--secondary" onClick={handleRefreshScenes} disabled={connectionStatus !== 'connected'}>
+          ↻ Refresh OBS Scenes ({availableScenes.length})
+        </button>
+      </div>
+      <div className="scoring-admin__form-grid">
+        <div className="scoring-admin__field">
+          <label>Ads Playing scene</label>
+          <select className="scoring-admin__select" value={replayConfig.inningsBreakSceneName || ''} onChange={e => updateReplayConfig({ inningsBreakSceneName: e.target.value || undefined })}>
+            <option value="">Automatic scene switch off</option>
+            {replayConfig.inningsBreakSceneName && !availableScenes.includes(replayConfig.inningsBreakSceneName) && <option value={replayConfig.inningsBreakSceneName}>{replayConfig.inningsBreakSceneName} · saved</option>}
+            {availableScenes.map(scene => <option key={scene} value={scene}>{scene}</option>)}
+          </select>
+        </div>
+        <div className="scoring-admin__field">
+          <label>Return to scene</label>
+          <select className="scoring-admin__select" value={replayConfig.inningsBreakReturnSceneName || ''} onChange={e => updateReplayConfig({ inningsBreakReturnSceneName: e.target.value || undefined })}>
+            <option value="">Restore scene active before break</option>
+            {replayConfig.inningsBreakReturnSceneName && !availableScenes.includes(replayConfig.inningsBreakReturnSceneName) && <option value={replayConfig.inningsBreakReturnSceneName}>{replayConfig.inningsBreakReturnSceneName} · saved</option>}
+            {availableScenes.filter(scene => scene !== replayConfig.inningsBreakSceneName).map(scene => <option key={scene} value={scene}>{scene}</option>)}
+          </select>
         </div>
       </div>
 

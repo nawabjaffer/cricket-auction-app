@@ -28,6 +28,9 @@ export function withScorerAdminChrome<P extends object>(
     const tenantSlug = getTenantSlugFromPath(location.pathname);
     const baseUrl = window.location.origin + (tenantSlug ? `/${tenantSlug}` : '');
     const { gameType, subtitle } = config;
+    const openQuickTab = (path: string) => {
+      window.open(`${baseUrl}${path}`, '_blank', 'noopener,noreferrer');
+    };
 
     return (
       <>
@@ -45,27 +48,27 @@ export function withScorerAdminChrome<P extends object>(
         </header>
 
         <div className="scorer-chrome__quick-actions">
-          <button className="scorer-chrome__quick-btn" onClick={() => navigate(`/${gameType}/scorer/update`)}>
+          <button className="scorer-chrome__quick-btn" onClick={() => openQuickTab(`/${gameType}/scorer/update`)}>
             <IoPencil size={14} /> Update Scorecard
           </button>
-          <button className="scorer-chrome__quick-btn" onClick={() => window.open(`${baseUrl}/${gameType}/scorer/obs-overlay`, '_blank')}>
+          <button className="scorer-chrome__quick-btn" onClick={() => openQuickTab(`/${gameType}/scorer/obs-overlay`)}>
             <IoDesktop size={14} /> OBS Overlay
           </button>
-          <button className="scorer-chrome__quick-btn" onClick={() => window.open(`${baseUrl}/${gameType}/scorer/camera`, '_blank')}>
+          <button className="scorer-chrome__quick-btn" onClick={() => openQuickTab(`/${gameType}/scorer/camera`)}>
             <IoVideocam size={14} /> Camera Recorder
           </button>
-          <button className="scorer-chrome__quick-btn" onClick={() => window.open(`${baseUrl}/${gameType}/scorer/obs-dock`, '_blank')}>
+          <button className="scorer-chrome__quick-btn" onClick={() => openQuickTab(`/${gameType}/scorer/obs-dock`)}>
             <IoGameController size={14} /> OBS Control Dock
           </button>
-          <button className="scorer-chrome__quick-btn" onClick={() => navigate(`/${gameType}/scorer/designer`)}>
+          <button className="scorer-chrome__quick-btn" onClick={() => openQuickTab(`/${gameType}/scorer/designer`)}>
             <IoColorPalette size={14} /> Scorecard Designer
           </button>
           {SUPPORTED_GAME_TYPES.filter(sport => sport !== gameType).map(sport => (
-            <button key={sport} className="scorer-chrome__quick-btn" onClick={() => navigate(`/${sport}/scorer/admin`)}>
+            <button key={sport} className="scorer-chrome__quick-btn" onClick={() => openQuickTab(`/${sport}/scorer/admin`)}>
               <span>{gameTypeIcon(sport)}</span> {gameTypeLabel(sport)} Scorer
             </button>
           ))}
-          <button className="scorer-chrome__quick-btn" onClick={() => navigate('/admin')}>
+          <button className="scorer-chrome__quick-btn" onClick={() => openQuickTab('/admin')}>
             <IoSettings size={14} /> Auction Admin
           </button>
         </div>

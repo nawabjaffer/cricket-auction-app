@@ -557,6 +557,12 @@ class OBSService {
     return this.config.scenes || [];
   }
 
+  async refreshScenes(): Promise<string[]> {
+    if (!this.isConnected()) return [];
+    await this.loadScenes();
+    return this.getScenes();
+  }
+
   /**
    * Get current scene
    */

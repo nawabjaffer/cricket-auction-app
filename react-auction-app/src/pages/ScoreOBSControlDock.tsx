@@ -6,6 +6,7 @@
 // ============================================================================
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { onValue, ref } from 'firebase/database';
 import { scoringService } from '../services/scoring';
 import { initializeSharedOBSProfileService, sharedOBSProfileService } from '../services/sharedOBSProfileService';
 import { realtimeSync } from '../services/realtimeSync';
@@ -13,9 +14,11 @@ import { tenantPath } from '../services/tenantPath';
 import { obsService } from '../services/obsService';
 import { obsReplaySourceService } from '../services/scoring/obsReplaySourceService';
 import { normalizePlayerName } from '../utils/playerName';
+import { isInningsBreak } from '../utils/inningsBreak';
+import { getAnimationActionDelayMs } from '../utils/animationAction';
 import type {
   MatchSetup, LiveScore, OverlayControlState, OverlayType,
-  OBSReplayButton, OBSReplayConfig,
+  OBSReplayButton, OBSReplayConfig, ScoringOverlayConfig,
 } from '../types/scoring';
 import './ScoreOBSControlDock.css';
 
@@ -34,6 +37,7 @@ const OVERLAY_BUTTONS: { key: OverlayType; label: string; icon: string; shortcut
 ];
 
 const STATS_OVERLAY_BUTTONS: { key: OverlayType; label: string; icon: string; color: string }[] = [
+  { key: 'player_stats_notes', label: 'Player Notes', icon: '📝', color: '#e5bb65' },
   { key: 'stats_fours', label: '4s (Match)', icon: '4️⃣', color: '#eab308' },
   { key: 'tournament_fours', label: '4s (Tourney)', icon: '4️⃣', color: '#ca8a04' },
   { key: 'stats_sixes', label: '6s (Match)', icon: '6️⃣', color: '#f97316' },
@@ -52,6 +56,15 @@ const STATS_OVERLAY_BUTTONS: { key: OverlayType; label: string; icon: string; co
   { key: 'field_placement', label: 'Field', icon: '🟢', color: '#10b981' },
 ];
 
+const EVENT_ANIMATION_CONFIG_KEYS: Partial<Record<OverlayType, keyof Pick<ScoringOverlayConfig,
+  'fourAnimation' | 'sixAnimation' | 'wicketAnimation' | 'duckOutAnimation' | 'hatTrickAnimation'>>> = {
+  boundary_four: 'fourAnimation',
+  boundary_six: 'sixAnimation',
+  wicket: 'wicketAnimation',
+  duck_out: 'duckOutAnimation',
+  hat_trick: 'hatTrickAnimation',
+};
+
 type DockConnectionMode = 'ip' | 'local' | 'relay';
 
 const DOCK_MODE_OPTIONS: { key: DockConnectionMode; label: string; hint: string }[] = [
@@ -64,7 +77,10 @@ export default function ScoreOBSControlDock() {
   const [matches, setMatches] = useState<MatchSetup[]>([]);
   const [selectedMatchId, setSelectedMatchId] = useState('');
   const [liveScore, setLiveScore] = useState<LiveScore | null>(null);
+  const [firstInningsComplete, setFirstInningsComplete] = useState(false);
   const [activeOverlay, setActiveOverlay] = useState<OverlayType>('none');
+  const [autoActionEvent, setAutoActionEvent] = useState<{ matchId: string; control: OverlayControlState } | null>(null);
+  const [animationSettings, setAnimationSettings] = useState<ScoringOverlayConfig | null>(null);
   const [feedback, setFeedback] = useState('');
   const initialized = useRef(false);
 
@@ -111,6 +127,10 @@ export default function ScoreOBSControlDock() {
   const [activeMatchPointer, setActiveMatchPointer] = useState<string | null>(null);
   const singleOverlayModeRef = useRef(false);
   const dockCleanupRef = useRef<Array<() => void>>([]);
+  const breakSceneActiveRef = useRef(false);
+  const preBreakSceneRef = useRef<string | null>(null);
+  const lastAutoActionEventRef = useRef<string | null>(null);
+  const autoActionTimersRef = useRef(new Set<ReturnType<typeof setTimeout>>());
 
   const isLoopbackHost = (value: string): boolean => {
     const host = value.trim().toLowerCase();
@@ -161,6 +181,7 @@ export default function ScoreOBSControlDock() {
             }
           } catch { /* fall back to tenant-local settings */ }
         }
+        setAnimationSettings(cfg || localCfg);
         const singleMode = !!cfg?.singleOverlayMode;
         setSingleOverlayMode(singleMode);
 
@@ -199,6 +220,7 @@ export default function ScoreOBSControlDock() {
         // Keep following Single Overlay Mode + the active match reactively after load
         dockCleanupRef.current.push(scoringService.subscribeOverlayConfig((liveCfg) => {
           setSingleOverlayMode(!!liveCfg.singleOverlayMode);
+          setAnimationSettings(liveCfg);
         }));
         dockCleanupRef.current.push(scoringService.subscribeActiveMatch((id) => {
           setActiveMatchPointer(id);
@@ -232,11 +254,27 @@ export default function ScoreOBSControlDock() {
     return unsub;
   }, [selectedMatchId]);
 
+  useEffect(() => {
+    setFirstInningsComplete(false);
+    if (!selectedMatchId) return;
+    const db = realtimeSync.getDatabase();
+    if (!db) return;
+    return onValue(ref(db, tenantPath(`scoring/matches/${selectedMatchId}/innings/1`)), snapshot => {
+      setFirstInningsComplete(snapshot.exists() && (snapshot.val() as { isCompleted?: boolean }).isCompleted === true);
+    });
+  }, [selectedMatchId]);
+
   // Subscribe to overlay control
   useEffect(() => {
     if (!selectedMatchId) return;
+    let isInitialSnapshot = true;
     const unsub = scoringService.subscribeOverlayControl(selectedMatchId, (control: OverlayControlState) => {
       setActiveOverlay(control.activeOverlay);
+      if (isInitialSnapshot) {
+        isInitialSnapshot = false;
+        return;
+      }
+      setAutoActionEvent({ matchId: selectedMatchId, control });
     });
     return unsub;
   }, [selectedMatchId]);
@@ -263,6 +301,34 @@ export default function ScoreOBSControlDock() {
     setFeedback(msg);
     setTimeout(() => setFeedback(''), 2500);
   }, []);
+
+  useEffect(() => {
+    const adsScene = replayConfig.inningsBreakSceneName;
+    const inBreak = isInningsBreak({
+      firstInningsComplete,
+      currentInnings: liveScore?.currentInnings,
+      secondInningsStarted: liveScore?.currentInnings === 2,
+    });
+    if (obsStatus !== 'connected' || !adsScene) return;
+
+    if (inBreak && !breakSceneActiveRef.current) {
+      const currentScene = obsService.getCurrentScene();
+      if (currentScene && currentScene !== adsScene) preBreakSceneRef.current = currentScene;
+      breakSceneActiveRef.current = true;
+      void obsService.setScene(adsScene).then(ok => {
+        if (!ok) showFeedback(`Could not switch to OBS scene: ${adsScene}`);
+      });
+    } else if (!inBreak && breakSceneActiveRef.current) {
+      const returnScene = replayConfig.inningsBreakReturnSceneName || preBreakSceneRef.current;
+      breakSceneActiveRef.current = false;
+      preBreakSceneRef.current = null;
+      if (returnScene && returnScene !== adsScene) {
+        void obsService.setScene(returnScene).then(ok => {
+          if (!ok) showFeedback(`Could not return to OBS scene: ${returnScene}`);
+        });
+      }
+    }
+  }, [firstInningsComplete, liveScore?.currentInnings, obsStatus, replayConfig.inningsBreakSceneName, replayConfig.inningsBreakReturnSceneName, showFeedback]);
 
   const handleObsConnect = useCallback(async () => {
     if (connectionMode === 'relay') {
@@ -386,6 +452,39 @@ export default function ScoreOBSControlDock() {
       setExecBusy(null);
     }
   }, [execBusy, obsStatus, selectedMatchId, showFeedback]);
+
+  useEffect(() => {
+    if (!selectedMatchId || !autoActionEvent || autoActionEvent.matchId !== selectedMatchId) return;
+    const { control } = autoActionEvent;
+    const eventKey = `${autoActionEvent.matchId}:${control.lastUpdated}:${control.activeOverlay}`;
+    if (lastAutoActionEventRef.current === eventKey) return;
+    if (!animationSettings) return;
+    lastAutoActionEventRef.current = eventKey;
+
+    const configKey = EVENT_ANIMATION_CONFIG_KEYS[control.activeOverlay];
+    const animation = configKey ? animationSettings[configKey] : undefined;
+    if (!animation) return;
+    const delayMs = getAnimationActionDelayMs(animation);
+    if (delayMs === null) return;
+
+    const button = replayConfig.buttons.find(item => item.id === animation.obsActionButtonId && item.enabled);
+    if (!button) return;
+
+    if (delayMs === 0) {
+      void execReplayButton(button);
+      return;
+    }
+    const timer = setTimeout(() => {
+      autoActionTimersRef.current.delete(timer);
+      void execReplayButton(button);
+    }, delayMs);
+    autoActionTimersRef.current.add(timer);
+  }, [animationSettings, autoActionEvent, execReplayButton, replayConfig.buttons, selectedMatchId]);
+
+  useEffect(() => () => {
+    autoActionTimersRef.current.forEach(timer => clearTimeout(timer));
+    autoActionTimersRef.current.clear();
+  }, [selectedMatchId]);
 
   const handleSwitchReplayScene = useCallback(async (scene: string) => {
     if (!scene) return;

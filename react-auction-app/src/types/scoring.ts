@@ -341,6 +341,7 @@ export type OverlayType =
   | 'live_question'
   | 'ads_break'
   // Stats overlays — match scope (current match only, 2 teams)
+  | 'player_stats_notes'
   | 'stats_dots'
   | 'stats_fours'
   | 'stats_sixes'
@@ -382,6 +383,16 @@ export interface OverlayControlState {
   lastUpdated: number;
 }
 
+export type PlayerStatsSequenceItem = 'player_stats_notes' | 'stats_fours' | 'stats_sixes' | 'stats_sr' | 'stats_mvp';
+
+export interface PlayerStatsSequenceConfig {
+  enabled: boolean;
+  items: PlayerStatsSequenceItem[];
+  displayDurationMs: number;
+  gapBetweenItemsMs: number;
+  repeatIntervalMs: number;
+}
+
 // ── Ads ──
 
 export interface ScoringAd {
@@ -397,11 +408,15 @@ export interface ScoringAd {
 // ── Overlay Config (persisted admin settings) ──
 
 export type AnimationType = 'css' | 'lottie' | 'image' | 'video';
+export type AnimationActionMode = 'animation' | 'animation_and_obs' | 'obs_only';
 
 export interface AnimationConfig {
   type: AnimationType;
   enabled: boolean;
   durationMs: number;        // how long the animation shows (ms)
+  actionMode?: AnimationActionMode;
+  obsActionButtonId?: string;
+  obsActionDelayMs?: number;
   mediaUrl?: string;         // URL for image/video/lottie json
   soundUrl?: string;         // optional sound effect URL
   text?: string;             // text overlay (e.g. "FOUR!", "SIX!", "OUT!")
@@ -449,6 +464,7 @@ export interface ScoringOverlayConfig {
   tickerConfig?: TickerConfig;
   // OBS WebSocket config
   obsWebSocketConfig?: OBSWebSocketConfig;
+  playerStatsSequence?: PlayerStatsSequenceConfig;
   // OBS Replay Source button configuration
   obsReplayConfig?: OBSReplayConfig;
   /** Optional platform-scoped OBS settings shared by multiple tenant slugs. */
@@ -846,6 +862,8 @@ export interface OBSReplayButton {
 export interface OBSReplayConfig {
   replaySceneName?: string;  // scene to switch to when showing replay
   drsSceneName?: string;     // scene to switch to for DRS review
+  inningsBreakSceneName?: string;
+  inningsBreakReturnSceneName?: string;
   buttons: OBSReplayButton[];
 }
 

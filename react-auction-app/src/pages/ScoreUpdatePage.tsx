@@ -1451,6 +1451,13 @@ function WicketModal({ battingLineup, bowlingLineup, currentBatsmen, currentBowl
   const availableBatsmen = battingLineup.filter(
     p => !dismissedIds.has(p.playerId) && !currentIds.has(p.playerId),
   );
+  const requiresNewBatsman = availableBatsmen.length > 0;
+  const missingRequiredFields = [
+    !outBatsman && 'Out batsman',
+    needsFielder && !fielderId && 'Fielder',
+    requiresNewBatsman && !availableBatsmen.some(p => p.playerId === newBatsmanId) && 'New batsman',
+  ].filter((field): field is string => Boolean(field));
+  const canConfirm = missingRequiredFields.length === 0;
 
   return (
     <motion.div className="score-update__modal-overlay" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose}>
@@ -1465,7 +1472,7 @@ function WicketModal({ battingLineup, bowlingLineup, currentBatsmen, currentBowl
         </div>
 
         <div className="score-update__modal-field">
-          <label>Out Batsman</label>
+          <label>Out Batsman *</label>
           <select value={outBatsman} onChange={e => setOutBatsman(e.target.value)} className="score-update__select">
             {currentBatsmen.map(b => <option key={b.playerId} value={b.playerId}>{b.playerName}</option>)}
           </select>
@@ -1473,7 +1480,7 @@ function WicketModal({ battingLineup, bowlingLineup, currentBatsmen, currentBowl
 
         {needsFielder && (
           <div className="score-update__modal-field">
-            <label>Fielder</label>
+            <label>Fielder *</label>
             <select value={fielderId} onChange={e => setFielderId(e.target.value)} className="score-update__select">
               <option value="">Select fielder</option>
               {bowlingLineup.map(p => <option key={p.playerId} value={p.playerId}>{p.playerName}</option>)}
@@ -1499,17 +1506,25 @@ function WicketModal({ battingLineup, bowlingLineup, currentBatsmen, currentBowl
         )}
 
         <div className="score-update__modal-field">
-          <label>New Batsman</label>
+          <label>New Batsman{requiresNewBatsman ? ' *' : ''}</label>
           <select value={newBatsmanId} onChange={e => setNewBatsmanId(e.target.value)} className="score-update__select">
             <option value="">Select new batsman</option>
             {availableBatsmen.map(p => <option key={p.playerId} value={p.playerId}>{p.playerName}</option>)}
           </select>
         </div>
 
+        {!canConfirm && (
+          <p className="score-update__validation-message" role="alert">
+            Select {missingRequiredFields.join(' and ')} before confirming the wicket.
+          </p>
+        )}
+
         <div className="score-update__modal-actions">
           <button
             className="score-update__btn score-update__btn--wicket"
+            disabled={!canConfirm}
             onClick={() => {
+              if (!canConfirm) return;
               const isCaughtAndBowled = dismissalType === 'caught_and_bowled';
               onConfirm({
                 dismissalType,

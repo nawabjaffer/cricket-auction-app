@@ -8,7 +8,7 @@
 // ============================================================================
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { onValue, ref } from 'firebase/database';
+import { onValue, ref, set as fbSet } from 'firebase/database';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faPerson, faPeopleGroup, faPersonRunning, faShieldHalved, faCircleUser, faBolt, faDragon, faHandBackFist, faBullseye } from '@fortawesome/free-solid-svg-icons';
 import type { IconDefinition } from '@fortawesome/fontawesome-svg-core';
@@ -26,6 +26,7 @@ import { scorecardLayoutService } from '../services/scorecardLayoutService';
 import { uploadFileToStorage } from '../services/firebaseStorageService';
 import { tenantPath } from '../services/tenantPath';
 import { ScorecardLayoutView } from '../components/ScorecardCanvas';
+import PreMatchPreviewModal from '../components/PreMatchPreviewModal';
 import {
   getWidgetCatalog, createWidgetInstance, createEmptyLayout, makeWidgetId,
   DEFAULT_WIDGET_STYLE, SURFACE_LABELS, SURFACE_HINTS, ANIMATION_PRESETS,
@@ -36,6 +37,12 @@ import type {
   ScorecardAsset, ScorecardWidgetVariant, ScorecardViewportVariant, WidgetGeometry,
 } from '../types/scorecardDesigner';
 import type { ScorecardDataContext } from '../utils/scorecardDataBinding';
+import type { MatchSetup, LiveScore, MatchLineup, MatchStatsSnapshot, TournamentStats, PreMatchState } from '../types/scoring';
+import {
+  DEFAULT_MATCH_SQUAD_OVERLAY_DESIGN,
+  type MatchSquadOverlayDesign,
+} from '../types/matchSquadOverlay';
+import { normalizeMatchSquadOverlayDesign } from '../utils/matchSquadOverlayDesign';
 import type { SupportedGameType } from './scorerPages';
 import type { Team } from '../types';
 import './ScorecardDesignerPage.css';
@@ -222,6 +229,10 @@ export default function ScorecardDesignerPage({ gameType = 'cricket' }: Readonly
   const { currentTheme } = useTheme();
   const sport = gameType;
   const [ready, setReady] = useState(false);
+  const [activeDesigner, setActiveDesigner] = useState<'scorecard' | 'squad'>(() =>
+    new URLSearchParams(window.location.search).get('mode') === 'squad' ? 'squad' : 'scorecard',
+  );
+  const [squadDesign, setSquadDesign] = useState<MatchSquadOverlayDesign>(DEFAULT_MATCH_SQUAD_OVERLAY_DESIGN);
   const [surface, setSurface] = useState<ScorecardSurface>('scoreboard');
   const [layout, setLayoutState] = useState<ScorecardLayout>(() => createEmptyLayout(sport, 'scoreboard'));
   const [layouts, setLayouts] = useState<ScorecardLayout[]>([]);
@@ -241,6 +252,17 @@ export default function ScorecardDesignerPage({ gameType = 'cricket' }: Readonly
     label: '', baseKind: 'text', defaultText: '', defaultImageUrl: '', statBindingKey: '',
   });
   const [previewToken, setPreviewToken] = useState(0);
+  const [previewMode, setPreviewMode] = useState<'sample' | 'live'>('sample');
+  const [livePreviewMatchId, setLivePreviewMatchId] = useState<string | null>(null);
+  const [livePreviewData, setLivePreviewData] = useState<{
+    matchId: string | null;
+    match: MatchSetup | null;
+    live: LiveScore | null;
+    lineups: Record<string, MatchLineup>;
+    matchStats: MatchStatsSnapshot | null;
+    tournamentStats: TournamentStats | null;
+    preMatch: PreMatchState | null;
+  }>({ matchId: null, match: null, live: null, lineups: {}, matchStats: null, tournamentStats: null, preMatch: null });
   const [designViewportId, setDesignViewportId] = useState<(typeof DESIGN_VIEWPORTS)[number]['id']>('desktop-hd');
 
   const canvasRef = useRef<HTMLDivElement>(null);
@@ -367,6 +389,58 @@ export default function ScorecardDesignerPage({ gameType = 'cricket' }: Readonly
     return () => unsubs.forEach(u => u());
   }, [ready, sport, surface]);
 
+  useEffect(() => {
+    if (!ready || sport !== 'cricket') return;
+    const db = realtimeSync.getDatabase();
+    if (!db) return;
+    return onValue(ref(db, tenantPath('scoring/activeMatch/matchId')), snapshot => {
+      setLivePreviewMatchId(snapshot.exists() ? snapshot.val() as string : null);
+    });
+  }, [ready, sport]);
+
+  useEffect(() => {
+    if (!ready || sport !== 'cricket' || !livePreviewMatchId) {
+      setLivePreviewData({ matchId: null, match: null, live: null, lineups: {}, matchStats: null, tournamentStats: null, preMatch: null });
+      return;
+    }
+    const db = realtimeSync.getDatabase();
+    if (!db) return;
+    const matchPath = tenantPath(`scoring/matches/${livePreviewMatchId}`);
+    const unsubs = [
+      onValue(ref(db, `${matchPath}/setup`), snapshot => {
+        setLivePreviewData(current => ({ ...current, matchId: livePreviewMatchId, match: snapshot.exists() ? snapshot.val() as MatchSetup : null }));
+      }),
+      onValue(ref(db, `${matchPath}/live`), snapshot => {
+        setLivePreviewData(current => ({ ...current, live: snapshot.exists() ? snapshot.val() as LiveScore : null }));
+      }),
+      onValue(ref(db, `${matchPath}/lineups`), snapshot => {
+        setLivePreviewData(current => ({ ...current, lineups: snapshot.exists() ? snapshot.val() as Record<string, MatchLineup> : {} }));
+      }),
+      onValue(ref(db, `${matchPath}/preMatch`), snapshot => {
+        setLivePreviewData(current => ({ ...current, preMatch: snapshot.exists() ? snapshot.val() as PreMatchState : null }));
+      }),
+      onValue(ref(db, `${matchPath}/stats`), snapshot => {
+        setLivePreviewData(current => ({ ...current, matchStats: snapshot.exists() ? snapshot.val() as MatchStatsSnapshot : null }));
+      }),
+      onValue(ref(db, tenantPath(`scoring/matchStats/${livePreviewMatchId}`)), snapshot => {
+        if (snapshot.exists()) setLivePreviewData(current => ({ ...current, matchStats: snapshot.val() as MatchStatsSnapshot }));
+      }),
+      onValue(ref(db, tenantPath('scoring/tournamentStats')), snapshot => {
+        setLivePreviewData(current => ({ ...current, tournamentStats: snapshot.exists() ? snapshot.val() as TournamentStats : null }));
+      }),
+    ];
+    return () => unsubs.forEach(unsubscribe => unsubscribe());
+  }, [livePreviewMatchId, ready, sport]);
+
+  useEffect(() => {
+    if (!ready || sport !== 'cricket') return;
+    const db = realtimeSync.getDatabase();
+    if (!db) return;
+    return onValue(ref(db, tenantPath('scorecardDesigner/cricket/squadOverlayDesign')), snapshot => {
+      setSquadDesign(normalizeMatchSquadOverlayDesign(snapshot.val()));
+    });
+  }, [ready, sport]);
+
   const mockCtx = useMemo(() => mockContextFor(sport), [sport]);
   const previewBranding = useMemo(() => ({
     tournamentLogo: tenantTournamentLogo || branding.tournamentLogo || currentTheme.seasonLogo,
@@ -377,7 +451,25 @@ export default function ScorecardDesignerPage({ gameType = 'cricket' }: Readonly
     allOutFlagUrl: branding.allOutFlagUrl,
     bonusPointFlagUrl: branding.bonusPointFlagUrl,
   }), [branding, currentTheme.seasonLogo, tenantTournamentLogo]);
-  const previewCtx = useMemo(() => ({ ...mockCtx, branding: { ...mockCtx.branding, ...previewBranding } }), [mockCtx, previewBranding]);
+  const currentLivePreviewData = livePreviewData.matchId === livePreviewMatchId ? livePreviewData : null;
+  const previewCtx = useMemo<ScorecardDataContext>(() => {
+    if (previewMode !== 'live' || sport !== 'cricket') {
+      return { ...mockCtx, branding: { ...mockCtx.branding, ...previewBranding } };
+    }
+    const match = currentLivePreviewData?.match ?? null;
+    return {
+      sport: 'cricket',
+      match,
+      live: currentLivePreviewData?.live ?? null,
+      lineups: {
+        teamA: match ? currentLivePreviewData?.lineups[match.teamA.id] ?? null : null,
+        teamB: match ? currentLivePreviewData?.lineups[match.teamB.id] ?? null : null,
+      },
+      matchStats: currentLivePreviewData?.matchStats ?? null,
+      tournamentStats: currentLivePreviewData?.tournamentStats ?? null,
+      branding: { ...mockCtx.branding, ...previewBranding },
+    };
+  }, [currentLivePreviewData, mockCtx, previewBranding, previewMode, sport]);
   const catalog = getWidgetCatalog(sport, surface);
   const selectedWidget = layout.widgets.find(w => w.id === selectedId) ?? null;
   const designViewport = DESIGN_VIEWPORTS.find(viewport => viewport.id === designViewportId) ?? DESIGN_VIEWPORTS[0];
@@ -716,6 +808,17 @@ export default function ScorecardDesignerPage({ gameType = 'cricket' }: Readonly
     } catch { flash('Failed to save layout'); }
   };
 
+  const handleSaveSquadDesign = async () => {
+    try {
+      const db = realtimeSync.getDatabase();
+      if (!db) throw new Error('no db');
+      const normalized = normalizeMatchSquadOverlayDesign(squadDesign);
+      await fbSet(ref(db, tenantPath('scorecardDesigner/cricket/squadOverlayDesign')), normalized);
+      setSquadDesign(normalized);
+      flash('Match squad design saved');
+    } catch { flash('Failed to save match squad design'); }
+  };
+
   const handleSetActive = async () => {
     try {
       const persistLayout = selectedWidget
@@ -831,6 +934,7 @@ export default function ScorecardDesignerPage({ gameType = 'cricket' }: Readonly
     <div className="scd">
       <header className="scd__bar">
         <button className="scd__icon-btn" onClick={() => navigate(`/${sport}/scorer/admin`)} title="Back to Admin"><IoArrowBack size={18} /></button>
+        {activeDesigner === 'scorecard' ? <>
         <input
           className="scd__name-input"
           value={layout.name}
@@ -868,23 +972,38 @@ export default function ScorecardDesignerPage({ gameType = 'cricket' }: Readonly
           {isActive && <button className="scd__btn scd__btn--danger" onClick={handleClearActive}>Clear Active</button>}
           <button className="scd__btn scd__btn--danger" onClick={() => handleDelete(layout.id)}><IoTrash size={15} /></button>
         </div>
+        </> : <>
+          <strong className="scd__squad-title">Match Squad Overlay</strong>
+          <div className="scd__bar-actions">
+            <button className="scd__btn" onClick={() => setSquadDesign(DEFAULT_MATCH_SQUAD_OVERLAY_DESIGN)}>Reset</button>
+            <button className="scd__btn scd__btn--primary" onClick={() => void handleSaveSquadDesign()}><IoSave size={15} /> Save design</button>
+          </div>
+        </>}
       </header>
 
       <nav className="scd__surface-tabs">
         {(Object.keys(SURFACE_LABELS) as ScorecardSurface[]).map(s => (
           <button
             key={s}
-            className={`scd__surface-tab ${surface === s ? 'is-active' : ''}`}
-            onClick={() => setSurface(s)}
+            className={`scd__surface-tab ${activeDesigner === 'scorecard' && surface === s ? 'is-active' : ''}`}
+            onClick={() => { setActiveDesigner('scorecard'); setSurface(s); }}
           >
             {SURFACE_LABELS[s]}
           </button>
         ))}
+        {sport === 'cricket' && (
+          <button
+            className={`scd__surface-tab ${activeDesigner === 'squad' ? 'is-active' : ''}`}
+            onClick={() => setActiveDesigner('squad')}
+          >
+            Match Squad
+          </button>
+        )}
       </nav>
 
       {toast && <div className="scd__toast">{toast}</div>}
 
-      <div className="scd__body">
+      <div className={`scd__body ${activeDesigner === 'squad' ? 'is-hidden' : ''}`}>
         {/* ── Widget palette ── */}
         <aside className="scd__palette">
           <h3>Widgets for {sport}</h3>
@@ -961,12 +1080,26 @@ export default function ScorecardDesignerPage({ gameType = 'cricket' }: Readonly
 
         {/* ── Canvas ── */}
         <main className="scd__stage">
-          <p className="scd__guideline-text">
-            {SURFACE_HINTS[surface]}{' '}
-            Preview shows sample data; live values populate automatically once this template is set Active.
-          </p>
+          <p className="scd__guideline-text">{SURFACE_HINTS[surface]}</p>
           <div className="scd__viewport-toolbar">
             <span>Preview screen</span>
+            {sport === 'cricket' && (
+              <div className="scd__preview-mode" role="group" aria-label="Preview data source">
+                <button type="button" className={previewMode === 'sample' ? 'is-active' : ''} aria-pressed={previewMode === 'sample'} onClick={() => setPreviewMode('sample')}>
+                  <IoEyeOutline size={13} /> Sample
+                </button>
+                <button type="button" className={previewMode === 'live' ? 'is-active' : ''} aria-pressed={previewMode === 'live'} onClick={() => setPreviewMode('live')}>
+                  <span className="scd__preview-live-dot" /> Live match
+                </button>
+              </div>
+            )}
+            {sport === 'cricket' && previewMode === 'live' && (
+              <span className="scd__preview-live-status" aria-live="polite">
+                {currentLivePreviewData?.match
+                  ? `${currentLivePreviewData.match.teamA.name} vs ${currentLivePreviewData.match.teamB.name}`
+                  : 'No active match'}
+              </span>
+            )}
             <select value={designViewportId} onChange={e => switchDesignViewport(e.target.value as typeof designViewportId)}>
               {DESIGN_VIEWPORTS.map(viewport => <option key={viewport.id} value={viewport.id}>{viewport.label} ({viewport.width}×{viewport.height})</option>)}
             </select>
@@ -1085,6 +1218,21 @@ export default function ScorecardDesignerPage({ gameType = 'cricket' }: Readonly
         </aside>
       </div>
 
+      {activeDesigner === 'squad' && (
+        <MatchSquadDesigner
+          design={squadDesign}
+          onChange={patch => setSquadDesign(current => ({ ...current, ...patch }))}
+          previewMode={previewMode}
+          onPreviewModeChange={setPreviewMode}
+          liveMatch={currentLivePreviewData?.match ?? null}
+          liveLineups={{
+            teamA: currentLivePreviewData?.match ? currentLivePreviewData.lineups[currentLivePreviewData.match.teamA.id] ?? null : null,
+            teamB: currentLivePreviewData?.match ? currentLivePreviewData.lineups[currentLivePreviewData.match.teamB.id] ?? null : null,
+          }}
+          livePreMatch={currentLivePreviewData?.preMatch ?? null}
+        />
+      )}
+
       {showCustomModal && (
         <div className="scd__modal" onClick={e => { if (e.target === e.currentTarget) setShowCustomModal(false); }}>
           <div className="scd__modal-card">
@@ -1137,6 +1285,125 @@ export default function ScorecardDesignerPage({ gameType = 'cricket' }: Readonly
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function MatchSquadDesigner({ design, onChange, previewMode, onPreviewModeChange, liveMatch, liveLineups, livePreMatch }: Readonly<{
+  design: MatchSquadOverlayDesign;
+  onChange: (patch: Partial<MatchSquadOverlayDesign>) => void;
+  previewMode: 'sample' | 'live';
+  onPreviewModeChange: (mode: 'sample' | 'live') => void;
+  liveMatch: MatchSetup | null;
+  liveLineups: { teamA: MatchLineup | null; teamB: MatchLineup | null };
+  livePreMatch: PreMatchState | null;
+}>) {
+  const phaseSettings: Array<{ label: string; key: keyof Pick<MatchSquadOverlayDesign, 'showSquadDisplay' | 'showTossAnimation' | 'showTossResult' | 'showSquadReveal' | 'showImpactPlayers' | 'showMatchReady'> }> = [
+    { label: 'Squad display', key: 'showSquadDisplay' },
+    { label: 'Toss animation', key: 'showTossAnimation' },
+    { label: 'Toss result', key: 'showTossResult' },
+    { label: 'Team A/B squad reveals', key: 'showSquadReveal' },
+    { label: 'Impact players', key: 'showImpactPlayers' },
+    { label: 'Match ready screen', key: 'showMatchReady' },
+  ];
+  const durationSettings: Array<{ label: string; key: keyof Pick<MatchSquadOverlayDesign, 'squadDisplayDurationMs' | 'tossAnimationDurationMs' | 'tossResultDurationMs' | 'squadRevealDurationMs' | 'squadRevealHoldDurationMs' | 'impactPlayersDurationMs' | 'matchReadyDurationMs' | 'delayAfterTossMs'> }> = [
+    { label: 'Squad display', key: 'squadDisplayDurationMs' },
+    { label: 'Toss animation', key: 'tossAnimationDurationMs' },
+    { label: 'Toss result', key: 'tossResultDurationMs' },
+    { label: 'Each team reveal', key: 'squadRevealDurationMs' },
+    { label: 'Hold full lineup after reveal', key: 'squadRevealHoldDurationMs' },
+    { label: 'Impact players', key: 'impactPlayersDurationMs' },
+    { label: 'Match ready animation', key: 'matchReadyDurationMs' },
+    { label: 'Delay after toss', key: 'delayAfterTossMs' },
+  ];
+
+  return (
+    <div className="scd__squad-editor">
+      <aside className="scd__squad-controls">
+        <div>
+          <h2>Match Squad</h2>
+          <p className="scd__hint">The preview uses the same overlay component and 1920 × 1080 layout as OBS.</p>
+        </div>
+        <div className="scd__squad-control-grid">
+          <label className="scd__field"><span>Panel color</span><input type="color" value={design.panelColor} onChange={e => onChange({ panelColor: e.target.value })} /></label>
+          <label className="scd__field"><span>Card color</span><input type="color" value={design.cardColor} onChange={e => onChange({ cardColor: e.target.value })} /></label>
+          <label className="scd__field"><span>Accent color</span><input type="color" value={design.accentColor} onChange={e => onChange({ accentColor: e.target.value })} /></label>
+          <label className="scd__field"><span>Text color</span><input type="color" value={design.textColor} onChange={e => onChange({ textColor: e.target.value })} /></label>
+          <label className="scd__field"><span>Muted text</span><input type="color" value={design.mutedTextColor} onChange={e => onChange({ mutedTextColor: e.target.value })} /></label>
+        </div>
+        <label className="scd__checkbox-field"><input type="checkbox" checked={design.useTeamColors} onChange={e => onChange({ useTeamColors: e.target.checked })} /> Use each team’s accent color</label>
+        <label className="scd__field">
+          <span>Panel opacity · {design.panelOpacity}%</span>
+          <input type="range" min="30" max="100" value={design.panelOpacity} onChange={e => onChange({ panelOpacity: Number(e.target.value) })} />
+        </label>
+        <label className="scd__field">
+          <span>Portrait height · {design.portraitHeight}px</span>
+          <input type="range" min="120" max="300" step="10" value={design.portraitHeight} onChange={e => onChange({ portraitHeight: Number(e.target.value) })} />
+        </label>
+        <label className="scd__field">
+          <span>Thumbnail size · {design.thumbnailSize}px</span>
+          <input type="range" min="32" max="80" step="2" value={design.thumbnailSize} onChange={e => onChange({ thumbnailSize: Number(e.target.value) })} />
+        </label>
+        <label className="scd__field">
+          <span>Card radius · {design.cardRadius}px</span>
+          <input type="range" min="0" max="28" value={design.cardRadius} onChange={e => onChange({ cardRadius: Number(e.target.value) })} />
+        </label>
+        <label className="scd__field">
+          <span>Player spacing · {design.rowGap}px</span>
+          <input type="range" min="2" max="20" value={design.rowGap} onChange={e => onChange({ rowGap: Number(e.target.value) })} />
+        </label>
+        <label className="scd__field">
+          <span>Player reveal interval · {design.playerRevealIntervalMs}ms</span>
+          <input type="range" min="100" max="2000" step="50" value={design.playerRevealIntervalMs} onChange={e => onChange({ playerRevealIntervalMs: Number(e.target.value) })} />
+        </label>
+        <label className="scd__field">
+          <span>Image fit</span>
+          <select value={design.imageFit} onChange={e => onChange({ imageFit: e.target.value as MatchSquadOverlayDesign['imageFit'] })}>
+            <option value="contain">Contain · preserve cutout</option>
+            <option value="cover">Cover · fill frame</option>
+          </select>
+        </label>
+        <section className="scd__squad-settings">
+          <h3>Sequence phases</h3>
+          {phaseSettings.map(({ label, key }) => (
+            <label className="scd__checkbox-field" key={key}>
+              <input type="checkbox" checked={design[key]} onChange={e => onChange({ [key]: e.target.checked })} /> {label}
+            </label>
+          ))}
+        </section>
+        <section className="scd__squad-settings">
+          <h3>Phase duration · seconds</h3>
+          {durationSettings.map(({ label, key }) => (
+            <label className="scd__field" key={key}>
+              <span>{label}</span>
+              <input type="number" min={key === 'delayAfterTossMs' || key === 'squadRevealHoldDurationMs' ? 0 : 0.5} max={key === 'delayAfterTossMs' || key === 'squadRevealHoldDurationMs' ? 60 : 120} step="0.5" value={design[key] / 1000} onChange={e => onChange({ [key]: Math.round(Number(e.target.value) * 1000) })} />
+            </label>
+          ))}
+        </section>
+      </aside>
+      <main className="scd__squad-preview-area">
+        <div className="scd__squad-preview-toolbar">
+          <span>{previewMode === 'live' && liveMatch ? `${liveMatch.teamA.name} vs ${liveMatch.teamB.name}` : previewMode === 'live' ? 'No active match' : 'Sample match'}</span>
+          <div className="scd__squad-preview-tabs" role="group" aria-label="Match squad preview data">
+            <button type="button" className={previewMode === 'sample' ? 'is-active' : ''} aria-pressed={previewMode === 'sample'} onClick={() => onPreviewModeChange('sample')}>Sample</button>
+            <button type="button" className={previewMode === 'live' ? 'is-active' : ''} aria-pressed={previewMode === 'live'} onClick={() => onPreviewModeChange('live')}>Live match</button>
+          </div>
+        </div>
+        <PreMatchPreviewModal
+          inline
+          showEditButton={false}
+          match={previewMode === 'live' ? liveMatch : null}
+          lineups={previewMode === 'live' ? liveLineups : { teamA: null, teamB: null }}
+          state={previewMode === 'live' ? livePreMatch : null}
+          impactPlayersA={previewMode === 'live' ? livePreMatch?.impactPlayers?.teamA ?? [] : undefined}
+          impactPlayersB={previewMode === 'live' ? livePreMatch?.impactPlayers?.teamB ?? [] : undefined}
+          onClose={() => {}}
+          onEdit={() => {}}
+          squadDesign={design}
+          playerRevealInterval={design.playerRevealIntervalMs}
+          delayAfterToss={design.delayAfterTossMs / 1000}
+        />
+      </main>
     </div>
   );
 }

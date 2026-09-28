@@ -273,6 +273,13 @@
   color: #34d399;
 }
 
+.scoring-admin__prematch-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+
+@media (max-width: 640px) {
+  .scoring-admin__section--prematch .scoring-admin__section-header { align-items: flex-start; flex-direction: column; gap: 10px; }
+  .scoring-admin__prematch-actions { justify-content: flex-start; }
+}
+
 .scoring-admin__btn--warning {
   background: rgba(245, 158, 11, 0.15);
   border-color: rgba(245, 158, 11, 0.3);

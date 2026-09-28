@@ -743,6 +743,91 @@ body.obs-overlay-host #root {
   font-weight: 900;
   letter-spacing: 0.12em;
   text-transform: uppercase;
+
+.score-obs__player-notes {
+  position: absolute;
+  z-index: 24;
+  right: 56px;
+  bottom: 120px;
+  width: 620px;
+  overflow: hidden;
+  border: 1px solid rgba(174, 209, 227, 0.24);
+  border-top: 2px solid #e5bb65;
+  border-radius: 18px;
+  background: linear-gradient(145deg, rgba(7, 18, 31, 0.97), rgba(12, 32, 48, 0.94));
+  box-shadow: 0 28px 85px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(18px);
+}
+
+.score-obs__player-notes-header {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 18px 22px 14px;
+  border-bottom: 1px solid rgba(174, 209, 227, 0.14);
+}
+
+.score-obs__player-notes-kicker {
+  color: #e5bb65;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+}
+
+.score-obs__player-notes-header strong {
+  color: #f2f7fb;
+  font-size: 18px;
+}
+
+.score-obs__player-notes-list { padding: 6px 18px 12px; }
+.score-obs__player-note { display: flex; align-items: center; gap: 12px; min-height: 62px; border-bottom: 1px solid rgba(255,255,255,0.07); }
+.score-obs__player-note:last-child { border-bottom: 0; }
+.score-obs__player-note-avatar { width: 42px; height: 42px; flex: 0 0 42px; overflow: hidden; display: grid; place-items: center; border: 1px solid rgba(229,187,101,0.45); border-radius: 50%; background: rgba(255,255,255,0.08); color: #e5bb65; font-size: 16px; font-weight: 800; }
+.score-obs__player-note-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.score-obs__player-note-copy { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.score-obs__player-note-copy strong { overflow: hidden; color: #f2f7fb; font-size: 14px; text-overflow: ellipsis; white-space: nowrap; }
+.score-obs__player-note-copy span { color: #92a9b8; font-size: 11px; text-transform: uppercase; }
+.score-obs__player-note > b { max-width: 190px; color: #e5bb65; font-size: 18px; text-align: right; overflow-wrap: anywhere; }
+.score-obs__player-notes-empty { padding: 8px 22px 20px; color: #a9bac5; font-size: 14px; }
+
+.score-obs__innings-break {
+  position: absolute;
+  z-index: 80;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 64px;
+  background: radial-gradient(ellipse at 18% 18%, rgba(38, 111, 132, 0.25), transparent 45%), radial-gradient(ellipse at 86% 88%, rgba(169, 120, 49, 0.19), transparent 42%), rgba(3, 10, 19, 0.97);
+}
+
+.score-obs__innings-break-panel { width: min(1500px, 100%); overflow: hidden; border: 1px solid rgba(213, 227, 234, 0.2); border-top: 2px solid #e5bb65; border-radius: 22px; background: linear-gradient(125deg, rgba(8, 21, 34, 0.98), rgba(15, 34, 47, 0.96)); box-shadow: 0 32px 100px rgba(0,0,0,0.48), inset 0 1px rgba(255,255,255,0.08); }
+.score-obs__innings-break-header { display: flex; align-items: center; justify-content: space-between; padding: 24px 34px; border-bottom: 1px solid rgba(213,227,234,0.12); }
+.score-obs__innings-break-header > div { display: flex; align-items: center; gap: 14px; color: #d7e4eb; font-size: 16px; font-weight: 700; text-transform: uppercase; }
+.score-obs__innings-break-header img { width: 46px; height: 46px; object-fit: contain; }
+.score-obs__innings-break-live { padding: 9px 15px; border: 1px solid rgba(229,187,101,0.4); border-radius: 999px; background: rgba(229,187,101,0.1); color: #e5bb65; font-size: 12px; font-weight: 900; letter-spacing: 0.12em; }
+.score-obs__innings-break-main { display: grid; grid-template-columns: 1fr 1.1fr; gap: 34px; padding: 38px 44px; }
+.score-obs__innings-break-score { min-height: 400px; display: flex; flex-direction: column; justify-content: center; padding: 30px 34px; border-left: 3px solid var(--break-team-color, #38bdf8); border-radius: 4px 16px 16px 4px; background: linear-gradient(120deg, color-mix(in srgb, var(--break-team-color, #38bdf8) 15%, transparent), rgba(3,11,21,0.5) 72%); }
+.score-obs__innings-break-eyebrow { color: #9eb4c0; font-size: 12px; font-weight: 800; letter-spacing: 0.16em; }
+.score-obs__innings-break-team { display: flex; align-items: center; gap: 16px; margin-top: 20px; }
+.score-obs__innings-break-team img { width: 64px; height: 64px; object-fit: contain; }
+.score-obs__innings-break-team strong { color: #f0f6f8; font-size: 28px; }
+.score-obs__innings-break-total { margin-top: 18px; color: #f0f6f8; font-size: 86px; font-weight: 900; line-height: 1; }
+.score-obs__innings-break-total small { color: #9eb4c0; font-size: 38px; }
+.score-obs__innings-break-overs { margin-top: 10px; color: #a8bbc5; font-size: 13px; font-weight: 700; letter-spacing: 0.08em; }
+.score-obs__innings-break-target { display: flex; align-items: center; justify-content: space-between; max-width: 430px; margin-top: 26px; padding-top: 18px; border-top: 1px solid rgba(255,255,255,0.12); color: #e5bb65; font-size: 13px; font-weight: 800; letter-spacing: 0.07em; }
+.score-obs__innings-break-target b { color: #fff; font-size: 32px; }
+.score-obs__innings-break-feature { min-width: 0; min-height: 400px; display: grid; place-items: center; overflow: hidden; border: 1px solid rgba(255,255,255,0.12); border-radius: 16px; background: linear-gradient(145deg, rgba(255,255,255,0.06), rgba(2,9,18,0.45)); }
+.score-obs__innings-break-ad { width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding: 20px; }
+.score-obs__innings-break-ad img { max-width: 100%; max-height: 320px; object-fit: contain; }
+.score-obs__innings-break-ad span { color: #e6eef2; font-size: 14px; font-weight: 700; }
+.score-obs__innings-break-sponsor { display: flex; flex-direction: column; align-items: center; gap: 24px; color: #9eb4c0; font-size: 12px; font-weight: 800; letter-spacing: 0.14em; }
+.score-obs__innings-break-sponsor img { max-width: 420px; max-height: 220px; object-fit: contain; }
+.score-obs__innings-break-teaser { display: flex; flex-direction: column; align-items: center; gap: 14px; color: #d4e0e6; }
+.score-obs__innings-break-teaser span { color: #e5bb65; font-size: 12px; font-weight: 800; letter-spacing: 0.18em; }
+.score-obs__innings-break-teaser strong { font-size: 32px; }
+.score-obs__innings-break-teaser small { color: #9eb4c0; font-size: 14px; }
+.score-obs__innings-break-footer { display: flex; align-items: center; justify-content: space-between; padding: 18px 34px; border-top: 1px solid rgba(213,227,234,0.12); color: #9eb4c0; font-size: 12px; }
+.score-obs__innings-break-footer b { color: #7de0c7; font-size: 11px; letter-spacing: 0.1em; }
 }
 
 .score-obs__lb-col-headers {
@@ -2423,7 +2508,7 @@ body.obs-overlay-host #root {
   position: absolute;
   left: 8%;
   top: 10%;
-  transform: translateX(-50%);
+  transform: none;
 }
 
 .score-obs__squad-header {
@@ -2453,7 +2538,6 @@ body.obs-overlay-host #root {
   order: 1;
   display: flex;
   flex-direction: column;
-  align-items: center;
   gap: 6px;
 }
 
@@ -2467,13 +2551,6 @@ body.obs-overlay-host #root {
   text-shadow: 0 2px 12px rgba(0, 0, 0, 0.4);
 }
 
-.score-obs__squad-tournament-badge {
-  padding: 3px 14px;
-  border-radius: 20px;
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-}
-
 .score-obs__squad-tournament-badge span {
   font-size: 11px;
   font-weight: 600;
@@ -2484,6 +2561,8 @@ body.obs-overlay-host #root {
 
 .score-obs__squad-grid-container {
   flex: 1;
+  width: 100%;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -2628,6 +2707,22 @@ body.obs-overlay-host #root {
   object-fit: contain;
 }
 
+.score-obs__squad-reveal {
+  background: var(--squad-panel-color, rgba(8, 8, 47, 0.88));
+  border-radius: var(--squad-card-radius, 24px);
+}
+.score-obs__squad-team-name { color: var(--squad-text-color, #fff); }
+.score-obs__squad-grid { gap: var(--squad-row-gap, 14px); }
+.score-obs__squad-card {
+  background: var(--squad-card-color, rgba(255, 255, 255, 0.03));
+  border-radius: var(--squad-card-radius, 14px);
+}
+.score-obs__squad-card-img { height: var(--squad-portrait-height, auto); aspect-ratio: auto; }
+.score-obs__squad-card-img img { object-fit: var(--squad-image-fit, cover); }
+.score-obs__squad-card-name, .score-obs__squad-card-role { background: var(--squad-card-color, #142033); }
+.score-obs__squad-card-name span { color: var(--squad-text-color, #fff); }
+.score-obs__squad-card-role span { color: var(--squad-accent-color, #a3e635); }
+
 .score-obs__squad-footer-text {
   font-size: 12px;
   font-weight: 600;
@@ -2636,74 +2731,57 @@ body.obs-overlay-host #root {
   letter-spacing: 0.08em;
 }
 
-/* Squad body layout (grid + impact panel) */
+/* Squad body layout */
 .score-obs__squad-body {
   flex: 1;
   display: flex;
-  gap: 20px;
   padding: 0;
 }
 
-/* Impact Subs Panel — Right side column */
-.score-obs__impact-subs-panel {
-  width: 200px;
-  flex-shrink: 0;
-  display: flex;
-  flex-direction: column;
-  background: linear-gradient(180deg, rgba(139, 92, 246, 0.08), rgba(88, 28, 135, 0.12));
-  border-left: 2px solid rgba(139, 92, 246, 0.3);
-  padding: 16px 12px;
-}
-
+/* Impact Subs divider and card row inside the bottom XI grid */
 .score-obs__impact-subs-header {
-  text-align: center;
-  padding: 8px 0 12px;
-  border-bottom: 1px solid rgba(139, 92, 246, 0.25);
-  margin-bottom: 12px;
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: min(100%, 520px);
+  gap: 14px;
 }
 
 .score-obs__impact-subs-header span {
   font-size: 12px;
   font-weight: 800;
-  color: #a78bfa;
+  color: var(--squad-accent-color, #a78bfa);
   text-transform: uppercase;
-  letter-spacing: 1.5px;
+  letter-spacing: 0.12em;
+  white-space: nowrap;
+}
+
+.score-obs__impact-subs-header::before,
+.score-obs__impact-subs-header::after {
+  content: '';
+  height: 1px;
+  flex: 1;
+  background: linear-gradient(90deg, transparent, var(--squad-accent-color, #a78bfa));
+  opacity: 0.55;
+}
+
+.score-obs__impact-subs-header::after {
+  transform: scaleX(-1);
 }
 
 .score-obs__impact-subs-list {
+  grid-column: 1 / -1;
   display: flex;
-  flex-direction: column;
-  gap: 8px;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: var(--squad-row-gap, 14px);
+  width: 100%;
+  margin-bottom: 4px;
 }
 
 .score-obs__impact-sub-item {
-  display: flex;
-  flex-direction: column;
-  padding: 8px 10px;
-  background: rgba(139, 92, 246, 0.1);
-  border: 1px solid rgba(139, 92, 246, 0.2);
-  border-radius: 8px;
-  transition: background 0.2s;
-}
-
-.score-obs__impact-sub-item:hover {
-  background: rgba(139, 92, 246, 0.18);
-}
-
-.score-obs__impact-sub-name {
-  font-size: 12px;
-  font-weight: 700;
-  color: #e9d5ff;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-
-.score-obs__impact-sub-role {
-  font-size: 10px;
-  font-weight: 600;
-  color: rgba(167, 139, 250, 0.7);
-  text-transform: capitalize;
-  margin-top: 2px;
+  flex: 0 1 160px;
 }
 
 /* Match ready phase */

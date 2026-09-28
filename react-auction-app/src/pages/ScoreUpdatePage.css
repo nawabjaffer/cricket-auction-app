@@ -814,6 +814,18 @@
   letter-spacing: 0.04em;
 }
 
+.score-update__validation-message {
+  margin: 0 0 0.75rem;
+  color: #fca5a5;
+  font-size: 0.8rem;
+}
+
+.score-update__modal-actions .score-update__btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+  filter: grayscale(0.5);
+}
+
 .score-update__select,
 .score-update__input {
   padding: 0.5rem 0.75rem;

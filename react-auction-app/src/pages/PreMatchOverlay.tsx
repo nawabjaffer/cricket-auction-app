@@ -4,11 +4,15 @@
 // ============================================================================
 
 import { useEffect, useState, useRef } from 'react';
+import type { CSSProperties } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type {
   MatchSetup, MatchLineup, PreMatchState, ScoringOverlayConfig,
   ImpactPlayer,
 } from '../types/scoring';
+import { DEFAULT_MATCH_SQUAD_OVERLAY_DESIGN, type MatchSquadOverlayDesign } from '../types/matchSquadOverlay';
+import { resolvePlayerImageUrl } from '../utils/playerImage';
+import { getMatchSquadOverlayStyle } from '../utils/matchSquadOverlayDesign';
 import './PreMatchOverlay.css';
 import './ScoreOBSOverlayPage.css';
 
@@ -18,9 +22,11 @@ interface PreMatchOverlayProps {
   config: ScoringOverlayConfig;
   lineups: { teamA: MatchLineup | null; teamB: MatchLineup | null };
   playerImages?: Record<string, string>;
+  squadDesign?: MatchSquadOverlayDesign;
+  preview?: boolean;
 }
 
-export default function PreMatchOverlay({ match, preMatch, config, lineups, playerImages }: PreMatchOverlayProps) {
+export default function PreMatchOverlay({ match, preMatch, config, lineups, playerImages, squadDesign = DEFAULT_MATCH_SQUAD_OVERLAY_DESIGN, preview = false }: PreMatchOverlayProps) {
   const { phase } = preMatch;
   const impactByTeam = preMatch.impactPlayers || { teamA: [], teamB: [] };
   const impactTeamA = preMatch.impactPlayers?.teamA;
@@ -38,14 +44,14 @@ export default function PreMatchOverlay({ match, preMatch, config, lineups, play
     const collectLineup = (lineup: MatchLineup | null) => {
       if (!lineup) return;
       lineup.players.forEach(player => {
-        addUrl(player.imageUrl || playerImages?.[player.playerId]);
+        addUrl(resolvePlayerImageUrl(player.playerId, player.imageUrl, playerImages));
       });
     };
 
     const collectImpact = (impactPlayers?: ImpactPlayer[]) => {
       if (!impactPlayers) return;
       impactPlayers.forEach(player => {
-        addUrl(player.imageUrl || playerImages?.[player.playerId]);
+        addUrl(resolvePlayerImageUrl(player.playerId, player.imageUrl, playerImages));
       });
     };
 
@@ -62,21 +68,21 @@ export default function PreMatchOverlay({ match, preMatch, config, lineups, play
     });
   }, [lineups.teamA, lineups.teamB, playerImages, impactTeamA, impactTeamB]);
 
-  if (phase === 'idle' || phase === 'match_ready') return null;
+  if (phase === 'idle') return null;
 
   return (
-    <div className="prematch-overlay">
+    <div className={`prematch-overlay ${preview ? 'prematch-overlay--preview' : ''}`}>
       <AnimatePresence mode="wait">
-        {phase === 'squad_display' && (
-          <SquadDisplayOverlay key="squad" match={match} lineups={lineups} config={config} playerImages={playerImages} impactPlayers={impactByTeam} />
+        {phase === 'squad_display' && squadDesign.showSquadDisplay && (
+          <SquadDisplayOverlay key="squad" match={match} lineups={lineups} config={config} playerImages={playerImages} impactPlayers={squadDesign.showImpactPlayers ? impactByTeam : { teamA: [], teamB: [] }} squadDesign={squadDesign} />
         )}
-        {phase === 'toss_animation' && (
-          <TossAnimationOverlay key="toss" match={match} preMatch={preMatch} config={config} />
+        {phase === 'toss_animation' && squadDesign.showTossAnimation && (
+          <TossAnimationOverlay key="toss" match={match} preMatch={preMatch} config={config} durationMs={squadDesign.tossAnimationDurationMs} />
         )}
-        {phase === 'toss_result' && (
+        {phase === 'toss_result' && squadDesign.showTossResult && (
           <TossResultOverlay key="toss-result" match={match} preMatch={preMatch} config={config} />
         )}
-        {phase === 'squad_reveal_teamA' && lineups.teamA && (
+        {phase === 'squad_reveal_teamA' && squadDesign.showSquadReveal && lineups.teamA && (
           <SquadRevealOverlay
             key="reveal-a"
             team={{ name: match.teamA.name, logoUrl: match.teamA.logoUrl, primaryColor: match.teamA.primaryColor }}
@@ -84,11 +90,12 @@ export default function PreMatchOverlay({ match, preMatch, config, lineups, play
             revealedIds={preMatch.revealedPlayersTeamA || []}
             revealConfig={preMatch.squadRevealConfig}
             playerImages={playerImages}
-            impactPlayers={impactByTeam.teamA || []}
+            impactPlayers={squadDesign.showImpactPlayers ? impactByTeam.teamA || [] : []}
             config={config}
+            squadDesign={squadDesign}
           />
         )}
-        {phase === 'squad_reveal_teamB' && lineups.teamB && (
+        {phase === 'squad_reveal_teamB' && squadDesign.showSquadReveal && lineups.teamB && (
           <SquadRevealOverlay
             key="reveal-b"
             team={{ name: match.teamB.name, logoUrl: match.teamB.logoUrl, primaryColor: match.teamB.primaryColor }}
@@ -96,15 +103,60 @@ export default function PreMatchOverlay({ match, preMatch, config, lineups, play
             revealedIds={preMatch.revealedPlayersTeamB || []}
             revealConfig={preMatch.squadRevealConfig}
             playerImages={playerImages}
-            impactPlayers={impactByTeam.teamB || []}
+            impactPlayers={squadDesign.showImpactPlayers ? impactByTeam.teamB || [] : []}
             config={config}
+            squadDesign={squadDesign}
           />
         )}
-        {phase === 'impact_players' && (
+        {phase === 'impact_players' && squadDesign.showImpactPlayers && (
           <ImpactPlayersOverlay key="impact" match={match} impactPlayers={impactByTeam} playerImages={playerImages} />
+        )}
+        {phase === 'match_ready' && squadDesign.showMatchReady && (
+          <MatchReadyOverlay key="match-ready" match={match} config={config} squadDesign={squadDesign} />
         )}
       </AnimatePresence>
     </div>
+  );
+}
+
+function MatchReadyOverlay({ match, config, squadDesign }: {
+  match: MatchSetup;
+  config: ScoringOverlayConfig;
+  squadDesign: MatchSquadOverlayDesign;
+}) {
+  const teamAColor = squadDesign.useTeamColors ? match.teamA.primaryColor || '#0ea5e9' : squadDesign.accentColor;
+  const teamBColor = squadDesign.useTeamColors ? match.teamB.primaryColor || '#f97316' : squadDesign.accentColor;
+  return (
+    <motion.section
+      className="prematch-ready"
+      style={{ ...getMatchSquadOverlayStyle(squadDesign), '--ready-team-a': teamAColor, '--ready-team-b': teamBColor } as React.CSSProperties}
+      initial={{ opacity: 0, scale: 0.94, y: 18 }}
+      animate={{ opacity: 1, scale: 1, y: 0 }}
+      exit={{ opacity: 0, scale: 0.98, y: -12 }}
+      transition={{ duration: squadDesign.matchReadyDurationMs / 1000, ease: 'easeOut' }}
+    >
+      <div className="prematch-ready__panel">
+        <span className="prematch-ready__eyebrow">{config.tournamentName || 'MATCH DAY'}</span>
+        <div className="prematch-ready__teams">
+          <div className="prematch-ready__team" style={{ '--ready-team-color': teamAColor } as React.CSSProperties}>
+            {match.teamA.logoUrl && <img className="prematch-ready__team-background-logo" src={match.teamA.logoUrl} alt="" aria-hidden="true" />}
+            <span className="prematch-ready__team-label">TEAM A</span>
+            <strong>{match.teamA.name}</strong>
+          </div>
+          <span className="prematch-ready__vs">VS</span>
+          <div className="prematch-ready__team" style={{ '--ready-team-color': teamBColor } as React.CSSProperties}>
+            {match.teamB.logoUrl && <img className="prematch-ready__team-background-logo" src={match.teamB.logoUrl} alt="" aria-hidden="true" />}
+            <span className="prematch-ready__team-label">TEAM B</span>
+            <strong>{match.teamB.name}</strong>
+          </div>
+        </div>
+        <div className="prematch-ready__footer">
+          <span>{match.venue}</span>
+          {config.broadcastPartnerLogo && <img src={config.broadcastPartnerLogo} alt={config.broadcastPartnerName || ''} />}
+          <b>READY TO PLAY</b>
+        </div>
+      </div>
+    </motion.section>
   );
 }
 
@@ -112,12 +164,13 @@ export default function PreMatchOverlay({ match, preMatch, config, lineups, play
 // SQUAD DISPLAY — Both teams' full squads side by side
 // ═══════════════════════════════════════════════════════════════════════════════
 
-function SquadDisplayOverlay({ match, lineups, config, playerImages, impactPlayers }: {
+function SquadDisplayOverlay({ match, lineups, config, playerImages, impactPlayers, squadDesign }: {
   match: MatchSetup;
   lineups: { teamA: MatchLineup | null; teamB: MatchLineup | null };
   config: ScoringOverlayConfig;
   playerImages?: Record<string, string>;
   impactPlayers?: { teamA: ImpactPlayer[]; teamB: ImpactPlayer[] };
+  squadDesign: MatchSquadOverlayDesign;
 }) {
   return (
     <motion.div
@@ -133,7 +186,6 @@ function SquadDisplayOverlay({ match, lineups, config, playerImages, impactPlaye
         <h1 className="prematch-squad-display__title">
           {match.teamA.name} <span className="prematch-squad-display__vs">vs</span> {match.teamB.name}
         </h1>
-        <p className="prematch-squad-display__venue">{match.venue}</p>
       </div>
 
       {/* Two columns */}
@@ -143,6 +195,7 @@ function SquadDisplayOverlay({ match, lineups, config, playerImages, impactPlaye
           lineup={lineups.teamA}
           playerImages={playerImages}
           impactPlayers={impactPlayers?.teamA || []}
+          squadDesign={squadDesign}
         />
         <div className="prematch-squad-display__divider" />
         <TeamSquadColumn
@@ -150,27 +203,29 @@ function SquadDisplayOverlay({ match, lineups, config, playerImages, impactPlaye
           lineup={lineups.teamB}
           playerImages={playerImages}
           impactPlayers={impactPlayers?.teamB || []}
+          squadDesign={squadDesign}
         />
       </div>
     </motion.div>
   );
 }
 
-function TeamSquadColumn({ team, lineup, playerImages, impactPlayers }: {
+function TeamSquadColumn({ team, lineup, playerImages, impactPlayers, squadDesign }: {
   team: { name: string; logoUrl?: string; primaryColor?: string };
   lineup: MatchLineup | null;
   playerImages?: Record<string, string>;
   impactPlayers?: ImpactPlayer[];
+  squadDesign: MatchSquadOverlayDesign;
 }) {
   return (
-    <div className="prematch-squad-col" style={{ '--team-color': team.primaryColor || '#3b82f6' } as React.CSSProperties}>
+    <div className="prematch-squad-col" style={{ ...getMatchSquadOverlayStyle(squadDesign, team.primaryColor || '#3b82f6'), '--team-color': squadDesign.useTeamColors ? team.primaryColor || '#3b82f6' : squadDesign.accentColor } as React.CSSProperties}>
       <div className="prematch-squad-col__header">
         {team.logoUrl && <img src={team.logoUrl} alt="" className="prematch-squad-col__logo" />}
         <h2 className="prematch-squad-col__name">{team.name}</h2>
       </div>
       <div className="prematch-squad-col__players">
         {lineup?.players.map((p, i) => {
-          const imgUrl = p.imageUrl || playerImages?.[p.playerId];
+          const imgUrl = resolvePlayerImageUrl(p.playerId, p.imageUrl, playerImages);
           return (
             <motion.div
               key={p.playerId}
@@ -373,16 +428,17 @@ function ChromaKeyTossVideo({ src, chromaColor, similarity }: {
   );
 }
 
-function TossAnimationOverlay({ match, preMatch, config }: {
+function TossAnimationOverlay({ match, preMatch, config, durationMs }: {
   match: MatchSetup;
   preMatch: PreMatchState;
   config: ScoringOverlayConfig;
+  durationMs: number;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const tossConfig = config.tossConfig;
   const coinSide = preMatch.tossResult?.coinSide || 'heads';
   const videoUrl = coinSide === 'heads' ? tossConfig?.headsVideoUrl : tossConfig?.tailsVideoUrl;
-  const tossDuration = tossConfig?.tossDurationSeconds || 5;
+  const tossDuration = Math.max(1, Math.ceil(durationMs / 1000));
 
   // Countdown timer
   const [timeLeft, setTimeLeft] = useState(tossDuration);
@@ -500,14 +556,20 @@ function TossResultOverlay({ match, preMatch, config }: {
       transition={{ duration: 0.5 }}
     >
       {config.tournamentLogo && <img src={config.tournamentLogo} alt="" className="prematch-toss-result__logo" />}
-      <div className="prematch-toss-result__winner">
-        {winner.logoUrl && <img src={winner.logoUrl} alt="" className="prematch-toss-result__team-logo" />}
-        <h2 className="prematch-toss-result__team-name" style={{ color: winner.primaryColor || '#fbbf24' }}>
-          {winner.name}
-        </h2>
-        <p className="prematch-toss-result__choice">
-          won the toss and elected to <strong>{preMatch.tossResult.elected === 'bat' ? 'BAT' : 'BOWL'}</strong>
-        </p>
+      <div
+        className="prematch-toss-result__winner"
+        style={{
+          '--winner-team-logo': winner.logoUrl ? `url("${winner.logoUrl}")` : 'none',
+        } as CSSProperties}
+      >
+        <div className="prematch-toss-result__winner-content">
+          <h2 className="prematch-toss-result__team-name" style={{ color: winner.primaryColor || '#fbbf24' }}>
+            {winner.name}
+          </h2>
+          <p className="prematch-toss-result__choice">
+            won the toss and elected to <strong>{preMatch.tossResult.elected === 'bat' ? 'BAT' : 'BOWL'}</strong>
+          </p>
+        </div>
       </div>
     </motion.div>
   );
@@ -517,7 +579,7 @@ function TossResultOverlay({ match, preMatch, config }: {
 // SQUAD REVEAL — Animated player-by-player reveal
 // ═══════════════════════════════════════════════════════════════════════════════
 
-function SquadRevealOverlay({ team, lineup, revealedIds, revealConfig, playerImages, impactPlayers, config }: {
+function SquadRevealOverlay({ team, lineup, revealedIds, revealConfig, playerImages, impactPlayers, config, squadDesign }: {
   team: { name: string; logoUrl?: string; primaryColor?: string };
   lineup: MatchLineup;
   revealedIds: string[];
@@ -525,6 +587,7 @@ function SquadRevealOverlay({ team, lineup, revealedIds, revealConfig, playerIma
   playerImages?: Record<string, string>;
   impactPlayers?: ImpactPlayer[];
   config?: ScoringOverlayConfig;
+  squadDesign: MatchSquadOverlayDesign;
 }) {
   const [localRevealed, setLocalRevealed] = useState<string[]>(revealedIds);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -562,10 +625,13 @@ function SquadRevealOverlay({ team, lineup, revealedIds, revealConfig, playerIma
   const topRow = revealedPlayers.slice(0, 6);
   const bottomRow = revealedPlayers.slice(6, 11);
   const hasImpactSubs = impactPlayers && impactPlayers.length > 0;
+  const showImpactSubs = Boolean(hasImpactSubs && revealedPlayers.length >= lineup.players.length);
+  const impactRevealDelay = Math.max(0, lineup.players.length - 1) * 0.1 + 0.5;
 
   return (
     <motion.div
       className="score-obs__squad-reveal"
+      style={getMatchSquadOverlayStyle(squadDesign, team.primaryColor || '#004be2')}
       initial={{ scale: 0.85, opacity: 0 }}
       animate={{ scale: 1, opacity: 1 }}
       exit={{ scale: 0.85, opacity: 0 }}
@@ -585,14 +651,14 @@ function SquadRevealOverlay({ team, lineup, revealedIds, revealConfig, playerIma
         {config?.broadcastPartnerLogo && <img src={config.broadcastPartnerLogo} alt="" className="score-obs__squad-header-logo score-obs__squad-header-logo--right" />}
       </div>
 
-      {/* Main content: Playing XI grid + Impact Subs column */}
-      <div className="score-obs__squad-body" style={{ display: 'flex', gap: '20px' }}>
+      {/* Main content: Playing XI and impact subs in one grid container */}
+      <div className="score-obs__squad-body">
         {/* Playing XI */}
         <div className="score-obs__squad-grid-container" style={{ flex: 1 }}>
           {/* Top Row (up to 6) */}
           <div className="score-obs__squad-grid score-obs__squad-grid--top">
             {topRow.map((player, i) => {
-              const imgUrl = player.imageUrl || playerImages?.[player.playerId];
+              const imgUrl = resolvePlayerImageUrl(player.playerId, player.imageUrl, playerImages);
               return (
                 <motion.div
                   key={player.playerId}
@@ -620,10 +686,10 @@ function SquadRevealOverlay({ team, lineup, revealedIds, revealConfig, playerIma
             })}
           </div>
           {/* Bottom Row (remaining, centered) */}
-          {bottomRow.length > 0 && (
+          {(bottomRow.length > 0 || showImpactSubs) && (
             <div className="score-obs__squad-grid score-obs__squad-grid--bottom">
               {bottomRow.map((player, i) => {
-                const imgUrl = player.imageUrl || playerImages?.[player.playerId];
+                const imgUrl = resolvePlayerImageUrl(player.playerId, player.imageUrl, playerImages);
                 return (
                   <motion.div
                     key={player.playerId}
@@ -649,37 +715,53 @@ function SquadRevealOverlay({ team, lineup, revealedIds, revealConfig, playerIma
                   </motion.div>
                 );
               })}
+              {showImpactSubs && (
+                <>
+                  <motion.div
+                    className="score-obs__impact-subs-header"
+                    initial={{ opacity: 0, y: 12 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: impactRevealDelay, duration: 0.3 }}
+                  >
+                    <span>⚡ IMPACT SUBS</span>
+                  </motion.div>
+                  <motion.div
+                    className="score-obs__impact-subs-list"
+                    initial={{ opacity: 0, y: 12 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: impactRevealDelay + 0.15, duration: 0.3 }}
+                  >
+                    {impactPlayers!.map((player, index) => {
+                      const imgUrl = resolvePlayerImageUrl(player.playerId, player.imageUrl, playerImages);
+                      return (
+                        <motion.div
+                          key={player.playerId}
+                          className="score-obs__squad-card score-obs__impact-sub-item"
+                          initial={{ y: 18, opacity: 0 }}
+                          animate={{ y: 0, opacity: 1 }}
+                          transition={{ delay: index * 0.1, type: 'spring', stiffness: 200, damping: 20 }}
+                        >
+                          <div className="score-obs__squad-card-img">
+                            {imgUrl
+                              ? <img src={imgUrl} alt={player.playerName} />
+                              : <span className="score-obs__squad-card-placeholder">{player.playerName.charAt(0)}</span>
+                            }
+                          </div>
+                          <div className="score-obs__squad-card-name">
+                            <span>{player.playerName}</span>
+                          </div>
+                          <div className="score-obs__squad-card-role">
+                            <span>{player.role}</span>
+                          </div>
+                        </motion.div>
+                      );
+                    })}
+                  </motion.div>
+                </>
+              )}
             </div>
           )}
         </div>
-
-        {/* Impact Subs Column (separate section with distinct styling) */}
-        {hasImpactSubs && (
-          <motion.div
-            className="score-obs__impact-subs-panel"
-            initial={{ x: 40, opacity: 0 }}
-            animate={{ x: 0, opacity: 1 }}
-            transition={{ delay: 0.6, type: 'spring', stiffness: 180, damping: 22 }}
-          >
-            <div className="score-obs__impact-subs-header">
-              <span>⚡ IMPACT SUBS</span>
-            </div>
-            <div className="score-obs__impact-subs-list">
-              {impactPlayers!.map((p, i) => (
-                <motion.div
-                  key={p.playerId}
-                  className="score-obs__impact-sub-item"
-                  initial={{ opacity: 0, x: 20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: 0.8 + i * 0.12 }}
-                >
-                  <span className="score-obs__impact-sub-name">{p.playerName}</span>
-                  <span className="score-obs__impact-sub-role">{p.role}</span>
-                </motion.div>
-              ))}
-            </div>
-          </motion.div>
-        )}
       </div>
 
       {/* Footer */}
@@ -723,7 +805,7 @@ function ImpactPlayersOverlay({ match, impactPlayers, playerImages }: {
           </div>
           <div className="prematch-impact__cards">
             {(impactPlayers.teamA || []).map((p, i) => {
-              const imgUrl = p.imageUrl || playerImages?.[p.playerId];
+              const imgUrl = resolvePlayerImageUrl(p.playerId, p.imageUrl, playerImages);
               return (
                 <motion.div
                   key={p.playerId}
@@ -758,7 +840,7 @@ function ImpactPlayersOverlay({ match, impactPlayers, playerImages }: {
           </div>
           <div className="prematch-impact__cards">
             {(impactPlayers.teamB || []).map((p, i) => {
-              const imgUrl = p.imageUrl || playerImages?.[p.playerId];
+              const imgUrl = resolvePlayerImageUrl(p.playerId, p.imageUrl, playerImages);
               return (
                 <motion.div
                   key={p.playerId}
