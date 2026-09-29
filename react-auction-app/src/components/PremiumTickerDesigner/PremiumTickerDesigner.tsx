@@ -13,17 +13,51 @@ import {
 } from '../../types/premiumTicker';
 import { isDefaultPremiumTickerPart, normalizePremiumTickerPart } from '../../utils/premiumTickerDesign';
 import type { LiveScore, MatchLineup, MatchSetup, ScoringOverlayConfig, TickerConfig } from '../../types/scoring';
+import type { Team } from '../../types';
 import './PremiumTickerDesigner.css';
 
 const STAGE_WIDTH = 1920;
 const STAGE_HEIGHT = 1080;
 
-const SAMPLE_IMAGES: Record<string, string> = Object.fromEntries(
-  [['p1', 'Sample Striker'], ['p2', 'Sample Partner'], ['p3', 'Sample Bowler']].map(([id, name]) => [
-    id,
-    `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=6d28d9&color=ffffff&size=256`,
-  ]),
-);
+/** Auction player with a usable portrait, used to fill the ticker preview. */
+export interface PreviewPlayerImage {
+  id: string;
+  name: string;
+  imageUrl: string;
+  /** Background-removed PNGs suit the ticker's cut-out portraits best. */
+  transparent: boolean;
+}
+
+// Player ids used by the designer's sample match (batters, bowler and the rest of the sample XI).
+const SAMPLE_PLAYER_IDS = ['p1', 'p2', 'p3', 'p4', 'p5'];
+
+const SILHOUETTE_IMAGE = `data:image/svg+xml,${encodeURIComponent(
+  "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 160'><circle cx='60' cy='48' r='28' fill='#cbd5e1'/><path d='M8 160c0-36 22-58 52-58s52 22 52 58z' fill='#cbd5e1'/></svg>",
+)}`;
+
+function seededRandom(seed: number): () => number {
+  let state = seed >>> 0;
+  return () => {
+    state = (state + 0x6d2b79f5) >>> 0;
+    let t = state;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/** Assigns real, randomly chosen player photos to the sample players (a neutral silhouette when none exist). */
+function pickSampleImages(players: PreviewPlayerImage[], seed: number): Record<string, string> {
+  const withImage = players.filter(player => player.imageUrl);
+  const transparent = withImage.filter(player => player.transparent);
+  const pool = [...(transparent.length >= SAMPLE_PLAYER_IDS.length ? transparent : withImage)];
+  const random = seededRandom(seed);
+  for (let index = pool.length - 1; index > 0; index -= 1) {
+    const swap = Math.floor(random() * (index + 1));
+    [pool[index], pool[swap]] = [pool[swap], pool[index]];
+  }
+  return Object.fromEntries(SAMPLE_PLAYER_IDS.map((id, index) => [id, pool.length ? pool[index % pool.length].imageUrl : SILHOUETTE_IMAGE]));
+}
 
 interface Props {
   design: PremiumTickerDesign;
@@ -34,6 +68,10 @@ interface Props {
   live: LiveScore | null;
   lineups: { teamA: MatchLineup | null; teamB: MatchLineup | null };
   tickerConfig?: TickerConfig;
+  /** Tournament teams the sample preview can be switched to. */
+  teams?: Team[];
+  /** Auction players whose portraits fill the live and sample previews. */
+  players?: PreviewPlayerImage[];
 }
 
 interface DragState {
@@ -59,9 +97,12 @@ function ControlRow({ label, value, min, max, step, unit, onChange }: Readonly<{
   );
 }
 
-export default function PremiumTickerDesigner({ design, onChange, previewMode, onPreviewModeChange, match, live, lineups, tickerConfig }: Readonly<Props>) {
+export default function PremiumTickerDesigner({ design, onChange, previewMode, onPreviewModeChange, match, live, lineups, tickerConfig, teams = [], players = [] }: Readonly<Props>) {
   const [selected, setSelected] = useState<PremiumTickerPartKey>('score');
   const [stageScale, setStageScale] = useState(0.5);
+  const [sampleBattingTeamId, setSampleBattingTeamId] = useState('');
+  const [sampleBowlingTeamId, setSampleBowlingTeamId] = useState('');
+  const [shuffleSeed, setShuffleSeed] = useState(() => Date.now() % 2147483647);
   const stageHostRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<DragState | null>(null);
   const designRef = useRef(design);
@@ -141,7 +182,23 @@ export default function PremiumTickerDesigner({ design, onChange, previewMode, o
   const editor = useMemo<PremiumTickerEditor>(() => ({ selectedPart: selected, onPointerDown: handlePointerDown }), [selected, handlePointerDown]);
 
   const sampleMode = previewMode === 'sample';
-  const previewMatch = match;
+  // Sample data always bats as team A and bowls as team B; the pickers swap in real team names and logos.
+  const previewMatch = useMemo(() => {
+    if (!match || !sampleMode) return match;
+    const batting = teams.find(team => team.id === sampleBattingTeamId);
+    const bowling = teams.find(team => team.id === sampleBowlingTeamId);
+    if (!batting && !bowling) return match;
+    return {
+      ...match,
+      teamA: batting ? { ...match.teamA, name: batting.name, logoUrl: batting.logoUrl } : match.teamA,
+      teamB: bowling ? { ...match.teamB, name: bowling.name, logoUrl: bowling.logoUrl } : match.teamB,
+    };
+  }, [match, sampleMode, teams, sampleBattingTeamId, sampleBowlingTeamId]);
+  const sampleImages = useMemo(() => pickSampleImages(players, shuffleSeed), [players, shuffleSeed]);
+  const liveImages = useMemo(
+    () => Object.fromEntries(players.filter(player => player.imageUrl).map(player => [player.id, player.imageUrl])),
+    [players],
+  );
   const previewLive = live;
   const previewLineups = lineups;
   const previewConfig = useMemo(() => ({
@@ -204,12 +261,39 @@ export default function PremiumTickerDesigner({ design, onChange, previewMode, o
 
       <main className="ptd__preview">
         <div className="scd__squad-preview-toolbar">
-          <span>{sampleMode ? 'Sample match' : previewMatch ? `${previewMatch.teamA.name} vs ${previewMatch.teamB.name}` : 'No active match'}</span>
+          <span>{previewMatch ? `${previewMatch.teamA.name} vs ${previewMatch.teamB.name}` : 'No active match'}{sampleMode ? ' · sample' : ''}</span>
           <div className="scd__squad-preview-tabs" role="group" aria-label="Premium ticker preview data">
             <button type="button" className={sampleMode ? 'is-active' : ''} aria-pressed={sampleMode} onClick={() => onPreviewModeChange('sample')}>Sample</button>
             <button type="button" className={sampleMode ? '' : 'is-active'} aria-pressed={!sampleMode} onClick={() => onPreviewModeChange('live')}>Live match</button>
           </div>
         </div>
+        {sampleMode && (
+          <div className="ptd__sample-controls">
+            <label>
+              <span>Batting team</span>
+              <select value={sampleBattingTeamId} onChange={event => setSampleBattingTeamId(event.target.value)}>
+                <option value="">Sample team</option>
+                {teams.map(team => <option key={team.id} value={team.id}>{team.name}</option>)}
+              </select>
+            </label>
+            <label>
+              <span>Bowling team</span>
+              <select value={sampleBowlingTeamId} onChange={event => setSampleBowlingTeamId(event.target.value)}>
+                <option value="">Sample team</option>
+                {teams.map(team => <option key={team.id} value={team.id}>{team.name}</option>)}
+              </select>
+            </label>
+            <button
+              type="button"
+              className="scd__btn scd__btn--sm"
+              onClick={() => setShuffleSeed(seed => (seed + 7919) % 2147483647)}
+              disabled={players.length === 0}
+              title={players.length === 0 ? 'No auction player photos found' : 'Pick different random player photos'}
+            >
+              <IoRefresh size={13} /> Shuffle photos
+            </button>
+          </div>
+        )}
         <div className="ptd__stage-host" ref={stageHostRef}>
           <div className="ptd__stage-frame" style={{ width: STAGE_WIDTH * stageScale, height: STAGE_HEIGHT * stageScale }}>
             <div className="score-obs ptd__stage" style={{ transform: `scale(${stageScale})` }}>
@@ -222,7 +306,7 @@ export default function PremiumTickerDesigner({ design, onChange, previewMode, o
                   bowlingTeam={live?.bowlingTeamId === previewMatch.teamA.id ? previewMatch.teamA.name : previewMatch.teamB.name}
                   config={previewConfig}
                   lineups={previewLineups}
-                  playerImages={sampleMode ? SAMPLE_IMAGES : {}}
+                  playerImages={sampleMode ? sampleImages : liveImages}
                   premiumDesign={design}
                   editor={editor}
                 />

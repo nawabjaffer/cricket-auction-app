@@ -125,6 +125,25 @@ const initializePersistence = async () => {
 // Start initialization
 initializePersistence();
 
+// Sold/unsold records keep their own copy of the player. The Players list is the
+// canonical copy, so overlay it by id while keeping each record's own sale/unsold fields.
+const SETTLEMENT_KEYS = ['soldAmount', 'teamName', 'teamId', 'soldDate', 'round', 'unsoldDate'] as const;
+
+function overlayCanonicalPlayers<T extends Player>(records: T[], canonical: Player[]): T[] {
+  if (records.length === 0 || canonical.length === 0) return records;
+  const byId = new Map(canonical.map(player => [player.id, player]));
+  return records.map(record => {
+    const source = byId.get(record.id);
+    if (!source) return record;
+    const recordFields = { ...record } as unknown as Record<string, unknown>;
+    const merged: Record<string, unknown> = { ...recordFields, ...source, imageUrl: source.imageUrl || record.imageUrl };
+    for (const key of SETTLEMENT_KEYS) {
+      if (key in recordFields) merged[key] = recordFields[key];
+    }
+    return { ...merged, name: normalizePlayerName(source.name) } as unknown as T;
+  });
+}
+
 // ============================================================================
 // STORE INTERFACE
 // ============================================================================
@@ -357,7 +376,12 @@ export const useAuctionStore = create<AuctionStore>()(
             return aIdx - bIdx;
           });
 
-          set({ availablePlayers: sorted, originalPlayers: activePlayers });
+          set({
+            availablePlayers: sorted,
+            originalPlayers: activePlayers,
+            soldPlayers: overlayCanonicalPlayers(soldPlayers, activePlayers),
+            unsoldPlayers: overlayCanonicalPlayers(unsoldPlayers, activePlayers),
+          });
         },
 
         setAdminPlayerOverrides: (overrides) => {
@@ -392,12 +416,20 @@ export const useAuctionStore = create<AuctionStore>()(
         },
         
         setSoldPlayers: (players) => {
-          const normalizedPlayers = players.map(player => ({ ...player, name: normalizePlayerName(player.name) }));
-          const { teams } = get();
+          const { teams, originalPlayers } = get();
+          const normalizedPlayers = overlayCanonicalPlayers(
+            players.map(player => ({ ...player, name: normalizePlayerName(player.name) })),
+            originalPlayers,
+          );
           set({ soldPlayers: normalizedPlayers, teams: reconcileTeamsWithSoldPlayers(teams, normalizedPlayers) });
         },
         
-        setUnsoldPlayers: (players) => set({ unsoldPlayers: players.map(player => ({ ...player, name: normalizePlayerName(player.name) })) }),
+        setUnsoldPlayers: (players) => set({
+          unsoldPlayers: overlayCanonicalPlayers(
+            players.map(player => ({ ...player, name: normalizePlayerName(player.name) })),
+            get().originalPlayers,
+          ),
+        }),
 
         setBidIncrementRanges: (ranges) => set({ bidIncrementRanges: ranges }),
         setBudgetMode: (mode) => set({ budgetMode: mode }),
@@ -1455,15 +1487,15 @@ export const useAuctionStore = create<AuctionStore>()(
       }),
       {
         name: 'auction-storage',
-        onRehydrateStorage: () => (state) => {
-          if (!state) return;
-          state.setSoldPlayers(state.soldPlayers);
-          state.setUnsoldPlayers(state.unsoldPlayers);
+        // Sold/unsold live only in the database; ignore copies cached by older versions.
+        merge: (persisted, current) => {
+          const rest = { ...(persisted as Partial<AuctionStore>) };
+          delete rest.soldPlayers;
+          delete rest.unsoldPlayers;
+          return { ...current, ...rest };
         },
         // Only persist specific fields
         partialize: (state) => ({
-          soldPlayers: state.soldPlayers,
-          unsoldPlayers: state.unsoldPlayers,
           currentRound: state.currentRound,
           isRound2Active: state.isRound2Active,
           maxUnsoldRounds: state.maxUnsoldRounds,

@@ -8,8 +8,8 @@ import { auctionPersistence } from '../services/auctionPersistence';
 import { realtimeSync } from '../services/realtimeSync';
 import { batchPreloadImages } from '../services/firebaseStorageService';
 import { getActiveTenant, onTenantChange } from '../services/tenantPath';
+import { startSettledPlayersSync } from '../services/settledPlayersSync';
 import { useAuctionStore } from '../store/auctionStore';
-import type { SoldPlayer } from '../types';
 
 // Per-tenant flag: track restore completion separately for each tenant so
 // switching tenants always re-runs the restore against the new namespace.
@@ -30,11 +30,7 @@ export function useAuctionDataLoader() {
     return () => { unsub(); };
   }, []);
 
-  const { 
-    setTeams, 
-    setSoldPlayers, 
-    setUnsoldPlayers,
-  } = useAuctionStore();
+  const { setTeams } = useAuctionStore();
 
   useEffect(() => {
     const restoreDataFromFirebase = async () => {
@@ -55,68 +51,17 @@ export function useAuctionDataLoader() {
         // Initialize persistence service with the database
         auctionPersistence.initialize(db);
 
-        // Check if there's existing auction data in Firebase
-        const hasData = await auctionPersistence.hasExistingData();
-
-        if (!hasData) {
-          console.log('[DataLoader] No existing Firebase data found');
-          setIsRestoring(false);
-          return;
-        }
-
-        console.log('[DataLoader] Found existing data, restoring from Firebase...');
-
-        // Load sold and unsold players
-        const [soldRecords, unsoldRecords, savedTeams, adminSettings] = await Promise.all([
-          auctionPersistence.getSoldPlayers(),
-          auctionPersistence.getUnsoldPlayers(),
+        // Teams first so legacy sold records (name only) can resolve their team id
+        const [savedTeams, adminSettings] = await Promise.all([
           auctionPersistence.getTeams(),
           auctionPersistence.getAdminSettings(),
         ]);
-
-        // Convert sold records back to SoldPlayer format
-        const restoredSoldPlayers: SoldPlayer[] = soldRecords.map(record => ({
-          id: record.id,
-          name: record.playerName,
-          role: record.role as SoldPlayer['role'],
-          age: record.age,
-          matches: record.matches,
-          runs: '',
-          wickets: '',
-          battingBestFigures: '',
-          bowlingBestFigures: record.bestFigures,
-          basePrice: record.basePrice,
-          imageUrl: record.imageUrl,
-          soldAmount: record.soldAmount,
-          teamName: record.teamName,
-          teamId: record.teamId || savedTeams?.find(t => t.name === record.teamName)?.id,
-          soldDate: new Date(record.timestamp).toISOString(),
-        }));
-
-        // Convert unsold records back to UnsoldPlayer format
-        const restoredUnsoldPlayers = unsoldRecords.map(record => ({
-          id: record.id,
-          name: record.name,
-          role: record.role as SoldPlayer['role'],
-          age: record.age,
-          matches: record.matches,
-          runs: '',
-          wickets: '',
-          battingBestFigures: '',
-          bowlingBestFigures: record.bowlingBest,
-          basePrice: record.basePrice,
-          imageUrl: record.imageUrl,
-          round: record.round,
-          unsoldDate: new Date(record.timestamp).toISOString(),
-        }));
-
-        // Update store with restored data
-        setSoldPlayers(restoredSoldPlayers);
-        setUnsoldPlayers(restoredUnsoldPlayers);
-
         if (savedTeams) {
           setTeams(savedTeams);
         }
+
+        // Sold/unsold always come from the database, even when both lists are empty
+        await startSettledPlayersSync();
 
         if (adminSettings?.maxUnsoldRounds !== undefined) {
           useAuctionStore.getState().setMaxUnsoldRounds(adminSettings.maxUnsoldRounds);
@@ -130,11 +75,9 @@ export function useAuctionDataLoader() {
           useAuctionStore.getState().setOrganizerName(adminSettings.organizerName);
         }
 
-        // Reconcile available players to exclude sold/unsold
-        useAuctionStore.getState().reconcilePlayerPools();
-
         setHasRestoredData(true);
         _restoreCompleteByTenant.add(tenantId);
+        const { soldPlayers: restoredSoldPlayers, unsoldPlayers: restoredUnsoldPlayers } = useAuctionStore.getState();
         console.log('[DataLoader] ✅ Data restored from Firebase:', {
           soldPlayers: restoredSoldPlayers.length,
           unsoldPlayers: restoredUnsoldPlayers.length,
@@ -178,7 +121,7 @@ export function useAuctionDataLoader() {
     } else if (_restoreCompleteByTenant.has(tenantId) && !hasRestoredData) {
       setHasRestoredData(true);
     }
-  }, [tenantId, hasRestoredData, isRestoring, setSoldPlayers, setUnsoldPlayers, setTeams]);
+  }, [tenantId, hasRestoredData, isRestoring, setTeams]);
 
   return {
     isRestoring,
@@ -245,66 +188,21 @@ export function useSaveInitialSnapshot(enabled = true) {
 }
 
 /**
- * Live subscription to sold/unsold/teams in Firebase for mirror mode.
- * Keeps the Zustand store in sync so the marquee and other UI elements
- * reflect real-time auction changes without a page reload.
+ * Live subscription to teams in Firebase for mirror mode. Sold/unsold stay
+ * live through startSettledPlayersSync() in every mode.
  */
 export function useMirrorLiveSync(enabled = true) {
-  const { setSoldPlayers, setUnsoldPlayers, setTeams } = useAuctionStore();
+  const { setTeams } = useAuctionStore();
 
   useEffect(() => {
     if (!enabled) return;
-
-    const unsubSold = auctionPersistence.subscribeSoldPlayers((records) => {
-      const players: SoldPlayer[] = records.map(r => ({
-        id: r.id,
-        name: r.playerName,
-        role: r.role as SoldPlayer['role'],
-        age: r.age,
-        matches: r.matches,
-        runs: '',
-        wickets: '',
-        battingBestFigures: '',
-        bowlingBestFigures: r.bestFigures,
-        basePrice: r.basePrice,
-        imageUrl: r.imageUrl,
-        soldAmount: r.soldAmount,
-        teamName: r.teamName,
-        teamId: r.teamId,
-        soldDate: new Date(r.timestamp).toISOString(),
-      }));
-      setSoldPlayers(players);
-      useAuctionStore.getState().reconcilePlayerPools();
-    });
-
-    const unsubUnsold = auctionPersistence.subscribeUnsoldPlayers((records) => {
-      const players = records.map(r => ({
-        id: r.id,
-        name: r.name,
-        role: r.role as SoldPlayer['role'],
-        age: r.age,
-        matches: r.matches ?? '',
-        runs: '',
-        wickets: '',
-        battingBestFigures: '',
-        bowlingBestFigures: r.bowlingBest,
-        basePrice: r.basePrice,
-        imageUrl: r.imageUrl,
-        round: r.round,
-        unsoldDate: new Date(r.timestamp).toISOString(),
-      }));
-      setUnsoldPlayers(players);
-      useAuctionStore.getState().reconcilePlayerPools();
-    });
 
     const unsubTeams = auctionPersistence.subscribeTeams((teams) => {
       setTeams(teams);
     });
 
     return () => {
-      unsubSold();
-      unsubUnsold();
       unsubTeams();
     };
-  }, [enabled, setSoldPlayers, setUnsoldPlayers, setTeams]);
+  }, [enabled, setTeams]);
 }

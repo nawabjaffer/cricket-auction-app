@@ -11,7 +11,7 @@ import {
   update,
   type Database 
 } from 'firebase/database';
-import type { Player, Team, SoldPlayer, AuctionRoleCategory } from '../types';
+import type { Player, Team, SoldPlayer, UnsoldPlayer, AuctionRoleCategory } from '../types';
 import { normalizePlayerName } from '../utils/playerName';
 import { belongsToTeam } from '../utils/teamMembership';
 import { tenantPath, tenantPathFor } from './tenantPath';
@@ -420,6 +420,12 @@ export interface BidIncrementRange {
   mode?: 'amount' | 'multiplier';
 }
 
+// Re-saving an existing record must keep its original sold/unsold time.
+function recordTimestamp(isoDate?: string): number {
+  const parsed = isoDate ? Date.parse(isoDate) : Number.NaN;
+  return Number.isFinite(parsed) ? parsed : Date.now();
+}
+
 class AuctionPersistenceService {
   private db: Database | null = null;
 
@@ -446,7 +452,7 @@ class AuctionPersistenceService {
       soldAmount: player.soldAmount,
       basePrice: player.basePrice ?? 0,
       imageUrl: player.imageUrl ?? '',
-      timestamp: Date.now(),
+      timestamp: recordTimestamp(player.soldDate),
       ...(player.teamId ? { teamId: player.teamId } : {}),
     };
 
@@ -544,7 +550,7 @@ class AuctionPersistenceService {
       bowlingBest: player.bowlingBestFigures || 'N/A',
       basePrice: player.basePrice ?? 0,
       round,
-      timestamp: Date.now(),
+      timestamp: recordTimestamp((player as Partial<UnsoldPlayer>).unsoldDate),
       imageUrl: player.imageUrl ?? '',
     };
 

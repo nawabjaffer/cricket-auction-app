@@ -8,6 +8,7 @@ import { googleSheetsService, imagePreloaderService } from '../services';
 import { auctionPersistence } from '../services/auctionPersistence';
 import { localImageCacheService } from '../services/localImageCache';
 import { realtimeSync } from '../services/realtimeSync';
+import { startSettledPlayersSync } from '../services/settledPlayersSync';
 import {
   DEFAULT_TENANT_ID,
   getActiveTenant,
@@ -119,24 +120,15 @@ export function useInitialData() {
           useAuctionStore.getState().setTeams([]);
         }
 
-        // Resolve per-tenant Google Sheet (if any). Only the tenant that
-        // explicitly has a sheetId will fetch from Google Sheets — every
-        // other tenant works purely from its own RTDB namespace.
-        const sheetIdOverride = await resolveTenantSheetId(tenantId);
+        // Sold/unsold stay live from the database; teams are loaded so legacy records resolve their team.
+        const settledPlayersReady = startSettledPlayersSync().catch((err) => {
+          console.warn('[useInitialData] Sold/unsold sync failed:', err);
+        });
 
-        // Load admin players from Firebase AND (optionally) raw players from
-        // Google Sheets in parallel. Sheets data is used as the base when the
-        // tenant has its own sheet; otherwise admin players are the only source.
-        // Also load adminSettings here so organizerLogo is always available
-        // even on fresh tenants with no sold players (hasExistingData = false).
-        const [adminPlayers, sheetPlayers, adminSettings, removedPlayerIds] = await Promise.all([
+        // The database is the source of truth for the player list. Google Sheets
+        // is only used to seed a tenant that has no saved players yet.
+        const [adminPlayers, adminSettings, removedPlayerIds] = await Promise.all([
           auctionPersistence.getAdminPlayers().catch(() => null),
-          sheetIdOverride
-            ? googleSheetsService.fetchPlayers([], sheetIdOverride).catch((err) => {
-                console.warn('[useInitialData] Google Sheets fetch failed:', err);
-                return [] as Player[];
-              })
-            : Promise.resolve([] as Player[]),
           auctionPersistence.getAdminSettings().catch(() => null),
           auctionPersistence.getRemovedPlayerIds().catch(() => []),
         ]);
@@ -152,34 +144,30 @@ export function useInitialData() {
           useAuctionStore.getState().setOrganizerName(adminSettings.organizerName);
         }
 
-        // Seed the base (originalPlayers) with sheet data first so the
-        // subsequent override merge can fall back to sheet imageUrl when
-        // the admin copy is empty. If no sheet, start with an empty base
-        // so we don't carry over a previous tenant's roster.
-        useAuctionStore.getState().setPlayers(sheetPlayers ?? []);
-
         if (adminPlayers && adminPlayers.length > 0) {
+          useAuctionStore.getState().setPlayers([]);
           useAuctionStore.getState().setAdminPlayerOverrides(adminPlayers);
-
-          // Repair: if any admin player had an empty imageUrl that sheets
-          // can fill, persist the repaired list back so other clients see it.
-          if (sheetPlayers && sheetPlayers.length > 0) {
-            const sheetMap = new Map(sheetPlayers.map((p) => [p.id, p]));
-            let changed = false;
-            const repaired = adminPlayers.map((ap) => {
-              if (!ap.imageUrl && sheetMap.get(ap.id)?.imageUrl) {
-                changed = true;
-                return { ...ap, imageUrl: sheetMap.get(ap.id)!.imageUrl };
-              }
-              return ap;
-            });
-            if (changed) {
-              auctionPersistence.saveAdminPlayers(repaired).catch((err) => {
-                console.warn('[useInitialData] repair save failed:', err);
+        } else {
+          // Resolve per-tenant Google Sheet (if any). Only a tenant with a
+          // sheetId (or the default tenant's env sheet) is seeded from Sheets.
+          const sheetIdOverride = await resolveTenantSheetId(tenantId);
+          const sheetPlayers = sheetIdOverride === null
+            ? []
+            : await googleSheetsService.fetchPlayers([], sheetIdOverride).catch((err) => {
+                console.warn('[useInitialData] Google Sheets fetch failed:', err);
+                return [] as Player[];
               });
-            }
+          useAuctionStore.getState().setPlayers(sheetPlayers);
+          if (sheetPlayers.length > 0) {
+            // Save once so every later load reads the database instead of the sheet.
+            await auctionPersistence.saveAdminPlayers(sheetPlayers).catch((err) => {
+              console.warn('[useInitialData] Failed to save the sheet players to the database:', err);
+            });
           }
         }
+
+        // Wait (bounded) for the sold/unsold lists so the auction never opens with sold players available.
+        await Promise.race([settledPlayersReady, new Promise(resolve => setTimeout(resolve, 8000))]);
 
         _dataLoadedByTenant.add(tenantId);
         if (!cancelled) { setDataReady(true); setIsLoading(false); }

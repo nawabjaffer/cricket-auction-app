@@ -27,7 +27,8 @@ import { uploadFileToStorage } from '../services/firebaseStorageService';
 import { tenantPath } from '../services/tenantPath';
 import { ScorecardLayoutView } from '../components/ScorecardCanvas';
 import PreMatchPreviewModal from '../components/PreMatchPreviewModal';
-import PremiumTickerDesigner from '../components/PremiumTickerDesigner/PremiumTickerDesigner';
+import PremiumTickerDesigner, { type PreviewPlayerImage } from '../components/PremiumTickerDesigner/PremiumTickerDesigner';
+import { preferMigratedPlayerImageUrl } from '../utils/playerImage';
 import {
   getWidgetCatalog, createWidgetInstance, createEmptyLayout, makeWidgetId,
   DEFAULT_WIDGET_STYLE, SURFACE_LABELS, SURFACE_HINTS, ANIMATION_PRESETS,
@@ -49,6 +50,14 @@ import { normalizeMatchSquadOverlayDesign } from '../utils/matchSquadOverlayDesi
 import type { SupportedGameType } from './scorerPages';
 import type { Team } from '../types';
 import './ScorecardDesignerPage.css';
+
+interface AdminPlayerRecord {
+  id?: string;
+  name?: string;
+  imageUrl?: string;
+  processedImageUrl?: string;
+  isBackgroundRemoved?: boolean;
+}
 
 const FONT_OPTIONS = [
   'Inter', 'Roboto', 'Open Sans', 'Lato', 'Montserrat', 'Poppins', 'Nunito', 'Raleway',
@@ -246,6 +255,7 @@ export default function ScorecardDesignerPage({ gameType = 'cricket' }: Readonly
   const [customWidgets, setCustomWidgets] = useState<CustomWidgetDef[]>([]);
   const [assets, setAssets] = useState<ScorecardAsset[]>([]);
   const [auctionTeams, setAuctionTeams] = useState<Team[]>([]);
+  const [previewPlayers, setPreviewPlayers] = useState<PreviewPlayerImage[]>([]);
   const [branding, setBranding] = useState<{ tournamentLogo?: string; partnerLogo?: string; doOrDieFlagUrl?: string; superRaidFlagUrl?: string; superTackleFlagUrl?: string; allOutFlagUrl?: string; bonusPointFlagUrl?: string }>({});
   const [tenantTournamentLogo, setTenantTournamentLogo] = useState<string | undefined>();
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -470,6 +480,27 @@ export default function ScorecardDesignerPage({ gameType = 'cricket' }: Readonly
     }).catch(() => undefined);
     return () => { cancelled = true; };
   }, [ready, sport]);
+
+  // The ticker preview needs the auction player portraits (the OBS overlay reads the same node); read once.
+  const tickerDesignerOpen = activeDesigner === 'ticker';
+  useEffect(() => {
+    if (!ready || sport !== 'cricket' || !tickerDesignerOpen || previewPlayers.length > 0) return;
+    const db = realtimeSync.getDatabase();
+    if (!db) return;
+    let cancelled = false;
+    void get(ref(db, tenantPath('auction/adminPlayers'))).then(snapshot => {
+      if (cancelled || !snapshot.exists()) return;
+      const raw = snapshot.val() as Record<string, AdminPlayerRecord> | AdminPlayerRecord[];
+      const players = (Array.isArray(raw) ? raw : Object.values(raw)).flatMap(record => {
+        const imageUrl = preferMigratedPlayerImageUrl(record?.processedImageUrl, record?.imageUrl);
+        return record?.id && imageUrl
+          ? [{ id: record.id, name: record.name ?? '', imageUrl, transparent: Boolean(record.processedImageUrl || record.isBackgroundRemoved) }]
+          : [];
+      });
+      setPreviewPlayers(players);
+    }).catch(() => undefined);
+    return () => { cancelled = true; };
+  }, [ready, sport, tickerDesignerOpen, previewPlayers.length]);
 
   const mockCtx = useMemo(() => mockContextFor(sport), [sport]);
   const previewBranding = useMemo(() => ({
@@ -1283,6 +1314,8 @@ export default function ScorecardDesignerPage({ gameType = 'cricket' }: Readonly
           live={previewCtx.sport === 'cricket' ? previewCtx.live : null}
           lineups={previewCtx.sport === 'cricket' && previewCtx.lineups ? previewCtx.lineups : { teamA: null, teamB: null }}
           tickerConfig={tenantTickerConfig}
+          teams={auctionTeams}
+          players={previewPlayers}
         />
       )}
 

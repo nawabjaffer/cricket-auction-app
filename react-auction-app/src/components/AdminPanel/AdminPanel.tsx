@@ -1210,7 +1210,7 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
           return t;
         });
         setTeams(updatedTeams);
-        await auctionPersistence.saveTeams(updatedTeams);
+        await auctionPersistence.saveTeams(useAuctionStore.getState().teams);
       }
 
       setEditingSoldPlayerId(null);
@@ -1243,7 +1243,7 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
         return t;
       });
       setTeams(updatedTeams);
-      await auctionPersistence.saveTeams(updatedTeams);
+      await auctionPersistence.saveTeams(useAuctionStore.getState().teams);
 
       showUploadFeedback(`Undid sale of ${player.name}. Player returned to available pool.`);
     } catch (err) {
@@ -1326,7 +1326,7 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
         return t;
       });
       setTeams(updatedTeams);
-      await auctionPersistence.saveTeams(updatedTeams);
+      await auctionPersistence.saveTeams(useAuctionStore.getState().teams);
 
       setEditingUnsoldPlayerId(null);
       setUnsoldSellDraft(null);
@@ -1692,6 +1692,13 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
       }
       // Sold list first so re-merging the player pool sees the new assignment.
       setSoldPlayers(updatedSoldPlayers);
+      const unsoldBeingEdited = unsoldPlayers.find(player => player.id === editingPlayerId);
+      if (unsoldBeingEdited) {
+        const updatedUnsold: UnsoldPlayer = { ...unsoldBeingEdited, ...normalizedDraft };
+        await auctionPersistence.saveUnsoldPlayer(updatedUnsold, updatedUnsold.round);
+        if (normalizedDraft.id !== editingPlayerId) await auctionPersistence.removeUnsoldPlayer(editingPlayerId);
+        setUnsoldPlayers(unsoldPlayers.map(player => player.id === editingPlayerId ? updatedUnsold : player));
+      }
       setAdminPlayerOverrides(updatedPlayers);
       // Persist team changes (icon player assignment) on top of stats recomputed from the sold list
       setTeams(updatedTeams);
