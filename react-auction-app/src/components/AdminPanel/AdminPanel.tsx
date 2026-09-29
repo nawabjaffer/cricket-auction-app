@@ -18,7 +18,7 @@ import '../../components/AdminPanel/ThemeSettingsExtended.css';
 import { useAuctionStore } from '../../store/auctionStore';
 import { activeConfig } from '../../config';
 import { exportSoldPlayers, exportUnsoldPlayers, downloadCSV, downloadPlayersTemplate, downloadScoresTemplate } from '../../utils/exportData';
-import { playerDuplicateMatch, uniqueImportedPlayerId } from '../../utils/playerDuplicateReview';
+import { playerDuplicateMatchById, uniqueImportedPlayerId } from '../../utils/playerDuplicateReview';
 import FeatureFlagsTab from './FeatureFlagsTab';
 import StreamingTab from './StreamingTab';
 import { StorageManager } from './StorageManager';
@@ -126,7 +126,7 @@ function PlayerImportReviewModal({ incoming, index, existingPlayers, onDecision,
   onCancel: () => void;
 }>) {
   const player = incoming[index];
-  const match = playerDuplicateMatch(player, existingPlayers);
+  const match = playerDuplicateMatchById(player, existingPlayers);
   const progress = `${index + 1} / ${incoming.length}`;
   return (
     <motion.div className="stats-review-overlay" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
@@ -139,6 +139,7 @@ function PlayerImportReviewModal({ incoming, index, existingPlayers, onDecision,
           <div className="stats-review-section">
             <h3 className="stats-section-title">Incoming CSV player</h3>
             <p><strong>{player.name}</strong></p>
+            <p>ID: {player.id}</p>
             <p>Phone: {player.phone || player.whatsappNumber || 'Not provided'}</p>
             <p>Place: {player.place || 'Not provided'}</p>
             <p>Role: {player.role || 'Not provided'}</p>
@@ -149,6 +150,7 @@ function PlayerImportReviewModal({ incoming, index, existingPlayers, onDecision,
             {match ? (
               <>
                 <p><strong>{match.existing.name}</strong></p>
+                <p>ID: {match.existing.id}</p>
                 <p>Phone: {match.existing.phone || match.existing.whatsappNumber || 'Not provided'}</p>
                 <p>Place: {match.existing.place || 'Not provided'}</p>
                 <p>Role: {match.existing.role || 'Not provided'}</p>
@@ -177,7 +179,7 @@ function AssignedPlayerReviewModal({ rows, index, existingPlayers, soldPlayers, 
   onCancel: () => void;
 }>) {
   const row = rows[index];
-  const match = playerDuplicateMatch(row.player, existingPlayers, {
+  const match = playerDuplicateMatchById(row.player, existingPlayers, {
     incomingTeam: { id: row.team.id, name: row.team.name },
     getExistingTeam: existing => {
       const assigned = soldPlayers.find(player => player.id === existing.id);
@@ -2217,7 +2219,7 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
     let linked = 0;
 
     review.incoming.forEach((incoming) => {
-      const match = playerDuplicateMatch(incoming, knownPlayers);
+      const match = playerDuplicateMatchById(incoming, knownPlayers);
       const decision = review.decisions[incoming.id];
       if (match && decision === 'same') {
         const existingIndex = mergedPlayers.findIndex(player => player.id === match.existing.id);
@@ -2325,7 +2327,7 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
       const decision = review.decisions[player.id] || 'skip';
       if (decision === 'remove') { removed += 1; continue; }
       if (decision === 'skip') { skipped += 1; continue; }
-      const duplicate = playerDuplicateMatch(player, nextPlayers, {
+      const duplicate = playerDuplicateMatchById(player, nextPlayers, {
         incomingTeam: { id: team.id, name: team.name },
         getExistingTeam: existing => existingTeams.get(existing.id),
       });
@@ -4596,7 +4598,10 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
                           {soldPlayers.map((p, i) => (
                             <tr key={p.id}>
                               <td>{i + 1}</td>
-                              <td>{p.name}</td>
+                              <td>
+                                {p.name}
+                                <small style={{ display: 'block', color: '#71717a', fontSize: '0.68rem' }}>ID: {p.id}</small>
+                              </td>
                               <td>
                                 <span className="admin-role-dot" style={{ background: getRoleBadgeColor(p.role) }} />
                                 {formatRoleDisplay(p.role)}

@@ -86,6 +86,20 @@ export function playerDuplicateMatch(
   return best;
 }
 
+export function playerDuplicateMatchById(
+  incoming: Player,
+  existingPlayers: Player[],
+  context: PlayerDuplicateMatchContext = {},
+): PlayerDuplicateMatch | null {
+  const incomingId = normalize(incoming.id);
+  if (!incomingId) return playerDuplicateMatch(incoming, existingPlayers, context);
+  const existing = existingPlayers.find(player => normalize(player.id) === incomingId);
+  if (existing) {
+    return { incoming, existing, confidence: 'high', reasons: ['player ID matches'] };
+  }
+  return playerDuplicateMatch(incoming, existingPlayers, context);
+}
+
 export function uniqueImportedPlayerId(baseId: string, usedIds: Set<string>): string {
   const base = normalize(baseId).replace(/[^a-z0-9_-]+/g, '_') || `csv_${Date.now()}`;
   let id = base;

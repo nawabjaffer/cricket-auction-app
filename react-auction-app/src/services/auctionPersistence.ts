@@ -446,6 +446,7 @@ class AuctionPersistenceService {
       basePrice: player.basePrice ?? 0,
       imageUrl: player.imageUrl ?? '',
       timestamp: Date.now(),
+      ...(player.teamId ? { teamId: player.teamId } : {}),
     };
 
     const soldPlayerRef = ref(this.db, `${DB_PATHS.SOLD_PLAYERS}/${player.id}`);

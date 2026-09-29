@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Player } from '../types';
-import { playerDuplicateMatch } from '../utils/playerDuplicateReview';
+import { playerDuplicateMatch, playerDuplicateMatchById } from '../utils/playerDuplicateReview';
 
 const player = (overrides: Partial<Player> = {}): Player => ({
   id: 'player-1',
@@ -45,5 +45,14 @@ describe('playerDuplicateMatch', () => {
     });
     expect(match?.confidence).toBe('review');
     expect(match?.reasons).toContain('team differs (Wolves vs Titans)');
+  });
+
+  it('matches duplicate-name bulk-edit rows by their exported ID', () => {
+    const first = player({ id: 'player-a', age: 24 });
+    const second = player({ id: 'player-b', age: 31 });
+    const incoming = player({ id: 'player-b', age: 32 });
+
+    expect(playerDuplicateMatchById(incoming, [first, second])?.existing.id).toBe('player-b');
+    expect(playerDuplicateMatch(incoming, [first, second])?.existing.id).toBe('player-a');
   });
 });
