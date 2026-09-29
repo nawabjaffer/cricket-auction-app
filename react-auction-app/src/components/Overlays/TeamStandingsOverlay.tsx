@@ -8,6 +8,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { IoClose } from 'react-icons/io5';
 import type { Team, SoldPlayer } from '../../types';
 import type { AdminSettings, SpecialCategory } from '../../services/auctionPersistence';
+import { belongsToTeam } from '../../utils/teamMembership';
 import './TeamStandingsOverlay.css';
 
 interface TeamStandingsOverlayProps {
@@ -24,7 +25,7 @@ export function TeamStandingsOverlay({ visible, onClose, teams, soldPlayers, set
 
   const teamRows = useMemo(() => {
     return teams.map(team => {
-      const teamPlayers = soldPlayers.filter(p => p.teamName === team.name);
+      const teamPlayers = soldPlayers.filter(player => belongsToTeam(player, team));
       const spent = teamPlayers.reduce((sum, p) => sum + p.soldAmount, 0);
       const totalPurse = team.allocatedAmount || budgetRules?.totalBudgetPerTeam || 100;
       const remaining = totalPurse - spent;

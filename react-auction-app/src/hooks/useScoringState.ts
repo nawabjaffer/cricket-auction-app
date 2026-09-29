@@ -13,6 +13,7 @@ import { scoringService } from '../services/scoring';
 import { statsEngine } from '../services/scoring/statsEngine';
 import { ManualScoringAdapter } from '../services/scoring/ManualScoringAdapter';
 import { normalizePlayerName } from '../utils/playerName';
+import { belongsToTeam } from '../utils/teamMembership';
 import type {
   LiveScore, MatchSetup, MatchLineup, Innings, BallOutcome,
   WicketDetail, MatchSquadPlayer, OverlayControlState, OverlayType,
@@ -131,7 +132,7 @@ export function useScoringState(matchId: string | undefined) {
 
               if (!lineupA || lineupA.players.length === 0) {
                 const teamAPlayers = allSold.filter(
-                  p => p.teamId === match.teamA.id || p.teamName === match.teamA.name,
+                  p => belongsToTeam(p, match.teamA),
                 );
                 if (teamAPlayers.length > 0) {
                   lineupA = {
@@ -142,7 +143,7 @@ export function useScoringState(matchId: string | undefined) {
               }
               if (!lineupB || lineupB.players.length === 0) {
                 const teamBPlayers = allSold.filter(
-                  p => p.teamId === match.teamB.id || p.teamName === match.teamB.name,
+                  p => belongsToTeam(p, match.teamB),
                 );
                 if (teamBPlayers.length > 0) {
                   lineupB = {

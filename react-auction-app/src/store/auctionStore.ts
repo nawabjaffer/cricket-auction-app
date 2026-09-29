@@ -25,6 +25,7 @@ import { realtimeSync } from '../services/realtimeSync';
 import { premiumService } from '../services/premiumService';
 import { inferRoleCategoryFromPlayer } from '../utils/roleFormatter';
 import { normalizePlayerName } from '../utils/playerName';
+import { belongsToTeam } from '../utils/teamMembership';
 
 // ── Synchronous localStorage read for instant logo on first render ───────
 // Zustand persist hydrates asynchronously (one tick after mount). Reading
@@ -75,9 +76,7 @@ function reconcileTeamsWithSoldPlayers(teams: Team[], soldPlayers: SoldPlayer[])
   if (teams.length === 0) return teams;
 
   return teams.map((team) => {
-    const soldForTeam = soldPlayers.filter((p) =>
-      p.teamId === team.id || (!!p.teamName && p.teamName === team.name)
-    );
+    const soldForTeam = soldPlayers.filter(player => belongsToTeam(player, team));
 
     const spent = soldForTeam.reduce((sum, p) => sum + (p.soldAmount || 0), 0);
     const allocatedAmount = Math.max(0, team.allocatedAmount || 0);

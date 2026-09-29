@@ -13,6 +13,7 @@ import {
 } from 'firebase/database';
 import type { Player, Team, SoldPlayer, AuctionRoleCategory } from '../types';
 import { normalizePlayerName } from '../utils/playerName';
+import { belongsToTeam } from '../utils/teamMembership';
 import { tenantPath, tenantPathFor } from './tenantPath';
 import { deletePlayerImageAssets } from './firebaseStorageService';
 
@@ -956,7 +957,7 @@ class AuctionPersistenceService {
     if (soldPlayers.length !== asRecords<SoldPlayerRecord>(soldRaw).length) {
       const rawTeams = teamsSnap.val();
       const recalculate = (team: Team): Team => {
-        const soldForTeam = soldPlayers.filter(item => item.teamId === team.id || item.teamName === team.name);
+        const soldForTeam = soldPlayers.filter(item => belongsToTeam(item, team));
         const playersBought = soldForTeam.length;
         const allocatedAmount = Math.max(0, team.allocatedAmount || 0);
         const spent = soldForTeam.reduce((sum, item) => sum + (item.soldAmount || 0), 0);

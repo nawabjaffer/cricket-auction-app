@@ -13,10 +13,12 @@ import { PlayerImage } from '../PlayerImage/PlayerImage';
 import { TeamLogo } from '../TeamLogo/TeamLogo';
 import { extractDriveFileId } from '../../utils/driveImage';
 import { useCurrencySuffix } from '../../store';
+import { belongsToTeam } from '../../utils/teamMembership';
 import { ImageLightbox } from '../ImageLightbox';
 import './TeamSquadView.css';
 
 type CaptainSourcePlayer = {
+  readonly id: string;
   readonly name: string;
   readonly imageUrl?: string;
   readonly role: string;
@@ -177,20 +179,16 @@ export function TeamSquadView({
 
     const normalizeRole = (role: string) => role.toLowerCase().trim();
 
-    // Normalize name for fuzzy matching (strip dots, extra spaces, lowercase)
-    const normalizeName = (name: string) => name.toLowerCase().replace(/\./g, '').replace(/\s+/g, ' ').trim();
-
-    // Build a name→imageUrl map from allPlayers for freshest image data
+    // Resolve current player images by ID so same-name players never share photos.
     const playerImageMap = new Map<string, string>();
     for (const p of allPlayers) {
-      if (p.imageUrl) playerImageMap.set(normalizeName(p.name), p.imageUrl);
+      if (p.imageUrl) playerImageMap.set(p.id, p.imageUrl);
     }
 
     return soldPlayers
-      .filter(p => p.teamId === activeTeam.id || p.teamName === activeTeam.name)
+      .filter(player => belongsToTeam(player, activeTeam))
       .map(p => {
-        // Use freshest image from allPlayers if available (fuzzy name match)
-        const freshImage = playerImageMap.get(normalizeName(p.name));
+        const freshImage = playerImageMap.get(p.id);
         if (freshImage && freshImage !== p.imageUrl) {
           return { ...p, imageUrl: freshImage };
         }

@@ -89,7 +89,7 @@ export function useAuctionDataLoader() {
           imageUrl: record.imageUrl,
           soldAmount: record.soldAmount,
           teamName: record.teamName,
-          teamId: savedTeams?.find(t => t.name === record.teamName)?.id,
+          teamId: record.teamId || savedTeams?.find(t => t.name === record.teamName)?.id,
           soldDate: new Date(record.timestamp).toISOString(),
         }));
 
@@ -270,6 +270,7 @@ export function useMirrorLiveSync(enabled = true) {
         imageUrl: r.imageUrl,
         soldAmount: r.soldAmount,
         teamName: r.teamName,
+        teamId: r.teamId,
         soldDate: new Date(r.timestamp).toISOString(),
       }));
       setSoldPlayers(players);

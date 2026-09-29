@@ -31,6 +31,7 @@ import type { SoldPlayer } from '../types';
 import { DEFAULT_MATCH_SQUAD_OVERLAY_DESIGN, type MatchSquadOverlayDesign } from '../types/matchSquadOverlay';
 import { normalizeMatchSquadOverlayDesign } from '../utils/matchSquadOverlayDesign';
 import { buildPreMatchSequence } from '../utils/preMatchSequence';
+import { belongsToTeam } from '../utils/teamMembership';
 import { EMPTY_CRICHEROES_MAPPINGS, normalizeCricHeroesAliasName, normalizeCricHeroesMappings, resolveCricHeroesPlayerAlias } from '../utils/cricHeroesMappings';
 import type { CricHeroesNameMappings } from '../utils/cricHeroesMappings';
 import { DEFAULT_PLAYER_STATS_SEQUENCE_CONFIG, normalizePlayerStatsSequenceConfig } from '../utils/playerStatsSequence';
@@ -628,7 +629,7 @@ function MatchesTab({ matches, teams, soldPlayers, onFeedback, saving, setSaving
 
           if (!existingA || existingA.players.length === 0) {
             const teamAPlayers = soldPlayers
-              .filter(p => p.teamId === match.teamA.id || p.teamName === match.teamA.name)
+              .filter(player => belongsToTeam(player, match.teamA))
               .slice(0, 11)
               .map((p, i) => ({
                 playerId: p.id,
@@ -645,7 +646,7 @@ function MatchesTab({ matches, teams, soldPlayers, onFeedback, saving, setSaving
 
           if (!existingB || existingB.players.length === 0) {
             const teamBPlayers = soldPlayers
-              .filter(p => p.teamId === match.teamB.id || p.teamName === match.teamB.name)
+              .filter(player => belongsToTeam(player, match.teamB))
               .slice(0, 11)
               .map((p, i) => ({
                 playerId: p.id,
@@ -785,6 +786,18 @@ function MatchesTab({ matches, teams, soldPlayers, onFeedback, saving, setSaving
       });
   }, [matchListMode, matches]);
     const syncMatch = matches.find(match => match.id === syncMatchId);
+  const [syncProvider, setSyncProvider] = useState<MatchScoringConfig['provider'] | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    setSyncProvider(null);
+    if (!syncMatchId) return () => { cancelled = true; };
+    void scoringService.getMatchConfig(syncMatchId).then(config => {
+      if (!cancelled) setSyncProvider(config?.provider || 'manual');
+    }).catch(() => {
+      if (!cancelled) setSyncProvider('manual');
+    });
+    return () => { cancelled = true; };
+  }, [syncMatchId]);
 
   return (
     <div className="scoring-admin__section scoring-admin__section--prematch">
@@ -1183,13 +1196,13 @@ function MatchesTab({ matches, teams, soldPlayers, onFeedback, saving, setSaving
               </button>
             </div>
           </div>
-          {syncMatchId === match.id && (
+          {syncMatchId === match.id && syncProvider === 'cricheroes' && (
             <CricHeroesSyncPanel match={match} teams={teams} soldPlayers={soldPlayers} sync={sync} nameMappings={nameMappings} setNameMappings={setNameMappings} />
           )}
           </Fragment>
         ))}
       </div>
-      {syncMatch && !visibleMatches.some(match => match.id === syncMatch.id) && (
+      {syncMatch && syncProvider === 'cricheroes' && !visibleMatches.some(match => match.id === syncMatch.id) && (
         <CricHeroesSyncPanel match={syncMatch} teams={teams} soldPlayers={soldPlayers} sync={sync} nameMappings={nameMappings} setNameMappings={setNameMappings} />
       )}
 
@@ -1373,7 +1386,15 @@ function ProviderTab({ matches, teams, soldPlayers, onFeedback, sync, nameMappin
           {matches.map(match => <option key={match.id} value={match.id}>{match.teamA.name} vs {match.teamB.name} ({match.status})</option>)}
         </select>
       </label>
-      <CricHeroesSyncPanel match={resolvedMatch} teams={teams} soldPlayers={soldPlayers} sync={sync} nameMappings={nameMappings} setNameMappings={setNameMappings} />
+      {resolvedMatch && configs[resolvedMatch.id]?.provider === 'cricheroes' ? (
+        <CricHeroesSyncPanel match={resolvedMatch} teams={teams} soldPlayers={soldPlayers} sync={sync} nameMappings={nameMappings} setNameMappings={setNameMappings} />
+      ) : (
+        <div className="scoring-admin__empty">
+          {resolvedMatch
+            ? `CricHeroes sync is hidden because ${resolvedMatch.teamA.name} vs ${resolvedMatch.teamB.name} uses ${configs[resolvedMatch.id]?.provider || 'manual'} scoring. Select CricHeroes in Per-Match Provider to configure team/player mapping and imports.`
+            : 'Choose a match and set its provider to CricHeroes to configure sync and player mappings.'}
+        </div>
+      )}
 
       <h3 className="scoring-admin__subsection-title" style={{ marginTop: '1.5rem' }}>Per-Match Provider</h3>
       {matches.length === 0 && (
@@ -3335,7 +3356,7 @@ function PreMatchTab({ matches, config, setConfig, onFeedback, soldPlayers }: {
               {impactPlayersA.length < 4 && (() => {
                 const playingXIIds = new Set((lineups.teamA?.players || []).map(p => p.playerId));
                 const remainingSquad = soldPlayers
-                  .filter(p => (p.teamId === selectedMatch.teamA.id || p.teamName === selectedMatch.teamA.name) && !playingXIIds.has(p.id))
+                  .filter(player => belongsToTeam(player, selectedMatch.teamA) && !playingXIIds.has(player.id))
                   .filter(p => !impactPlayersA.some(ip => ip.playerId === p.id));
                 return remainingSquad.length > 0 ? (
                   <select
@@ -3376,7 +3397,7 @@ function PreMatchTab({ matches, config, setConfig, onFeedback, soldPlayers }: {
               {impactPlayersB.length < 4 && (() => {
                 const playingXIIds = new Set((lineups.teamB?.players || []).map(p => p.playerId));
                 const remainingSquad = soldPlayers
-                  .filter(p => (p.teamId === selectedMatch.teamB.id || p.teamName === selectedMatch.teamB.name) && !playingXIIds.has(p.id))
+                  .filter(player => belongsToTeam(player, selectedMatch.teamB) && !playingXIIds.has(player.id))
                   .filter(p => !impactPlayersB.some(ip => ip.playerId === p.id));
                 return remainingSquad.length > 0 ? (
                   <select
@@ -3448,8 +3469,8 @@ function SquadSelectionModal({ match, soldPlayers, onSave, onClose }: {
   const [saving, setSaving] = useState(false);
   const [loadedExisting, setLoadedExisting] = useState(false);
 
-  const teamAPlayers = soldPlayers.filter(p => p.teamId === match.teamA.id || p.teamName === match.teamA.name);
-  const teamBPlayers = soldPlayers.filter(p => p.teamId === match.teamB.id || p.teamName === match.teamB.name);
+  const teamAPlayers = soldPlayers.filter(player => belongsToTeam(player, match.teamA));
+  const teamBPlayers = soldPlayers.filter(player => belongsToTeam(player, match.teamB));
 
   // Load existing lineups, or pre-select default playing 11
   useEffect(() => {
