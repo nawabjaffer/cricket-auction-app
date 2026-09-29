@@ -12,12 +12,19 @@ interface OBSMessage {
   d: Record<string, unknown>;
 }
 
-interface OBSConnectionDiagnostics {
+export interface OBSConnectionDiagnostics {
   attemptedUrls: string[];
   lastSuccessfulUrl: string;
   failures: string[];
   lastErrorDetail: string;
   mixedContentLikely: boolean;
+  logs: OBSConnectionLog[];
+}
+
+export interface OBSConnectionLog {
+  timestamp: number;
+  level: 'info' | 'warning' | 'error';
+  message: string;
 }
 
 type OBSEventCallback = (event: string, data: unknown) => void;
@@ -38,6 +45,11 @@ class OBSService {
   private attemptedUrls: string[] = [];
   private attemptFailures: string[] = [];
   private lastSuccessfulUrl = '';
+  private connectionLogs: OBSConnectionLog[] = [];
+
+  private logConnection(message: string, level: OBSConnectionLog['level'] = 'info'): void {
+    this.connectionLogs = [...this.connectionLogs, { timestamp: Date.now(), level, message }].slice(-60);
+  }
 
   /**
    * Subscribe to connection state changes
@@ -118,9 +130,8 @@ class OBSService {
       return [`${explicitScheme}://${normalizedHost}:${port}`];
     }
 
-    const prefersSecure = globalThis.location?.protocol === 'https:';
-    const schemeOrder = prefersSecure ? ['wss', 'ws'] : ['ws', 'wss'];
-    return schemeOrder.map((scheme) => `${scheme}://${normalizedHost}:${port}`);
+    const scheme = globalThis.location?.protocol === 'https:' ? 'wss' : 'ws';
+    return [`${scheme}://${normalizedHost}:${port}`];
   }
 
   private isLikelyLanHost(host: string): boolean {
@@ -137,60 +148,79 @@ class OBSService {
   private async tryConnectUrl(wsUrl: string, password?: string): Promise<boolean> {
     return new Promise((resolve) => {
       let settled = false;
-      const socket = new WebSocket(wsUrl);
+      let socket: WebSocket;
+      let timeoutId: ReturnType<typeof setTimeout> | null = null;
       const settle = (success: boolean) => {
         if (settled) return;
         settled = true;
         resolve(success);
       };
 
-      const timeoutId = setTimeout(() => {
-        this.lastErrorDetail = `Connection timeout for ${wsUrl}`;
-        this.notifyConnectionState('error');
-        socket.close();
-        settle(false);
-      }, 10_000);
-
       try {
         this.notifyConnectionState('connecting');
+        socket = new WebSocket(wsUrl);
+        timeoutId = setTimeout(() => {
+          this.lastErrorDetail = `Connection timed out after 10 seconds: ${wsUrl}`;
+          this.logConnection(this.lastErrorDetail, 'error');
+          this.notifyConnectionState('error');
+          socket.close();
+          settle(false);
+        }, 10_000);
 
         socket.onopen = () => {
           console.log('[OBS] WebSocket connected:', wsUrl);
+          this.logConnection(`WebSocket transport opened: ${wsUrl}`);
         };
 
         socket.onmessage = async (event) => {
           try {
             const message: OBSMessage = JSON.parse(event.data);
             await this.handleMessage(message, (success) => {
-              clearTimeout(timeoutId);
+              if (timeoutId) clearTimeout(timeoutId);
               if (success) {
                 this.lastErrorDetail = '';
                 this.config.password = password;
                 this.ws = socket;
+                this.logConnection(`OBS authenticated successfully: ${wsUrl}`);
               }
               settle(success);
             }, socket);
           } catch (error) {
             this.lastErrorDetail = `Invalid OBS message from ${wsUrl}: ${String(error)}`;
+            this.logConnection(this.lastErrorDetail, 'error');
             this.notifyConnectionState('error');
-            clearTimeout(timeoutId);
+            if (timeoutId) clearTimeout(timeoutId);
             settle(false);
           }
         };
 
         socket.onerror = () => {
-          clearTimeout(timeoutId);
-          this.lastErrorDetail = `WebSocket error for ${wsUrl}`;
+          if (timeoutId) clearTimeout(timeoutId);
+          const guidance = wsUrl.startsWith('wss://')
+            ? 'Check that this WSS endpoint is a reachable TLS reverse proxy with a browser-trusted certificate; OBS default port 4455 is plain WS.'
+            : 'Check this is the OBS computer LAN IP (not the browser/dev-server IP), OBS WebSocket is enabled on this port, and the OBS host firewall allows inbound LAN connections.';
+          this.lastErrorDetail = `Browser WebSocket error for ${wsUrl}. ${guidance}`;
+          if (globalThis.location?.protocol === 'https:' && wsUrl.startsWith('ws://')) {
+            this.lastErrorDetail += ' HTTPS pages cannot open insecure ws:// connections; use WSS or the OBS dock relay.';
+          }
+          this.logConnection(this.lastErrorDetail, 'error');
           this.notifyConnectionState('error');
           settle(false);
         };
 
         socket.onclose = (event) => {
-          clearTimeout(timeoutId);
+          if (timeoutId) clearTimeout(timeoutId);
           console.log('[OBS] WebSocket closed', event.code, event.reason, wsUrl);
           this.lastErrorDetail = event.reason
             ? `OBS closed (${event.code}) for ${wsUrl}: ${event.reason}`
             : `OBS closed (${event.code}) for ${wsUrl}`;
+          const hint = event.code === 4009
+            ? ' OBS rejected authentication; verify the WebSocket password.'
+            : event.code === 1006
+              ? ' No WebSocket close frame arrived; check OBS is listening on this interface and firewall rules allow the port.'
+              : '';
+          this.lastErrorDetail += hint;
+          this.logConnection(this.lastErrorDetail, event.code === 4009 || event.code === 1006 ? 'error' : 'warning');
           settle(false);
           if (this.ws === socket) {
             this.stopHeartbeat();
@@ -202,12 +232,13 @@ class OBSService {
           }
         };
       } catch (error) {
-        clearTimeout(timeoutId);
+        if (timeoutId) clearTimeout(timeoutId);
         const detail = String(error);
         this.lastErrorDetail = `Failed creating WebSocket ${wsUrl}: ${detail}`;
         if (detail.toLowerCase().includes('securityerror') || detail.toLowerCase().includes('mixed content')) {
-          this.lastErrorDetail += ' (Browser blocked insecure ws:// from a secure https page)';
+          this.lastErrorDetail += ' Browser blocked insecure ws:// from a secure https page; use the OBS dock relay or a trusted wss:// endpoint.';
         }
+        this.logConnection(this.lastErrorDetail, 'error');
         this.notifyConnectionState('error');
         settle(false);
       }
@@ -218,11 +249,6 @@ class OBSService {
    * Connect to OBS WebSocket
    */
   async connect(host: string = 'localhost', port: number = 4455, password?: string): Promise<boolean> {
-    if (this.ws?.readyState === WebSocket.OPEN) {
-      console.log('[OBS] Already connected');
-      return true;
-    }
-
     // Cancel any pending auto-reconnect before a manual connect
     if (this.reconnectTimeout) {
       clearTimeout(this.reconnectTimeout);
@@ -232,8 +258,18 @@ class OBSService {
     const normalized = this.normalizeTarget(host, port);
     if (!normalized.host) {
       this.lastErrorDetail = 'Invalid OBS host';
+      this.logConnection(this.lastErrorDetail, 'error');
       this.notifyConnectionState('error');
       return false;
+    }
+
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      if (this.config.host === normalized.host && this.config.port === normalized.port && this.config.password === password) {
+        this.logConnection(`Already connected to ${normalized.host}:${normalized.port}`);
+        return true;
+      }
+      this.logConnection('Connection settings changed; closing the old OBS socket before reconnecting.', 'warning');
+      this.disconnect();
     }
 
     this.config.host = normalized.host;
@@ -243,12 +279,15 @@ class OBSService {
     this.attemptFailures = [];
     this.lastSuccessfulUrl = '';
     this.lastErrorDetail = '';
+    this.connectionLogs = [];
+    this.logConnection(`Starting OBS WebSocket connection to ${normalized.host}:${normalized.port}`);
     // Reset reconnect counter for a fresh manual connect
     this.reconnectAttempts = 0;
 
     const urls = this.buildCandidateUrls(normalized.host, normalized.port, normalized.explicitScheme);
     if (urls.length === 0) {
       this.lastErrorDetail = 'Invalid OBS host';
+      this.logConnection(this.lastErrorDetail, 'error');
       this.notifyConnectionState('error');
       return false;
     }
@@ -256,10 +295,11 @@ class OBSService {
     for (const url of urls) {
       this.attemptedUrls.push(url);
       console.log('[OBS] Connecting to:', url);
-      // eslint-disable-next-line no-await-in-loop
+      this.logConnection(`Trying ${url}`);
       const ok = await this.tryConnectUrl(url, password);
       if (ok) {
         this.lastSuccessfulUrl = url;
+        this.logConnection(`Connected to OBS at ${url}`);
         return true;
       }
       if (this.lastErrorDetail) {
@@ -269,8 +309,10 @@ class OBSService {
 
     if (globalThis.location?.protocol === 'https:' && this.isLikelyLanHost(normalized.host) && urls.some((url) => url.startsWith('ws://'))) {
       this.lastErrorDetail = `${this.lastErrorDetail || 'Direct OBS socket failed'}. HTTPS page may block ws:// LAN connections on iPhone/Safari. Use OBS relay mode or host the dock over http:// on local network.`;
+      this.logConnection(this.lastErrorDetail, 'warning');
     }
 
+    this.logConnection('All OBS WebSocket connection attempts failed.', 'error');
     this.notifyConnectionState('error');
     return false;
   }
@@ -306,7 +348,7 @@ class OBSService {
         break;
 
       case 7: // RequestResponse
-        this.handleRequestResponse(d as { requestId: string; requestStatus: { result: boolean }; responseData: unknown });
+        this.handleRequestResponse(d as { requestId: string; requestType?: string; requestStatus: { result: boolean; code?: number; comment?: string }; responseData: unknown });
         break;
 
       default:
@@ -400,8 +442,8 @@ class OBSService {
   /**
    * Handle request response
    */
-  private handleRequestResponse(response: { requestId: string; requestStatus: { result: boolean; comment?: string }; responseData: unknown }): void {
-    const { requestId, requestStatus, responseData } = response;
+  private handleRequestResponse(response: { requestId: string; requestType?: string; requestStatus: { result: boolean; code?: number; comment?: string }; responseData: unknown }): void {
+    const { requestId, requestType, requestStatus, responseData } = response;
     const pending = this.pendingRequests.get(requestId);
     
     if (pending) {
@@ -409,7 +451,11 @@ class OBSService {
       if (requestStatus.result) {
         pending.resolve(responseData);
       } else {
-        pending.reject(new Error(requestStatus.comment || 'Request failed'));
+        const requestName = requestType || 'OBS request';
+        const detail = `${requestName} failed${requestStatus.code ? ` (${requestStatus.code})` : ''}${requestStatus.comment ? `: ${requestStatus.comment}` : ''}`;
+        this.lastErrorDetail = detail;
+        this.logConnection(detail, 'error');
+        pending.reject(new Error(requestStatus.comment || detail));
       }
     }
   }
@@ -437,14 +483,20 @@ class OBSService {
   /**
    * Load available scenes
    */
-  private async loadScenes(): Promise<void> {
+  private async loadScenes(): Promise<boolean> {
     try {
       const response = await this.request<{ scenes: { sceneName: string }[]; currentProgramSceneName: string }>('GetSceneList');
       this.config.scenes = response.scenes.map(s => s.sceneName);
       this.config.currentScene = response.currentProgramSceneName;
+      this.lastErrorDetail = '';
+      this.logConnection(`Loaded ${this.config.scenes.length} OBS scene(s).`);
       console.log('[OBS] Loaded scenes:', this.config.scenes);
+      return true;
     } catch (error) {
+      this.lastErrorDetail = `Could not load OBS scenes: ${error instanceof Error ? error.message : String(error)}`;
+      this.logConnection(this.lastErrorDetail, 'error');
       console.error('[OBS] Failed to load scenes:', error);
+      return false;
     }
   }
 
@@ -559,7 +611,8 @@ class OBSService {
 
   async refreshScenes(): Promise<string[]> {
     if (!this.isConnected()) return [];
-    await this.loadScenes();
+    const loaded = await this.loadScenes();
+    if (!loaded) throw new Error(this.lastErrorDetail || 'OBS scene discovery failed');
     return this.getScenes();
   }
 
@@ -669,7 +722,12 @@ class OBSService {
       failures: [...this.attemptFailures],
       lastErrorDetail: this.lastErrorDetail,
       mixedContentLikely,
+      logs: [...this.connectionLogs],
     };
+  }
+
+  getConnectionLogs(): OBSConnectionLog[] {
+    return [...this.connectionLogs];
   }
 }
 

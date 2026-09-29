@@ -3,7 +3,7 @@
 // Match setup, provider config, ads, overlay branding, animation triggers
 // ============================================================================
 
-import { Fragment, useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { Fragment, useState, useEffect, useCallback, useMemo, useRef, useId } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { get, onValue, ref, set as fbSet } from 'firebase/database';
 import { IoAdd, IoTrash, IoSave, IoClose, IoPlay, IoStop, IoTrophy, IoSettings, IoImage, IoFlash, IoVideocam, IoLink, IoDesktop, IoPencil, IoPeople, IoGameController } from 'react-icons/io5';
@@ -26,8 +26,11 @@ import type { CricHeroesSnapshot } from '../services/scoring/cricHeroesReader';
 import { useCricHeroesSyncAdapter } from '../hooks/useCricHeroesSyncAdapter';
 import { uploadFileToStorage } from '../services';
 import { CRICHEROES_EXTENSION } from '../config/cricheroesExtension';
+import { CRICKET_REPLAY_SCENE, obsStreamingPresetService } from '../services/obsStreamingPresetService';
+import { obsConnectionBridgeService } from '../services/obsConnectionBridgeService';
+import type { OBSConnectionDiagnostics } from '../services/obsService';
 import { DEFAULT_LIVE_COMMENT_SETTINGS, DEFAULT_MVP_WEIGHTS, MATCH_STAGE_LABELS } from '../types/scoring';
-import type { MatchSetup, MatchStage, ScoringAd, ScoringOverlayConfig, LiveQuestion, MatchScoringConfig, PreMatchState, ImpactPlayer, TossConfig, MatchLineup, MatchSquadPlayer, TickerConfig, OBSWebSocketConfig, MVPWeights, AnimationConfig, OBSReplayButton, OBSButtonSeriesStep, OBSReplayConfig, TickerStatWidget, SharedOBSProfile, PlayerStatsSequenceItem, LiveCommentSettings } from '../types/scoring';
+import type { MatchSetup, MatchStage, ScoringAd, ScoringOverlayConfig, LiveQuestion, MatchScoringConfig, PreMatchState, ImpactPlayer, TossConfig, MatchLineup, MatchSquadPlayer, TickerConfig, OBSWebSocketConfig, MVPWeights, AnimationConfig, OBSReplayButton, OBSButtonKeySequence, OBSButtonSeriesStep, OBSReplayConfig, TickerStatWidget, SharedOBSProfile, PlayerStatsSequenceItem, LiveCommentSettings } from '../types/scoring';
 import type { SoldPlayer } from '../types';
 import { DEFAULT_MATCH_SQUAD_OVERLAY_DESIGN, type MatchSquadOverlayDesign } from '../types/matchSquadOverlay';
 import { normalizeMatchSquadOverlayDesign } from '../utils/matchSquadOverlayDesign';
@@ -36,6 +39,8 @@ import { belongsToTeam } from '../utils/teamMembership';
 import { EMPTY_CRICHEROES_MAPPINGS, normalizeCricHeroesAliasName, normalizeCricHeroesMappings, resolveCricHeroesPlayerAlias } from '../utils/cricHeroesMappings';
 import type { CricHeroesNameMappings } from '../utils/cricHeroesMappings';
 import { DEFAULT_PLAYER_STATS_SEQUENCE_CONFIG, normalizePlayerStatsSequenceConfig } from '../utils/playerStatsSequence';
+
+const EMPTY_OBS_REPLAY_CONFIG: OBSReplayConfig = { buttons: [] };
 import { withScorerAdminChrome } from './withScorerAdminChrome';
 import './ScoringAdminPage.css';
 
@@ -4031,6 +4036,187 @@ interface HotkeyDescriptor {
   context: string;
 }
 
+interface OBSChoice {
+  value: string;
+  label: string;
+  detail?: string;
+}
+
+interface OBSChoiceGroup {
+  group: string;
+  items: OBSChoice[];
+}
+
+const OBS_KEY_GROUPS: OBSChoiceGroup[] = [
+  {
+    group: 'Letters',
+    items: Array.from({ length: 26 }, (_, index) => String.fromCharCode(65 + index)).map(key => ({ value: `OBS_KEY_${key}`, label: key })),
+  },
+  {
+    group: 'Numbers',
+    items: Array.from({ length: 10 }, (_, index) => String(index)).map(key => ({ value: `OBS_KEY_${key}`, label: key })),
+  },
+  {
+    group: 'Function keys',
+    items: Array.from({ length: 24 }, (_, index) => `F${index + 1}`).map(key => ({ value: `OBS_KEY_${key}`, label: key })),
+  },
+  {
+    group: 'Navigation',
+    items: ['UP', 'DOWN', 'LEFT', 'RIGHT', 'HOME', 'END', 'PAGEUP', 'PAGEDOWN', 'INSERT', 'DELETE'].map(key => ({ value: `OBS_KEY_${key}`, label: key.replace('PAGE', 'Page ') })),
+  },
+  {
+    group: 'Control keys',
+    items: [
+      ['SPACE', 'Space'], ['RETURN', 'Enter'], ['ENTER', 'Numpad Enter'], ['TAB', 'Tab'],
+      ['ESCAPE', 'Escape'], ['BACKSPACE', 'Backspace'], ['PAUSE', 'Pause'], ['PRINT', 'Print Screen'],
+    ].map(([key, label]) => ({ value: `OBS_KEY_${key}`, label })),
+  },
+];
+
+function OBSSearchablePicker({
+  value,
+  groups,
+  onChange,
+  placeholder,
+  ariaLabel,
+  allowCustom = true,
+  className = '',
+}: {
+  value: string;
+  groups: OBSChoiceGroup[];
+  onChange: (value: string) => void;
+  placeholder: string;
+  ariaLabel: string;
+  allowCustom?: boolean;
+  className?: string;
+}) {
+  const listId = useId();
+  const rootRef = useRef<HTMLDivElement>(null);
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const normalizedQuery = query.trim().toLowerCase();
+  const filteredGroups = groups.map(group => ({
+    ...group,
+    items: group.items.filter(item =>
+      `${item.value} ${item.label} ${item.detail || ''} ${group.group}`.toLowerCase().includes(normalizedQuery),
+    ),
+  })).filter(group => group.items.length > 0);
+  const allOptions = groups.flatMap(group => group.items);
+  const selected = allOptions.find(item => item.value === value);
+  const displayValue = selected?.label || value;
+  const customValue = query.trim();
+  const isKnownValue = allOptions.some(item => item.value.toLowerCase() === customValue.toLowerCase());
+
+  useEffect(() => {
+    if (!open) return;
+    const closeOnOutsidePointer = (event: PointerEvent) => {
+      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
+    };
+    document.addEventListener('pointerdown', closeOnOutsidePointer);
+    return () => document.removeEventListener('pointerdown', closeOnOutsidePointer);
+  }, [open]);
+
+  const choose = (nextValue: string) => {
+    onChange(nextValue);
+    setQuery('');
+    setOpen(false);
+  };
+
+  return (
+    <div className={`obs-search-picker ${className}`} ref={rootRef}>
+      <input
+        className="scoring-admin__input obs-search-picker__input"
+        type="search"
+        role="combobox"
+        aria-label={ariaLabel}
+        aria-expanded={open}
+        aria-controls={listId}
+        aria-autocomplete="list"
+        value={open ? query : displayValue}
+        placeholder={placeholder}
+        onFocus={() => { setQuery(''); setOpen(true); }}
+        onChange={event => { setQuery(event.target.value); setOpen(true); }}
+        onKeyDown={event => {
+          if (event.key === 'Escape') setOpen(false);
+          if (event.key === 'Enter' && open && query.trim()) {
+            event.preventDefault();
+            const firstMatch = filteredGroups[0]?.items[0];
+            choose(firstMatch?.value || query.trim());
+          }
+        }}
+      />
+      {open && (
+        <div className="obs-search-picker__menu" id={listId} role="listbox" aria-label={`${ariaLabel} options`}>
+          {allowCustom && customValue && !isKnownValue && (
+            <button type="button" className="obs-search-picker__option obs-search-picker__option--custom" role="option" onClick={() => choose(customValue)}>
+              <span>Use custom value</span>
+              <code>{customValue}</code>
+            </button>
+          )}
+          {filteredGroups.map(group => (
+            <div className="obs-search-picker__group" key={group.group} role="group" aria-label={group.group}>
+              <div className="obs-search-picker__group-title">{group.group}</div>
+              {group.items.map(item => (
+                <button
+                  type="button"
+                  className="obs-search-picker__option"
+                  key={item.value}
+                  role="option"
+                  aria-selected={item.value === value}
+                  onClick={() => choose(item.value)}
+                >
+                  <span>{item.label}</span>
+                  <code>{item.detail || item.value}</code>
+                </button>
+              ))}
+            </div>
+          ))}
+          {!filteredGroups.length && !(allowCustom && customValue) && (
+            <div className="obs-search-picker__empty">No matching options. Try another search.</div>
+          )}
+        </div>
+      )}
+      <small className="obs-search-picker__selected">
+        {value ? <>Selected: <code>{value}</code></> : 'Search and select an option'}
+      </small>
+    </div>
+  );
+}
+
+function OBSKeySequenceField({
+  value,
+  onChange,
+  compact = false,
+}: {
+  value?: OBSButtonKeySequence;
+  onChange: (value: OBSButtonKeySequence) => void;
+  compact?: boolean;
+}) {
+  return (
+    <div className={`obs-key-sequence ${compact ? 'obs-key-sequence--compact' : ''}`}>
+      <OBSSearchablePicker
+        value={value?.keyId || ''}
+        groups={OBS_KEY_GROUPS}
+        onChange={keyId => onChange({ ...value, keyId })}
+        placeholder="Search keys: F1, Space, Enter…"
+        ariaLabel="Search OBS keyboard keys"
+      />
+      <div className="obs-key-sequence__modifiers" aria-label="Modifier keys">
+        {(['shift', 'ctrl', 'alt'] as const).map(modifier => (
+          <label key={modifier}>
+            <input
+              type="checkbox"
+              checked={!!value?.[modifier]}
+              onChange={event => onChange({ ...value, keyId: value?.keyId || '', [modifier]: event.target.checked })}
+            />
+            {modifier === 'ctrl' ? 'Ctrl' : modifier.charAt(0).toUpperCase() + modifier.slice(1)}
+          </label>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function describeHotkey(rawHotkey: string): HotkeyDescriptor {
   const [namespace = 'general', ...rest] = rawHotkey.split('.');
   const tail = rest.length > 0 ? rest.join('.') : rawHotkey;
@@ -4069,14 +4255,40 @@ function OBSWebSocketTab({ config, setConfig, onFeedback, baseUrl }: {
 }) {
   const [saving, setSaving] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<'disconnected' | 'connected' | 'connecting' | 'error'>('disconnected');
+  const [connectionDiagnostics, setConnectionDiagnostics] = useState<OBSConnectionDiagnostics>({
+    attemptedUrls: [], lastSuccessfulUrl: '', failures: [], lastErrorDetail: '', mixedContentLikely: false, logs: [],
+  });
   const [availableHotkeys, setAvailableHotkeys] = useState<string[]>([]);
   const [availableScenes, setAvailableScenes] = useState<string[]>([]);
   const [discoveringHotkeys, setDiscoveringHotkeys] = useState(false);
+  const [presetCameraCount, setPresetCameraCount] = useState(2);
+  const [presetMobileCameraCount, setPresetMobileCameraCount] = useState(0);
+  const [presetMicrophoneCount, setPresetMicrophoneCount] = useState(1);
+  const [presetDesktopAudio, setPresetDesktopAudio] = useState(true);
+  const [settingUpOBS, setSettingUpOBS] = useState(false);
+  const [presetWarnings, setPresetWarnings] = useState<string[]>([]);
+  const [currentReplayDirectory, setCurrentReplayDirectory] = useState('');
   const [editingButtonIdx, setEditingButtonIdx] = useState<number | null>(null);
+  const [setupChecklistOpen, setSetupChecklistOpen] = useState(false);
+  const [setupChecklistAccepted, setSetupChecklistAccepted] = useState(false);
+  const setupDialogRef = useRef<HTMLDialogElement>(null);
   const [sharedProfiles, setSharedProfiles] = useState<SharedOBSProfile[]>([]);
   const [sharedProfileName, setSharedProfileName] = useState('');
   const [sharedBusy, setSharedBusy] = useState(false);
   const activeTenantId = getActiveTenant();
+
+  useEffect(() => {
+    let active = true;
+    let unsubscribe = () => {};
+    void import('../services/obsService').then(({ obsService }) => {
+      if (!active) return;
+      unsubscribe = obsService.onConnectionChange(state => {
+        setConnectionStatus(state);
+        setConnectionDiagnostics(obsService.getConnectionDiagnostics());
+      });
+    });
+    return () => { active = false; unsubscribe(); };
+  }, []);
 
   useEffect(() => {
     let unsubscribe = () => {};
@@ -4102,6 +4314,18 @@ function OBSWebSocketTab({ config, setConfig, onFeedback, baseUrl }: {
       .sort((a, b) => a.group.localeCompare(b.group));
   }, [availableHotkeys]);
 
+  const searchableHotkeyGroups = useMemo<OBSChoiceGroup[]>(() => groupedHotkeys.map(group => ({
+    group: group.group,
+    items: group.items.map(item => ({ value: item.raw, label: item.title, detail: `${item.raw} · ${item.context}` })),
+  })), [groupedHotkeys]);
+
+  useEffect(() => {
+    const dialog = setupDialogRef.current;
+    if (!dialog) return;
+    if (setupChecklistOpen && !dialog.open) dialog.showModal();
+    else if (!setupChecklistOpen && dialog.open) dialog.close();
+  }, [setupChecklistOpen]);
+
   const obsConfig = config.obsWebSocketConfig ?? {
     host: 'localhost',
     port: 4455,
@@ -4110,8 +4334,16 @@ function OBSWebSocketTab({ config, setConfig, onFeedback, baseUrl }: {
     replayDurationSeconds: 30,
   };
 
-  const replayConfig: OBSReplayConfig = config.obsReplayConfig ?? { buttons: [] };
+  const replayConfig: OBSReplayConfig = config.obsReplayConfig ?? EMPTY_OBS_REPLAY_CONFIG;
   const statsSequence = normalizePlayerStatsSequenceConfig(config.playerStatsSequence || DEFAULT_PLAYER_STATS_SEQUENCE_CONFIG);
+
+  useEffect(() => {
+    if (connectionStatus !== 'connected') return;
+    const db = realtimeSync.getDatabase();
+    if (!db) return;
+    obsConnectionBridgeService.start(db, tenantPath('scoring'), replayConfig);
+    obsConnectionBridgeService.updateReplayConfig(replayConfig);
+  }, [connectionStatus, replayConfig]);
 
   const updateOBS = (updates: Partial<OBSWebSocketConfig>) => {
     setConfig({ ...config, obsWebSocketConfig: { ...obsConfig, ...updates } });
@@ -4170,7 +4402,7 @@ function OBSWebSocketTab({ config, setConfig, onFeedback, baseUrl }: {
   const addButton = () => {
     const newBtn: OBSReplayButton = {
       id: `btn_${Date.now()}`,
-      label: 'New Button',
+      label: 'New Replay Button',
       icon: '▶',
       color: '#3b82f6',
       action: 'hotkey_name',
@@ -4243,21 +4475,139 @@ function OBSWebSocketTab({ config, setConfig, onFeedback, baseUrl }: {
     try {
       const { obsService } = await import('../services/obsService');
       const ok = await obsService.connect(obsConfig.host, obsConfig.port, obsConfig.password);
+      setConnectionDiagnostics(obsService.getConnectionDiagnostics());
       setConnectionStatus(ok ? 'connected' : 'error');
-      if (ok) setAvailableScenes(obsService.getScenes());
-      onFeedback(ok ? 'Connected to OBS' : 'Failed to connect to OBS');
+      if (ok) {
+        try {
+          const scenes = await obsService.refreshScenes();
+          setAvailableScenes(scenes);
+          const directory = await obsService.request<{ recordDirectory?: string }>('GetRecordDirectory').catch(() => null);
+          if (directory?.recordDirectory) setCurrentReplayDirectory(directory.recordDirectory);
+          onFeedback(scenes.length ? `Connected to OBS; loaded ${scenes.length} scenes` : 'Connected to OBS; no scenes were returned');
+        } catch (error) {
+          setAvailableScenes([]);
+          onFeedback(`Connected to OBS, but scene discovery failed: ${error instanceof Error ? error.message : String(error)}`);
+        }
+      } else {
+        onFeedback(obsService.getLastErrorDetail() || 'Failed to connect to OBS');
+      }
     } catch {
       setConnectionStatus('error');
-      onFeedback('Failed to connect to OBS');
+      const { obsService } = await import('../services/obsService');
+      setConnectionDiagnostics(obsService.getConnectionDiagnostics());
+      onFeedback(obsService.getLastErrorDetail() || 'Failed to connect to OBS');
     }
   };
 
   const handleRefreshScenes = async () => {
     if (connectionStatus !== 'connected') { onFeedback('Connect to OBS first'); return; }
     const { obsService } = await import('../services/obsService');
-    const scenes = await obsService.refreshScenes();
-    setAvailableScenes(scenes);
-    onFeedback(scenes.length ? `Loaded ${scenes.length} OBS scenes` : 'No scenes returned by OBS');
+    try {
+      const scenes = await obsService.refreshScenes();
+      setConnectionDiagnostics(obsService.getConnectionDiagnostics());
+      setAvailableScenes(scenes);
+      onFeedback(scenes.length ? `Loaded ${scenes.length} OBS scenes` : 'No scenes returned by OBS');
+    } catch (error) {
+      setConnectionDiagnostics(obsService.getConnectionDiagnostics());
+      onFeedback(`Scene discovery failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  };
+
+  const handleMatchSetup = async () => {
+    if (connectionStatus !== 'connected') { onFeedback('Connect to OBS before Match Setup'); return; }
+    setSettingUpOBS(true);
+    setPresetWarnings([]);
+    try {
+      const result = await obsStreamingPresetService.createCricketMatchSetup({
+        cameraCount: presetCameraCount,
+        mobileCameraCount: presetMobileCameraCount,
+        microphoneCount: presetMicrophoneCount,
+        includeDesktopAudio: presetDesktopAudio,
+        replayDurationSeconds: obsConfig.replayDurationSeconds,
+        overlayUrl: `${baseUrl}/cricket/scorer/obs-overlay`,
+        replayDirectory: replayConfig.replayDirectory,
+      });
+      if (result.replayDirectory) setCurrentReplayDirectory(result.replayDirectory);
+      const setupWarnings = [...result.warnings];
+      try {
+        const scenes = await (await import('../services/obsService')).obsService.refreshScenes();
+        setAvailableScenes(scenes);
+      } catch (error) {
+        setupWarnings.push(`Scene list refresh failed: ${error instanceof Error ? error.message : String(error)}`);
+      }
+      const buttons = [...replayConfig.buttons];
+      for (const presetButton of obsStreamingPresetService.getPresetReplayButtons(result.replayDurationSeconds)) {
+        const existingIndex = buttons.findIndex(button => button.id === presetButton.id);
+        if (existingIndex < 0) {
+          buttons.push({ ...presetButton, order: buttons.length });
+        } else {
+          const existing = buttons[existingIndex];
+          buttons[existingIndex] = {
+            ...presetButton,
+            label: existing.label,
+            icon: existing.icon,
+            color: existing.color,
+            order: existing.order,
+            enabled: true,
+          };
+        }
+      }
+      const nextReplayConfig: OBSReplayConfig = {
+        ...replayConfig,
+        replaySceneName: CRICKET_REPLAY_SCENE,
+        drsSceneName: 'Cricket - DRS',
+        replayDirectory: replayConfig.replayDirectory || result.replayDirectory,
+        instantReplaySourceName: result.replaySourceName,
+        instantReplaySourceNames: result.replaySourceNames,
+        buttons,
+      };
+      const nextConfig: ScoringOverlayConfig = {
+        ...config,
+        obsReplayConfig: nextReplayConfig,
+        obsWebSocketConfig: { ...obsConfig, replayDurationSeconds: result.replayDurationSeconds },
+      };
+      if (obsConfig.autoReplay) {
+        const attachReplayAction = (animation: AnimationConfig | undefined, defaults: AnimationConfig): AnimationConfig => ({
+          ...defaults,
+          ...animation,
+          actionMode: 'animation_and_obs',
+          obsActionButtonId: 'cricket-preset-instant-replay',
+          obsActionDelayMs: Math.max(0, obsConfig.replayDelaySeconds) * 1000,
+        });
+        nextConfig.fourAnimation = attachReplayAction(config.fourAnimation, { type: 'css', enabled: true, durationMs: 3000, text: 'FOUR!', color: '#22c55e', scale: 1 });
+        nextConfig.sixAnimation = attachReplayAction(config.sixAnimation, { type: 'css', enabled: true, durationMs: 4000, text: 'SIX!', color: '#8b5cf6', scale: 1.2 });
+        nextConfig.wicketAnimation = attachReplayAction(config.wicketAnimation, { type: 'css', enabled: true, durationMs: 4000, text: 'OUT!', color: '#ef4444', scale: 1 });
+      } else {
+        const clearPresetReplayAction = (animation?: AnimationConfig): AnimationConfig | undefined => {
+          if (animation?.obsActionButtonId !== 'cricket-preset-instant-replay') return animation;
+          const { actionMode: _actionMode, obsActionButtonId: _buttonId, obsActionDelayMs: _delay, ...remaining } = animation;
+          return remaining;
+        };
+        nextConfig.fourAnimation = clearPresetReplayAction(config.fourAnimation);
+        nextConfig.sixAnimation = clearPresetReplayAction(config.sixAnimation);
+        nextConfig.wicketAnimation = clearPresetReplayAction(config.wicketAnimation);
+      }
+      setConfig(nextConfig);
+      await scoringService.saveOverlayConfig(nextConfig);
+      if (nextConfig.obsSharingEnabled && nextConfig.obsSharedProfileId) {
+        const sharedProfile = await sharedOBSProfileService.get(nextConfig.obsSharedProfileId);
+        if (sharedProfile) {
+          await sharedOBSProfileService.save({
+            ...sharedProfile,
+            obsWebSocketConfig: nextConfig.obsWebSocketConfig || obsConfig,
+            obsReplayConfig: nextReplayConfig,
+          });
+        }
+      }
+      setPresetWarnings(setupWarnings);
+      onFeedback(setupWarnings.length
+        ? `Created ${result.scenes.length} scenes; review ${setupWarnings.length} setup note(s) below`
+        : `OBS Match Setup complete: ${result.scenes.length} scenes created`);
+    } catch (error) {
+      onFeedback(`OBS Match Setup failed: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      setSettingUpOBS(false);
+    }
   };
 
   const handleDiscoverHotkeys = async () => {
@@ -4287,12 +4637,19 @@ function OBSWebSocketTab({ config, setConfig, onFeedback, baseUrl }: {
   };
 
   return (
-    <div className="scoring-admin__section">
-      <h2 className="scoring-admin__section-title"><IoLink size={20} /> OBS WebSocket & Replay Control</h2>
-      <p className="scoring-admin__section-desc">
-        Connect to OBS Studio (WebSocket 5.x) for replay buffer control and Replay Source plugin integration.
-        Works over WiFi — enter the OBS computer's LAN IP from any device on the same network.
-      </p>
+    <div className="scoring-admin__section obs-ws-settings">
+      <div className="obs-ws-settings__header">
+        <div>
+          <h2 className="scoring-admin__section-title"><IoLink size={20} /> OBS WebSocket &amp; Replay Control</h2>
+          <p className="scoring-admin__section-desc">
+            Connect to OBS Studio (WebSocket 5.x) for replay buffer control and Replay Source plugin integration.
+            Works over Wi-Fi when this browser and OBS can reach each other on the network.
+          </p>
+        </div>
+        <button className="scoring-admin__btn scoring-admin__btn--primary obs-ws-settings__save" onClick={handleSave} disabled={saving}>
+          <IoSave size={16} /> {saving ? 'Saving…' : 'Save OBS Settings'}
+        </button>
+      </div>
 
       <div className="scoring-admin__form-card">
         <h3 className="scoring-admin__subsection-title">Shared OBS Settings</h3>
@@ -4352,12 +4709,40 @@ function OBSWebSocketTab({ config, setConfig, onFeedback, baseUrl }: {
         </ol>
       </div>
 
-      {/* Connection */}
-      <h3 className="scoring-admin__subsection-title">Connection</h3>
-      <div className="scoring-admin__connection-status">
-        <span className={`scoring-admin__status-dot scoring-admin__status-dot--${connectionStatus}`} />
-        <span>{connectionStatus === 'connected' ? 'Connected to OBS' : connectionStatus === 'connecting' ? 'Connecting…' : connectionStatus === 'error' ? 'Connection Error' : 'Disconnected'}</span>
-      </div>
+      <section className="obs-ws-group">
+        <div className="obs-ws-group__header">
+          <h3 className="scoring-admin__subsection-title">Connection</h3>
+          <div className="scoring-admin__connection-status">
+            <span className={`scoring-admin__status-dot scoring-admin__status-dot--${connectionStatus}`} />
+            <span>{connectionStatus === 'connected' ? 'Connected to OBS' : connectionStatus === 'connecting' ? 'Connecting…' : connectionStatus === 'error' ? 'Connection Error' : 'Disconnected'}</span>
+          </div>
+        </div>
+      {connectionDiagnostics.logs.length > 0 && (
+        <details className="scoring-admin__form-card obs-connection-log" open={connectionStatus === 'error'}>
+          <summary>OBS connection diagnostics ({connectionDiagnostics.logs.length})</summary>
+          {connectionDiagnostics.lastErrorDetail && <p className="obs-connection-log__error" role="alert">{connectionDiagnostics.lastErrorDetail}</p>}
+          {connectionDiagnostics.mixedContentLikely && (
+            <p className="scoring-admin__hint">
+              This page is HTTPS but OBS WebSocket is usually plain WS. Browsers block secure-page-to-insecure-LAN sockets. For production, connect the OBS dock on the OBS computer and use Same Wi-Fi relay, or expose a trusted WSS reverse proxy.
+            </p>
+          )}
+          {connectionDiagnostics.attemptedUrls.length > 0 && (
+            <p className="scoring-admin__hint">Tried: {connectionDiagnostics.attemptedUrls.join(' → ')}</p>
+          )}
+          {connectionDiagnostics.lastSuccessfulUrl && <p className="scoring-admin__hint">Connected endpoint: {connectionDiagnostics.lastSuccessfulUrl}</p>}
+          <ol className="obs-connection-log__entries" aria-label="OBS connection log">
+            {[...connectionDiagnostics.logs].reverse().map((entry, index) => (
+              <li key={`${entry.timestamp}-${index}`} data-level={entry.level}>
+                <time dateTime={new Date(entry.timestamp).toISOString()}>{new Date(entry.timestamp).toLocaleTimeString()}</time>
+                <span>{entry.message}</span>
+              </li>
+            ))}
+          </ol>
+        </details>
+      )}
+      <p className="scoring-admin__hint">
+        Enable <strong>Tools → WebSocket Server Settings</strong> in OBS, verify the port and password there, and allow inbound OBS traffic through the host firewall. The OBS computer and this browser must be able to reach each other over the network.
+      </p>
 
       <div className="scoring-admin__form-grid">
         <div className="scoring-admin__field">
@@ -4369,7 +4754,7 @@ function OBSWebSocketTab({ config, setConfig, onFeedback, baseUrl }: {
             onChange={e => updateOBS({ host: e.target.value })}
             placeholder="192.168.1.x or localhost"
           />
-          <small className="scoring-admin__hint">Enter OBS computer's local IP for WiFi control from mobile</small>
+          <small className="scoring-admin__hint">Local dev: enter the OBS computer LAN IP. HTTPS production needs a trusted wss:// endpoint or use the OBS dock's Same Wi-Fi relay.</small>
         </div>
         <div className="scoring-admin__field">
           <label>Port</label>
@@ -4379,6 +4764,7 @@ function OBSWebSocketTab({ config, setConfig, onFeedback, baseUrl }: {
             value={obsConfig.port}
             onChange={e => updateOBS({ port: Number(e.target.value) })}
           />
+          <small className="scoring-admin__hint">OBS WebSocket default: 4455. For a WSS reverse proxy, use the proxy port.</small>
         </div>
         <div className="scoring-admin__field">
           <label>Password (optional)</label>
@@ -4400,9 +4786,10 @@ function OBSWebSocketTab({ config, setConfig, onFeedback, baseUrl }: {
           {discoveringHotkeys ? 'Discovering…' : `🔍 Discover Hotkeys (${availableHotkeys.length})`}
         </button>
       </div>
+      </section>
 
       {groupedHotkeys.length > 0 && (
-        <div className="scoring-admin__form-card" style={{ marginBottom: '1.25rem' }}>
+        <div className="scoring-admin__form-card obs-ws-hotkey-library">
           <h3 className="scoring-admin__subsection-title">Discovered Hotkeys (Grouped Context)</h3>
           <p className="scoring-admin__hint">Use this list to identify scene/source/general mappings before assigning replay buttons.</p>
           <div style={{ display: 'grid', gap: '0.75rem', maxHeight: 260, overflow: 'auto', paddingRight: 4 }}>
@@ -4468,36 +4855,118 @@ function OBSWebSocketTab({ config, setConfig, onFeedback, baseUrl }: {
         </div>
       </div>
 
-      {/* Replay Source Scene Config */}
-      <h3 className="scoring-admin__subsection-title">Replay Source Scene Mapping</h3>
-      <p className="scoring-admin__hint" style={{ marginBottom: '0.75rem' }}>
+      <div className="scoring-admin__form-card obs-ws-setup-panel">
+        <h3 className="scoring-admin__subsection-title">Cricket Match Setup</h3>
+        <p className="scoring-admin__hint">
+          Create or reuse the <strong>Cricket Match Streaming</strong> scene collection, then build camera, audio, mobile, replay and DRS scenes. Existing generated scenes and sources are reused.
+        </p>
+        <div className="scoring-admin__form-grid">
+          <div className="scoring-admin__field">
+            <label>Video cameras</label>
+            <input className="scoring-admin__input" type="number" min={1} max={8} value={presetCameraCount} onChange={event => setPresetCameraCount(Math.max(1, Math.min(8, Number(event.target.value) || 1)))} />
+          </div>
+          <div className="scoring-admin__field">
+            <label>Mobile cameras</label>
+            <input className="scoring-admin__input" type="number" min={0} max={4} value={presetMobileCameraCount} onChange={event => setPresetMobileCameraCount(Math.max(0, Math.min(4, Number(event.target.value) || 0)))} />
+          </div>
+          <div className="scoring-admin__field">
+            <label>Microphone inputs</label>
+            <input className="scoring-admin__input" type="number" min={0} max={4} value={presetMicrophoneCount} onChange={event => setPresetMicrophoneCount(Math.max(0, Math.min(4, Number(event.target.value) || 0)))} />
+          </div>
+          <div className="scoring-admin__field scoring-admin__field--checkbox">
+            <label><input type="checkbox" checked={presetDesktopAudio} onChange={event => setPresetDesktopAudio(event.target.checked)} /> Include desktop audio</label>
+          </div>
+        </div>
+        <p className="scoring-admin__hint obs-ws-setup-panel__summary">
+          OBS will create capture sources with default device settings. Choose the camera, microphone and Starting Soon window targets in each source's Properties. Every generated output scene includes the shared Audio scene. Mobile scenes are added only when the DroidCam OBS source is installed. Starting Soon includes a looping Media Source; choose its clip in Properties. The Replay scene's Media/VLC sources follow the latest replay saved by OBS.
+        </p>
+        <div className="obs-setup-notes" role="note">
+          <div className="obs-setup-notes__heading">
+            <strong>Before you build scenes</strong>
+            <span>Review these OBS requirements</span>
+          </div>
+          <ul>
+            <li><strong>Instant replay:</strong> Install and enable the OBS Replay Source (Instant Replay) plugin for plugin playback hotkeys. OBS Replay Buffer saving remains available without it.</li>
+            {presetMobileCameraCount > 0 && <li><strong>Mobile cameras selected:</strong> Install and enable the DroidCam OBS plugin before setup. The mobile capture sources are created only when OBS advertises the plugin.</li>}
+            <li><strong>Replay video:</strong> Install VLC and enable OBS's VLC Video Source for the best replay-source compatibility. The preset also adds a standard Media Source fallback.</li>
+            <li><strong>Device assignment:</strong> After setup, choose the physical camera, microphone, Starting Soon window, and media clip in each source's OBS Properties.</li>
+          </ul>
+        </div>
+        <div className="scoring-admin__actions">
+          <button className="scoring-admin__btn scoring-admin__btn--primary" onClick={() => { setSetupChecklistAccepted(false); setSetupChecklistOpen(true); }} disabled={settingUpOBS || connectionStatus !== 'connected'}>
+            {settingUpOBS ? 'Building OBS scenes…' : 'Match Setup'}
+          </button>
+          <span className="scoring-admin__hint">A confirmation checklist appears before any OBS changes are made.</span>
+        </div>
+        <dialog
+          className="obs-setup-dialog"
+          ref={setupDialogRef}
+          aria-labelledby="obs-setup-dialog-title"
+          onCancel={event => { event.preventDefault(); setSetupChecklistOpen(false); }}
+          onClick={event => { if (event.target === event.currentTarget) setSetupChecklistOpen(false); }}
+        >
+          <div className="obs-setup-dialog__content">
+            <div className="obs-setup-dialog__eyebrow">OBS MATCH SETUP</div>
+            <h3 id="obs-setup-dialog-title">Confirm your OBS preflight</h3>
+            <p>Match Setup will create or update scenes and sources in the connected OBS collection. It cannot install plugins or choose hardware devices for you.</p>
+            <ul className="obs-setup-dialog__checklist">
+              <li>Replay Source (Instant Replay) plugin is installed if you need plugin playback hotkeys.</li>
+              {presetMobileCameraCount > 0 && <li>DroidCam OBS plugin is installed for the selected mobile cameras.</li>}
+              <li>VLC and OBS VLC Video Source are installed for the most compatible replay playback.</li>
+              <li>You are ready to choose cameras, microphones, the Starting Soon window, and the media clip in OBS Properties.</li>
+            </ul>
+            <label className="obs-setup-dialog__acknowledgement">
+              <input type="checkbox" checked={setupChecklistAccepted} onChange={event => setSetupChecklistAccepted(event.target.checked)} />
+              I reviewed these notes and understand any missing plugin or device must be configured in OBS.
+            </label>
+            <div className="obs-setup-dialog__actions">
+              <button className="scoring-admin__btn scoring-admin__btn--secondary" onClick={() => setSetupChecklistOpen(false)}>Go back</button>
+              <button
+                className="scoring-admin__btn scoring-admin__btn--primary"
+                disabled={!setupChecklistAccepted || settingUpOBS}
+                onClick={() => { setSetupChecklistOpen(false); void handleMatchSetup(); }}
+              >
+                {settingUpOBS ? 'Building scenes…' : 'Confirm & build scenes'}
+              </button>
+            </div>
+          </div>
+        </dialog>
+        {presetWarnings.length > 0 && (
+          <ul className="scoring-admin__hint" role="status">
+            {presetWarnings.map((warning, index) => <li key={`${index}-${warning}`}>{warning}</li>)}
+          </ul>
+        )}
+      </div>
+
+      <section className="obs-ws-group obs-ws-scene-group">
+      <div className="obs-ws-subgroup">
+      <h3 className="scoring-admin__subsection-title">Replay &amp; DRS Scene Mapping</h3>
+      <p className="scoring-admin__hint">
         Scenes to switch to when showing replays or DRS review. Leave blank to skip scene switch.
       </p>
       <div className="scoring-admin__form-grid">
         <div className="scoring-admin__field">
-          <label>Replay Scene Name</label>
-          <input
-            type="text"
-            className="scoring-admin__input"
-            value={replayConfig.replaySceneName || ''}
-            onChange={e => updateReplayConfig({ replaySceneName: e.target.value || undefined })}
-            placeholder="e.g. Replay"
-          />
+          <label>Replay Scene</label>
+          <select className="scoring-admin__select" value={replayConfig.replaySceneName || ''} onChange={e => updateReplayConfig({ replaySceneName: e.target.value || undefined })}>
+            <option value="">Select a scene</option>
+            {replayConfig.replaySceneName && !availableScenes.includes(replayConfig.replaySceneName) && <option value={replayConfig.replaySceneName}>{replayConfig.replaySceneName} · saved</option>}
+            {availableScenes.map(scene => <option key={scene} value={scene}>{scene}</option>)}
+          </select>
         </div>
         <div className="scoring-admin__field">
-          <label>DRS Review Scene Name</label>
-          <input
-            type="text"
-            className="scoring-admin__input"
-            value={replayConfig.drsSceneName || ''}
-            onChange={e => updateReplayConfig({ drsSceneName: e.target.value || undefined })}
-            placeholder="e.g. DRS Review"
-          />
+          <label>DRS Review Scene</label>
+          <select className="scoring-admin__select" value={replayConfig.drsSceneName || ''} onChange={e => updateReplayConfig({ drsSceneName: e.target.value || undefined })}>
+            <option value="">Select a scene</option>
+            {replayConfig.drsSceneName && !availableScenes.includes(replayConfig.drsSceneName) && <option value={replayConfig.drsSceneName}>{replayConfig.drsSceneName} · saved</option>}
+            {availableScenes.map(scene => <option key={scene} value={scene}>{scene}</option>)}
+          </select>
         </div>
       </div>
 
-      <h3 className="scoring-admin__subsection-title" style={{ marginTop: '1.5rem' }}>Innings Break Scene</h3>
-      <p className="scoring-admin__hint" style={{ marginBottom: '0.75rem' }}>
+      </div>
+      <div className="obs-ws-subgroup">
+      <h3 className="scoring-admin__subsection-title">Innings Break Scene</h3>
+      <p className="scoring-admin__hint">
         The OBS dock switches to the Ads scene when the first innings ends, then returns to the selected live scene when the second innings starts. Connect to OBS to load its scene list.
       </p>
       <div className="scoring-admin__actions" style={{ marginBottom: '0.75rem' }}>
@@ -4523,9 +4992,12 @@ function OBSWebSocketTab({ config, setConfig, onFeedback, baseUrl }: {
           </select>
         </div>
       </div>
+      </div>
+      </section>
 
       {/* Auto-replay settings */}
-      <h3 className="scoring-admin__subsection-title">Auto-Replay on Boundaries / Wickets</h3>
+      <section className="obs-ws-group">
+      <h3 className="scoring-admin__subsection-title">Replay Buffer &amp; Automatic Replay</h3>
       <div className="scoring-admin__form-grid">
         <div className="scoring-admin__field scoring-admin__field--checkbox">
           <label>
@@ -4559,31 +5031,47 @@ function OBSWebSocketTab({ config, setConfig, onFeedback, baseUrl }: {
             max={120}
           />
         </div>
+        <div className="scoring-admin__field" style={{ gridColumn: '1 / -1' }}>
+          <label>Replay output folder on OBS computer</label>
+          <input
+            type="text"
+            className="scoring-admin__input"
+            value={replayConfig.replayDirectory || ''}
+            onChange={event => updateReplayConfig({ replayDirectory: event.target.value || undefined })}
+            placeholder="C:/Users/YourName/Desktop/Cricket Replays or /Users/YourName/Desktop/Cricket Replays"
+          />
+          <small className="scoring-admin__hint">
+            {currentReplayDirectory ? `Current OBS recording/replay folder: ${currentReplayDirectory}. ` : ''}
+            Enter an absolute path from the OBS computer. Match Setup applies it to OBS Replay Buffer and recording output; blank keeps OBS's current folder.
+          </small>
+        </div>
       </div>
+      </section>
 
       {/* Replay Source Button Configurator */}
+      <section className="obs-ws-group obs-ws-buttons-group">
       <h3 className="scoring-admin__subsection-title" style={{ marginTop: '1.5rem' }}>
         Replay Source Control Buttons
         <span className="scoring-admin__hint" style={{ marginLeft: 8, fontWeight: 400 }}>
           — shown in OBS Control Dock for one-tap control from mobile
         </span>
       </h3>
-      <p className="scoring-admin__hint" style={{ marginBottom: '1rem' }}>
+      <p className="scoring-admin__hint">
         Each button triggers an OBS hotkey. Hotkey names are discovered from your OBS instance
-        (includes Replay Source plugin hotkeys like play, pause, slow forward, etc.).
-        Click <strong>Discover Hotkeys</strong> above while connected to populate the dropdown.
+        (including Replay Source plugin controls). Search by action name, plugin, or OBS key ID; custom values are also accepted.
       </p>
 
       {/* Button list */}
       <div className="obs-btn-config-list">
         {replayConfig.buttons.map((btn, idx) => (
           <div key={btn.id} className={`obs-btn-config-row ${editingButtonIdx === idx ? 'obs-btn-config-row--editing' : ''}`}>
-            <div className="obs-btn-config-preview" style={{ '--rbtn-color': btn.color } as React.CSSProperties}>
-              <span className="obs-btn-config-icon">{btn.icon}</span>
-              <span className="obs-btn-config-name">{btn.label}</span>
-              {btn.hotkeyName && <span className="obs-btn-config-hotkey">{btn.hotkeyName}</span>}
-            </div>
-            <div className="obs-btn-config-actions">
+            <div className="obs-btn-config-summary">
+              <div className="obs-btn-config-preview" style={{ '--rbtn-color': btn.color } as React.CSSProperties}>
+                <span className="obs-btn-config-icon">{btn.icon}</span>
+                <span className="obs-btn-config-name">{btn.label || 'Untitled button'}</span>
+                {btn.hotkeyName && <span className="obs-btn-config-hotkey">{btn.hotkeyName}</span>}
+              </div>
+              <div className="obs-btn-config-actions">
               <button className="scoring-admin__btn-icon" onClick={() => moveButton(idx, -1)} disabled={idx === 0} title="Move up">↑</button>
               <button className="scoring-admin__btn-icon" onClick={() => moveButton(idx, 1)} disabled={idx === replayConfig.buttons.length - 1} title="Move down">↓</button>
               <button
@@ -4595,17 +5083,24 @@ function OBSWebSocketTab({ config, setConfig, onFeedback, baseUrl }: {
               </button>
               <button className="scoring-admin__btn-icon" onClick={() => setEditingButtonIdx(editingButtonIdx === idx ? null : idx)} title="Edit">✏️</button>
               <button className="scoring-admin__btn-icon scoring-admin__btn-icon--danger" onClick={() => removeButton(idx)} title="Delete">✕</button>
+              </div>
             </div>
 
             {editingButtonIdx === idx && (
               <div className="obs-btn-config-editor">
                 <div className="scoring-admin__form-grid">
                   <div className="scoring-admin__field">
-                    <label>Label</label>
+                    <label htmlFor={`obs-button-label-${btn.id}`}>Button text</label>
                     <input
+                      id={`obs-button-label-${btn.id}`}
                       className="scoring-admin__input"
                       value={btn.label}
                       onChange={e => updateButton(idx, { label: e.target.value })}
+                      onFocus={event => {
+                        if (btn.label === 'New Replay Button') event.currentTarget.select();
+                      }}
+                      placeholder="e.g. Play Replay"
+                      autoFocus={editingButtonIdx === idx}
                     />
                   </div>
                   <div className="scoring-admin__field">
@@ -4666,73 +5161,37 @@ function OBSWebSocketTab({ config, setConfig, onFeedback, baseUrl }: {
 
                   {btn.action === 'hotkey_name' && (
                     <div className="scoring-admin__field" style={{ gridColumn: '1 / -1' }}>
-                      <label>OBS Hotkey Name</label>
-                      {availableHotkeys.length > 0 ? (
-                        <select
-                          className="scoring-admin__input"
-                          value={btn.hotkeyName || ''}
-                          onChange={e => updateButton(idx, { hotkeyName: e.target.value })}
-                        >
-                          <option value="">— Select hotkey —</option>
-                          {groupedHotkeys.map(group => (
-                            <optgroup key={group.group} label={group.group}>
-                              {group.items.map(item => (
-                                <option key={item.raw} value={item.raw}>{item.title} — {item.raw}</option>
-                              ))}
-                            </optgroup>
-                          ))}
-                        </select>
-                      ) : (
-                        <input
-                          className="scoring-admin__input"
-                          value={btn.hotkeyName || ''}
-                          onChange={e => updateButton(idx, { hotkeyName: e.target.value })}
-                          placeholder="e.g. ReplaySource.replay — click Discover Hotkeys to populate"
-                        />
-                      )}
-                      <small className="scoring-admin__hint">
-                        Hotkey name from OBS (connect + Discover Hotkeys to see all options including Replay Source plugin hotkeys)
-                      </small>
+                      <label>OBS hotkey</label>
+                      <OBSSearchablePicker
+                        value={btn.hotkeyName || ''}
+                        groups={searchableHotkeyGroups}
+                        onChange={hotkeyName => updateButton(idx, { hotkeyName })}
+                        placeholder={availableHotkeys.length ? 'Search by action, plugin, or exact hotkey…' : 'Connect and discover hotkeys, or enter a custom value…'}
+                        ariaLabel={`Search OBS hotkeys for ${btn.label || 'button'}`}
+                      />
+                      <small className="scoring-admin__hint">Connect to OBS and use Discover Hotkeys to load available actions. Press Enter or choose “Use custom value” for a manual hotkey name.</small>
                     </div>
                   )}
 
                   {btn.action === 'hotkey_sequence' && (
                     <div className="scoring-admin__field" style={{ gridColumn: '1 / -1' }}>
-                      <label>Key ID (OBS format)</label>
-                      <input
-                        className="scoring-admin__input"
-                        value={btn.keySequence?.keyId || ''}
-                        onChange={e => updateButton(idx, {
-                          keySequence: { ...btn.keySequence, keyId: e.target.value },
-                        })}
-                        placeholder="e.g. OBS_KEY_F1"
-                      />
-                      <div style={{ display: 'flex', gap: 12, marginTop: 6 }}>
-                        {(['shift', 'ctrl', 'alt'] as const).map(mod => (
-                          <label key={mod} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: '0.82rem' }}>
-                            <input
-                              type="checkbox"
-                              checked={!!(btn.keySequence as Record<string, boolean> | undefined)?.[mod]}
-                              onChange={e => updateButton(idx, {
-                                keySequence: { keyId: '', ...btn.keySequence, [mod]: e.target.checked },
-                              })}
-                            />
-                            {mod.charAt(0).toUpperCase() + mod.slice(1)}
-                          </label>
-                        ))}
-                      </div>
+                      <label>OBS key sequence</label>
+                      <OBSKeySequenceField value={btn.keySequence} onChange={keySequence => updateButton(idx, { keySequence })} />
                     </div>
                   )}
 
                   {btn.action === 'scene_switch' && (
                     <div className="scoring-admin__field">
-                      <label>Scene Name</label>
-                      <input
+                      <label>OBS Scene</label>
+                      <select
                         className="scoring-admin__input"
                         value={btn.sceneName || ''}
-                        onChange={e => updateButton(idx, { sceneName: e.target.value })}
-                        placeholder="e.g. Replay"
-                      />
+                        onChange={e => updateButton(idx, { sceneName: e.target.value || undefined })}
+                      >
+                        <option value="">Select a scene</option>
+                        {btn.sceneName && !availableScenes.includes(btn.sceneName) && <option value={btn.sceneName}>{btn.sceneName} · saved</option>}
+                        {availableScenes.map(scene => <option key={scene} value={scene}>{scene}</option>)}
+                      </select>
                     </div>
                   )}
 
@@ -4775,48 +5234,33 @@ function OBSWebSocketTab({ config, setConfig, onFeedback, baseUrl }: {
                           </select>
 
                           {step.action === 'hotkey_name' && (
-                            availableHotkeys.length > 0 ? (
-                              <select
-                                className="scoring-admin__input obs-series-step__value"
-                                value={step.hotkeyName || ''}
-                                onChange={e => updateSeriesStep(idx, stepIdx, { hotkeyName: e.target.value })}
-                              >
-                                <option value="">— Select hotkey —</option>
-                                {groupedHotkeys.map(group => (
-                                  <optgroup key={group.group} label={group.group}>
-                                    {group.items.map(item => (
-                                      <option key={item.raw} value={item.raw}>{item.title}</option>
-                                    ))}
-                                  </optgroup>
-                                ))}
-                              </select>
-                            ) : (
-                              <input
-                                className="scoring-admin__input obs-series-step__value"
-                                value={step.hotkeyName || ''}
-                                onChange={e => updateSeriesStep(idx, stepIdx, { hotkeyName: e.target.value })}
-                                placeholder="Hotkey name"
-                              />
-                            )
-                          )}
-
-                          {step.action === 'scene_switch' && (
-                            <input
-                              className="scoring-admin__input obs-series-step__value"
-                              value={step.sceneName || ''}
-                              onChange={e => updateSeriesStep(idx, stepIdx, { sceneName: e.target.value })}
-                              placeholder="Scene name"
+                            <OBSSearchablePicker
+                              className="obs-series-step__value"
+                              value={step.hotkeyName || ''}
+                              groups={searchableHotkeyGroups}
+                              onChange={hotkeyName => updateSeriesStep(idx, stepIdx, { hotkeyName })}
+                              placeholder="Search OBS hotkeys…"
+                              ariaLabel={`Search OBS hotkeys for step ${stepIdx + 1}`}
                             />
                           )}
 
-                          {step.action === 'hotkey_sequence' && (
-                            <input
+                          {step.action === 'scene_switch' && (
+                            <select
                               className="scoring-admin__input obs-series-step__value"
-                              value={step.keySequence?.keyId || ''}
-                              onChange={e => updateSeriesStep(idx, stepIdx, {
-                                keySequence: { ...step.keySequence, keyId: e.target.value },
-                              })}
-                              placeholder="e.g. OBS_KEY_F1"
+                              value={step.sceneName || ''}
+                              onChange={e => updateSeriesStep(idx, stepIdx, { sceneName: e.target.value || undefined })}
+                            >
+                              <option value="">Select scene</option>
+                              {step.sceneName && !availableScenes.includes(step.sceneName) && <option value={step.sceneName}>{step.sceneName} · saved</option>}
+                              {availableScenes.map(scene => <option key={scene} value={scene}>{scene}</option>)}
+                            </select>
+                          )}
+
+                          {step.action === 'hotkey_sequence' && (
+                            <OBSKeySequenceField
+                              compact
+                              value={step.keySequence}
+                              onChange={keySequence => updateSeriesStep(idx, stepIdx, { keySequence })}
                             />
                           )}
 
@@ -4857,12 +5301,13 @@ function OBSWebSocketTab({ config, setConfig, onFeedback, baseUrl }: {
       <button
         className="scoring-admin__btn scoring-admin__btn--secondary"
         onClick={addButton}
-        style={{ marginTop: '0.75rem' }}
       >
-        + Add Button
+        <IoAdd size={16} /> Add replay button
       </button>
 
-      <div className="scoring-admin__actions" style={{ marginTop: '1.5rem' }}>
+      </section>
+
+      <div className="scoring-admin__actions obs-ws-bottom-save">
         <button className="scoring-admin__btn scoring-admin__btn--primary" onClick={handleSave} disabled={saving}>
           <IoSave size={16} /> {saving ? 'Saving…' : 'Save All OBS Settings'}
         </button>

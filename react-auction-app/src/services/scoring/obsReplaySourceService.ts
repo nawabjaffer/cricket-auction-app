@@ -13,7 +13,7 @@
 // computer's LAN IP instead of localhost.
 // ============================================================================
 
-import { ref, onValue, set, push, type Database } from 'firebase/database';
+import { ref, onValue, set, push, runTransaction, type Database } from 'firebase/database';
 import { obsService } from '../obsService';
 import type { OBSReplayButton, OBSReplayConfig, OBSButtonSeriesStep } from '../../types/scoring';
 
@@ -116,8 +116,18 @@ export const DEFAULT_REPLAY_BUTTONS: OBSReplayButton[] = [
 export interface OBSRelayCommand {
   id: string;
   buttonId: string;
+  matchId?: string;
   timestamp: number;
   consumed: boolean;
+  status?: 'pending' | 'running' | 'success' | 'error';
+  error?: string;
+}
+
+export interface OBSButtonExecutionResult {
+  success: boolean;
+  completedSteps: number;
+  totalSteps: number;
+  errors: string[];
 }
 
 class OBSReplaySourceService {
@@ -132,65 +142,73 @@ class OBSReplaySourceService {
 
   // ── Direct action execution (when the dock is on the OBS machine) ──────────
 
-  async executeButton(button: OBSReplayButton): Promise<boolean> {
+  async executeButton(button: OBSReplayButton): Promise<OBSButtonExecutionResult> {
     if (button.action === 'series') {
       return this.executeSeries(button);
     }
-    return this.executeAction(button);
+    const error = await this.executeAction(button);
+    return { success: !error, completedSteps: error ? 0 : 1, totalSteps: 1, errors: error ? [error] : [] };
   }
 
   /** Run each configured step in order, waiting the step delay before firing it. */
-  private async executeSeries(button: OBSReplayButton): Promise<boolean> {
+  private async executeSeries(button: OBSReplayButton): Promise<OBSButtonExecutionResult> {
     const steps = [...(button.series || [])];
-    if (steps.length === 0) return false;
+    if (steps.length === 0) return { success: false, completedSteps: 0, totalSteps: 0, errors: ['This series has no steps.'] };
 
-    let allOk = true;
-    for (const step of steps) {
+    let completedSteps = 0;
+    const errors: string[] = [];
+    for (const [index, step] of steps.entries()) {
       const wait = Math.max(0, Number(step.delayMs) || 0);
       if (wait > 0) {
-        // eslint-disable-next-line no-await-in-loop
         await new Promise(resolve => setTimeout(resolve, wait));
       }
-      // eslint-disable-next-line no-await-in-loop
-      const ok = await this.executeAction(step);
-      if (!ok) allOk = false;
+      const error = await this.executeAction(step);
+      if (error) errors.push(`Step ${index + 1} (${step.label || step.action}): ${error}`);
+      else completedSteps += 1;
     }
-    return allOk;
+    return { success: errors.length === 0, completedSteps, totalSteps: steps.length, errors };
   }
 
-  private async executeAction(step: OBSReplayButton | OBSButtonSeriesStep): Promise<boolean> {
-    switch (step.action) {
-      case 'hotkey_name':
-        if (!step.hotkeyName) return false;
-        return obsService.triggerHotkeyByName(step.hotkeyName);
+  private async executeAction(step: OBSReplayButton | OBSButtonSeriesStep): Promise<string | null> {
+    try {
+      switch (step.action) {
+        case 'hotkey_name':
+          if (!step.hotkeyName) return 'Select an OBS hotkey first.';
+          if (!await obsService.triggerHotkeyByName(step.hotkeyName)) return `OBS did not trigger hotkey "${step.hotkeyName}".`;
+          return null;
 
-      case 'hotkey_sequence':
-        if (!step.keySequence?.keyId) return false;
-        return obsService.triggerHotkeyByKeySequence(
-          step.keySequence.keyId,
-          step.keySequence.shift,
-          step.keySequence.ctrl,
-          step.keySequence.alt,
-        );
+        case 'hotkey_sequence':
+          if (!step.keySequence?.keyId) return 'Enter an OBS key ID first (for example OBS_KEY_F1).';
+          if (!await obsService.triggerHotkeyByKeySequence(
+            step.keySequence.keyId,
+            step.keySequence.shift,
+            step.keySequence.ctrl,
+            step.keySequence.alt,
+          )) return `OBS did not trigger key sequence "${step.keySequence.keyId}".`;
+          return null;
 
-      case 'scene_switch':
-        if (!step.sceneName) return false;
-        return obsService.setScene(step.sceneName);
+        case 'scene_switch':
+          if (!step.sceneName?.trim()) return 'Select an OBS scene first.';
+          await obsService.request('SetCurrentProgramScene', { sceneName: step.sceneName.trim() });
+          return null;
 
-      case 'replay_buffer_save':
-        await obsService.request('SaveReplayBuffer');
-        return true;
+        case 'replay_buffer_save':
+          await obsService.request('SaveReplayBuffer');
+          return null;
 
-      case 'replay_buffer_start':
-        await obsService.request('StartReplayBuffer');
-        return true;
+        case 'replay_buffer_start':
+          await obsService.request('StartReplayBuffer');
+          return null;
 
-      case 'replay_buffer_stop':
-        await obsService.request('StopReplayBuffer');
-        return true;
+        case 'replay_buffer_stop':
+          await obsService.request('StopReplayBuffer');
+          return null;
 
-      default:
-        return false;
+        default:
+          return `Unsupported OBS action: ${step.action}.`;
+      }
+    } catch (error) {
+      return error instanceof Error ? error.message : String(error);
     }
   }
 
@@ -210,41 +228,83 @@ class OBSReplaySourceService {
    * Write a relay command to Firebase.
    * Mobile uses this when it cannot connect directly to OBS WebSocket.
    */
-  async sendRelayCommand(matchId: string, buttonId: string): Promise<void> {
-    if (!this.db) return;
-    const commandsPath = `${this.basePath}/matches/${matchId}/obsRelayCommands`;
+  async sendRelayCommand(matchId: string, buttonId: string): Promise<string> {
+    if (!this.db) throw new Error('OBS relay is not initialized');
+    const commandsPath = `${this.basePath}/obsRelayCommands`;
     const newRef = push(ref(this.db, commandsPath));
+    if (!newRef.key) throw new Error('Could not create OBS relay command');
     const command: OBSRelayCommand = {
-      id: newRef.key ?? `cmd_${Date.now()}`,
+      id: newRef.key,
       buttonId,
+      matchId,
       timestamp: Date.now(),
       consumed: false,
+      status: 'pending',
     };
     await set(newRef, command);
+    return newRef.key;
+  }
+
+  waitForRelayResult(_matchId: string, commandId: string, timeoutMs = 120_000): Promise<{ success: boolean; error?: string }> {
+    if (!this.db) return Promise.resolve({ success: false, error: 'OBS relay is not initialized' });
+    const commandRef = ref(this.db, `${this.basePath}/obsRelayCommands/${commandId}`);
+    return new Promise(resolve => {
+      let settled = false;
+      let unsubscribe = () => {};
+      const timer = setTimeout(() => finish({ success: false, error: 'OBS dock did not respond in time' }), timeoutMs);
+      const finish = (result: { success: boolean; error?: string }) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        unsubscribe();
+        resolve(result);
+      };
+      unsubscribe = onValue(commandRef, snapshot => {
+        const command = snapshot.val() as OBSRelayCommand | null;
+        if (command?.status === 'success') finish({ success: true });
+        if (command?.status === 'error') finish({ success: false, error: command.error || 'OBS action failed' });
+      }, error => finish({ success: false, error: error.message }));
+    });
   }
 
   /**
    * Listen for relay commands and execute them locally.
    * The OBS dock (running on the OBS computer) calls this to process commands.
    */
-  watchRelayCommands(matchId: string, config: OBSReplayConfig): void {
+  watchRelayCommands(matchId: string | null, config: OBSReplayConfig): void {
     if (!this.db) return;
     this.stopRelayWatch();
 
-    const commandsPath = `${this.basePath}/matches/${matchId}/obsRelayCommands`;
+    const commandsPath = `${this.basePath}/obsRelayCommands`;
     this.relayUnsub = onValue(ref(this.db, commandsPath), (snap) => {
       if (!snap.exists()) return;
       snap.forEach((child) => {
         const cmd = child.val() as OBSRelayCommand;
-        if (cmd.consumed) return;
-        // Mark as consumed immediately to prevent double-execution
-        set(ref(this.db!, `${commandsPath}/${child.key}/consumed`), true);
-        const button = config.buttons.find(b => b.id === cmd.buttonId);
-        if (button && button.enabled) {
-          this.executeButton(button).catch((err) =>
-            console.error('[OBSRelay] executeButton failed:', err),
-          );
-        }
+        if (matchId && cmd.matchId && cmd.matchId !== matchId) return;
+        if (!cmd.timestamp || Date.now() - cmd.timestamp > 120_000) return;
+        if (cmd.consumed || cmd.status === 'running' || cmd.status === 'success' || cmd.status === 'error') return;
+        const commandRef = ref(this.db!, `${commandsPath}/${child.key}`);
+        void runTransaction(commandRef, current => {
+          if (!current || current.consumed || current.status === 'running' || current.status === 'success' || current.status === 'error') return;
+          return { ...current, consumed: true, status: 'running' };
+        }).then(async claim => {
+          if (!claim.committed) return;
+          const claimed = claim.snapshot.val() as OBSRelayCommand;
+          const button = config.buttons.find(b => b.id === claimed.buttonId && b.enabled);
+          let result: OBSButtonExecutionResult;
+          if (button) {
+            result = await this.executeButton(button);
+          } else {
+            result = { success: false, completedSteps: 0, totalSteps: 0, errors: ['Configured button was not found or is disabled on the OBS dock.'] };
+          }
+          await set(commandRef, {
+            ...claimed,
+            status: result.success ? 'success' : 'error',
+            error: result.errors.join(' · ') || null,
+            completedSteps: result.completedSteps,
+            totalSteps: result.totalSteps,
+          });
+        }).catch(error => console.error('[OBSRelay] Command claim or execution failed:', error));
       });
     });
   }

@@ -894,6 +894,9 @@ export interface OBSReplayConfig {
   drsSceneName?: string;     // scene to switch to for DRS review
   inningsBreakSceneName?: string;
   inningsBreakReturnSceneName?: string;
+  replayDirectory?: string;
+  instantReplaySourceName?: string;
+  instantReplaySourceNames?: string[];
   buttons: OBSReplayButton[];
 }
 

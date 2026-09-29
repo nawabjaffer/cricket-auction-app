@@ -3,6 +3,16 @@ import { platformPath } from './tenantPath';
 import { realtimeSync } from './realtimeSync';
 import type { OBSReplayConfig, OBSWebSocketConfig, SharedOBSProfile } from '../types/scoring';
 
+function stripUndefined(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(item => item === undefined ? null : stripUndefined(item));
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value).filter(([, child]) => child !== undefined).map(([key, child]) => [key, stripUndefined(child)]),
+    );
+  }
+  return value;
+}
+
 class SharedOBSProfileService {
   private db: Database | null = null;
 
@@ -34,11 +44,11 @@ class SharedOBSProfileService {
   }
 
   async save(input: { id?: string; name: string; ownerTenantId: string; obsWebSocketConfig: OBSWebSocketConfig; obsReplayConfig: OBSReplayConfig }): Promise<SharedOBSProfile> {
-    const profile: SharedOBSProfile = {
+    const profile = stripUndefined({
       ...input,
       id: input.id || `obs_profile_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
       updatedAt: Date.now(),
-    };
+    }) as SharedOBSProfile;
     await set(ref(this.ensureDb(), `${platformPath('obsProfiles')}/${profile.id}`), profile);
     return profile;
   }
