@@ -6,11 +6,10 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useTenantNavigate as useNavigate } from '../../hooks/useTenantNavigate';
 import { getTenantSlugFromPath } from '../../hooks/useTenantNavigate';
-import { IoVideocam, IoRadio, IoSettings, IoPlay, IoStop, IoDesktop, IoFlash } from 'react-icons/io5';
+import { IoVideocam, IoRadio, IoSettings, IoPlay, IoDesktop, IoFlash } from 'react-icons/io5';
 import { GiCricketBat } from 'react-icons/gi';
 import { useLocation } from 'react-router-dom';
 import { useLiveStreamingStore } from '../../store/liveStreamingStore';
-import { obsService } from '../../services/obsService';
 import { scoringService } from '../../services/scoring';
 import { kabaddiService } from '../../services/kabaddi';
 import { realtimeSync } from '../../services/realtimeSync';
@@ -21,14 +20,18 @@ import { premiumService } from '../../services/premiumService';
 import { featureFlagsService } from '../../services/featureFlagsService';
 import { useFeatureFlags } from '../../hooks/useFeatureFlags';
 import type { PremiumTier } from '../../types/premium';
-import type { OBSConnectionState, SuccessAnimationType } from '../../types/streaming';
+import type { SuccessAnimationType } from '../../types/streaming';
 import type { ScoringOverlayConfig } from '../../types/scoring';
+import ObsStudioPanel, { type ObsOverlaySource } from './ObsStudioPanel';
+
+export type StreamingSection = 'obs' | 'live' | 'rtmp' | 'sports';
 
 interface StreamingTabProps {
   onClose?: () => void;
+  section?: StreamingSection;
 }
 
-export default function StreamingTab({ onClose }: StreamingTabProps) {
+export default function StreamingTab({ onClose, section }: StreamingTabProps) {
   const navigate = useNavigate();
   const location = useLocation();
   const tenantSlug = getTenantSlugFromPath(location.pathname);
@@ -36,6 +39,7 @@ export default function StreamingTab({ onClose }: StreamingTabProps) {
   
   // Feature flags
   const { isEnabled } = useFeatureFlags();
+  const show = (name: StreamingSection) => !section || section === name;
   const ownerOverlayEnabled = isEnabled('owner-overlay-in-break');
   const superAdminEnabled = isEnabled('super-admin-bidding');
 
@@ -52,8 +56,6 @@ export default function StreamingTab({ onClose }: StreamingTabProps) {
     overlay,
     isPremium,
     maxCameras,
-    setOBSEnabled,
-    setOBSConnectionState,
     setRTMPEnabled,
     setRTMPConfig,
     setPlayerOverlayVisible,
@@ -63,14 +65,9 @@ export default function StreamingTab({ onClose }: StreamingTabProps) {
   } = useLiveStreamingStore();
 
   // Local state
-  const [obsHost, setObsHost] = useState('localhost');
-  const [obsPort, setObsPort] = useState('4455');
-  const [obsPassword, setObsPassword] = useState('');
-  const [obsStatus, setObsStatus] = useState<OBSConnectionState>('disconnected');
   const [rtmpUrl, setRtmpUrl] = useState(broadcast.rtmp.serverUrl);
   const [rtmpKey, setRtmpKey] = useState(broadcast.rtmp.streamKey);
   const [currentTier, setCurrentTier] = useState<PremiumTier>('free');
-  const [isConnecting, setIsConnecting] = useState(false);
   const [singleOverlayMode, setSingleOverlayMode] = useState(false);
   const [savingSingleOverlay, setSavingSingleOverlay] = useState(false);
   const [enabledSports, setEnabledSports] = useState<SportKey[]>([]);
@@ -96,6 +93,18 @@ export default function StreamingTab({ onClose }: StreamingTabProps) {
     football: { admin: '/football/scorer/admin', scorer: '/football/scorer/update', overlay: '/football/scorer/obs-overlay', dock: '/football/scorer/obs-dock' },
     kabaddi: { admin: '/kabaddi/scorer/admin', scorer: '/kabaddi/scorer/update', overlay: '/kabaddi/scorer/obs-overlay', dock: '/kabaddi/scorer/obs-dock' },
   };
+
+  const obsLocked = !premiumService.canUseOBS() && currentTier !== 'pro' && currentTier !== 'enterprise';
+  const obsSources: ObsOverlaySource[] = [
+    { id: 'auction-overlay', label: 'Auction Overlay', url: `${baseUrl}/obs-overlay`, hint: 'Transparent player, bid and sold overlay' },
+    { id: 'live-view', label: 'Live Broadcast View', url: `${baseUrl}/live`, hint: 'Full-screen camera plus overlays' },
+    ...(enabledSports.length > 0 ? enabledSports : (['cricket'] as SportKey[])).map(sport => ({
+      id: `${sport}-score-overlay`,
+      label: `${sportMeta[sport].label} Score Overlay`,
+      url: `${baseUrl}${sportRoutes[sport].overlay}`,
+      hint: 'Transparent scoreboard overlay',
+    })),
+  ];
 
   // Load + follow the scoring "Single Overlay Mode" flag (tenant-scoped across sports)
   useEffect(() => {
@@ -205,47 +214,6 @@ export default function StreamingTab({ onClose }: StreamingTabProps) {
     }
   }, [setPremiumStatus]);
 
-  // Subscribe to OBS connection state
-  useEffect(() => {
-    const unsubscribe = obsService.onConnectionChange((state) => {
-      setObsStatus(state);
-      setOBSConnectionState(state);
-    });
-
-    return unsubscribe;
-  }, [setOBSConnectionState]);
-
-  // Connect to OBS
-  const handleConnectOBS = async () => {
-    if (!premiumService.canUseOBS() && currentTier !== 'pro' && currentTier !== 'enterprise') {
-      alert('OBS integration requires Pro or Enterprise tier');
-      return;
-    }
-
-    setIsConnecting(true);
-    try {
-      const success = await obsService.connect(
-        obsHost,
-        parseInt(obsPort),
-        obsPassword || undefined
-      );
-
-      if (success) {
-        setOBSEnabled(true);
-      }
-    } catch (error) {
-      console.error('Failed to connect to OBS:', error);
-    } finally {
-      setIsConnecting(false);
-    }
-  };
-
-  // Disconnect from OBS
-  const handleDisconnectOBS = () => {
-    obsService.disconnect();
-    setOBSEnabled(false);
-  };
-
   // Save RTMP settings
   const handleSaveRTMP = () => {
     setRTMPConfig(rtmpUrl, rtmpKey);
@@ -296,7 +264,7 @@ export default function StreamingTab({ onClose }: StreamingTabProps) {
             : 'rgba(107, 114, 128, 0.1)',
           borderRadius: '0.75rem',
           marginBottom: '1.5rem',
-          border: '1px solid rgba(255, 255, 255, 0.1)',
+          border: '1px solid rgba(15, 23, 42, 0.12)',
         }}
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -329,6 +297,8 @@ export default function StreamingTab({ onClose }: StreamingTabProps) {
         </div>
       </div>
 
+      {show('live') && (
+        <>
       {/* Quick Launch */}
       <div className="admin-panel__section">
         <h3 className="admin-panel__section-title">
@@ -361,95 +331,14 @@ export default function StreamingTab({ onClose }: StreamingTabProps) {
           Opens the full-screen broadcast view at /live
         </p>
       </div>
+        </>
+      )}
 
-      {/* OBS Integration */}
-      <div className="admin-panel__section">
-        <h3 className="admin-panel__section-title">
-          <IoRadio /> OBS Studio Integration
-          {currentTier !== 'pro' && currentTier !== 'enterprise' && (
-            <span style={{ marginLeft: '0.5rem', fontSize: '0.75rem', color: '#f59e0b' }}>
-              (Pro+)
-            </span>
-          )}
-        </h3>
+      {/* OBS Studio control panel */}
+      {show('obs') && <ObsStudioPanel locked={obsLocked} sources={obsSources} />}
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-          <div style={{ display: 'flex', gap: '0.5rem' }}>
-            <input
-              type="text"
-              value={obsHost}
-              onChange={(e) => setObsHost(e.target.value)}
-              placeholder="Host (localhost)"
-              className="admin-panel__input"
-              style={{ flex: 2 }}
-              disabled={obsStatus === 'connected'}
-            />
-            <input
-              type="text"
-              value={obsPort}
-              onChange={(e) => setObsPort(e.target.value)}
-              placeholder="Port"
-              className="admin-panel__input"
-              style={{ flex: 1 }}
-              disabled={obsStatus === 'connected'}
-            />
-          </div>
-
-          <input
-            type="password"
-            value={obsPassword}
-            onChange={(e) => setObsPassword(e.target.value)}
-            placeholder="Password (optional)"
-            className="admin-panel__input"
-            disabled={obsStatus === 'connected'}
-          />
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-            <div
-              style={{
-                width: 10,
-                height: 10,
-                borderRadius: '50%',
-                background:
-                  obsStatus === 'connected'
-                    ? '#22c55e'
-                    : obsStatus === 'connecting'
-                    ? '#f59e0b'
-                    : obsStatus === 'error'
-                    ? '#ef4444'
-                    : '#6b7280',
-              }}
-            />
-            <span style={{ fontSize: '0.875rem', color: 'rgba(255, 255, 255, 0.7)', flex: 1 }}>
-              {obsStatus === 'connected'
-                ? 'Connected to OBS'
-                : obsStatus === 'connecting'
-                ? 'Connecting...'
-                : obsStatus === 'error'
-                ? 'Connection failed'
-                : 'Disconnected'}
-            </span>
-
-            {obsStatus === 'connected' ? (
-              <button
-                onClick={handleDisconnectOBS}
-                className="admin-panel__btn admin-panel__btn--secondary"
-              >
-                <IoStop /> Disconnect
-              </button>
-            ) : (
-              <button
-                onClick={handleConnectOBS}
-                disabled={isConnecting || (currentTier !== 'pro' && currentTier !== 'enterprise')}
-                className="admin-panel__btn admin-panel__btn--primary"
-              >
-                {isConnecting ? 'Connecting...' : 'Connect'}
-              </button>
-            )}
-          </div>
-        </div>
-      </div>
-
+      {show('obs') && (
+        <>
       {/* OBS Integration Guide */}
       <div className="admin-panel__section">
         <h3 className="admin-panel__section-title">
@@ -480,7 +369,7 @@ export default function StreamingTab({ onClose }: StreamingTabProps) {
             <div>
               <strong style={{ color: '#000' }}>Enable OBS WebSocket</strong>
               <p style={{ margin: '0.25rem 0 0', fontSize: '0.78rem', color: 'rgba(0, 0, 0, 0.6)', lineHeight: 1.5 }}>
-                In OBS Studio, go to <strong>Tools → WebSocket Server Settings</strong>. Enable the server, set the port to <code style={{ background: 'rgba(255,255,255,0.08)', padding: '1px 5px', borderRadius: 4, fontSize: '0.75rem' }}>4455</code> (default), and optionally set a password. Click <em>Apply</em>.
+                In OBS Studio, go to <strong>Tools → WebSocket Server Settings</strong>. Enable the server, set the port to <code style={{ background: 'rgba(15,23,42,0.08)', padding: '1px 5px', borderRadius: 4, fontSize: '0.75rem' }}>4455</code> (default), and optionally set a password. Click <em>Apply</em>.
               </p>
             </div>
           </div>
@@ -626,8 +515,8 @@ export default function StreamingTab({ onClose }: StreamingTabProps) {
           <div style={{
             marginTop: '0.25rem',
             padding: '0.75rem',
-            background: 'rgba(255, 255, 255, 0.03)',
-            border: '1px solid rgba(255, 255, 255, 0.08)',
+            background: 'rgba(15, 23, 42, 0.03)',
+            border: '1px solid rgba(15, 23, 42, 0.12)',
             borderRadius: '0.5rem',
           }}>
             <div style={{ fontWeight: 700, fontSize: '0.78rem', color: '#000', marginBottom: '0.5rem' }}>Quick Reference URLs</div>
@@ -656,7 +545,11 @@ export default function StreamingTab({ onClose }: StreamingTabProps) {
           </div>
         </div>
       </div>
+        </>
+      )}
 
+      {show('rtmp') && (
+        <>
       {/* RTMP Settings */}
       <div className="admin-panel__section">
         <h3 className="admin-panel__section-title">
@@ -696,7 +589,11 @@ export default function StreamingTab({ onClose }: StreamingTabProps) {
           </button>
         </div>
       </div>
+        </>
+      )}
 
+      {show('live') && (
+        <>
       {/* Overlay Settings */}
       <div className="admin-panel__section">
         <h3 className="admin-panel__section-title">Overlay Settings</h3>
@@ -799,14 +696,18 @@ export default function StreamingTab({ onClose }: StreamingTabProps) {
           </div>
         </div>
       </div>
+        </>
+      )}
 
+      {show('live') && (
+        <>
       {/* Camera Info */}
       <div className="admin-panel__section">
         <h3 className="admin-panel__section-title">Camera Support</h3>
         <div
           style={{
             padding: '1rem',
-            background: 'rgba(255, 255, 255, 0.05)',
+            background: 'rgba(15, 23, 42, 0.05)',
             borderRadius: '0.5rem',
           }}
         >
@@ -824,7 +725,11 @@ export default function StreamingTab({ onClose }: StreamingTabProps) {
           </p>
         </div>
       </div>
+        </>
+      )}
 
+      {show('sports') && (
+        <>
       {/* ── Scoring Section ── */}
       <div className="admin-panel__section">
         <h3 className="admin-panel__section-title">
@@ -838,8 +743,8 @@ export default function StreamingTab({ onClose }: StreamingTabProps) {
         <div style={{
           padding: '0.75rem',
           marginBottom: '0.75rem',
-          background: singleOverlayMode ? 'rgba(34, 197, 94, 0.08)' : 'rgba(255, 255, 255, 0.03)',
-          border: `1px solid ${singleOverlayMode ? 'rgba(34, 197, 94, 0.3)' : 'rgba(255, 255, 255, 0.08)'}`,
+          background: singleOverlayMode ? 'rgba(34, 197, 94, 0.08)' : 'rgba(15, 23, 42, 0.03)',
+          border: `1px solid ${singleOverlayMode ? 'rgba(34, 197, 94, 0.3)' : 'rgba(15, 23, 42, 0.12)'}`,
           borderRadius: '0.5rem',
         }}>
           <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontWeight: 600, fontSize: '0.85rem', color: '#000' }}>
@@ -887,8 +792,8 @@ export default function StreamingTab({ onClose }: StreamingTabProps) {
         <div style={{
           marginTop: '0.75rem',
           padding: '0.75rem',
-          background: 'rgba(255, 255, 255, 0.03)',
-          border: '1px solid rgba(255, 255, 255, 0.08)',
+          background: 'rgba(15, 23, 42, 0.03)',
+          border: '1px solid rgba(15, 23, 42, 0.12)',
           borderRadius: '0.5rem',
         }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
@@ -932,6 +837,8 @@ export default function StreamingTab({ onClose }: StreamingTabProps) {
           </div>
         </div>
       </div>
+        </>
+      )}
 
       {/* Save Feedback Toast */}
       {saveFeedback && (

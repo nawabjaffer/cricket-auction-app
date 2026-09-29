@@ -1,168 +1,133 @@
-import React, { useState, useEffect } from 'react';
-import { featureFlagsService, type FeatureFlags } from '../../services/featureFlagsService';
+import React, { useState, useEffect, useMemo } from 'react';
+import { featureFlagsService, type FeatureFlag, type FeatureFlags } from '../../services/featureFlagsService';
+import { FEATURE_CATEGORIES } from '../../config/featureCategories';
 import './FeatureFlagsTab.css';
 
 interface FeatureFlagsTabProps {
   onStatusChange: (status: 'idle' | 'success' | 'error') => void;
+  /** Show a single category, or every category when omitted / "all". */
+  category?: string;
 }
 
-const FeatureFlagsTab: React.FC<FeatureFlagsTabProps> = ({ onStatusChange }) => {
+type FlagEntry = FeatureFlag & { key: string };
+
+const FeatureFlagsTab: React.FC<FeatureFlagsTabProps> = ({ onStatusChange, category = 'all' }) => {
   const [flags, setFlags] = useState<FeatureFlags>(() => featureFlagsService.getAllFlags());
   const [loading, setLoading] = useState(false);
-  const [expandedCategory, setExpandedCategory] = useState<string | null>(null);
+  const [query, setQuery] = useState('');
 
   useEffect(() => {
-    // Initialize flags on mount
     featureFlagsService.initialize().then(() => {
       setFlags(featureFlagsService.getAllFlags());
     });
-
-    // Subscribe to changes
-    const unsubscribe = featureFlagsService.subscribe((updatedFlags) => {
-      setFlags(updatedFlags);
-    });
-
-    return () => {
-      unsubscribe();
-    };
+    return featureFlagsService.subscribe(setFlags);
   }, []);
+
+  const report = (status: 'success' | 'error') => {
+    onStatusChange(status);
+    setTimeout(() => onStatusChange('idle'), 2000);
+  };
 
   const handleToggleFlag = async (featureKey: string, currentEnabled: boolean) => {
     setLoading(true);
     try {
       await featureFlagsService.toggleFeature(featureKey, !currentEnabled);
-      onStatusChange('success');
-      setTimeout(() => onStatusChange('idle'), 2000);
+      report('success');
     } catch (error) {
       console.error('[FeatureFlagsTab] Failed to toggle flag:', error);
-      onStatusChange('error');
-      setTimeout(() => onStatusChange('idle'), 2000);
+      report('error');
     } finally {
       setLoading(false);
     }
   };
 
   const handleResetToDefaults = async () => {
-    const confirmed = window.confirm('Reset all features to default state?');
-    if (!confirmed) return;
-
+    if (!window.confirm('Reset all features to default state?')) return;
     setLoading(true);
     try {
       await featureFlagsService.resetToDefaults();
-      onStatusChange('success');
-      setTimeout(() => onStatusChange('idle'), 2000);
+      report('success');
     } catch (error) {
       console.error('[FeatureFlagsTab] Failed to reset:', error);
-      onStatusChange('error');
-      setTimeout(() => onStatusChange('idle'), 2000);
+      report('error');
     } finally {
       setLoading(false);
     }
   };
 
-  // Get categories
-  const categories: { [key: string]: string } = {
-    bidding: '🎯 Bidding Features',
-    ui: '🎨 UI & Display',
-    notifications: '🔔 Notifications',
-    analytics: '📊 Analytics & Logging',
-    other: '⚙️ Other'
-  };
+  const entries = useMemo<FlagEntry[]>(() => Object.entries(flags).map(([key, flag]) => ({ ...flag, key })), [flags]);
+  const needle = query.trim().toLowerCase();
+  const visible = entries.filter(flag => {
+    if (category !== 'all' && flag.category !== category) return false;
+    return !needle || `${flag.name} ${flag.description} ${flag.key}`.toLowerCase().includes(needle);
+  });
 
-  // Group flags by category
-  const groupedFlags = Object.entries(flags).reduce((acc, [key, flag]) => {
-    const category = flag.category;
-    if (!acc[category]) {
-      acc[category] = [];
-    }
-    acc[category].push({ key, ...flag });
-    return acc;
-  }, {} as { [key: string]: any[] });
-
-  const stats = featureFlagsService.getStats();
+  const scopeEntries = category === 'all' ? entries : entries.filter(flag => flag.category === category);
+  const enabledCount = scopeEntries.filter(flag => flag.enabled).length;
+  const groups = FEATURE_CATEGORIES
+    .filter(group => category === 'all' || group.key === category)
+    .map(group => ({ ...group, items: visible.filter(flag => flag.category === group.key) }))
+    .filter(group => group.items.length > 0);
+  const activeCategory = FEATURE_CATEGORIES.find(group => group.key === category);
 
   return (
     <div className="features-tab">
-      <div className="features-header">
-        <h3>Feature Flags Management</h3>
-        <div className="features-stats">
-          <span className="stat">
-            <span className="stat-label">Enabled:</span>
-            <span className="stat-value enabled">{stats.enabled}</span>
-          </span>
-          <span className="stat">
-            <span className="stat-label">Disabled:</span>
-            <span className="stat-value disabled">{stats.disabled}</span>
-          </span>
+      <div className="features-toolbar">
+        <div className="features-summary">
+          <strong>{activeCategory?.label ?? 'All features'}</strong>
+          <span>{enabledCount} of {scopeEntries.length} enabled</span>
         </div>
+        <input
+          type="search"
+          className="features-search"
+          placeholder="Search features"
+          value={query}
+          onChange={e => setQuery(e.target.value)}
+          aria-label="Search features"
+        />
       </div>
 
       <p className="features-description">
-        Control which features are enabled or disabled in the auction application. Changes take effect immediately.
+        {activeCategory?.description ?? 'Turn features on or off for this auction.'} Changes take effect immediately for everyone using the app.
       </p>
 
-      <div className="features-list">
-        {Object.entries(categories).map(([category, categoryLabel]) => (
-          <div key={category} className="feature-category">
-            <button
-              className={`category-header ${expandedCategory === category ? 'expanded' : ''}`}
-              onClick={() => setExpandedCategory(expandedCategory === category ? null : category)}
-            >
-              <span className="category-icon">{categoryLabel}</span>
-              <span className="category-arrow">▼</span>
-            </button>
-
-            {expandedCategory === category && (
-              <div className="category-features">
-                {groupedFlags[category]?.map((flag) => (
-                  <div key={flag.key} className="feature-item">
-                    <div className="feature-info">
-                      <div className="feature-name">{flag.name}</div>
-                      <div className="feature-description">{flag.description}</div>
-                      {flag.updatedBy && (
-                        <div className="feature-meta">
-                          Last updated by: {flag.updatedBy}
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="feature-toggle">
-                      <input
-                        type="checkbox"
-                        id={flag.key}
-                        checked={flag.enabled}
-                        onChange={() => handleToggleFlag(flag.key, flag.enabled)}
-                        disabled={loading}
-                        className="toggle-input"
-                      />
-                      <label htmlFor={flag.key} className="toggle-label">
-                        <span className="toggle-switch"></span>
-                        <span className="toggle-text">
-                          {flag.enabled ? 'Enabled' : 'Disabled'}
-                        </span>
-                      </label>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
+      {groups.map(group => (
+        <section key={group.key} className="feature-group">
+          {category === 'all' && <h4 className="feature-group__title">{group.label}<span>{group.items.length}</span></h4>}
+          <div className="feature-grid">
+            {group.items.map(flag => (
+              <label key={flag.key} className={`feature-card ${flag.enabled ? 'is-on' : ''}`} htmlFor={flag.key}>
+                <div className="feature-card__body">
+                  <div className="feature-name">{flag.name}</div>
+                  <div className="feature-description">{flag.description}</div>
+                  {flag.updatedBy && <div className="feature-meta">Last updated by {flag.updatedBy}</div>}
+                </div>
+                <div className="feature-toggle">
+                  <input
+                    type="checkbox"
+                    id={flag.key}
+                    checked={flag.enabled}
+                    onChange={() => handleToggleFlag(flag.key, flag.enabled)}
+                    disabled={loading}
+                    className="toggle-input"
+                  />
+                  <span className="toggle-label">
+                    <span className="toggle-switch" />
+                    <span className="toggle-text">{flag.enabled ? 'On' : 'Off'}</span>
+                  </span>
+                </div>
+              </label>
+            ))}
           </div>
-        ))}
-      </div>
+        </section>
+      ))}
+
+      {groups.length === 0 && <p className="features-empty">No features match your search.</p>}
 
       <div className="features-actions">
-        <button
-          onClick={handleResetToDefaults}
-          disabled={loading}
-          className="reset-button"
-        >
-          ↻ Reset to Defaults
+        <button type="button" onClick={handleResetToDefaults} disabled={loading} className="reset-button">
+          Reset all to defaults
         </button>
-      </div>
-
-      <div className="features-info">
-        <strong>Note:</strong> Feature flags control app functionality in real-time. Disabling a feature will
-        immediately prevent users from accessing it.
       </div>
     </div>
   );

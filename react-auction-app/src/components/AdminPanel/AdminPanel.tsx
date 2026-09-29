@@ -7,7 +7,7 @@ import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { createPortal } from 'react-dom';
 
-import { IoClose, IoSave, IoRefresh, IoDownload, IoVideocam, IoAdd, IoTrash, IoArrowUp, IoArrowDown, IoSearch, IoStatsChart, IoCloudUpload, IoRemoveCircleOutline } from 'react-icons/io5';
+import { IoClose, IoSave, IoRefresh, IoDownload, IoAdd, IoTrash, IoArrowUp, IoArrowDown, IoSearch, IoStatsChart, IoCloudUpload, IoRemoveCircleOutline } from 'react-icons/io5';
 import { auctionPersistence, type AdminSettings, type SponsorRecord, type SpecialCategory, type BidIncrementRange, type PlayerTrashRecord } from '../../services/auctionPersistence';
 import { realtimeSync } from '../../services/realtimeSync';
 import { googleSheetsService, imagePreloaderService, resolveMediaToStorage, uploadFileToStorage } from '../../services';
@@ -19,11 +19,14 @@ import { useAuctionStore } from '../../store/auctionStore';
 import { activeConfig } from '../../config';
 import { exportSoldPlayers, exportUnsoldPlayers, downloadCSV, downloadPlayersTemplate, downloadScoresTemplate } from '../../utils/exportData';
 import { playerDuplicateMatchById, uniqueImportedPlayerId } from '../../utils/playerDuplicateReview';
+import { belongsToTeam } from '../../utils/teamMembership';
 import FeatureFlagsTab from './FeatureFlagsTab';
-import StreamingTab from './StreamingTab';
+import StreamingTab, { type StreamingSection } from './StreamingTab';
+import { ADMIN_NAV, defaultSubsection, findAdminNavItem, type AdminTab } from './adminNavigation';
 import { StorageManager } from './StorageManager';
 import '../AdminPanel/StorageManager.css';
 import './AdminPanel.css';
+import './AdminShell.css';
 import type { Team, Player, SoldPlayer, UnsoldPlayer, AuctionRoleCategory, BattingStats, BowlingStats } from '../../types';
 import { DEFAULT_AUCTION_ROLE_ORDER, createEmptyBattingStats, createEmptyBowlingStats } from '../../types';
 import { SPORT_ROLE_ORDERS, DEFAULT_SPORT_STAT_FIELDS, getStatFieldsForSport } from '../../config/playerStatFields';
@@ -348,7 +351,9 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
     }) ?? null;
   };
 
-  const [activeTab, setActiveTab] = useState<'theme' | 'teams' | 'purse' | 'sponsors' | 'players' | 'registration' | 'export' | 'features' | 'streaming' | 'storage' | 'reset'>('theme');
+  const [activeTab, setActiveTab] = useState<AdminTab>('theme');
+  const [activeSubsections, setActiveSubsections] = useState<Partial<Record<AdminTab, string>>>({});
+  const [isNavOpen, setIsNavOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'success' | 'error'>('idle');
 
@@ -514,6 +519,14 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
   // Sold player edit state
   const [editingSoldPlayerId, setEditingSoldPlayerId] = useState<string | null>(null);
   const [soldPlayerDraft, setSoldPlayerDraft] = useState<{ teamId: string; teamName: string; soldAmount: number } | null>(null);
+  const [playerTeamDraft, setPlayerTeamDraft] = useState<{ teamId: string; teamName: string } | null>(null);
+  const [exportTeamFilter, setExportTeamFilter] = useState('all');
+
+  const filteredExportSoldPlayers = useMemo(() => {
+    if (exportTeamFilter === 'all') return soldPlayers;
+    const team = teams.find(item => item.id === exportTeamFilter);
+    return team ? soldPlayers.filter(player => belongsToTeam(player, team)) : soldPlayers;
+  }, [exportTeamFilter, soldPlayers, teams]);
 
   const showUploadFeedback = (message: string, type: 'success' | 'error' = 'success') => {
     setUploadFeedback({ message, type });
@@ -577,7 +590,7 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
   const teamDraftSpent = useMemo(() => {
     if (!editingTeamId || !teamDraft) return 0;
     return soldPlayers
-      .filter(sp => sp.teamId === editingTeamId || sp.teamName === teamDraft.name)
+      .filter(sp => belongsToTeam(sp, { id: editingTeamId, name: teamDraft.name }))
       .reduce((sum, sp) => sum + (sp.soldAmount || 0), 0);
   }, [editingTeamId, teamDraft?.name, soldPlayers]);
 
@@ -585,7 +598,7 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
   // actual sold-player records, never from a possibly-stale cached value.
   const purseControlRows = useMemo(() => {
     return editingTeams.map((team) => {
-      const soldForTeam = soldPlayers.filter(sp => sp.teamId === team.id || sp.teamName === team.name);
+      const soldForTeam = soldPlayers.filter(player => belongsToTeam(player, team));
       const spent = soldForTeam.reduce((sum, sp) => sum + (sp.soldAmount || 0), 0);
       const allocated = team.allocatedAmount ?? 0;
       const threshold = team.totalPlayerThreshold ?? 0;
@@ -904,7 +917,7 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
   const handleApplyTeamBudgetDefaults = useCallback((defaults: { totalBudget: number; playerThreshold: number }) => {
     const nextTeams = editingTeams.map((team) => {
       const spent = soldPlayers
-        .filter((sold) => sold.teamId === team.id || sold.teamName === team.name)
+        .filter(sold => belongsToTeam(sold, team))
         .reduce((sum, sold) => sum + (sold.soldAmount || 0), 0);
       const allocatedAmount = Math.max(0, defaults.totalBudget, spent);
       const playersBought = team.playersBought || 0;
@@ -1144,7 +1157,7 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
   const handleEditSoldPlayer = (player: SoldPlayer) => {
     setEditingSoldPlayerId(player.id);
     setSoldPlayerDraft({ 
-      teamId: player.teamId || '', 
+      teamId: player.teamId || teams.find(team => team.name === player.teamName)?.id || '',
       teamName: player.teamName || '', 
       soldAmount: player.soldAmount 
     });
@@ -1163,6 +1176,7 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
         teamName: soldPlayerDraft.teamName,
         soldAmount: soldPlayerDraft.soldAmount,
       };
+      const previousTeamId = player.teamId || teams.find(team => team.name === player.teamName)?.id || '';
 
       // Update the soldPlayers list in store
       const updatedList = soldPlayers.map(p => p.id === editingSoldPlayerId ? updatedPlayer : p);
@@ -1172,17 +1186,17 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
       await auctionPersistence.saveSoldPlayer(updatedPlayer, soldPlayerDraft.teamName);
 
       // Update team budgets if team or amount changed
-      if (player.teamId !== soldPlayerDraft.teamId || player.soldAmount !== soldPlayerDraft.soldAmount) {
+      if (previousTeamId !== soldPlayerDraft.teamId || player.soldAmount !== soldPlayerDraft.soldAmount) {
         const updatedTeams = teams.map(t => {
-          if (t.id === player.teamId && player.teamId !== soldPlayerDraft.teamId) {
+          if (t.id === previousTeamId && previousTeamId !== soldPlayerDraft.teamId) {
             // Old team: refund the player
             return { ...t, remainingPurse: t.remainingPurse + player.soldAmount, playersBought: Math.max(0, t.playersBought - 1) };
           }
-          if (t.id === soldPlayerDraft.teamId && player.teamId !== soldPlayerDraft.teamId) {
+          if (t.id === soldPlayerDraft.teamId && previousTeamId !== soldPlayerDraft.teamId) {
             // New team: deduct the amount
             return { ...t, remainingPurse: t.remainingPurse - soldPlayerDraft.soldAmount, playersBought: t.playersBought + 1 };
           }
-          if (t.id === soldPlayerDraft.teamId && player.teamId === soldPlayerDraft.teamId && player.soldAmount !== soldPlayerDraft.soldAmount) {
+          if (t.id === soldPlayerDraft.teamId && previousTeamId === soldPlayerDraft.teamId && player.soldAmount !== soldPlayerDraft.soldAmount) {
             // Same team but amount changed: adjust purse
             return { ...t, remainingPurse: t.remainingPurse + player.soldAmount - soldPlayerDraft.soldAmount };
           }
@@ -1397,6 +1411,14 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
 
     setEditingPlayerId(playerId);
     setPlayerDraft({ ...targetPlayer, name: normalizePlayerName(targetPlayer.name) });
+    const soldAssignment = soldPlayers.find(player => player.id === playerId);
+    const soldAssignedTeam = soldAssignment
+      ? teams.find(team => team.id === soldAssignment.teamId) || teams.find(team => team.name === soldAssignment.teamName)
+      : undefined;
+    setPlayerTeamDraft(soldAssignment ? {
+      teamId: soldAssignedTeam?.id || soldAssignment.teamId || '',
+      teamName: soldAssignedTeam?.name || soldAssignment.teamName,
+    } : null);
     setEditorImageBlob(undefined);
 
     // Check if this player is currently an icon player for any team
@@ -1413,6 +1435,7 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
   const closePlayerEditor = () => {
     setEditingPlayerId(null);
     setPlayerDraft(null);
+    setPlayerTeamDraft(null);
     setIsIconPlayer(false);
     setIconTeamId('');
     setEditorImageBlob(undefined);
@@ -1562,6 +1585,18 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
         ? normalizedDraft
         : player
     ));
+    const soldPlayerBeingEdited = soldPlayers.find(player => player.id === editingPlayerId);
+    const updatedSoldPlayers = soldPlayerBeingEdited
+      ? soldPlayers.map(player => player.id === editingPlayerId ? {
+        ...player,
+        ...normalizedDraft,
+        id: normalizedDraft.id,
+        teamId: playerTeamDraft ? teams.find(team => team.id === playerTeamDraft.teamId)?.id || '' : player.teamId,
+        teamName: playerTeamDraft ? teams.find(team => team.id === playerTeamDraft.teamId)?.name || '' : player.teamName,
+        soldAmount: player.soldAmount,
+        soldDate: player.soldDate,
+      } : player)
+      : soldPlayers;
     setEditingPlayers(updatedPlayers);
 
     // If the ID was changed, update the image sources mapping
@@ -1607,6 +1642,15 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
     try {
       setAdminPlayerOverrides(updatedPlayers);
       await auctionPersistence.saveAdminPlayers(updatedPlayers);
+      if (soldPlayerBeingEdited) {
+        const updatedSoldPlayer = updatedSoldPlayers.find(player => player.id === normalizedDraft.id);
+        if (updatedSoldPlayer) {
+          await auctionPersistence.saveSoldPlayer(updatedSoldPlayer, updatedSoldPlayer.teamName);
+          if (normalizedDraft.id !== editingPlayerId) await auctionPersistence.removeSoldPlayer(editingPlayerId);
+          setSoldPlayers(updatedSoldPlayers);
+          reconcilePlayerPools();
+        }
+      }
       // Also persist team changes (icon player assignment)
       setTeams(updatedTeams);
       await auctionPersistence.saveTeams(updatedTeams);
@@ -1921,13 +1965,13 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
   };
 
   // Handle export sold players
-  const handleExportSoldPlayers = () => {
-    if (soldPlayers.length === 0) {
+  const handleExportSoldPlayers = (playersToExport: SoldPlayer[] = soldPlayers) => {
+    if (playersToExport.length === 0) {
       alert('No sold players to export');
       return;
     }
 
-    const records = soldPlayers.map(player => ({
+    const records = playersToExport.map(player => ({
       id: player.id,
       playerName: player.name,
       role: player.role,
@@ -2320,6 +2364,7 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
   const finishAssignedImport = async (review: NonNullable<typeof assignedImportReview>) => {
     let added = 0; let skipped = 0; let removed = 0;
     const nextPlayers = [...editingPlayers];
+    let nextSoldPlayers = [...soldPlayers];
     const existingTeams = new Map(soldPlayers.flatMap(player => player.teamId || player.teamName
       ? [[player.id, { id: player.teamId, name: player.teamName }] as const]
       : []));
@@ -2339,7 +2384,21 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
         added += 1;
       }
       await auctionPersistence.saveDirectAssignedPlayer(canonical, team);
+      const existingSoldPlayer = nextSoldPlayers.find(item => item.id === canonical.id);
+      const assignedSoldPlayer: SoldPlayer = {
+        ...canonical,
+        soldAmount: 0,
+        teamId: team.id,
+        teamName: team.name,
+        soldDate: existingSoldPlayer?.soldDate || new Date().toISOString(),
+      };
+      nextSoldPlayers = [
+        ...nextSoldPlayers.filter(item => item.id !== canonical.id),
+        assignedSoldPlayer,
+      ];
     }
+    setSoldPlayers(nextSoldPlayers);
+    reconcilePlayerPools();
     if (added > 0) {
       await auctionPersistence.saveAdminPlayers(nextPlayers);
       setEditingPlayers(nextPlayers);
@@ -2695,8 +2754,26 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
     }
   };
 
+  const activeSub = activeTab === 'players'
+    ? (isPlayerTrashView ? 'trash' : 'list')
+    : (activeSubsections[activeTab] ?? defaultSubsection(activeTab) ?? '');
+  const activeNavGroup = ADMIN_NAV.find(group => group.items.some(item => item.tab === activeTab));
+  const activeNavItem = findAdminNavItem(activeTab);
+  const activeNavSub = activeNavItem.subsections?.find(sub => sub.key === activeSub);
+
+  const selectSection = (tab: AdminTab, sub?: string) => {
+    setActiveTab(tab);
+    if (tab === 'players') {
+      if (sub) setIsPlayerTrashView(sub === 'trash');
+    } else {
+      const nextSub = sub ?? activeSubsections[tab] ?? defaultSubsection(tab);
+      if (nextSub) setActiveSubsections(prev => ({ ...prev, [tab]: nextSub }));
+    }
+    setIsNavOpen(false);
+  };
+
   const panelContent = (
-    <div className={`admin-panel ${mode === 'page' ? 'admin-panel--page' : ''}`}>
+    <div className={`admin-panel adm-shell ${mode === 'page' ? 'admin-panel--page' : 'admin-panel--drawer'}`}>
       {/* Global saving progress bar */}
       <AnimatePresence>
         {(isSaving || isSavingSponsors) && (
@@ -2798,91 +2875,71 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
         )}
       </AnimatePresence>
 
-      {/* Header */}
-      <div className="admin-header">
-        <h2>Admin Panel</h2>
-        <button className="admin-close-btn" onClick={onClose}>
-          <IoClose size={24} />
-        </button>
-      </div>
+      <div className="adm-layout">
+        <aside className={`adm-sidebar ${isNavOpen ? 'is-open' : ''}`} aria-label="Admin sections">
+          <nav className="adm-nav">
+            {ADMIN_NAV.map(group => (
+              <div key={group.label} className="adm-nav-group">
+                <p className="adm-nav-group__label">{group.label}</p>
+                {group.items.map(item => {
+                  const isActive = activeTab === item.tab;
+                  return (
+                    <div key={item.tab}>
+                      <button
+                        type="button"
+                        className={`adm-nav-item ${isActive ? 'is-active' : ''}`}
+                        aria-current={isActive ? 'page' : undefined}
+                        onClick={() => selectSection(item.tab)}
+                      >
+                        {item.icon}
+                        <span>{item.label}</span>
+                      </button>
+                      {isActive && item.subsections && (
+                        <ul className="adm-subnav">
+                          {item.subsections.map(sub => (
+                            <li key={sub.key}>
+                              <button
+                                type="button"
+                                className={`adm-subnav__item ${activeSub === sub.key ? 'is-active' : ''}`}
+                                onClick={() => selectSection(item.tab, sub.key)}
+                              >
+                                {sub.label}
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            ))}
+          </nav>
+        </aside>
 
-      {/* Tabs */}
-      <div className="admin-tabs">
-        <button
-          className={`admin-tab ${activeTab === 'theme' ? 'active' : ''}`}
-          onClick={() => setActiveTab('theme')}
-        >
-          Theme & Settings
-        </button>
-        <button
-          className={`admin-tab ${activeTab === 'teams' ? 'active' : ''}`}
-          onClick={() => setActiveTab('teams')}
-        >
-          Teams
-        </button>
-        <button
-          className={`admin-tab ${activeTab === 'purse' ? 'active' : ''}`}
-          onClick={() => setActiveTab('purse')}
-        >
-          Purse Control
-        </button>
-        <button
-          className={`admin-tab ${activeTab === 'sponsors' ? 'active' : ''}`}
-          onClick={() => setActiveTab('sponsors')}
-        >
-          Sponsors
-        </button>
-        <button
-          className={`admin-tab ${activeTab === 'players' ? 'active' : ''}`}
-          onClick={() => setActiveTab('players')}
-        >
-          Players
-        </button>
-        <button
-          className={`admin-tab ${activeTab === 'registration' ? 'active' : ''}`}
-          onClick={() => setActiveTab('registration')}
-        >
-          Registration Form
-        </button>
-        <button
-          className={`admin-tab ${activeTab === 'export' ? 'active' : ''}`}
-          onClick={() => setActiveTab('export')}
-        >
-          Export
-        </button>
-        <button
-          className={`admin-tab ${activeTab === 'features' ? 'active' : ''}`}
-          onClick={() => setActiveTab('features')}
-        >
-          Features
-        </button>
-        <button
-          className={`admin-tab ${activeTab === 'streaming' ? 'active' : ''}`}
-          onClick={() => setActiveTab('streaming')}
-        >
-          <IoVideocam style={{ marginRight: 4 }} />
-          Streaming
-        </button>
-        <button
-          className={`admin-tab ${activeTab === 'storage' ? 'active' : ''}`}
-          onClick={() => setActiveTab('storage')}
-        >
-          <IoCloudUpload style={{ marginRight: 4 }} />
-          Storage
-        </button>
-        <button
-          className={`admin-tab ${activeTab === 'reset' ? 'active' : ''}`}
-          onClick={() => setActiveTab('reset')}
-        >
-          Reset
-        </button>
-      </div>
+        <section className="adm-main">
+          <header className="adm-main__header">
+            <button type="button" className="adm-menu-toggle" onClick={() => setIsNavOpen(open => !open)} aria-expanded={isNavOpen}>
+              Menu
+            </button>
+            <div className="adm-main__titles">
+              <p className="adm-breadcrumb">
+                {activeNavGroup?.label} <span>/</span> {activeNavItem.label}
+                {activeNavSub && <> <span>/</span> {activeNavSub.label}</>}
+              </p>
+              <h2>{activeNavSub?.label ?? activeNavItem.label}</h2>
+              <p className="adm-main__desc">{activeNavItem.description}</p>
+            </div>
+            <button className="admin-close-btn" onClick={onClose} aria-label="Close admin panel">
+              <IoClose size={22} />
+            </button>
+          </header>
 
-      {/* Content */}
-      <div className="admin-content">
+      <div className="adm-content">
               {/* Theme Tab */}
               {activeTab === 'theme' && (
                 <div className="admin-section">
+                  <div className="adm-sub" hidden={activeSub !== 'general'}>
                   <h3>Auction Settings</h3>
 
                   <div className="form-group">
@@ -2982,6 +3039,9 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
                     <span style={{ fontSize: '0.8rem', color: '#64748b' }}>Preview: ₹10.00{currencySuffix}</span>
                   </div>
 
+                  <div className="adm-sub" hidden={activeSub !== 'look'}>
+                  </div>
+
                   <h3 style={{ marginTop: '2rem' }}>OBS Overlay Style</h3>
                   <small style={{ color: '#6b7280', display: 'block', marginBottom: '0.75rem' }}>
                     Choose the live player lower-third design shown on the OBS overlay (<code>/obs-overlay</code>).
@@ -3023,6 +3083,9 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
                       style={{ width: 44, height: 32, borderRadius: 6, border: '1px solid rgba(255,255,255,0.1)', background: 'transparent', cursor: 'pointer' }}
                     />
                     <span style={{ fontSize: '0.78rem', color: '#64748b' }}>Blue gradient &amp; highlights on the broadcast overlay.</span>
+                  </div>
+
+                  <div className="adm-sub" hidden={activeSub !== 'bidding'}>
                   </div>
 
                   <h3 style={{ marginTop: '2rem' }}>Bid Increment Ranges</h3>
@@ -3113,6 +3176,9 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
                   >
                     + Add Range
                   </button>
+
+                  <div className="adm-sub" hidden={activeSub !== 'look'}>
+                  </div>
 
                   <h3 style={{ marginTop: '2rem' }}>Theme Colors</h3>
 
@@ -3287,6 +3353,9 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
                         )}
                       </div>
                     </div>
+                  </div>
+
+                  <div className="adm-sub" hidden={activeSub !== 'sport'}>
                   </div>
 
                   {/* Auction Game / Sport Selection */}
@@ -3471,6 +3540,9 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
                     </div>
                   </div>
 
+                  <div className="adm-sub" hidden={activeSub !== 'look'}>
+                  </div>
+
                   {/* Auction Screen Layout */}
                   <div className="admin-sport-section">
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '0.5rem' }}>
@@ -3523,6 +3595,9 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
                     </div>
                   </div>
 
+                  <div className="adm-sub" hidden={activeSub !== 'advanced'}>
+                  </div>
+
                   {/* Extended Settings - Player Stats, Categories, Budget, Breaks, Loading, Owners, Iconic Players */}
                   <div style={{ marginTop: '2rem', borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '2rem' }}>
                     <h3 style={{ marginBottom: '1rem' }}>Advanced Configuration</h3>
@@ -3534,6 +3609,9 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
                       onChange={(partial) => { extendedSettingsRef.current = partial; }}
                       onApplyTeamDefaults={handleApplyTeamBudgetDefaults}
                     />
+                  </div>
+
+                  <div className="adm-sub" hidden={activeSub !== 'bidding'}>
                   </div>
 
                   {/* Budget Enforcement Mode */}
@@ -3562,6 +3640,9 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
                         Release & Refund (prompt team to drop a player)
                       </label>
                     </div>
+                  </div>
+
+                  <div className="adm-sub" hidden={activeSub !== 'access'}>
                   </div>
 
                   <h3 style={{ marginTop: '2rem' }}>Connect-Bidding Login</h3>
@@ -3608,6 +3689,9 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
                         placeholder="Shared with trusted helpers only"
                       />
                     </div>
+                  </div>
+
+                  <div className="adm-sub" hidden={activeSub !== 'branding'}>
                   </div>
 
                   {/* Branding & Placement Controls */}
@@ -3791,15 +3875,18 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
                       </div>
                     </div>
                   </div>
+                  </div>
 
-                  <button
-                    className="admin-btn admin-btn-primary"
-                    onClick={handleSaveTheme}
-                    disabled={isSaving}
-                    style={{ marginTop: '1.5rem' }}
-                  >
-                    <IoSave size={18} /> Save Settings
-                  </button>
+                  <div className="adm-savebar">
+                    <span>Changes in every settings section are saved together.</span>
+                    <button
+                      className="admin-btn admin-btn-primary"
+                      onClick={handleSaveTheme}
+                      disabled={isSaving}
+                    >
+                      <IoSave size={18} /> Save Settings
+                    </button>
+                  </div>
                 </div>
               )}
 
@@ -4572,19 +4659,28 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
               {/* Export Tab */}
               {activeTab === 'export' && (
                 <div className="admin-section">
+                  <div className="adm-sub" hidden={activeSub !== 'sold'}>
                   <h3>Export Data</h3>
 
                   <div className="export-info">
-                    <p>Total Sold Players: <strong>{soldPlayers.length}</strong></p>
-                    <p>Total Revenue: <strong>₹{soldPlayers.reduce((sum, p) => sum + p.soldAmount, 0).toFixed(1)}L</strong></p>
+                    <label className="admin-export-team-filter">
+                      <span>Filter team</span>
+                      <select value={exportTeamFilter} onChange={event => setExportTeamFilter(event.target.value)}>
+                        <option value="all">All teams</option>
+                        {teams.map(team => <option key={team.id} value={team.id}>{team.name} · {team.id}</option>)}
+                      </select>
+                    </label>
+                    <p>Sold Players: <strong>{filteredExportSoldPlayers.length}</strong></p>
+                    <p>Total Revenue: <strong>₹{filteredExportSoldPlayers.reduce((sum, p) => sum + p.soldAmount, 0).toFixed(1)}L</strong></p>
                   </div>
 
-                  {soldPlayers.length > 0 && (
+                  {filteredExportSoldPlayers.length > 0 && (
                     <div className="admin-export-table-wrapper">
                       <table className="admin-export-table">
                         <thead>
                           <tr>
                             <th>#</th>
+                            <th>Photo</th>
                             <th>Player</th>
                             <th>Role</th>
                             <th>Age</th>
@@ -4595,79 +4691,86 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
                           </tr>
                         </thead>
                         <tbody>
-                          {soldPlayers.map((p, i) => (
-                            <tr key={p.id}>
-                              <td>{i + 1}</td>
-                              <td>
-                                {p.name}
-                                <small style={{ display: 'block', color: '#71717a', fontSize: '0.68rem' }}>ID: {p.id}</small>
-                              </td>
-                              <td>
-                                <span className="admin-role-dot" style={{ background: getRoleBadgeColor(p.role) }} />
-                                {formatRoleDisplay(p.role)}
-                              </td>
-                              <td>{p.age ?? 'N/A'}</td>
-                              <td>
-                                {editingSoldPlayerId === p.id ? (
-                                  <select
-                                    value={soldPlayerDraft?.teamId || ''}
-                                    onChange={(e) => {
-                                      const t = teams.find(tm => tm.id === e.target.value);
-                                      if (t) setSoldPlayerDraft(prev => prev ? { ...prev, teamId: t.id, teamName: t.name } : prev);
-                                    }}
-                                  >
-                                    {teams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-                                  </select>
-                                ) : p.teamName}
-                              </td>
-                              <td className="admin-export-amount">
-                                {editingSoldPlayerId === p.id ? (
-                                  <input
-                                    type="number"
-                                    value={soldPlayerDraft?.soldAmount ?? 0}
-                                    onChange={(e) => setSoldPlayerDraft(prev => prev ? { ...prev, soldAmount: Number(e.target.value) } : prev)}
-                                    style={{ width: '5rem' }}
-                                    step={0.5}
-                                    min={0}
-                                  />
-                                ) : `₹${p.soldAmount}`}
-                              </td>
-                              <td>₹{p.basePrice}</td>
-                              <td>
-                                {editingSoldPlayerId === p.id ? (
-                                  <>
-                                    <button className="admin-btn admin-btn-success admin-btn-sm" onClick={handleSaveSoldPlayerEdit} disabled={isSaving}>Save</button>
-                                    <button className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => { setEditingSoldPlayerId(null); setSoldPlayerDraft(null); }} style={{ marginLeft: 4 }}>Cancel</button>
-                                  </>
-                                ) : (
-                                  <>
-                                    <button className="admin-btn admin-btn-warning admin-btn-sm" onClick={() => handleEditSoldPlayer(p)} disabled={isSaving} title="Edit team/amount">Edit</button>
-                                    <button className="admin-btn admin-btn-danger admin-btn-sm" onClick={() => handleUndoSoldPlayer(p)} disabled={isSaving} title="Undo sale" style={{ marginLeft: 4 }}>Undo</button>
-                                  </>
-                                )}
-                              </td>
-                            </tr>
-                          ))}
+                          {filteredExportSoldPlayers.map((p, i) => {
+                            const editedPlayer = editingPlayers.find(player => player.id === p.id);
+                            const displayName = editedPlayer?.name || p.name;
+                            const displayImage = editedPlayer?.processedImageUrl || editedPlayer?.imageUrl || p.imageUrl;
+                            return (
+                              <tr key={p.id}>
+                                <td>{i + 1}</td>
+                                <td><CompactPlayerAvatar imageUrl={displayImage} playerName={displayName} /></td>
+                                <td>
+                                  {displayName}
+                                  <small style={{ display: 'block', color: '#71717a', fontSize: '0.68rem' }}>ID: {p.id}</small>
+                                </td>
+                                <td>
+                                  <span className="admin-role-dot" style={{ background: getRoleBadgeColor(editedPlayer?.role || p.role) }} />
+                                  {formatRoleDisplay(editedPlayer?.role || p.role)}
+                                </td>
+                                <td>{editedPlayer?.age ?? p.age ?? 'N/A'}</td>
+                                <td>
+                                  {editingSoldPlayerId === p.id ? (
+                                    <select
+                                      value={soldPlayerDraft?.teamId || p.teamId || ''}
+                                      onChange={(e) => {
+                                        const t = teams.find(tm => tm.id === e.target.value);
+                                        if (t) setSoldPlayerDraft(prev => prev ? { ...prev, teamId: t.id, teamName: t.name } : prev);
+                                      }}
+                                    >
+                                      {teams.map(t => <option key={t.id} value={t.id}>{t.name} · {t.id}</option>)}
+                                    </select>
+                                  ) : <>{p.teamName}<small style={{ display: 'block', color: '#71717a', fontSize: '0.68rem' }}>Team ID: {p.teamId || teams.find(team => team.name === p.teamName)?.id || 'legacy'}</small></>}
+                                </td>
+                                <td className="admin-export-amount">
+                                  {editingSoldPlayerId === p.id ? (
+                                    <input
+                                      type="number"
+                                      value={soldPlayerDraft?.soldAmount ?? 0}
+                                      onChange={(e) => setSoldPlayerDraft(prev => prev ? { ...prev, soldAmount: Number(e.target.value) } : prev)}
+                                      style={{ width: '5rem' }}
+                                      step={0.5}
+                                      min={0}
+                                    />
+                                  ) : `₹${p.soldAmount}`}
+                                </td>
+                                <td>₹{editedPlayer?.basePrice ?? p.basePrice}</td>
+                                <td>
+                                  {editingSoldPlayerId === p.id ? (
+                                    <>
+                                      <button className="admin-btn admin-btn-success admin-btn-sm" onClick={handleSaveSoldPlayerEdit} disabled={isSaving}>Save</button>
+                                      <button className="admin-btn admin-btn-secondary admin-btn-sm" onClick={() => { setEditingSoldPlayerId(null); setSoldPlayerDraft(null); }} style={{ marginLeft: 4 }}>Cancel</button>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <button className="admin-btn admin-btn-warning admin-btn-sm" onClick={() => handleEditSoldPlayer(p)} disabled={isSaving} title="Edit team/amount">Edit</button>
+                                      <button className="admin-btn admin-btn-danger admin-btn-sm" onClick={() => handleUndoSoldPlayer(p)} disabled={isSaving} title="Undo sale" style={{ marginLeft: 4 }}>Undo</button>
+                                    </>
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          })}
                         </tbody>
                       </table>
                     </div>
                   )}
 
-                  {soldPlayers.length === 0 && (
+                  {filteredExportSoldPlayers.length === 0 && (
                     <div className="admin-empty-state">No players sold yet. Sold players will appear here as the auction progresses.</div>
                   )}
 
                   <button
                     className="admin-btn admin-btn-success"
-                    onClick={handleExportSoldPlayers}
-                    disabled={soldPlayers.length === 0}
+                    onClick={() => handleExportSoldPlayers(filteredExportSoldPlayers)}
+                    disabled={filteredExportSoldPlayers.length === 0}
                     style={{ marginTop: '1rem' }}
                   >
                     <IoDownload size={18} /> Export Sold Players CSV
                   </button>
+                  </div>
 
                   {/* ── Unsold Players Section ── */}
-                  <hr style={{ border: 'none', borderTop: '1px solid rgba(255,255,255,0.1)', margin: '2rem 0 1.5rem' }} />
+                  <div className="adm-sub" hidden={activeSub !== 'unsold'}>
                   <h3>Unsold Players</h3>
                   <div className="export-info">
                     <p>Total Unsold Players: <strong>{unsoldPlayers.length}</strong></p>
@@ -4749,6 +4852,7 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
                   >
                     <IoDownload size={18} /> Export Unsold Players CSV
                   </button>
+                  </div>
                 </div>
               )}
 
@@ -4761,12 +4865,12 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
 
               {/* Features Tab */}
               {activeTab === 'features' && (
-                <FeatureFlagsTab onStatusChange={setSaveStatus} />
+                <FeatureFlagsTab onStatusChange={setSaveStatus} category={activeSub || 'all'} />
               )}
 
               {/* Streaming Tab - V3 Premium */}
               {activeTab === 'streaming' && (
-                <StreamingTab onClose={onClose} />
+                <StreamingTab onClose={onClose} section={(activeSub || 'obs') as StreamingSection} />
               )}
 
               {/* Storage Tab */}
@@ -5174,6 +5278,26 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
                       </div>
                     </div>
 
+                    {soldPlayers.some(player => player.id === editingPlayerId) && (
+                      <div className="form-row">
+                        <div className="form-group">
+                          <label>Assigned Team</label>
+                          <select
+                            className="admin-select"
+                            value={playerTeamDraft?.teamId || ''}
+                            onChange={event => {
+                              const team = teams.find(item => item.id === event.target.value);
+                              setPlayerTeamDraft({ teamId: team?.id || '', teamName: team?.name || '' });
+                            }}
+                          >
+                            <option value="">Unassigned</option>
+                            {teams.map(team => <option key={team.id} value={team.id}>{team.name} · {team.id}</option>)}
+                          </select>
+                          <small className="admin-field-hint">This updates the assigned team in Export and team rosters.</small>
+                        </div>
+                      </div>
+                    )}
+
                     <div className="form-row">
                       <div className="form-group">
                         <label>Role</label>
@@ -5457,6 +5581,8 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
                   </motion.div>
                 )}
               </AnimatePresence>
+      </div>
+        </section>
       </div>
     </div>
   );

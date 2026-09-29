@@ -60,10 +60,10 @@ const AdminPageContent: React.FC = () => {
 
   return (
     <div className="admin-page">
-      <div className="admin-header">
-        <div className="admin-header-content">
+      <div className="admin-page-header">
+        <div className="admin-page-header__content">
           <div className="admin-page-title">
-            <h1>Auction Admin Panel</h1>
+            <h1>Auction Admin</h1>
             <p className="admin-page-subtitle">Manage settings, teams, exports, and features</p>
           </div>
           <div className="admin-page-actions">
@@ -92,7 +92,7 @@ const AdminPageContent: React.FC = () => {
         </div>
       </div>
 
-      <div className="admin-content">
+      <div className="admin-page-body">
         {isPanelOpen ? (
           <AdminPanel isOpen={true} onClose={() => setIsPanelOpen(false)} mode="page" />
         ) : (

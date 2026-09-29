@@ -8,7 +8,7 @@
 //           4/6=boundary, W=wicket, D=duck, H=hat-trick, Q=question, ESC=clear
 // ============================================================================
 
-import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
+import { useEffect, useState, useCallback, useRef, useMemo, type PointerEvent as ReactPointerEvent } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { initializeApp, getApps } from 'firebase/app';
 import { getDatabase, ref, onValue, set as fbSet } from 'firebase/database';
@@ -34,6 +34,8 @@ import { MATCH_STAGE_LABELS } from '../types/scoring';
 import { preferMigratedPlayerImageUrl, resolvePlayerImageUrl } from '../utils/playerImage';
 import { fingerprintImageUrls, schedulePreMatchImageWarmup } from '../utils/preMatchImageWarmup';
 import { getMatchSquadOverlayStyle, normalizeMatchSquadOverlayDesign } from '../utils/matchSquadOverlayDesign';
+import { getPremiumPartStyle, isPremiumTickerCustomized, normalizePremiumTickerDesign } from '../utils/premiumTickerDesign';
+import type { PremiumTickerDesign, PremiumTickerEditor, PremiumTickerPartKey } from '../types/premiumTicker';
 import { normalizePlayerStatsSequenceConfig } from '../utils/playerStatsSequence';
 import { isInningsBreak } from '../utils/inningsBreak';
 import { shouldShowAnimation } from '../utils/animationAction';
@@ -171,6 +173,7 @@ export default function ScoreOBSOverlayPage() {
   const [rawLineups, setRawLineups] = useState<Record<string, MatchLineup>>({});
   const [playerImages, setPlayerImages] = useState<Record<string, string>>({});
   const [squadDesign, setSquadDesign] = useState<MatchSquadOverlayDesign>(DEFAULT_MATCH_SQUAD_OVERLAY_DESIGN);
+  const [premiumTickerDesign, setPremiumTickerDesign] = useState<PremiumTickerDesign>(() => normalizePremiumTickerDesign(null));
 
   // Local overlay state (for keyboard-triggered overlays)
   const [localOverlay, setLocalOverlay] = useState<OverlayType>('none');
@@ -233,6 +236,10 @@ export default function ScoreOBSOverlayPage() {
 
   useEffect(() => onValue(ref(obsDb, tenantPath('scorecardDesigner/cricket/squadOverlayDesign')), snapshot => {
     setSquadDesign(normalizeMatchSquadOverlayDesign(snapshot.val()));
+  }), []);
+
+  useEffect(() => onValue(ref(obsDb, tenantPath('scorecardDesigner/cricket/premiumTickerDesign')), snapshot => {
+    setPremiumTickerDesign(normalizePremiumTickerDesign(snapshot.val()));
   }), []);
 
   useEffect(() => {
@@ -1084,6 +1091,7 @@ export default function ScoreOBSOverlayPage() {
           config={config}
           lineups={lineups}
           playerImages={playerImages}
+          premiumDesign={premiumTickerDesign}
           onTickerVisibleChange={setTickerVisible}
         />
       )}
@@ -2641,7 +2649,7 @@ function AwardOverlay({ title, subtitle, color, playerName, value, imageUrl }: {
 
 // ── Ticker With Intro Animation ──
 
-function TickerWithIntro({ live, match, battingTeam, bowlingTeam, config, lineups, playerImages, onTickerVisibleChange }: {
+function TickerWithIntro({ live, match, battingTeam, bowlingTeam, config, lineups, playerImages, premiumDesign, onTickerVisibleChange }: {
   live: LiveScore;
   match: MatchSetup;
   battingTeam: string;
@@ -2649,6 +2657,7 @@ function TickerWithIntro({ live, match, battingTeam, bowlingTeam, config, lineup
   config: ScoringOverlayConfig;
   lineups: { teamA: MatchLineup | null; teamB: MatchLineup | null };
   playerImages: Record<string, string>;
+  premiumDesign?: PremiumTickerDesign;
   onTickerVisibleChange?: (visible: boolean) => void;
 }) {
   // Skip intro if match is already in progress (balls bowled) — only show intro on fresh match start
@@ -2678,7 +2687,7 @@ function TickerWithIntro({ live, match, battingTeam, bowlingTeam, config, lineup
     return (
       <ScorecardTicker
         live={live} match={match} battingTeam={battingTeam} bowlingTeam={bowlingTeam}
-        config={config} lineups={lineups} playerImages={playerImages}
+        config={config} lineups={lineups} playerImages={playerImages} premiumDesign={premiumDesign}
       />
     );
   }
@@ -2772,7 +2781,7 @@ function TickerWithIntro({ live, match, battingTeam, bowlingTeam, config, lineup
 
 // ── Scorecard Ticker (bottom bar for broadcast) ──
 
-function ScorecardTicker({ live, match, battingTeam, bowlingTeam, config, lineups, playerImages }: {
+export function ScorecardTicker({ live, match, battingTeam, bowlingTeam, config, lineups, playerImages, premiumDesign, editor }: {
   live: LiveScore;
   match: MatchSetup;
   battingTeam: string;
@@ -2780,6 +2789,8 @@ function ScorecardTicker({ live, match, battingTeam, bowlingTeam, config, lineup
   config: ScoringOverlayConfig;
   lineups: { teamA: MatchLineup | null; teamB: MatchLineup | null };
   playerImages: Record<string, string>;
+  premiumDesign?: PremiumTickerDesign;
+  editor?: PremiumTickerEditor;
 }) {
   const ticker = config.tickerConfig;
   const position = ticker?.position || 'bottom';
@@ -2908,31 +2919,55 @@ function ScorecardTicker({ live, match, battingTeam, bowlingTeam, config, lineup
 
   // ── Premium Design ──
   if (design === 'premium') {
+    const barPart = premiumDesign?.parts.ticker;
+    const isEditing = !!editor;
+    // Editor mode keeps parts selectable (dimmed when hidden) and lets them overflow the bar.
+    const partProps = (key: Exclude<PremiumTickerPartKey, 'ticker'>, className = '') => ({
+      className: [className, isEditing ? 'score-ticker__part--editable' : '', editor?.selectedPart === key ? 'score-ticker__part--selected' : ''].filter(Boolean).join(' ') || undefined,
+      style: getPremiumPartStyle(premiumDesign, key, isEditing),
+      'data-prem-part': key,
+      onPointerDown: editor ? (event: ReactPointerEvent) => editor.onPointerDown(key, event) : undefined,
+    });
+    const barTarget = {
+      x: barPart?.x ?? 0,
+      y: barPart?.y ?? 0,
+      rotate: barPart?.rotation ?? 0,
+      scale: barPart?.scale ?? 1,
+      opacity: barPart && !barPart.visible ? (isEditing ? 0.25 : 0) : 1,
+    };
+    const tickerClass = [
+      `score-ticker score-ticker--${position} score-ticker--premium`,
+      isEditing || isPremiumTickerCustomized(premiumDesign) ? 'score-ticker--premium-free' : '',
+      isEditing ? 'score-ticker--editing' : '',
+      editor?.selectedPart === 'ticker' ? 'score-ticker__part--selected' : '',
+    ].filter(Boolean).join(' ');
     return (
       <motion.div
-        className={`score-ticker score-ticker--${position} score-ticker--premium`}
+        className={tickerClass}
+        data-prem-part="ticker"
+        onPointerDown={editor ? (event: ReactPointerEvent) => { if (event.target === event.currentTarget) editor.onPointerDown('ticker', event); } : undefined}
         initial={{ y: position === 'bottom' ? 80 : -80, opacity: 0, scale: 0.96 }}
-        animate={{ y: 0, opacity: 1, scale: 1 }}
-        transition={{ type: 'spring', stiffness: 180, damping: 26, delay: 0.4 }}
+        animate={barTarget}
+        transition={isEditing ? { duration: 0 } : { type: 'spring', stiffness: 180, damping: 26, delay: 0.4 }}
       >
         {/* Left: Batting team logo */}
         <div className="score-ticker__logo-glass">
           {battingLogo
-            ? <img src={battingLogo} alt={battingTeam} className="score-ticker__prem-logo" />
-            : <div className="score-ticker__team-logo-fallback">{battingTeam.slice(0, 3).toUpperCase()}</div>
+            ? <img src={battingLogo} alt={battingTeam} {...partProps('battingLogo', 'score-ticker__prem-logo')} />
+            : <div {...partProps('battingLogo', 'score-ticker__team-logo-fallback')}>{battingTeam.slice(0, 3).toUpperCase()}</div>
           }
         </div>
 
         {/* Score section: matchup + big score */}
         <div className="score-ticker__score-section">
-          <div className="score-ticker__prem-matchup">
+          <div {...partProps('matchup', 'score-ticker__prem-matchup')}>
             {battingTeam.toUpperCase()} <span className="score-ticker__prem-vs">vs</span> {bowlingTeam.toUpperCase()}
           </div>
           <div className="score-ticker__prem-score-row">
-            <span className="score-ticker__prem-score">{live.runs}-{live.wickets}</span>
-            <span className="score-ticker__prem-overs">({live.overs} ov)</span>
+            <span {...partProps('score', 'score-ticker__prem-score')}>{live.runs}-{live.wickets}</span>
+            <span {...partProps('overs', 'score-ticker__prem-overs')}>({live.overs} ov)</span>
              {widgetPills.length > 0 && (
-            <div className="score-ticker__prem-stats-row">
+            <div {...partProps('widgets', 'score-ticker__prem-stats-row')}>
               {widgetPills.map(widget => (
                 <div key={widget.key} className="score-ticker__prem-widget-pill">
                   <span className="score-ticker__prem-widget-label">{widget.label}</span>
@@ -2947,20 +2982,22 @@ function ScorecardTicker({ live, match, battingTeam, bowlingTeam, config, lineup
         {/* Middle: Batsmen with full-height transparent PNG portraits */}
         {resolvedInfoMode === 'batsmen' ? (
           <div className="score-ticker__prem-batsmen">
-            {(live.currentBatsmen || []).map(b => {
+            {(live.currentBatsmen || []).map((b, batterIndex) => {
+              const portraitKey = batterIndex === 0 ? 'batter1Portrait' : 'batter2Portrait';
+              const infoKey = batterIndex === 0 ? 'batter1Info' : 'batter2Info';
               // Check if this player is an impact sub in either lineup
               const isImpactInTeamA = lineups.teamA?.players?.find(p => p.playerId === b.playerId && p.isImpactSub);
               const isImpactInTeamB = lineups.teamB?.players?.find(p => p.playerId === b.playerId && p.isImpactSub);
               const isImpactSub = isImpactInTeamA || isImpactInTeamB;
               return (
                 <div key={b.playerId} className="score-ticker__prem-bat" style={{ position: 'relative' }}>
-                  <div className="score-ticker__prem-bat-portrait">
+                  <div {...partProps(portraitKey, 'score-ticker__prem-bat-portrait')}>
                     {playerImageMap[b.playerId]
                       ? <img src={playerImageMap[b.playerId]} alt={b.playerName} className="score-ticker__prem-bat-img" />
                       : <div className="score-ticker__prem-bat-placeholder">{b.playerName.charAt(0)}</div>
                     }
                   </div>
-                  <div className="score-ticker__prem-bat-info">
+                  <div {...partProps(infoKey, 'score-ticker__prem-bat-info')}>
                     <span className="score-ticker__prem-bat-name" title={b.playerName}>{tickerName(b.playerName, 16)}</span>
                     <div className="score-ticker__prem-bat-stats">
                       <span className="score-ticker__prem-bat-runs">{b.runs}</span>
@@ -2981,21 +3018,21 @@ function ScorecardTicker({ live, match, battingTeam, bowlingTeam, config, lineup
 
         {/* Right: Gold panel with bowler image + stats + over balls */}
         <div className="score-ticker__gold-panel">
-          <div className="score-ticker__gold-bowler-portrait">
+          <div {...partProps('bowlerPortrait', 'score-ticker__gold-bowler-portrait')}>
             {playerImageMap[live.currentBowler.playerId]
               ? <img src={playerImageMap[live.currentBowler.playerId]} alt={live.currentBowler.playerName} className="score-ticker__gold-bowler-img" />
               : <div className="score-ticker__gold-bowler-placeholder">{live.currentBowler.playerName.charAt(0)}</div>
             }
           </div>
           <div className="score-ticker__gold-bowler">
-            <div className="score-ticker__gold-bowler-name" title={live.currentBowler.playerName}>
+            <div {...partProps('bowlerName', 'score-ticker__gold-bowler-name')} title={live.currentBowler.playerName}>
               {tickerName(live.currentBowler.playerName, 16)}
             </div>
-            <div className="score-ticker__gold-bowler-figures">
+            <div {...partProps('bowlerFigures', 'score-ticker__gold-bowler-figures')}>
               {live.currentBowler.wickets}-{live.currentBowler.runs} ({live.currentBowler.overs})
             </div>
             {/* This over balls */}
-            <div className="score-ticker__prem-over-balls">
+            <div {...partProps('overBalls', 'score-ticker__prem-over-balls')}>
               {(() => {
                 // Show last completed over balls if current over is empty (over just ended, awaiting new bowler)
                 const ballsToShow = (live.currentOverBalls || []).length > 0
@@ -3027,14 +3064,14 @@ function ScorecardTicker({ live, match, battingTeam, bowlingTeam, config, lineup
         {/* Far right: Bowling team logo */}
         <div className="score-ticker__prem-team-badge">
           {bowlingLogo
-            ? <img src={bowlingLogo} alt={bowlingTeam} className="score-ticker__prem-team-badge-img" />
-            : <div className="score-ticker__team-logo-fallback">{bowlingTeam.slice(0, 3).toUpperCase()}</div>
+            ? <img src={bowlingLogo} alt={bowlingTeam} {...partProps('bowlingBadge', 'score-ticker__prem-team-badge-img')} />
+            : <div {...partProps('bowlingBadge', 'score-ticker__team-logo-fallback')}>{bowlingTeam.slice(0, 3).toUpperCase()}</div>
           }
         </div>
 
-        {/* Powerplay badge */}
-        {live.isPowerplay && (
-          <div className="score-ticker__powerplay">PP</div>
+        {/* Powerplay badge (always shown while editing so it can be placed) */}
+        {(live.isPowerplay || isEditing) && (
+          <div {...partProps('powerplay', 'score-ticker__powerplay')}>PP</div>
         )}
 
       </motion.div>

@@ -400,7 +400,7 @@ class OBSService {
   /**
    * Handle request response
    */
-  private handleRequestResponse(response: { requestId: string; requestStatus: { result: boolean }; responseData: unknown }): void {
+  private handleRequestResponse(response: { requestId: string; requestStatus: { result: boolean; comment?: string }; responseData: unknown }): void {
     const { requestId, requestStatus, responseData } = response;
     const pending = this.pendingRequests.get(requestId);
     
@@ -409,7 +409,7 @@ class OBSService {
       if (requestStatus.result) {
         pending.resolve(responseData);
       } else {
-        pending.reject(new Error('Request failed'));
+        pending.reject(new Error(requestStatus.comment || 'Request failed'));
       }
     }
   }

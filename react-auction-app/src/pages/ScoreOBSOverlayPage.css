@@ -3822,3 +3822,43 @@ body.obs-overlay-host #root {
   font-family: 'Inter', system-ui, sans-serif;
   text-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
 }
+
+/* ── Premium ticker: free placement + designer editing ─────────────────── */
+
+.score-ticker--premium-free,
+.score-ticker--premium-free .score-ticker__gold-panel,
+.score-ticker--premium-free .score-ticker__prem-bat-portrait,
+.score-ticker--premium-free .score-ticker__gold-bowler-portrait,
+.score-ticker--premium-free .score-ticker__prem-team-badge {
+  overflow: visible;
+}
+
+.score-ticker--premium-free .score-ticker__powerplay {
+  z-index: 3;
+}
+
+.score-ticker--editing {
+  pointer-events: auto;
+  touch-action: none;
+}
+
+.score-ticker__part--editable {
+  cursor: grab;
+  outline: 1px dashed rgba(255, 255, 255, 0.35);
+  outline-offset: 2px;
+}
+
+.score-ticker__part--editable:active {
+  cursor: grabbing;
+}
+
+.score-ticker__part--selected {
+  outline: 3px solid #22d3ee;
+  outline-offset: 3px;
+  z-index: 5;
+}
+
+.score-ticker--editing img {
+  -webkit-user-drag: none;
+  user-select: none;
+}

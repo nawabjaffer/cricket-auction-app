@@ -6,7 +6,7 @@ export interface FeatureFlag {
   name: string;
   enabled: boolean;
   description: string;
-  category: 'bidding' | 'ui' | 'notifications' | 'analytics' | 'other';
+  category: 'bidding' | 'ui' | 'notifications' | 'analytics' | 'streaming' | 'other';
   updatedAt: number;
   updatedBy?: string;
 }
@@ -108,6 +108,13 @@ const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
     enabled: false,
     description: 'Show team owner images with brand identity during auction breaks',
     category: 'ui',
+    updatedAt: Date.now()
+  },
+  'obs-studio-integration': {
+    name: 'OBS Studio Control',
+    enabled: true,
+    description: 'Show the OBS Studio panel in Streaming to control scenes, stream and recording over OBS WebSocket',
+    category: 'streaming',
     updatedAt: Date.now()
   },
   'super-admin-bidding': {

@@ -27,6 +27,7 @@ import { uploadFileToStorage } from '../services/firebaseStorageService';
 import { tenantPath } from '../services/tenantPath';
 import { ScorecardLayoutView } from '../components/ScorecardCanvas';
 import PreMatchPreviewModal from '../components/PreMatchPreviewModal';
+import PremiumTickerDesigner from '../components/PremiumTickerDesigner/PremiumTickerDesigner';
 import {
   getWidgetCatalog, createWidgetInstance, createEmptyLayout, makeWidgetId,
   DEFAULT_WIDGET_STYLE, SURFACE_LABELS, SURFACE_HINTS, ANIMATION_PRESETS,
@@ -37,7 +38,9 @@ import type {
   ScorecardAsset, ScorecardWidgetVariant, ScorecardViewportVariant, WidgetGeometry,
 } from '../types/scorecardDesigner';
 import type { ScorecardDataContext } from '../utils/scorecardDataBinding';
-import type { MatchSetup, LiveScore, MatchLineup, MatchStatsSnapshot, TournamentStats, PreMatchState } from '../types/scoring';
+import type { MatchSetup, LiveScore, MatchLineup, MatchStatsSnapshot, TournamentStats, PreMatchState, TickerConfig } from '../types/scoring';
+import { createDefaultPremiumTickerDesign, type PremiumTickerDesign } from '../types/premiumTicker';
+import { normalizePremiumTickerDesign } from '../utils/premiumTickerDesign';
 import {
   DEFAULT_MATCH_SQUAD_OVERLAY_DESIGN,
   type MatchSquadOverlayDesign,
@@ -229,9 +232,12 @@ export default function ScorecardDesignerPage({ gameType = 'cricket' }: Readonly
   const { currentTheme } = useTheme();
   const sport = gameType;
   const [ready, setReady] = useState(false);
-  const [activeDesigner, setActiveDesigner] = useState<'scorecard' | 'squad'>(() =>
-    new URLSearchParams(window.location.search).get('mode') === 'squad' ? 'squad' : 'scorecard',
-  );
+  const [activeDesigner, setActiveDesigner] = useState<'scorecard' | 'squad' | 'ticker'>(() => {
+    const mode = new URLSearchParams(window.location.search).get('mode');
+    return mode === 'squad' || mode === 'ticker' ? mode : 'scorecard';
+  });
+  const [premiumTickerDesign, setPremiumTickerDesign] = useState<PremiumTickerDesign>(() => createDefaultPremiumTickerDesign());
+  const [tenantTickerConfig, setTenantTickerConfig] = useState<TickerConfig | undefined>();
   const [squadDesign, setSquadDesign] = useState<MatchSquadOverlayDesign>(DEFAULT_MATCH_SQUAD_OVERLAY_DESIGN);
   const [surface, setSurface] = useState<ScorecardSurface>('scoreboard');
   const [layout, setLayoutState] = useState<ScorecardLayout>(() => createEmptyLayout(sport, 'scoreboard'));
@@ -439,6 +445,21 @@ export default function ScorecardDesignerPage({ gameType = 'cricket' }: Readonly
     return onValue(ref(db, tenantPath('scorecardDesigner/cricket/squadOverlayDesign')), snapshot => {
       setSquadDesign(normalizeMatchSquadOverlayDesign(snapshot.val()));
     });
+  }, [ready, sport]);
+
+  useEffect(() => {
+    if (!ready || sport !== 'cricket') return;
+    const db = realtimeSync.getDatabase();
+    if (!db) return;
+    const unsubs = [
+      onValue(ref(db, tenantPath('scorecardDesigner/cricket/premiumTickerDesign')), snapshot => {
+        setPremiumTickerDesign(normalizePremiumTickerDesign(snapshot.val()));
+      }),
+      onValue(ref(db, tenantPath('scoring/overlayConfig/tickerConfig')), snapshot => {
+        setTenantTickerConfig(snapshot.exists() ? snapshot.val() as TickerConfig : undefined);
+      }),
+    ];
+    return () => unsubs.forEach(unsubscribe => unsubscribe());
   }, [ready, sport]);
 
   const mockCtx = useMemo(() => mockContextFor(sport), [sport]);
@@ -819,6 +840,17 @@ export default function ScorecardDesignerPage({ gameType = 'cricket' }: Readonly
     } catch { flash('Failed to save match squad design'); }
   };
 
+  const handleSavePremiumTickerDesign = async () => {
+    try {
+      const db = realtimeSync.getDatabase();
+      if (!db) throw new Error('no db');
+      const normalized = normalizePremiumTickerDesign(premiumTickerDesign);
+      await fbSet(ref(db, tenantPath('scorecardDesigner/cricket/premiumTickerDesign')), normalized);
+      setPremiumTickerDesign(normalized);
+      flash('Premium ticker saved — live in OBS overlay');
+    } catch { flash('Failed to save premium ticker'); }
+  };
+
   const handleSetActive = async () => {
     try {
       const persistLayout = selectedWidget
@@ -972,6 +1004,12 @@ export default function ScorecardDesignerPage({ gameType = 'cricket' }: Readonly
           {isActive && <button className="scd__btn scd__btn--danger" onClick={handleClearActive}>Clear Active</button>}
           <button className="scd__btn scd__btn--danger" onClick={() => handleDelete(layout.id)}><IoTrash size={15} /></button>
         </div>
+        </> : activeDesigner === 'ticker' ? <>
+          <strong className="scd__squad-title">Premium Score Ticker</strong>
+          <div className="scd__bar-actions">
+            <button className="scd__btn" onClick={() => setPremiumTickerDesign(createDefaultPremiumTickerDesign())}>Reset all</button>
+            <button className="scd__btn scd__btn--primary" onClick={() => void handleSavePremiumTickerDesign()}><IoSave size={15} /> Save ticker</button>
+          </div>
         </> : <>
           <strong className="scd__squad-title">Match Squad Overlay</strong>
           <div className="scd__bar-actions">
@@ -999,11 +1037,19 @@ export default function ScorecardDesignerPage({ gameType = 'cricket' }: Readonly
             Match Squad
           </button>
         )}
+        {sport === 'cricket' && (
+          <button
+            className={`scd__surface-tab ${activeDesigner === 'ticker' ? 'is-active' : ''}`}
+            onClick={() => setActiveDesigner('ticker')}
+          >
+            Premium Ticker
+          </button>
+        )}
       </nav>
 
       {toast && <div className="scd__toast">{toast}</div>}
 
-      <div className={`scd__body ${activeDesigner === 'squad' ? 'is-hidden' : ''}`}>
+      <div className={`scd__body ${activeDesigner !== 'scorecard' ? 'is-hidden' : ''}`}>
         {/* ── Widget palette ── */}
         <aside className="scd__palette">
           <h3>Widgets for {sport}</h3>
@@ -1217,6 +1263,19 @@ export default function ScorecardDesignerPage({ gameType = 'cricket' }: Readonly
           )}
         </aside>
       </div>
+
+      {activeDesigner === 'ticker' && (
+        <PremiumTickerDesigner
+          design={premiumTickerDesign}
+          onChange={setPremiumTickerDesign}
+          previewMode={previewMode}
+          onPreviewModeChange={setPreviewMode}
+          match={previewCtx.sport === 'cricket' ? previewCtx.match : null}
+          live={previewCtx.sport === 'cricket' ? previewCtx.live : null}
+          lineups={previewCtx.sport === 'cricket' && previewCtx.lineups ? previewCtx.lineups : { teamA: null, teamB: null }}
+          tickerConfig={tenantTickerConfig}
+        />
+      )}
 
       {activeDesigner === 'squad' && (
         <MatchSquadDesigner
