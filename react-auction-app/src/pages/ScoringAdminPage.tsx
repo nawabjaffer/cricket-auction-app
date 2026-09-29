@@ -25,6 +25,7 @@ import { cricHeroesReader, isValidCricHeroesUrl } from '../services/scoring/cric
 import type { CricHeroesSnapshot } from '../services/scoring/cricHeroesReader';
 import { useCricHeroesSyncAdapter } from '../hooks/useCricHeroesSyncAdapter';
 import { uploadFileToStorage } from '../services';
+import { CRICHEROES_EXTENSION } from '../config/cricheroesExtension';
 import { DEFAULT_LIVE_COMMENT_SETTINGS, DEFAULT_MVP_WEIGHTS, MATCH_STAGE_LABELS } from '../types/scoring';
 import type { MatchSetup, MatchStage, ScoringAd, ScoringOverlayConfig, LiveQuestion, MatchScoringConfig, PreMatchState, ImpactPlayer, TossConfig, MatchLineup, MatchSquadPlayer, TickerConfig, OBSWebSocketConfig, MVPWeights, AnimationConfig, OBSReplayButton, OBSButtonSeriesStep, OBSReplayConfig, TickerStatWidget, SharedOBSProfile, PlayerStatsSequenceItem, LiveCommentSettings } from '../types/scoring';
 import type { SoldPlayer } from '../types';
@@ -1339,7 +1340,7 @@ function ProviderTab({ matches, teams, soldPlayers, onFeedback, sync, nameMappin
       </div>
 
       <div className="scoring-admin__sync-download-row">
-        <a className="scoring-admin__btn scoring-admin__btn--primary" href="/cricheroes-live-sync.zip" download="cricheroes-live-sync.zip">Download Chrome extension</a>
+        <a className="scoring-admin__btn scoring-admin__btn--primary" href={CRICHEROES_EXTENSION.url} download="cricheroes-live-sync.zip">Download Chrome extension</a>
         <span>Chrome extension settings: enter <code>chrome://extensions/</code> in Chrome’s address bar.</span>
       </div>
       <section className="scoring-admin__sync-guide" aria-labelledby="cricheroes-sync-guide-title">

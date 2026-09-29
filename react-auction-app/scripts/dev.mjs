@@ -1,6 +1,6 @@
 // Usage: npm run dev:local | npm run dev:prod | npm run dev -- --local
 // Local extras: --sync forces a prod->emulator download, --no-sync skips it.
-import { spawn, spawnSync } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { existsSync, mkdirSync } from 'node:fs';
 import net from 'node:net';
 import { syncFromProd } from './emulator-sync.mjs';
@@ -23,8 +23,6 @@ const PROJECT_ID = 'e-auction-store';
 const EMULATOR_PORT = 9000;
 const DATA_DIR = '.emulator-data';
 const AUTOSAVE_MS = 120_000;
-
-spawnSync('npm', ['run', 'package:cricheroes-extension'], { stdio: 'inherit' });
 
 const children = [];
 let shuttingDown = false;
