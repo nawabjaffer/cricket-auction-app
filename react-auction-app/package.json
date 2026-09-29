@@ -4,8 +4,10 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "predev": "npm run package:cricheroes-extension",
-    "dev": "vite",
+    "dev": "node scripts/dev.mjs",
+    "dev:local": "node scripts/dev.mjs --local",
+    "dev:prod": "node scripts/dev.mjs --prod",
+    "emulator:sync": "node scripts/emulator-sync.mjs",
     "package:cricheroes-extension": "node scripts/package-cricheroes-extension.mjs",
     "build": "npm run package:cricheroes-extension && tsc -b && vite build",
     "lint": "eslint .",

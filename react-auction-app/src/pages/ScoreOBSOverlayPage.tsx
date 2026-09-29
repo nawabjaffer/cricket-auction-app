@@ -11,7 +11,7 @@
 import { useEffect, useState, useCallback, useRef, useMemo, type PointerEvent as ReactPointerEvent } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { initializeApp, getApps } from 'firebase/app';
-import { getDatabase, ref, onValue, set as fbSet } from 'firebase/database';
+import { ref, onValue, set as fbSet } from 'firebase/database';
 import { getActiveTenant, tenantPath } from '../services/tenantPath';
 import { useBroadcastOverlaySurface } from '../hooks/useBroadcastOverlaySurface';
 import { overlayMediaPreload, getPreloadedMediaUrl } from '../services/overlayMediaPreload';
@@ -40,6 +40,7 @@ import { normalizePlayerStatsSequenceConfig } from '../utils/playerStatsSequence
 import { isInningsBreak } from '../utils/inningsBreak';
 import { shouldShowAnimation } from '../utils/animationAction';
 import './ScoreOBSOverlayPage.css';
+import { openDatabase } from '../services/firebaseEnv';
 
 const DEFAULT_OVERLAY_CONFIG: ScoringOverlayConfig = {
   showLiveBadge: true,
@@ -124,7 +125,7 @@ const FB_CONFIG = {
 };
 const SCORE_OBS_APP = 'score-obs';
 const obsApp = getApps().find(a => a.name === SCORE_OBS_APP) ?? initializeApp(FB_CONFIG, SCORE_OBS_APP);
-const obsDb = getDatabase(obsApp);
+const obsDb = openDatabase(obsApp);
 
 /**
  * Shorten a player name so it fits the fixed-width ticker slots.

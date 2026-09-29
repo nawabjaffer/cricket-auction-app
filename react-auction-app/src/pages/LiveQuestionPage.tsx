@@ -6,10 +6,11 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { initializeApp, getApps } from 'firebase/app';
-import { getDatabase, ref, onValue, runTransaction } from 'firebase/database';
+import { ref, onValue, runTransaction } from 'firebase/database';
 import { tenantPath } from '../services/tenantPath';
 import type { LiveQuestion, OverlayControlState } from '../types/scoring';
 import './LiveQuestionPage.css';
+import { openDatabase } from '../services/firebaseEnv';
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -25,14 +26,14 @@ export default function LiveQuestionPage() {
   const [question, setQuestion] = useState<LiveQuestion | null>(null);
   const [voted, setVoted] = useState<string | null>(null);
   const [responses, setResponses] = useState<Record<string, number>>({});
-  const [db, setDb] = useState<ReturnType<typeof getDatabase> | null>(null);
+  const [db, setDb] = useState<ReturnType<typeof openDatabase> | null>(null);
 
   // Initialize Firebase
   useEffect(() => {
     const appName = 'live-question-audience';
     const existing = getApps().find(a => a.name === appName);
     const app = existing || initializeApp(firebaseConfig, appName);
-    const database = getDatabase(app);
+    const database = openDatabase(app);
     setDb(database);
   }, []);
 

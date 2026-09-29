@@ -6,16 +6,19 @@
 
 import { initializeApp, type FirebaseApp } from 'firebase/app';
 import { 
-  getDatabase, 
   ref, 
   set, 
   onValue, 
   push,
+  query,
+  orderByChild,
+  equalTo,
   type Database,
   type Unsubscribe,
 } from 'firebase/database';
 import type { Player, Team } from '../types';
 import { tenantPath } from './tenantPath';
+import { openDatabase } from './firebaseEnv';
 
 const IS_DEV = import.meta.env.DEV;
 
@@ -258,7 +261,7 @@ class RealtimeSyncService {
     try {
       if (IS_DEV) console.log('[RealtimeSync] Initializing Firebase...');
       this.app = initializeApp(firebaseConfig, 'realtime-sync');
-      this.db = getDatabase(this.app);
+      this.db = openDatabase(this.app);
       this.isInitialized = true;
       if (IS_DEV) console.log('[RealtimeSync] Firebase initialized successfully');
       return true;
@@ -267,7 +270,7 @@ class RealtimeSyncService {
       try {
         const { getApp } = await import('firebase/app');
         this.app = getApp('realtime-sync');
-        this.db = getDatabase(this.app);
+        this.db = openDatabase(this.app);
         this.isInitialized = true;
         if (IS_DEV) console.log('[RealtimeSync] Using existing Firebase app');
         return true;
@@ -460,7 +463,8 @@ class RealtimeSyncService {
 
     if (IS_DEV) console.log('[RealtimeSync] Starting bid listener...');
     
-    const bidsRef = ref(this.db, MOBILE_BIDS_PATH());
+    // Server-side filter (indexed in database.rules.json) so processed bids are never downloaded.
+    const bidsRef = query(ref(this.db, MOBILE_BIDS_PATH()), orderByChild('processed'), equalTo(false));
     const unsubscribe = onValue(
       bidsRef,
       (snapshot) => {
@@ -573,7 +577,7 @@ class RealtimeSyncService {
 
     if (IS_DEV) console.log('[RealtimeSync] Starting admin command listener...');
 
-    const commandsRef = ref(this.db, ADMIN_COMMANDS_PATH());
+    const commandsRef = query(ref(this.db, ADMIN_COMMANDS_PATH()), orderByChild('processed'), equalTo(false));
     const unsubscribe = onValue(
       commandsRef,
       (snapshot) => {

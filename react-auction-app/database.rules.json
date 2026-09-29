@@ -11,6 +11,21 @@
         ".read": true,
         ".write": true,
         ".indexOn": ["timestamp", "processed"]
+      },
+      "adminCommands": {
+        ".indexOn": ["timestamp", "processed"]
+      }
+    },
+    "tenants": {
+      "$tenantId": {
+        "auction": {
+          "mobileBids": {
+            ".indexOn": ["timestamp", "processed"]
+          },
+          "adminCommands": {
+            ".indexOn": ["timestamp", "processed"]
+          }
+        }
       }
     }
   }

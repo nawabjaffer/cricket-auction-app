@@ -141,19 +141,12 @@ export default function KabaddiUpdatePage() {
       }));
     }
 
-    const fetchMatches = async () => {
-      try {
-        const list = await kabaddiService.getMatches();
-        setAllMatches(list);
-      } catch { /* non-critical */ }
-    };
-    void fetchMatches();
-    const pollTimer = setInterval(fetchMatches, 3000);
+    // Match setups arrive through listeners, replacing a 3s poll that re-downloaded every match tree.
+    unsubs.push(kabaddiService.subscribeMatches(setAllMatches));
     void auctionPersistence.getSoldPlayers().then(setSoldPlayers).catch(() => setSoldPlayers([]));
 
     return () => {
       unsubs.forEach(u => u());
-      clearInterval(pollTimer);
     };
   }, [ready]);
 

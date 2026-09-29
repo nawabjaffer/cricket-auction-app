@@ -62,7 +62,6 @@ export function getActiveTenant(): string {
 
 /** Returns `tenants/{activeTenantId}/{relativePath}`. */
 export function tenantPath(relativePath: string): string {
-  console.log('[tenantPath] Resolving tenant path for active tenant:', _activeTenantId, 'relativePath:', relativePath);
   const clean = (relativePath ?? '').replace(/^\/+/, '');
   return `tenants/${_activeTenantId}/${clean}`;
 }

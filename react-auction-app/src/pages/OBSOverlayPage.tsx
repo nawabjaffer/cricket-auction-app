@@ -10,7 +10,7 @@
 import { useEffect, useRef, useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { initializeApp, getApps } from 'firebase/app';
-import { getDatabase, ref, onValue } from 'firebase/database';
+import { ref, onValue } from 'firebase/database';
 import { getCachedStorageUrl, resolveImageAsync } from '../services/firebaseStorageService';
 import { extractDriveFileId } from '../utils/driveImage';
 import SoldAnimation from '../components/Live/SoldAnimation';
@@ -23,6 +23,7 @@ import type { SponsorRecord, AdminSettings } from '../services/auctionPersistenc
 import { tenantPath } from '../services/tenantPath';
 import './OBSOverlayPage.css';
 import { useOrganizerLogo, useOrganizerName } from '../store';
+import { openDatabase } from '../services/firebaseEnv';
 
 // ── Firebase: module-level synchronous init ──────────────────────────────────
 const FB_CONFIG = {
@@ -36,7 +37,7 @@ const FB_CONFIG = {
 const OBS_APP_NAME = 'obs-overlay';
 // console.log('[OBSOverlay] Initializing Firebase app for OBS overlay:', OBS_APP_NAME, getApps());
 const obsApp = getApps().find((a) => a.name === OBS_APP_NAME) ?? initializeApp(FB_CONFIG, OBS_APP_NAME);
-const obsDb  = getDatabase(obsApp);
+const obsDb  = openDatabase(obsApp);
 
 // Paths are resolved dynamically at subscribe-time so TenantGate's
 // `setActiveTenant()` has already run and the tenant id uses the

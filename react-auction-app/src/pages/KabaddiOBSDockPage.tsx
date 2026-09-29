@@ -9,7 +9,7 @@
 import { useEffect, useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { initializeApp, getApps } from 'firebase/app';
-import { getDatabase, ref, onValue, set } from 'firebase/database';
+import { ref, onValue, set } from 'firebase/database';
 import { tenantPath } from '../services/tenantPath';
 import { ResolvedImage } from '../components/ResolvedImage';
 import { DEFAULT_KABADDI_OVERLAY_CONFIG, DEFAULT_KABADDI_RULES } from '../types/kabaddi';
@@ -20,6 +20,7 @@ import type {
   KabaddiMatchEvent, KabaddiRulesConfig,
 } from '../types/kabaddi';
 import './KabaddiOBSDockPage.css';
+import { openDatabase } from '../services/firebaseEnv';
 
 const FB_CONFIG = {
   apiKey: 'AIzaSyBazxXTsWddS3r_i-0VhUaC2QqknheEzpQ',
@@ -31,7 +32,7 @@ const FB_CONFIG = {
 };
 const FB_APP = 'kabaddi-obs';
 const fbApp = getApps().find(a => a.name === FB_APP) ?? initializeApp(FB_CONFIG, FB_APP);
-const fbDb = getDatabase(fbApp);
+const fbDb = openDatabase(fbApp);
 
 type Board = { key: string; title: string; stat: (p: KabaddiTopPerformer) => number; suffix: string };
 

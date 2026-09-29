@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { initializeApp, getApps } from 'firebase/app';
-import { getDatabase, onValue, ref } from 'firebase/database';
+import { onValue, ref } from 'firebase/database';
 import { useSearchParams } from 'react-router-dom';
 import { IoChatbubbleEllipsesOutline, IoHeart, IoSend } from 'react-icons/io5';
 import { tenantPath } from '../services/tenantPath';
@@ -12,6 +12,7 @@ import {
   type MatchSetup,
 } from '../types/scoring';
 import './LiveCommentsPage.css';
+import { openDatabase } from '../services/firebaseEnv';
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -39,7 +40,7 @@ export default function LiveCommentsPage() {
   const matchId = searchParams.get('matchId') || '';
   const profileKey = `live-comments-profile:${tenantPath('scoring')}`;
   const voteKey = `live-comments-votes:${tenantPath('scoring')}:${matchId}`;
-  const [database, setDatabase] = useState<ReturnType<typeof getDatabase> | null>(null);
+  const [database, setDatabase] = useState<ReturnType<typeof openDatabase> | null>(null);
   const [settings, setSettings] = useState<LiveCommentSettings>(DEFAULT_LIVE_COMMENT_SETTINGS);
   const [comments, setComments] = useState<LiveComment[]>([]);
   const [match, setMatch] = useState<MatchSetup | null>(null);
@@ -53,7 +54,7 @@ export default function LiveCommentsPage() {
     try {
       const appName = 'live-comments-audience';
       const app = getApps().find(existing => existing.name === appName) || initializeApp(firebaseConfig, appName);
-      setDatabase(getDatabase(app));
+      setDatabase(openDatabase(app));
     } catch {
       setFeedback('Could not connect to the live audience service.');
     }

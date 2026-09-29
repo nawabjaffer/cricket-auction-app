@@ -552,6 +552,30 @@ class AuctionPersistenceService {
     await set(unsoldPlayerRef, record);
   }
 
+  /** Writes many unsold records in one multi-path update. */
+  async saveUnsoldPlayers(players: Player[], round: string): Promise<void> {
+    if (!this.db) throw new Error('Database not initialized');
+    if (players.length === 0) return;
+
+    const timestamp = Date.now();
+    const updates: Record<string, UnsoldPlayerRecord> = {};
+    for (const player of players) {
+      updates[`${DB_PATHS.UNSOLD_PLAYERS}/${player.id}`] = {
+        id: player.id,
+        name: normalizePlayerName(player.name),
+        role: player.role,
+        age: player.age ?? null,
+        matches: player.matches ?? '',
+        bowlingBest: player.bowlingBestFigures || 'N/A',
+        basePrice: player.basePrice ?? 0,
+        round,
+        timestamp,
+        imageUrl: player.imageUrl ?? '',
+      };
+    }
+    await update(ref(this.db), updates);
+  }
+
   /**
    * Get all unsold players from Firebase
    */

@@ -112,9 +112,27 @@ describe('Auction Store', () => {
         }],
       });
 
-      useAuctionStore.getState().setPlayers([makePlayer(), makePlayer({ id: 'P002' })]);
+      useAuctionStore.getState().setPlayers([makePlayer(), makePlayer({ id: 'P002', name: 'Second Player' })]);
       expect(useAuctionStore.getState().availablePlayers).toHaveLength(1);
       expect(useAuctionStore.getState().availablePlayers[0].id).toBe('P002');
+    });
+
+    it('filters out a sold player re-imported under a different ID', () => {
+      useAuctionStore.setState({
+        soldPlayers: [{
+          ...makePlayer({ id: 'direct_1', name: 'Test Batsman' }),
+          soldAmount: 0,
+          teamName: 'Team A',
+          soldDate: new Date().toISOString(),
+        }],
+      });
+
+      useAuctionStore.getState().setPlayers([makePlayer({ id: 'CSV-7' }), makePlayer({ id: 'P002', name: 'Player 2' })]);
+      expect(useAuctionStore.getState().availablePlayers.map(p => p.id)).toEqual(['P002']);
+
+      useAuctionStore.setState({ availablePlayers: [makePlayer({ id: 'CSV-7' }), makePlayer({ id: 'P002', name: 'Player 2' })] });
+      useAuctionStore.getState().reconcilePlayerPools();
+      expect(useAuctionStore.getState().availablePlayers.map(p => p.id)).toEqual(['P002']);
     });
 
     it('filters out captain players', () => {
@@ -475,9 +493,9 @@ describe('Auction Store', () => {
 
   describe('reconcilePlayerPools', () => {
     it('removes sold/unsold players from available', () => {
-      const p1 = makePlayer({ id: 'P001' });
-      const p2 = makePlayer({ id: 'P002' });
-      const p3 = makePlayer({ id: 'P003' });
+      const p1 = makePlayer({ id: 'P001', name: 'First Player' });
+      const p2 = makePlayer({ id: 'P002', name: 'Second Player' });
+      const p3 = makePlayer({ id: 'P003', name: 'Third Player' });
       useAuctionStore.setState({
         availablePlayers: [p1, p2, p3],
         soldPlayers: [{ ...p1, soldAmount: 10, teamName: 'T', soldDate: '' }],

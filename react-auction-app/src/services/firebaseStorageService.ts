@@ -29,7 +29,6 @@ import {
   type StorageReference,
 } from 'firebase/storage';
 import {
-  getDatabase,
   ref as dbRef,
   get,
   set,
@@ -37,6 +36,7 @@ import {
   type Database,
 } from 'firebase/database';
 import { getDriveImageUrl } from '../utils/driveImage';
+import { openDatabase } from './firebaseEnv';
 
 // ── Firebase config (same project as realtimeSync.ts) ────────────────────────
 const FB_CONFIG = {
@@ -107,7 +107,7 @@ function getStorageInstance(): FirebaseStorage {
 }
 
 function getDbInstance(): Database {
-  if (!_db) _db = getDatabase(getFirebaseApp());
+  if (!_db) _db = openDatabase(getFirebaseApp());
   return _db;
 }
 

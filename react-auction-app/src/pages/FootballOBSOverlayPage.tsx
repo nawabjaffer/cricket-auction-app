@@ -13,7 +13,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { initializeApp, getApps } from 'firebase/app';
-import { getDatabase, ref, onValue } from 'firebase/database';
+import { ref, onValue } from 'firebase/database';
 import { tenantPath } from '../services/tenantPath';
 import { useBroadcastOverlaySurface } from '../hooks/useBroadcastOverlaySurface';
 import { ScorecardLayoutView } from '../components/ScorecardCanvas';
@@ -27,6 +27,7 @@ import type {
   FootballMatchSetup, FootballLiveState, FootballOverlayConfig, FootballOverlayControl, FootballPlayer,
 } from '../types/football';
 import './FootballOBSOverlayPage.css';
+import { openDatabase } from '../services/firebaseEnv';
 
 // ── Dedicated Firebase app (module-level, zero-delay) ────────────────────────
 const FB_CONFIG = {
@@ -39,7 +40,7 @@ const FB_CONFIG = {
 };
 const FB_APP = 'football-obs';
 const fbApp = getApps().find((a) => a.name === FB_APP) ?? initializeApp(FB_CONFIG, FB_APP);
-const fbDb = getDatabase(fbApp);
+const fbDb = openDatabase(fbApp);
 
 export default function FootballOBSOverlayPage() {
   useBroadcastOverlaySurface();

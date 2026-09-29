@@ -25,6 +25,7 @@ import { realtimeSync } from '../services/realtimeSync';
 import { premiumService } from '../services/premiumService';
 import { inferRoleCategoryFromPlayer } from '../utils/roleFormatter';
 import { normalizePlayerName } from '../utils/playerName';
+import { createPlayerBlocker } from '../utils/playerIdentity';
 import { belongsToTeam } from '../utils/teamMembership';
 
 // ── Synchronous localStorage read for instant logo on first render ───────
@@ -337,17 +338,14 @@ export const useAuctionStore = create<AuctionStore>()(
 
           const removedIds = new Set(_removedPlayerIds);
           const activePlayers = mergedPlayers.filter(player => !removedIds.has(player.id));
-          const blockedIds = new Set([
-            ...soldPlayers.map(p => p.id),
-            ...unsoldPlayers.map(p => p.id),
-          ]);
+          const isSettled = createPlayerBlocker([...soldPlayers, ...unsoldPlayers]);
           const captainNames = new Set(
             teams
               .map(t => (t.captain || '').trim().toLowerCase())
               .filter(Boolean)
           );
           const filtered = activePlayers.filter(
-            p => !blockedIds.has(p.id) && !captainNames.has(p.name.trim().toLowerCase())
+            p => !isSettled(p) && !captainNames.has(p.name.trim().toLowerCase())
           );
 
           // Sort by configured auction role order
@@ -408,10 +406,7 @@ export const useAuctionStore = create<AuctionStore>()(
 
         reconcilePlayerPools: () => {
           const { availablePlayers, soldPlayers, unsoldPlayers, currentPlayer, teams } = get();
-          const blockedIds = new Set([
-            ...soldPlayers.map(p => p.id),
-            ...unsoldPlayers.map(p => p.id),
-          ]);
+          const isSettled = createPlayerBlocker([...soldPlayers, ...unsoldPlayers]);
           const captainNames = new Set(
             teams
               .map(t => (t.captain || '').trim().toLowerCase())
@@ -419,11 +414,11 @@ export const useAuctionStore = create<AuctionStore>()(
           );
 
           const updatedAvailable = availablePlayers.filter(
-            p => !blockedIds.has(p.id) && !captainNames.has(p.name.trim().toLowerCase())
+            p => !isSettled(p) && !captainNames.has(p.name.trim().toLowerCase())
           );
 
           const shouldClearCurrent = currentPlayer
-            ? blockedIds.has(currentPlayer.id) || captainNames.has(currentPlayer.name.trim().toLowerCase())
+            ? isSettled(currentPlayer) || captainNames.has(currentPlayer.name.trim().toLowerCase())
             : false;
 
           set({

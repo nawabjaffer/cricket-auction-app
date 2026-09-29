@@ -1,7 +1,9 @@
 import {
   get,
   onValue,
+  limitToLast,
   push,
+  query,
   ref,
   remove,
   runTransaction,
@@ -11,6 +13,8 @@ import {
 } from 'firebase/database';
 import { DEFAULT_LIVE_COMMENT_SETTINGS, type LiveComment, type LiveCommentSettings } from '../types/scoring';
 import { rankLiveComments } from '../utils/liveComments';
+
+const MAX_QUEUE_ITEMS = 300;
 
 class LiveCommentService {
   private db: Database | null = null;
@@ -56,9 +60,11 @@ class LiveCommentService {
 
   subscribeQueue(matchId: string, callback: (comments: LiveComment[]) => void): () => void {
     const database = this.database();
-    return onValue(ref(database, this.matchPath(matchId)), snapshot => {
+    // Only the newest items: votes live beside items and would otherwise be downloaded on every upvote.
+    const items = query(ref(database, `${this.matchPath(matchId)}/items`), limitToLast(MAX_QUEUE_ITEMS));
+    return onValue(items, snapshot => {
       const data = snapshot.val() as Record<string, unknown> | null;
-      const entries = Object.entries(data?.items || {}).flatMap(([id, raw]) => {
+      const entries = Object.entries(data || {}).flatMap(([id, raw]) => {
         if (!raw || typeof raw !== 'object') return [];
         const comment = raw as Omit<LiveComment, 'id'>;
         return [{ ...comment, id, upvotes: Number(comment.upvotes) || 0 }];
@@ -73,7 +79,11 @@ class LiveCommentService {
     if (!settings.enabled) throw new Error('Audience comments are not open right now');
 
     const name = input.name.trim().slice(0, 40);
-    const message = input.message.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, '').trim().slice(0, 280);
+    const message = Array.from(input.message)
+      .filter(character => character >= ' ' || character === '\t' || character === '\n' || character === '\r')
+      .join('')
+      .trim()
+      .slice(0, 280);
     const details = input.details?.trim().slice(0, 64) || undefined;
     const imageUrl = this.safeImageUrl(input.imageUrl);
     if (!name || !message) throw new Error('Name and message are required');

@@ -410,7 +410,7 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
   const [budgetMode, setBudgetMode] = useState<'constraint' | 'releaseRefund'>('constraint');
 
   // Store
-  const { teams, setTeams, soldPlayers, setSoldPlayers, unsoldPlayers, setUnsoldPlayers, originalPlayers, setAdminPlayerOverrides, reconcilePlayerPools } = useAuctionStore();
+  const { teams, setTeams, soldPlayers, setSoldPlayers, unsoldPlayers, setUnsoldPlayers, availablePlayers, originalPlayers, setAdminPlayerOverrides, reconcilePlayerPools } = useAuctionStore();
   const [editingTeams, setEditingTeams] = useState<Team[]>([]);
   const [editingSponsors, setEditingSponsors] = useState<SponsorRecord[]>([]);
   const [sharedSponsorTenantSlug, setSharedSponsorTenantSlug] = useState('');
@@ -546,6 +546,13 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
   const filteredPlayers = useMemo(
     () => editingPlayers.filter((player) => player.name.toLowerCase().includes(playerSearch.toLowerCase())),
     [editingPlayers, playerSearch],
+  );
+  const assignedTeamNameByPlayerId = useMemo(
+    () => new Map(soldPlayers.map(sold => [
+      sold.id,
+      teams.find(team => team.id === sold.teamId)?.name || sold.teamName,
+    ])),
+    [soldPlayers, teams],
   );
   const filteredTrash = useMemo(
     () => playerTrash.filter(item => item.record.player.name.toLowerCase().includes(playerSearch.toLowerCase())),
@@ -1353,6 +1360,33 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
     exportUnsoldPlayers(records);
   };
 
+  const handleMoveRemainingToUnsold = async () => {
+    const remaining = useAuctionStore.getState().availablePlayers;
+    if (remaining.length === 0) {
+      showUploadFeedback('No remaining auction players to move.', 'error');
+      return;
+    }
+    if (!globalThis.confirm(`Move all ${remaining.length} players still in the auction list to Unsold? They will no longer appear in the auction.`)) return;
+
+    try {
+      setIsSaving(true);
+      const store = useAuctionStore.getState();
+      const round = `Round ${store.currentRound}`;
+      const unsoldDate = new Date().toISOString();
+      await auctionPersistence.saveUnsoldPlayers(remaining, round);
+      store.setUnsoldPlayers([
+        ...store.unsoldPlayers,
+        ...remaining.map(player => ({ ...player, round, unsoldDate })),
+      ]);
+      reconcilePlayerPools();
+      showUploadFeedback(`Moved ${remaining.length} remaining players to Unsold.`);
+    } catch (err) {
+      showUploadFeedback(`Failed to move remaining players: ${(err as Error).message}`, 'error');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const openTeamEditor = (teamId: string) => {
     const targetTeam = editingTeams.find((team) => team.id === teamId);
     if (!targetTeam) return;
@@ -1415,10 +1449,10 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
     const soldAssignedTeam = soldAssignment
       ? teams.find(team => team.id === soldAssignment.teamId) || teams.find(team => team.name === soldAssignment.teamName)
       : undefined;
-    setPlayerTeamDraft(soldAssignment ? {
-      teamId: soldAssignedTeam?.id || soldAssignment.teamId || '',
-      teamName: soldAssignedTeam?.name || soldAssignment.teamName,
-    } : null);
+    setPlayerTeamDraft({
+      teamId: soldAssignedTeam?.id || soldAssignment?.teamId || '',
+      teamName: soldAssignedTeam?.name || soldAssignment?.teamName || '',
+    });
     setEditorImageBlob(undefined);
 
     // Check if this player is currently an icon player for any team
@@ -1586,17 +1620,25 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
         : player
     ));
     const soldPlayerBeingEdited = soldPlayers.find(player => player.id === editingPlayerId);
-    const updatedSoldPlayers = soldPlayerBeingEdited
-      ? soldPlayers.map(player => player.id === editingPlayerId ? {
-        ...player,
+    const assignedTeam = playerTeamDraft?.teamId ? teams.find(team => team.id === playerTeamDraft.teamId) : undefined;
+    const assignedRecord: SoldPlayer | null = assignedTeam
+      ? {
+        ...soldPlayerBeingEdited,
         ...normalizedDraft,
-        id: normalizedDraft.id,
-        teamId: playerTeamDraft ? teams.find(team => team.id === playerTeamDraft.teamId)?.id || '' : player.teamId,
-        teamName: playerTeamDraft ? teams.find(team => team.id === playerTeamDraft.teamId)?.name || '' : player.teamName,
-        soldAmount: player.soldAmount,
-        soldDate: player.soldDate,
-      } : player)
-      : soldPlayers;
+        soldAmount: soldPlayerBeingEdited?.soldAmount ?? 0,
+        soldDate: soldPlayerBeingEdited?.soldDate ?? new Date().toISOString(),
+        teamId: assignedTeam.id,
+        teamName: assignedTeam.name,
+      }
+      : null;
+    let updatedSoldPlayers = soldPlayers;
+    if (assignedRecord) {
+      updatedSoldPlayers = soldPlayerBeingEdited
+        ? soldPlayers.map(player => player.id === editingPlayerId ? assignedRecord : player)
+        : [...soldPlayers, assignedRecord];
+    } else if (soldPlayerBeingEdited) {
+      updatedSoldPlayers = soldPlayers.filter(player => player.id !== editingPlayerId);
+    }
     setEditingPlayers(updatedPlayers);
 
     // If the ID was changed, update the image sources mapping
@@ -1640,20 +1682,20 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
     // Persist to Firebase and update store with feedback
     setIsSaving(true);
     try {
-      setAdminPlayerOverrides(updatedPlayers);
       await auctionPersistence.saveAdminPlayers(updatedPlayers);
-      if (soldPlayerBeingEdited) {
-        const updatedSoldPlayer = updatedSoldPlayers.find(player => player.id === normalizedDraft.id);
-        if (updatedSoldPlayer) {
-          await auctionPersistence.saveSoldPlayer(updatedSoldPlayer, updatedSoldPlayer.teamName);
-          if (normalizedDraft.id !== editingPlayerId) await auctionPersistence.removeSoldPlayer(editingPlayerId);
-          setSoldPlayers(updatedSoldPlayers);
-          reconcilePlayerPools();
-        }
+      if (assignedRecord && assignedTeam) {
+        if (soldPlayerBeingEdited) await auctionPersistence.saveSoldPlayer(assignedRecord, assignedTeam.name);
+        else await auctionPersistence.saveDirectAssignedPlayer(normalizedDraft, assignedTeam);
+        if (soldPlayerBeingEdited && normalizedDraft.id !== editingPlayerId) await auctionPersistence.removeSoldPlayer(editingPlayerId);
+      } else if (soldPlayerBeingEdited) {
+        await auctionPersistence.removeSoldPlayer(editingPlayerId);
       }
-      // Also persist team changes (icon player assignment)
+      // Sold list first so re-merging the player pool sees the new assignment.
+      setSoldPlayers(updatedSoldPlayers);
+      setAdminPlayerOverrides(updatedPlayers);
+      // Persist team changes (icon player assignment) on top of stats recomputed from the sold list
       setTeams(updatedTeams);
-      await auctionPersistence.saveTeams(updatedTeams);
+      await auctionPersistence.saveTeams(useAuctionStore.getState().teams);
       reconcilePlayerPools();
       setSaveStatus('success');
       setTimeout(() => setSaveStatus('idle'), 2500);
@@ -4543,7 +4585,7 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
                           </div>
                           <small>
                             <span className="admin-role-dot" style={{ background: getRoleBadgeColor(player.role) }} />
-                            {formatRoleDisplay(player.role)} | Base: ₹{player.basePrice}L
+                            {formatRoleDisplay(player.role)} | Base: ₹{player.basePrice}L | Team: {assignedTeamNameByPlayerId.get(player.id) || '—'}
                           </small>
                           {(processingPlayerIds[player.id] || processingPlayerLogs[player.id]?.at(-1)?.includes('ERROR')) && (
                             <div className="admin-player-background-log" role={processingPlayerIds[player.id] ? 'log' : 'status'} aria-live="polite">
@@ -4844,6 +4886,15 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
                     <div className="admin-empty-state">No unsold players. Unsold players will appear here as the auction progresses.</div>
                   )}
 
+                  <button
+                    className="admin-btn admin-btn-warning"
+                    onClick={() => void handleMoveRemainingToUnsold()}
+                    disabled={isSaving || availablePlayers.length === 0}
+                    style={{ marginTop: '1rem', marginRight: '0.5rem' }}
+                    title="Moves every player still in the auction list to the Unsold list"
+                  >
+                    Move remaining auction players to Unsold ({availablePlayers.length})
+                  </button>
                   <button
                     className="admin-btn admin-btn-success"
                     onClick={handleExportUnsoldPlayers}
@@ -5278,25 +5329,23 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
                       </div>
                     </div>
 
-                    {soldPlayers.some(player => player.id === editingPlayerId) && (
-                      <div className="form-row">
-                        <div className="form-group">
-                          <label>Assigned Team</label>
-                          <select
-                            className="admin-select"
-                            value={playerTeamDraft?.teamId || ''}
-                            onChange={event => {
-                              const team = teams.find(item => item.id === event.target.value);
-                              setPlayerTeamDraft({ teamId: team?.id || '', teamName: team?.name || '' });
-                            }}
-                          >
-                            <option value="">Unassigned</option>
-                            {teams.map(team => <option key={team.id} value={team.id}>{team.name} · {team.id}</option>)}
-                          </select>
-                          <small className="admin-field-hint">This updates the assigned team in Export and team rosters.</small>
-                        </div>
+                    <div className="form-row">
+                      <div className="form-group">
+                        <label>Team</label>
+                        <select
+                          className="admin-select"
+                          value={playerTeamDraft?.teamId || ''}
+                          onChange={event => {
+                            const team = teams.find(item => item.id === event.target.value);
+                            setPlayerTeamDraft({ teamId: team?.id || '', teamName: team?.name || '' });
+                          }}
+                        >
+                          <option value="">No team</option>
+                          {teams.map(team => <option key={team.id} value={team.id}>{team.name} · {team.id}</option>)}
+                        </select>
+                        <small className="admin-field-hint">Assigns the player directly to this team (₹0 unless already sold). Leave empty to remove any assignment.</small>
                       </div>
-                    )}
+                    </div>
 
                     <div className="form-row">
                       <div className="form-group">

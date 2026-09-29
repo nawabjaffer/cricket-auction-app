@@ -13,6 +13,7 @@
 // ============================================================================
 
 import { ref, get, set, update, onValue, remove, type Database } from 'firebase/database';
+import { MatchIndex } from '../matchIndex';
 import type {
   FootballTeam, FootballPlayer, FootballMatchSetup, FootballLiveState,
   FootballOverlayConfig, FootballOverlayControl,
@@ -21,6 +22,7 @@ import type {
 import { createEmptyFootballLiveState } from '../../types/football';
 
 class FootballService {
+  private readonly matchIndex = new MatchIndex<FootballMatchSetup>(() => this.ensureDb(), () => this.basePath);
   private db: Database | null = null;
   private basePath = '';
 
@@ -139,19 +141,15 @@ class FootballService {
   // ── Matches ──────────────────────────────────────────────────────────────
 
   async saveMatch(match: FootballMatchSetup): Promise<void> {
-    const db = this.ensureDb();
-    await set(ref(db, `${this.basePath}/matches/${match.id}/setup`), this.clean(match));
+    await this.matchIndex.save(match.id, this.clean(match));
   }
 
   async getMatches(): Promise<FootballMatchSetup[]> {
-    const db = this.ensureDb();
-    const snap = await get(ref(db, `${this.basePath}/matches`));
-    if (!snap.exists()) return [];
-    const data = snap.val() as Record<string, { setup?: FootballMatchSetup }>;
-    return Object.values(data)
-      .map((m) => m.setup)
-      .filter((s): s is FootballMatchSetup => !!s)
-      .sort((a, b) => b.createdAt - a.createdAt);
+    return this.matchIndex.list();
+  }
+
+  subscribeMatches(callback: (matches: FootballMatchSetup[]) => void): () => void {
+    return this.matchIndex.subscribe(callback);
   }
 
   async getMatch(matchId: string): Promise<FootballMatchSetup | null> {
@@ -173,8 +171,7 @@ class FootballService {
   }
 
   async deleteMatch(matchId: string): Promise<void> {
-    const db = this.ensureDb();
-    await remove(ref(db, `${this.basePath}/matches/${matchId}`));
+    await this.matchIndex.remove(matchId);
   }
 
   // ── Live state (timer + score) ─────────────────────────────────────────────

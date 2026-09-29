@@ -8,7 +8,7 @@
 // ============================================================================
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { onValue, ref, set as fbSet } from 'firebase/database';
+import { get, onValue, ref, set as fbSet } from 'firebase/database';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faPerson, faPeopleGroup, faPersonRunning, faShieldHalved, faCircleUser, faBolt, faDragon, faHandBackFist, faBullseye } from '@fortawesome/free-solid-svg-icons';
 import type { IconDefinition } from '@fortawesome/fontawesome-svg-core';
@@ -359,18 +359,23 @@ export default function ScorecardDesignerPage({ gameType = 'cricket' }: Readonly
       scorecardLayoutService.subscribeAssets(sport, setAssets),
     ];
     const db = realtimeSync.getDatabase();
+    let cancelled = false;
+    // Preview inputs rarely change while designing, so read them once instead of holding listeners open.
+    const readOnce = (path: string, apply: (value: unknown) => void) => {
+      void get(ref(db!, tenantPath(path))).then(snapshot => { if (!cancelled) apply(snapshot.val()); }).catch(() => undefined);
+    };
     if (db) {
-      unsubs.push(onValue(ref(db, tenantPath('auction/teams')), snapshot => {
-        const value = snapshot.val() as Team[] | Record<string, Team> | null;
+      readOnce('auction/teams', raw => {
+        const value = raw as Team[] | Record<string, Team> | null;
         setAuctionTeams(value ? Object.values(value).filter((team): team is Team => !!team?.id) : []);
-      }));
-      unsubs.push(onValue(ref(db, tenantPath('auction/adminSettings')), snapshot => {
-        const settings = snapshot.val() as { organizerLogo?: string } | null;
+      });
+      readOnce('auction/adminSettings', raw => {
+        const settings = raw as { organizerLogo?: string } | null;
         setTenantTournamentLogo(settings?.organizerLogo || undefined);
-      }));
+      });
       const brandingPaths = ['scoring/overlayConfig', 'football/overlayConfig', 'kabaddi/overlayConfig'];
-      brandingPaths.forEach(path => unsubs.push(onValue(ref(db, tenantPath(path)), snapshot => {
-        const value = snapshot.val() as { tournamentLogo?: string; broadcastPartnerLogo?: string; doOrDieAnimation?: { mediaUrl?: string }; superRaidAnimation?: { mediaUrl?: string }; superTackleAnimation?: { mediaUrl?: string }; allOutAnimation?: { mediaUrl?: string }; bonusAnimation?: { mediaUrl?: string } } | null;
+      brandingPaths.forEach(path => readOnce(path, raw => {
+        const value = raw as { tournamentLogo?: string; broadcastPartnerLogo?: string; doOrDieAnimation?: { mediaUrl?: string }; superRaidAnimation?: { mediaUrl?: string }; superTackleAnimation?: { mediaUrl?: string }; allOutAnimation?: { mediaUrl?: string }; bonusAnimation?: { mediaUrl?: string } } | null;
         if (!value) return;
         setBranding(current => path === 'kabaddi/overlayConfig' ? {
           ...current,
@@ -390,22 +395,25 @@ export default function ScorecardDesignerPage({ gameType = 'cricket' }: Readonly
           allOutFlagUrl: current.allOutFlagUrl,
           bonusPointFlagUrl: current.bonusPointFlagUrl,
         });
-      })));
+      }));
     }
-    return () => unsubs.forEach(u => u());
+    return () => { cancelled = true; unsubs.forEach(u => u()); };
   }, [ready, sport, surface]);
 
+  // Live match listeners only run while the Live preview is selected.
+  const livePreviewActive = previewMode === 'live';
+
   useEffect(() => {
-    if (!ready || sport !== 'cricket') return;
+    if (!ready || sport !== 'cricket' || !livePreviewActive) return;
     const db = realtimeSync.getDatabase();
     if (!db) return;
     return onValue(ref(db, tenantPath('scoring/activeMatch/matchId')), snapshot => {
       setLivePreviewMatchId(snapshot.exists() ? snapshot.val() as string : null);
     });
-  }, [ready, sport]);
+  }, [ready, sport, livePreviewActive]);
 
   useEffect(() => {
-    if (!ready || sport !== 'cricket' || !livePreviewMatchId) {
+    if (!ready || sport !== 'cricket' || !livePreviewActive || !livePreviewMatchId) {
       setLivePreviewData({ matchId: null, match: null, live: null, lineups: {}, matchStats: null, tournamentStats: null, preMatch: null });
       return;
     }
@@ -436,30 +444,31 @@ export default function ScorecardDesignerPage({ gameType = 'cricket' }: Readonly
       }),
     ];
     return () => unsubs.forEach(unsubscribe => unsubscribe());
-  }, [livePreviewMatchId, ready, sport]);
+  }, [livePreviewActive, livePreviewMatchId, ready, sport]);
 
   useEffect(() => {
     if (!ready || sport !== 'cricket') return;
     const db = realtimeSync.getDatabase();
     if (!db) return;
-    return onValue(ref(db, tenantPath('scorecardDesigner/cricket/squadOverlayDesign')), snapshot => {
-      setSquadDesign(normalizeMatchSquadOverlayDesign(snapshot.val()));
-    });
+    let cancelled = false;
+    void get(ref(db, tenantPath('scorecardDesigner/cricket/squadOverlayDesign'))).then(snapshot => {
+      if (!cancelled) setSquadDesign(normalizeMatchSquadOverlayDesign(snapshot.val()));
+    }).catch(() => undefined);
+    return () => { cancelled = true; };
   }, [ready, sport]);
 
   useEffect(() => {
     if (!ready || sport !== 'cricket') return;
     const db = realtimeSync.getDatabase();
     if (!db) return;
-    const unsubs = [
-      onValue(ref(db, tenantPath('scorecardDesigner/cricket/premiumTickerDesign')), snapshot => {
-        setPremiumTickerDesign(normalizePremiumTickerDesign(snapshot.val()));
-      }),
-      onValue(ref(db, tenantPath('scoring/overlayConfig/tickerConfig')), snapshot => {
-        setTenantTickerConfig(snapshot.exists() ? snapshot.val() as TickerConfig : undefined);
-      }),
-    ];
-    return () => unsubs.forEach(unsubscribe => unsubscribe());
+    let cancelled = false;
+    void get(ref(db, tenantPath('scorecardDesigner/cricket/premiumTickerDesign'))).then(snapshot => {
+      if (!cancelled) setPremiumTickerDesign(normalizePremiumTickerDesign(snapshot.val()));
+    }).catch(() => undefined);
+    void get(ref(db, tenantPath('scoring/overlayConfig/tickerConfig'))).then(snapshot => {
+      if (!cancelled) setTenantTickerConfig(snapshot.exists() ? snapshot.val() as TickerConfig : undefined);
+    }).catch(() => undefined);
+    return () => { cancelled = true; };
   }, [ready, sport]);
 
   const mockCtx = useMemo(() => mockContextFor(sport), [sport]);

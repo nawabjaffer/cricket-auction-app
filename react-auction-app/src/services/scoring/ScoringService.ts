@@ -5,6 +5,7 @@
 // ============================================================================
 
 import { ref, get, set, onValue, remove, type Database } from 'firebase/database';
+import { MatchIndex } from '../matchIndex';
 import { ManualScoringAdapter } from './ManualScoringAdapter';
 import { CricHeroesAdapter } from './CricHeroesAdapter';
 import type {
@@ -21,6 +22,7 @@ export class ScoringService {
   private manualAdapter: ManualScoringAdapter | null = null;
   private cricHeroesAdapter: CricHeroesAdapter = new CricHeroesAdapter();
   private adapters = new Map<string, IScoringAdapter>();
+  private readonly matchIndex = new MatchIndex<MatchSetup>(() => this.ensureDb(), () => this.basePath);
 
   /** Initialize with Firebase database and tenant scoring path */
   initialize(db: Database, tenantScoringPath: string): void {
@@ -83,8 +85,7 @@ export class ScoringService {
   // ── Match Management ───────────────────────────────────────────────────────
 
   async createMatch(match: MatchSetup): Promise<string> {
-    const db = this.ensureDb();
-    await set(ref(db, `${this.basePath}/matches/${match.id}/setup`), this.stripUndefinedDeep(match));
+    await this.matchIndex.save(match.id, this.stripUndefinedDeep(match));
     return match.id;
   }
 
@@ -107,19 +108,11 @@ export class ScoringService {
   }
 
   async getAllMatches(): Promise<MatchSetup[]> {
-    const db = this.ensureDb();
-    const snapshot = await get(ref(db, `${this.basePath}/matches`));
-    if (!snapshot.exists()) return [];
-    const data = snapshot.val() as Record<string, { setup?: MatchSetup }>;
-    return Object.values(data)
-      .map(m => m.setup)
-      .filter((s): s is MatchSetup => !!s)
-      .sort((a, b) => b.createdAt - a.createdAt);
+    return this.matchIndex.list();
   }
 
   async deleteMatch(matchId: string): Promise<void> {
-    const db = this.ensureDb();
-    await remove(ref(db, `${this.basePath}/matches/${matchId}`));
+    await this.matchIndex.remove(matchId);
   }
 
   // ── Venue Directory ───────────────────────────────────────────────────────
@@ -148,16 +141,7 @@ export class ScoringService {
   }
 
   subscribeMatches(callback: (matches: MatchSetup[]) => void): () => void {
-    const db = this.ensureDb();
-    return onValue(ref(db, `${this.basePath}/matches`), (snapshot) => {
-      if (!snapshot.exists()) { callback([]); return; }
-      const data = snapshot.val() as Record<string, { setup?: MatchSetup }>;
-      const matches = Object.values(data)
-        .map(m => m.setup)
-        .filter((s): s is MatchSetup => !!s)
-        .sort((a, b) => b.createdAt - a.createdAt);
-      callback(matches);
-    });
+    return this.matchIndex.subscribe(callback);
   }
 
   // ── Active Match Pointer (Single Overlay Mode) ─────────────────────────────

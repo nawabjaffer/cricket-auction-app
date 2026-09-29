@@ -151,10 +151,10 @@
 
 .admin-compact-avatar {
   position: relative;
-  width: 42px;
-  height: 42px;
+  width: 84px;
+  height: 84px;
   flex-shrink: 0;
-  border-radius: 999px;
+
   overflow: hidden;
   border: 1px solid #dbeafe;
   background: #eff6ff;

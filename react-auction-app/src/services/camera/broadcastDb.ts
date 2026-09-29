@@ -4,7 +4,8 @@
 // ============================================================================
 
 import { initializeApp, getApps } from 'firebase/app';
-import { getDatabase } from 'firebase/database';
+import { openDatabase } from '../firebaseEnv';
+
 
 const FB_CONFIG = {
   apiKey: 'AIzaSyBazxXTsWddS3r_i-0VhUaC2QqknheEzpQ',
@@ -19,4 +20,4 @@ const APP_NAME = 'score-obs';
 
 const broadcastApp = getApps().find(a => a.name === APP_NAME) ?? initializeApp(FB_CONFIG, APP_NAME);
 
-export const broadcastDb = getDatabase(broadcastApp);
+export const broadcastDb = openDatabase(broadcastApp);

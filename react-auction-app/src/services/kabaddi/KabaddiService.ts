@@ -16,6 +16,7 @@
 // ============================================================================
 
 import { ref, get, set, update, remove, onValue, type Database } from 'firebase/database';
+import { MatchIndex } from '../matchIndex';
 import type {
   KabaddiTeam, KabaddiPlayer, KabaddiMatchSetup, KabaddiLiveState,
   KabaddiOverlayConfig, KabaddiOverlayControl, KabaddiTopPerformer,
@@ -35,6 +36,7 @@ export interface RaidResolution {
 }
 
 class KabaddiService {
+  private readonly matchIndex = new MatchIndex<KabaddiMatchSetup>(() => this.ensureDb(), () => this.basePath);
   private db: Database | null = null;
   private basePath = '';
 
@@ -153,19 +155,15 @@ class KabaddiService {
   // ── Matches ────────────────────────────────────────────────────────────────
 
   async saveMatch(match: KabaddiMatchSetup): Promise<void> {
-    const db = this.ensureDb();
-    await set(ref(db, `${this.basePath}/matches/${match.id}/setup`), this.clean(match));
+    await this.matchIndex.save(match.id, this.clean(match));
   }
 
   async getMatches(): Promise<KabaddiMatchSetup[]> {
-    const db = this.ensureDb();
-    const snap = await get(ref(db, `${this.basePath}/matches`));
-    if (!snap.exists()) return [];
-    const data = snap.val() as Record<string, { setup?: KabaddiMatchSetup }>;
-    return Object.values(data)
-      .map(m => m.setup)
-      .filter((s): s is KabaddiMatchSetup => !!s)
-      .sort((a, b) => b.createdAt - a.createdAt);
+    return this.matchIndex.list();
+  }
+
+  subscribeMatches(callback: (matches: KabaddiMatchSetup[]) => void): () => void {
+    return this.matchIndex.subscribe(callback);
   }
 
   async getMatch(matchId: string): Promise<KabaddiMatchSetup | null> {
@@ -187,8 +185,7 @@ class KabaddiService {
   }
 
   async deleteMatch(matchId: string): Promise<void> {
-    const db = this.ensureDb();
-    await remove(ref(db, `${this.basePath}/matches/${matchId}`));
+    await this.matchIndex.remove(matchId);
   }
 
   /** Remove every persisted result child and retain only a scheduled setup. */

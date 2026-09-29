@@ -13,7 +13,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { initializeApp, getApps } from 'firebase/app';
-import { getDatabase, ref, onValue, set } from 'firebase/database';
+import { ref, onValue, set } from 'firebase/database';
 import { tenantPath } from '../services/tenantPath';
 import { useBroadcastOverlaySurface } from '../hooks/useBroadcastOverlaySurface';
 import { ResolvedImage } from '../components/ResolvedImage';
@@ -35,6 +35,7 @@ import type {
 import type { Player, Team } from '../types';
 import type { SoldPlayerRecord } from '../services/auctionPersistence';
 import './KabaddiOBSOverlayPage.css';
+import { openDatabase } from '../services/firebaseEnv';
 
 const FB_CONFIG = {
   apiKey: 'AIzaSyBazxXTsWddS3r_i-0VhUaC2QqknheEzpQ',
@@ -46,7 +47,7 @@ const FB_CONFIG = {
 };
 const FB_APP = 'kabaddi-obs';
 const fbApp = getApps().find(a => a.name === FB_APP) ?? initializeApp(FB_CONFIG, FB_APP);
-const fbDb = getDatabase(fbApp);
+const fbDb = openDatabase(fbApp);
 
 function mergeKabaddiOverlayConfig(raw: Partial<KabaddiOverlayConfig> | null): KabaddiOverlayConfig {
   const value = raw ?? {};

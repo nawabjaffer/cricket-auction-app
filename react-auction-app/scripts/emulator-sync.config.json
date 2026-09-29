@@ -1,0 +1,5 @@
+{
+  "intervalHours": 24,
+  "maxMbPerPath": 5,
+  "paths": ["platform", "tenants/epl_2026"]
+}
