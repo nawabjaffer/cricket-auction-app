@@ -27,7 +27,7 @@ import { useCricHeroesSyncAdapter } from '../hooks/useCricHeroesSyncAdapter';
 import { uploadFileToStorage } from '../services';
 import { CRICHEROES_EXTENSION } from '../config/cricheroesExtension';
 import { CRICKET_REPLAY_SCENE, obsStreamingPresetService } from '../services/obsStreamingPresetService';
-import { obsConnectionBridgeService } from '../services/obsConnectionBridgeService';
+import { obsConnectionBridgeService, type OBSConnectionBridgePresence } from '../services/obsConnectionBridgeService';
 import type { OBSConnectionDiagnostics } from '../services/obsService';
 import { DEFAULT_LIVE_COMMENT_SETTINGS, DEFAULT_MVP_WEIGHTS, MATCH_STAGE_LABELS } from '../types/scoring';
 import type { MatchSetup, MatchStage, ScoringAd, ScoringOverlayConfig, LiveQuestion, MatchScoringConfig, PreMatchState, ImpactPlayer, TossConfig, MatchLineup, MatchSquadPlayer, TickerConfig, OBSWebSocketConfig, MVPWeights, AnimationConfig, OBSReplayButton, OBSButtonKeySequence, OBSButtonSeriesStep, OBSReplayConfig, TickerStatWidget, SharedOBSProfile, PlayerStatsSequenceItem, LiveCommentSettings } from '../types/scoring';
@@ -41,6 +41,13 @@ import type { CricHeroesNameMappings } from '../utils/cricHeroesMappings';
 import { DEFAULT_PLAYER_STATS_SEQUENCE_CONFIG, normalizePlayerStatsSequenceConfig } from '../utils/playerStatsSequence';
 
 const EMPTY_OBS_REPLAY_CONFIG: OBSReplayConfig = { buttons: [] };
+const DEFAULT_OBS_WEBSOCKET_CONFIG: OBSWebSocketConfig = {
+  host: 'localhost',
+  port: 4455,
+  autoReplay: true,
+  replayDelaySeconds: 3,
+  replayDurationSeconds: 30,
+};
 import { withScorerAdminChrome } from './withScorerAdminChrome';
 import './ScoringAdminPage.css';
 
@@ -4028,6 +4035,12 @@ const PLAYER_STATS_SEQUENCE_OPTIONS: Array<{ key: PlayerStatsSequenceItem; label
   { key: 'stats_sr', label: 'Match strike rate' },
   { key: 'stats_mvp', label: 'Match MVP' },
 ];
+type OBSAdminConnectionMode = 'ip' | 'local' | 'relay';
+const OBS_CONNECTION_MODE_OPTIONS: Array<{ key: OBSAdminConnectionMode; label: string; hint: string }> = [
+  { key: 'ip', label: 'IP Address', hint: 'Direct connection to OBS using its LAN IP or DNS name.' },
+  { key: 'local', label: 'Local', hint: 'Direct connection to OBS running on this computer (127.0.0.1).' },
+  { key: 'relay', label: 'Same Wi-Fi', hint: 'Use the live connection from the OBS Dock on the OBS computer.' },
+];
 
 interface HotkeyDescriptor {
   raw: string;
@@ -4255,6 +4268,15 @@ function OBSWebSocketTab({ config, setConfig, onFeedback, baseUrl }: {
 }) {
   const [saving, setSaving] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<'disconnected' | 'connected' | 'connecting' | 'error'>('disconnected');
+  const [connectionMode, setConnectionMode] = useState<OBSAdminConnectionMode>(() => {
+    const stored = localStorage.getItem('obs_admin_connection_mode');
+    if (stored === 'ip' || stored === 'local' || stored === 'relay') return stored;
+    return /^(localhost|127\.0\.0\.1|::1)$/i.test(config.obsWebSocketConfig?.host || '') ? 'local' : 'ip';
+  });
+  const [sharedObsConnection, setSharedObsConnection] = useState<OBSConnectionBridgePresence | null>(null);
+  const lastSharedOwnerRef = useRef<string | null>(null);
+  const configRef = useRef(config);
+  configRef.current = config;
   const [connectionDiagnostics, setConnectionDiagnostics] = useState<OBSConnectionDiagnostics>({
     attemptedUrls: [], lastSuccessfulUrl: '', failures: [], lastErrorDetail: '', mixedContentLikely: false, logs: [],
   });
@@ -4326,16 +4348,66 @@ function OBSWebSocketTab({ config, setConfig, onFeedback, baseUrl }: {
     else if (!setupChecklistOpen && dialog.open) dialog.close();
   }, [setupChecklistOpen]);
 
-  const obsConfig = config.obsWebSocketConfig ?? {
-    host: 'localhost',
-    port: 4455,
-    autoReplay: true,
-    replayDelaySeconds: 3,
-    replayDurationSeconds: 30,
-  };
+  const obsConfig = config.obsWebSocketConfig ?? DEFAULT_OBS_WEBSOCKET_CONFIG;
 
   const replayConfig: OBSReplayConfig = config.obsReplayConfig ?? EMPTY_OBS_REPLAY_CONFIG;
   const statsSequence = normalizePlayerStatsSequenceConfig(config.playerStatsSequence || DEFAULT_PLAYER_STATS_SEQUENCE_CONFIG);
+
+  useEffect(() => {
+    let active = true;
+    let unsubscribe = () => {};
+    void realtimeSync.ensureInitialized().then(() => {
+      if (!active) return;
+      const db = realtimeSync.getDatabase();
+      if (!db) return;
+      unsubscribe = onValue(ref(db, tenantPath('scoring/obsConnectionBridge')), snapshot => {
+        const presence = snapshot.exists() ? snapshot.val() as OBSConnectionBridgePresence : null;
+        const shared = obsConnectionBridgeService.isAlive(presence) && !obsConnectionBridgeService.isOwner(presence)
+          ? presence
+          : null;
+        setSharedObsConnection(shared);
+        if (!shared) {
+          lastSharedOwnerRef.current = null;
+          return;
+        }
+
+        const latestConfig = configRef.current;
+        const latestOBSConfig = latestConfig.obsWebSocketConfig ?? DEFAULT_OBS_WEBSOCKET_CONFIG;
+        if (latestOBSConfig.host !== shared.host || latestOBSConfig.port !== shared.port) {
+          const nextConfig = {
+            ...latestConfig,
+            obsWebSocketConfig: { ...latestOBSConfig, host: shared.host, port: shared.port },
+          };
+          configRef.current = nextConfig;
+          setConfig(nextConfig);
+        }
+
+        if (lastSharedOwnerRef.current !== shared.ownerId) {
+          const nextMode: OBSAdminConnectionMode = shared.ownerType === 'dock'
+            ? 'relay'
+            : /^(localhost|127\.0\.0\.1|::1)$/i.test(shared.host) ? 'local' : 'ip';
+          setConnectionMode(nextMode);
+          localStorage.setItem('obs_admin_connection_mode', nextMode);
+          lastSharedOwnerRef.current = shared.ownerId;
+        }
+      }, error => console.warn('[OBS Admin] Could not watch shared connection:', error));
+    }).catch(error => console.warn('[OBS Admin] Could not initialize shared connection:', error));
+    return () => { active = false; unsubscribe(); };
+  }, [setConfig]);
+
+  useEffect(() => {
+    const activeConnection = sharedObsConnection;
+    if (!activeConnection) return;
+    const timer = setInterval(() => {
+      if (!obsConnectionBridgeService.isExpired(activeConnection)) return;
+      setSharedObsConnection(null);
+      lastSharedOwnerRef.current = null;
+      const fallbackMode: OBSAdminConnectionMode = /^(localhost|127\.0\.0\.1|::1)$/i.test(activeConnection.host) ? 'local' : 'ip';
+      setConnectionMode(fallbackMode);
+      localStorage.setItem('obs_admin_connection_mode', fallbackMode);
+    }, 1_000);
+    return () => clearInterval(timer);
+  }, [sharedObsConnection]);
 
   useEffect(() => {
     if (connectionStatus !== 'connected') return;
@@ -4347,6 +4419,12 @@ function OBSWebSocketTab({ config, setConfig, onFeedback, baseUrl }: {
 
   const updateOBS = (updates: Partial<OBSWebSocketConfig>) => {
     setConfig({ ...config, obsWebSocketConfig: { ...obsConfig, ...updates } });
+  };
+
+  const selectConnectionMode = (mode: OBSAdminConnectionMode) => {
+    setConnectionMode(mode);
+    localStorage.setItem('obs_admin_connection_mode', mode);
+    if (mode === 'local' && obsConfig.host !== '127.0.0.1') updateOBS({ host: '127.0.0.1' });
   };
 
   const updateReplayConfig = (updates: Partial<OBSReplayConfig>) => {
@@ -4471,10 +4549,18 @@ function OBSWebSocketTab({ config, setConfig, onFeedback, baseUrl }: {
   };
 
   const handleConnect = async () => {
+    if (connectionMode === 'relay') {
+      onFeedback(sharedObsConnection
+        ? `OBS is connected from the Dock at ${sharedObsConnection.host}:${sharedObsConnection.port}. Connect directly here for scene setup and hotkey discovery.`
+        : 'Connect from the OBS Dock first, then this tab will sync its connection details.');
+      return;
+    }
     setConnectionStatus('connecting');
     try {
       const { obsService } = await import('../services/obsService');
-      const ok = await obsService.connect(obsConfig.host, obsConfig.port, obsConfig.password);
+      const host = connectionMode === 'local' ? '127.0.0.1' : obsConfig.host;
+      if (host !== obsConfig.host) updateOBS({ host });
+      const ok = await obsService.connect(host, obsConfig.port, obsConfig.password);
       setConnectionDiagnostics(obsService.getConnectionDiagnostics());
       setConnectionStatus(ok ? 'connected' : 'error');
       if (ok) {
@@ -4713,10 +4799,23 @@ function OBSWebSocketTab({ config, setConfig, onFeedback, baseUrl }: {
         <div className="obs-ws-group__header">
           <h3 className="scoring-admin__subsection-title">Connection</h3>
           <div className="scoring-admin__connection-status">
-            <span className={`scoring-admin__status-dot scoring-admin__status-dot--${connectionStatus}`} />
-            <span>{connectionStatus === 'connected' ? 'Connected to OBS' : connectionStatus === 'connecting' ? 'Connecting…' : connectionStatus === 'error' ? 'Connection Error' : 'Disconnected'}</span>
+            <span className={`scoring-admin__status-dot scoring-admin__status-dot--${connectionStatus === 'connected' || sharedObsConnection ? 'connected' : connectionStatus}`} />
+            <span>{connectionStatus === 'connected'
+              ? 'Connected to OBS'
+              : sharedObsConnection
+                ? `Connected from OBS ${sharedObsConnection.ownerType === 'dock' ? 'Dock' : 'another tab'} · ${sharedObsConnection.host}:${sharedObsConnection.port}`
+                : connectionStatus === 'connecting' ? 'Connecting…' : connectionStatus === 'error' ? 'Connection Error' : 'Disconnected'}</span>
           </div>
         </div>
+      <p className="scoring-admin__hint obs-ws-mode-hint">
+        {OBS_CONNECTION_MODE_OPTIONS.find(option => option.key === connectionMode)?.hint}
+      </p>
+      {sharedObsConnection && (
+        <div className="obs-ws-shared-connection" role="status">
+          <strong>OBS connection synced from the {sharedObsConnection.ownerType === 'dock' ? 'OBS Dock' : 'other tab'}.</strong>
+          <span>Host and port were copied into this Admin configuration. Save to keep them. Scene setup and hotkey discovery still require a direct connection from this tab.</span>
+        </div>
+      )}
       {connectionDiagnostics.logs.length > 0 && (
         <details className="scoring-admin__form-card obs-connection-log" open={connectionStatus === 'error'}>
           <summary>OBS connection diagnostics ({connectionDiagnostics.logs.length})</summary>
@@ -4750,9 +4849,10 @@ function OBSWebSocketTab({ config, setConfig, onFeedback, baseUrl }: {
           <input
             type="text"
             className="scoring-admin__input"
-            value={obsConfig.host}
+            value={connectionMode === 'local' ? '127.0.0.1' : obsConfig.host}
             onChange={e => updateOBS({ host: e.target.value })}
             placeholder="192.168.1.x or localhost"
+            disabled={connectionMode === 'local' || connectionMode === 'relay'}
           />
           <small className="scoring-admin__hint">Local dev: enter the OBS computer LAN IP. HTTPS production needs a trusted wss:// endpoint or use the OBS dock's Same Wi-Fi relay.</small>
         </div>
@@ -4763,6 +4863,7 @@ function OBSWebSocketTab({ config, setConfig, onFeedback, baseUrl }: {
             className="scoring-admin__input"
             value={obsConfig.port}
             onChange={e => updateOBS({ port: Number(e.target.value) })}
+            disabled={connectionMode === 'relay'}
           />
           <small className="scoring-admin__hint">OBS WebSocket default: 4455. For a WSS reverse proxy, use the proxy port.</small>
         </div>
@@ -4774,13 +4875,31 @@ function OBSWebSocketTab({ config, setConfig, onFeedback, baseUrl }: {
             value={obsConfig.password || ''}
             onChange={e => updateOBS({ password: e.target.value || undefined })}
             placeholder="OBS WebSocket password"
+            disabled={connectionMode === 'relay'}
           />
         </div>
       </div>
 
-      <div className="scoring-admin__actions" style={{ marginBottom: '1.5rem' }}>
-        <button className="scoring-admin__btn scoring-admin__btn--secondary" onClick={handleConnect} disabled={connectionStatus === 'connecting'}>
-          <IoLink size={16} /> {connectionStatus === 'connecting' ? 'Connecting…' : connectionStatus === 'connected' ? 'Reconnect' : 'Connect & Test'}
+      <div className="scoring-admin__actions obs-ws-connection-actions">
+        <div className="obs-ws-mode-switch" role="group" aria-label="OBS connection type">
+          {OBS_CONNECTION_MODE_OPTIONS.map(option => (
+            <button
+              key={option.key}
+              type="button"
+              className={`obs-ws-mode-btn ${connectionMode === option.key ? 'obs-ws-mode-btn--active' : ''}`}
+              aria-pressed={connectionMode === option.key}
+              title={option.hint}
+              onClick={() => selectConnectionMode(option.key)}
+              disabled={connectionStatus === 'connecting'}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+        <button className="scoring-admin__btn scoring-admin__btn--secondary" onClick={handleConnect} disabled={connectionStatus === 'connecting' || connectionMode === 'relay'}>
+          <IoLink size={16} /> {connectionMode === 'relay'
+            ? sharedObsConnection ? 'OBS Dock connected' : 'Waiting for OBS Dock'
+            : connectionStatus === 'connecting' ? 'Connecting…' : connectionStatus === 'connected' ? 'Reconnect' : 'Connect & Test'}
         </button>
         <button className="scoring-admin__btn scoring-admin__btn--secondary" onClick={handleDiscoverHotkeys} disabled={discoveringHotkeys || connectionStatus !== 'connected'}>
           {discoveringHotkeys ? 'Discovering…' : `🔍 Discover Hotkeys (${availableHotkeys.length})`}

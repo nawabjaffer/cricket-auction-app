@@ -190,8 +190,9 @@ export default function ScoreOBSControlDock() {
             dockCleanupRef.current.push(onValue(ref(db, tenantPath('scoring/obsConnectionBridge')), snapshot => {
               const presence = snapshot.exists() ? snapshot.val() as OBSConnectionBridgePresence : null;
               const activeBridge = obsConnectionBridgeService.isAlive(presence) ? presence : null;
-              setSharedObsBridge(activeBridge);
-              if (activeBridge) {
+              const remoteBridge = activeBridge && !obsConnectionBridgeService.isOwner(activeBridge) ? activeBridge : null;
+              setSharedObsBridge(remoteBridge);
+              if (remoteBridge) {
                 if (obsService.isConnected()) obsService.disconnect();
                 setRelayOnlyMode(true);
                 setObsErrorDetail('');
@@ -200,6 +201,9 @@ export default function ScoreOBSControlDock() {
                   localStorage.setItem('obs_dock_mode', 'relay');
                   setConnectionMode('relay');
                 }
+              } else if (activeBridge) {
+                autoRelayFromBridgeRef.current = false;
+                setRelayOnlyMode(false);
               } else if (!activeBridge && autoRelayFromBridgeRef.current) {
                 autoRelayFromBridgeRef.current = false;
                 setRelayOnlyMode(false);
@@ -366,6 +370,13 @@ export default function ScoreOBSControlDock() {
   // obsService is a singleton, no deps needed
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (obsStatus !== 'connected') return;
+    const db = realtimeSync.getDatabase();
+    if (!db) return;
+    obsConnectionBridgeService.start(db, tenantPath('scoring'), replayConfig, 'dock');
+  }, [obsStatus, replayConfig]);
 
   const showFeedback = useCallback((msg: string) => {
     setFeedback(msg);

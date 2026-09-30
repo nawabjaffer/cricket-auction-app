@@ -50,10 +50,36 @@ describe('OBS connection bridge', () => {
     obsConnectionBridgeService.stop();
   });
 
+  it('publishes Dock ownership without replacing its match-scoped command watcher', async () => {
+    const replayConfig: OBSReplayConfig = { buttons: [] };
+    const database = {} as never;
+    obsConnectionBridgeService.start(database, 'tenants/epl_2026/scoring', replayConfig, 'dock');
+    await Promise.resolve();
+
+    const presence = firebase.set.mock.calls[0][1] as {
+      ownerId: string;
+      ownerType: 'admin' | 'dock';
+      connected: boolean;
+      lastSeen: number;
+      host: string;
+      port: number;
+    };
+    expect(presence.ownerType).toBe('dock');
+    expect(obsConnectionBridgeService.isOwner(presence)).toBe(true);
+    expect(replay.watchRelayCommands).not.toHaveBeenCalledWith(null, replayConfig);
+
+    obsConnectionBridgeService.stop();
+  });
+
   it('expires stale owners so docks can return to direct connection mode', () => {
     const now = 10_000;
-    expect(obsConnectionBridgeService.isAlive({ ownerId: 'owner', connected: true, lastSeen: 9_000, host: 'obs', port: 4455 }, now)).toBe(true);
-    expect(obsConnectionBridgeService.isAlive({ ownerId: 'owner', connected: true, lastSeen: -10_000, host: 'obs', port: 4455 }, now)).toBe(false);
-    expect(obsConnectionBridgeService.isAlive({ ownerId: 'owner', connected: false, lastSeen: 9_000, host: 'obs', port: 4455 }, now)).toBe(false);
+    const live = { ownerId: 'owner', connected: true, lastSeen: 9_000, host: 'obs', port: 4455 };
+    const stale = { ...live, lastSeen: -10_000 };
+    const disconnected = { ...live, connected: false };
+    expect(obsConnectionBridgeService.isAlive(live, now)).toBe(true);
+    expect(obsConnectionBridgeService.isAlive(stale, now)).toBe(false);
+    expect(obsConnectionBridgeService.isAlive(disconnected, now)).toBe(false);
+    expect(obsConnectionBridgeService.isExpired(live, now)).toBe(false);
+    expect(obsConnectionBridgeService.isExpired(stale, now)).toBe(true);
   });
 });
