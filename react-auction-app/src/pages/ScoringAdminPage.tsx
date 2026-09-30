@@ -5011,6 +5011,46 @@ function OBSWebSocketTab({ config, setConfig, onFeedback, baseUrl }: {
             <li><strong>Device assignment:</strong> After setup, choose the physical camera, microphone, Starting Soon window, and media clip in each source's OBS Properties.</li>
           </ul>
         </div>
+        <details className="obs-match-guide" open>
+          <summary>Full Match Setup and Replay Guide</summary>
+          <ol>
+            <li>
+              <strong>Connect to the OBS computer.</strong>
+              <span> OBS WebSocket is built into OBS Studio. Enable it from <em>Tools → WebSocket Server Settings</em>, confirm the port/password, and use the correct direct connection for the computer running OBS. Match Setup and hotkey discovery need a direct Admin connection; Same Wi-Fi relays control commands but cannot build scenes from this tab.</span>
+            </li>
+            <li>
+              <strong>Install playback dependencies.</strong>
+              <span> Install VLC on the OBS computer and confirm OBS offers a VLC Video Source; restart OBS after installing VLC if needed. The Replay Source (Instant Replay) plugin is optional for this preset's file-based replay buttons; install it only if you want to map its own plugin hotkeys. If Mobile cameras is above zero, install and enable the DroidCam OBS plugin before setup.</span>
+            </li>
+            <li>
+              <strong>Create the replay folder on the OBS computer.</strong>
+              <span> Use File Explorer/Finder to create a real, writable folder before entering it here. Suggested paths:</span>
+              <code className="obs-match-guide__path">Windows: C:\Users\&lt;OBS-user&gt;\Desktop\Cricket Replays</code>
+              <code className="obs-match-guide__path">macOS: /Users/&lt;OBS-user&gt;/Desktop/Cricket Replays</code>
+              <span>Use the OBS computer's account and an absolute local path. Match Setup tells OBS to use that directory, but it does not create the folder. Make sure the OBS account can write there and that free disk space is available.</span>
+            </li>
+            <li>
+              <strong>Enable and size OBS Replay Buffer.</strong>
+              <span> In OBS open <em>Settings → Output → Replay Buffer</em>, enable it, and set the maximum replay time (20–30 seconds is a practical starting point). Set this to match <em>Replay Buffer Duration</em> below. Match Setup reads OBS's actual buffer duration when available and starts the buffer if it is stopped; it does not replace the Output settings.</span>
+            </li>
+            <li>
+              <strong>Set the path and options here, then run Match Setup.</strong>
+              <span> Enter the folder path in <em>Replay output folder on OBS computer</em>, choose camera/audio counts, then press <em>Match Setup</em> and confirm the preflight. The preset selects the Cricket Match Streaming collection, creates the Live/Replay/DRS/Starting Soon/audio scenes and replay sources, and saves the configuration. Read any setup warnings before going live.</span>
+            </li>
+            <li>
+              <strong>Assign the physical sources in OBS.</strong>
+              <span> Open each generated camera, microphone, DroidCam, and Starting Soon capture source's <em>Properties</em> and choose its actual device/window. Choose the Starting Soon media clip there too. OBS cannot infer physical devices. Keep the shared Cricket Audio scene included in the generated output scenes.</span>
+            </li>
+            <li>
+              <strong>Test a complete replay before the match.</strong>
+              <span> Start streaming/recording a short test scene and confirm the OBS Replay Buffer indicator is active. From the OBS Control Dock press <em>Start Replay Buffer</em> if needed, then <em>Test Replay</em>. Its preset sequence saves the current buffer, waits 0.8 seconds, switches to <em>Cricket - Replay</em>, waits the configured buffer duration, and returns to <em>Cricket - Live</em>. When OBS reports the saved file, the preset updates and restarts the Cricket VLC/Media replay source automatically.</span>
+            </li>
+            <li>
+              <strong>Enable automatic boundary/wicket replays last.</strong>
+              <span> After the manual test succeeds, enable <em>Auto-trigger OBS replay buffer save on boundaries &amp; wickets</em>, set <em>Replay Delay</em>, save OBS settings, and test another event. The saved clip is played in the Replay scene; the series then returns to Live after the configured buffer duration.</span>
+            </li>
+          </ol>
+        </details>
         <div className="scoring-admin__actions">
           <button className="scoring-admin__btn scoring-admin__btn--primary" onClick={() => { setSetupChecklistAccepted(false); setSetupChecklistOpen(true); }} disabled={settingUpOBS || connectionStatus !== 'connected'}>
             {settingUpOBS ? 'Building OBS scenes…' : 'Match Setup'}
