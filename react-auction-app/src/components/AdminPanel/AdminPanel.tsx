@@ -42,6 +42,11 @@ import { processPlayerImage } from '../../services/playerBackgroundRemovalServic
 import { PlayerImageEditor } from './PlayerImageEditor';
 import { RegistrationFormSettings } from './RegistrationFormSettings';
 import { normalizePlayerName } from '../../utils/playerName';
+import { SortableColumnHeader, useSortableRows } from '../SortableTable';
+
+type SoldExportSortColumn = 'name' | 'role' | 'age' | 'teamName' | 'soldAmount' | 'basePrice';
+type UnsoldExportSortColumn = 'name' | 'role' | 'age' | 'basePrice' | 'round';
+type PurseControlSortColumn = 'team' | 'allocated' | 'spent' | 'remaining' | 'threshold' | 'bought' | 'remainingSlots';
 
 function hasBackgroundRemoved(player: Player): boolean {
   return player.isBackgroundRemoved === true
@@ -510,6 +515,31 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
     mismatched: StatsImportMismatch[];
   } | null>(null);
   const [showStatsReview, setShowStatsReview] = useState(false);
+  type MatchedStatsSortColumn = 'id' | 'name' | 'role' | 'batMatches' | 'runs' | 'highScore' | 'average' | 'strikeRate' | 'bowlMatches' | 'wickets' | 'bestBowling' | 'economy';
+  type MismatchedStatsSortColumn = 'id' | 'name' | 'reason';
+  const matchedStatsTable = useSortableRows(statsImportResult?.matched ?? [], (item, column: MatchedStatsSortColumn) => {
+    switch (column) {
+      case 'id': return getStatsCsvField(item.csvRow, 'id') || item.player.id;
+      case 'name': return item.player.name;
+      case 'role': return getStatsCsvField(item.csvRow, 'cricket role', 'role') || item.player.role;
+      case 'batMatches': return getStatsCsvField(item.csvRow, 'batting matches played', 'matches played', 'matches');
+      case 'runs': return getStatsCsvField(item.csvRow, 'runs');
+      case 'highScore': return getStatsCsvField(item.csvRow, 'highest score', 'hs');
+      case 'average': return getStatsCsvField(item.csvRow, 'average');
+      case 'strikeRate': return getStatsCsvField(item.csvRow, 'strike rate', 'sr');
+      case 'bowlMatches': return getStatsCsvField(item.csvRow, 'bowling matches played', 'bowling matches');
+      case 'wickets': return getStatsCsvField(item.csvRow, 'wickets');
+      case 'bestBowling': return getStatsCsvField(item.csvRow, 'bb');
+      case 'economy': return getStatsCsvField(item.csvRow, 'eco', 'economy');
+    }
+  });
+  const mismatchedStatsTable = useSortableRows(statsImportResult?.mismatched ?? [], (item, column: MismatchedStatsSortColumn) => {
+    switch (column) {
+      case 'id': return getStatsCsvField(item.csvRow, 'id');
+      case 'name': return getStatsCsvField(item.csvRow, 'full name:', 'full name', 'name');
+      case 'reason': return item.reason;
+    }
+  });
 
   // Icon player searchable picker state
   const [iconPlayerSearch, setIconPlayerSearch] = useState('');
@@ -527,6 +557,25 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
     const team = teams.find(item => item.id === exportTeamFilter);
     return team ? soldPlayers.filter(player => belongsToTeam(player, team)) : soldPlayers;
   }, [exportTeamFilter, soldPlayers, teams]);
+  const soldExportTable = useSortableRows<SoldPlayer, SoldExportSortColumn>(filteredExportSoldPlayers, (player, column) => {
+    switch (column) {
+      case 'name': return player.name;
+      case 'role': return player.role;
+      case 'age': return player.age;
+      case 'teamName': return player.teamName;
+      case 'soldAmount': return player.soldAmount;
+      case 'basePrice': return player.basePrice;
+    }
+  });
+  const unsoldExportTable = useSortableRows<UnsoldPlayer, UnsoldExportSortColumn>(unsoldPlayers, (player, column) => {
+    switch (column) {
+      case 'name': return player.name;
+      case 'role': return player.role;
+      case 'age': return player.age;
+      case 'basePrice': return player.basePrice;
+      case 'round': return player.round;
+    }
+  });
 
   const showUploadFeedback = (message: string, type: 'success' | 'error' = 'success') => {
     setUploadFeedback({ message, type });
@@ -621,6 +670,18 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
       };
     });
   }, [editingTeams, soldPlayers]);
+  type PurseControlRow = (typeof purseControlRows)[number];
+  const purseControlTable = useSortableRows<PurseControlRow, PurseControlSortColumn>(purseControlRows, (row, column) => {
+    switch (column) {
+      case 'team': return row.team.name;
+      case 'allocated': return row.allocated;
+      case 'spent': return row.spent;
+      case 'remaining': return row.remaining;
+      case 'threshold': return row.threshold;
+      case 'bought': return row.bought;
+      case 'remainingSlots': return row.remainingSlots;
+    }
+  });
 
   const updatePurseField = (teamId: string, field: 'allocatedAmount' | 'totalPlayerThreshold', value: number) => {
     setEditingTeams((current) => current.map((t) => (t.id === teamId ? { ...t, [field]: value } : t)));
@@ -4062,17 +4123,17 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
                     <table className="admin-purse-table">
                       <thead>
                         <tr>
-                          <th>Team</th>
-                          <th>Total Budget (₹L)</th>
-                          <th>Spent (₹L)</th>
-                          <th>Remaining (₹L)</th>
-                          <th>Threshold</th>
-                          <th>Bought</th>
-                          <th>Slots Left</th>
+                          <SortableColumnHeader column="team" label="Team" sortState={purseControlTable.sortState} onSort={purseControlTable.requestSort} />
+                          <SortableColumnHeader column="allocated" label="Total Budget (₹L)" sortState={purseControlTable.sortState} onSort={purseControlTable.requestSort} />
+                          <SortableColumnHeader column="spent" label="Spent (₹L)" sortState={purseControlTable.sortState} onSort={purseControlTable.requestSort} />
+                          <SortableColumnHeader column="remaining" label="Remaining (₹L)" sortState={purseControlTable.sortState} onSort={purseControlTable.requestSort} />
+                          <SortableColumnHeader column="threshold" label="Threshold" sortState={purseControlTable.sortState} onSort={purseControlTable.requestSort} />
+                          <SortableColumnHeader column="bought" label="Bought" sortState={purseControlTable.sortState} onSort={purseControlTable.requestSort} />
+                          <SortableColumnHeader column="remainingSlots" label="Slots Left" sortState={purseControlTable.sortState} onSort={purseControlTable.requestSort} />
                         </tr>
                       </thead>
                       <tbody>
-                        {purseControlRows.map(({ team, spent, remaining, allocated, threshold, bought, remainingSlots }) => (
+                        {purseControlTable.sortedRows.map(({ team, spent, remaining, allocated, threshold, bought, remainingSlots }) => (
                           <tr key={team.id}>
                             <td className="admin-purse-team-name">{team.name}</td>
                             <td>
@@ -4730,17 +4791,17 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
                           <tr>
                             <th>#</th>
                             <th>Photo</th>
-                            <th>Player</th>
-                            <th>Role</th>
-                            <th>Age</th>
-                            <th>Team</th>
-                            <th>Sold (₹L)</th>
-                            <th>Base (₹L)</th>
+                              <SortableColumnHeader column="name" label="Player" sortState={soldExportTable.sortState} onSort={soldExportTable.requestSort} />
+                              <SortableColumnHeader column="role" label="Role" sortState={soldExportTable.sortState} onSort={soldExportTable.requestSort} />
+                              <SortableColumnHeader column="age" label="Age" sortState={soldExportTable.sortState} onSort={soldExportTable.requestSort} />
+                              <SortableColumnHeader column="teamName" label="Team" sortState={soldExportTable.sortState} onSort={soldExportTable.requestSort} />
+                              <SortableColumnHeader column="soldAmount" label="Sold (₹L)" sortState={soldExportTable.sortState} onSort={soldExportTable.requestSort} />
+                              <SortableColumnHeader column="basePrice" label="Base (₹L)" sortState={soldExportTable.sortState} onSort={soldExportTable.requestSort} />
                             <th>Actions</th>
                           </tr>
                         </thead>
                         <tbody>
-                          {filteredExportSoldPlayers.map((p, i) => {
+                            {soldExportTable.sortedRows.map((p, i) => {
                             const editedPlayer = editingPlayers.find(player => player.id === p.id);
                             const displayName = editedPlayer?.name || p.name;
                             const displayImage = editedPlayer?.processedImageUrl || editedPlayer?.imageUrl || p.imageUrl;
@@ -4810,7 +4871,7 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
 
                   <button
                     className="admin-btn admin-btn-success"
-                    onClick={() => handleExportSoldPlayers(filteredExportSoldPlayers)}
+                    onClick={() => handleExportSoldPlayers(soldExportTable.sortedRows)}
                     disabled={filteredExportSoldPlayers.length === 0}
                     style={{ marginTop: '1rem' }}
                   >
@@ -4831,16 +4892,16 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
                         <thead>
                           <tr>
                             <th>#</th>
-                            <th>Player</th>
-                            <th>Role</th>
-                            <th>Age</th>
-                            <th>Base (₹L)</th>
-                            <th>Round</th>
+                            <SortableColumnHeader column="name" label="Player" sortState={unsoldExportTable.sortState} onSort={unsoldExportTable.requestSort} />
+                            <SortableColumnHeader column="role" label="Role" sortState={unsoldExportTable.sortState} onSort={unsoldExportTable.requestSort} />
+                            <SortableColumnHeader column="age" label="Age" sortState={unsoldExportTable.sortState} onSort={unsoldExportTable.requestSort} />
+                            <SortableColumnHeader column="basePrice" label="Base (₹L)" sortState={unsoldExportTable.sortState} onSort={unsoldExportTable.requestSort} />
+                            <SortableColumnHeader column="round" label="Round" sortState={unsoldExportTable.sortState} onSort={unsoldExportTable.requestSort} />
                             <th>Actions</th>
                           </tr>
                         </thead>
                         <tbody>
-                          {unsoldPlayers.map((p, i) => (
+                          {unsoldExportTable.sortedRows.map((p, i) => (
                             <tr key={p.id}>
                               <td>{i + 1}</td>
                               <td>{p.name}</td>
@@ -5679,22 +5740,22 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
             <table className="stats-review-table">
               <thead>
                 <tr>
-                  <th>ID</th>
-                  <th>Player Name</th>
-                  <th>Role</th>
-                  <th>Bat M</th>
-                  <th>Runs</th>
-                  <th>HS</th>
-                  <th>Avg</th>
-                  <th>SR</th>
-                  <th>Bowl M</th>
-                  <th>Wkts</th>
-                  <th>BB</th>
-                  <th>Eco</th>
+                  <SortableColumnHeader column="id" label="ID" sortState={matchedStatsTable.sortState} onSort={matchedStatsTable.requestSort} />
+                  <SortableColumnHeader column="name" label="Player Name" sortState={matchedStatsTable.sortState} onSort={matchedStatsTable.requestSort} />
+                  <SortableColumnHeader column="role" label="Role" sortState={matchedStatsTable.sortState} onSort={matchedStatsTable.requestSort} />
+                  <SortableColumnHeader column="batMatches" label="Bat M" sortState={matchedStatsTable.sortState} onSort={matchedStatsTable.requestSort} />
+                  <SortableColumnHeader column="runs" label="Runs" sortState={matchedStatsTable.sortState} onSort={matchedStatsTable.requestSort} />
+                  <SortableColumnHeader column="highScore" label="HS" sortState={matchedStatsTable.sortState} onSort={matchedStatsTable.requestSort} />
+                  <SortableColumnHeader column="average" label="Avg" sortState={matchedStatsTable.sortState} onSort={matchedStatsTable.requestSort} />
+                  <SortableColumnHeader column="strikeRate" label="SR" sortState={matchedStatsTable.sortState} onSort={matchedStatsTable.requestSort} />
+                  <SortableColumnHeader column="bowlMatches" label="Bowl M" sortState={matchedStatsTable.sortState} onSort={matchedStatsTable.requestSort} />
+                  <SortableColumnHeader column="wickets" label="Wkts" sortState={matchedStatsTable.sortState} onSort={matchedStatsTable.requestSort} />
+                  <SortableColumnHeader column="bestBowling" label="BB" sortState={matchedStatsTable.sortState} onSort={matchedStatsTable.requestSort} />
+                  <SortableColumnHeader column="economy" label="Eco" sortState={matchedStatsTable.sortState} onSort={matchedStatsTable.requestSort} />
                 </tr>
               </thead>
               <tbody>
-                {statsImportResult.matched.map(({ csvRow, player }) => (
+                {matchedStatsTable.sortedRows.map(({ csvRow, player }) => (
                   <tr key={player.id}>
                     <td>{player.id}</td>
                     <td><strong>{player.name}</strong></td>
@@ -5723,14 +5784,14 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
             <table className="stats-review-table stats-review-table-error">
               <thead>
                 <tr>
-                  <th>CSV ID</th>
-                  <th>CSV Name</th>
-                  <th>Reason</th>
+                  <SortableColumnHeader column="id" label="CSV ID" sortState={mismatchedStatsTable.sortState} onSort={mismatchedStatsTable.requestSort} />
+                  <SortableColumnHeader column="name" label="CSV Name" sortState={mismatchedStatsTable.sortState} onSort={mismatchedStatsTable.requestSort} />
+                  <SortableColumnHeader column="reason" label="Reason" sortState={mismatchedStatsTable.sortState} onSort={mismatchedStatsTable.requestSort} />
                 </tr>
               </thead>
               <tbody>
-                {statsImportResult.mismatched.map((item, i) => (
-                  <tr key={i}>
+                {mismatchedStatsTable.sortedRows.map((item, i) => (
+                  <tr key={`${getStatsCsvField(item.csvRow, 'id')}-${item.reason}-${i}`}>
                     <td>{getStatsCsvField(item.csvRow, 'id')}</td>
                     <td>{getStatsCsvField(item.csvRow, 'full name:', 'full name', 'name')}</td>
                     <td className="stats-mismatch-reason">{item.reason}</td>

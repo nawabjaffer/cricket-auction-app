@@ -6,6 +6,7 @@
 import { useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { IoClose } from 'react-icons/io5';
+import { SortableColumnHeader, useSortableRows } from '../SortableTable';
 import type { Team, SoldPlayer } from '../../types';
 import type { AdminSettings, SpecialCategory } from '../../services/auctionPersistence';
 import { belongsToTeam } from '../../utils/teamMembership';
@@ -19,8 +20,10 @@ interface TeamStandingsOverlayProps {
   readonly settings: AdminSettings | null;
 }
 
+const EMPTY_SPECIAL_CATEGORIES: SpecialCategory[] = [];
+
 export function TeamStandingsOverlay({ visible, onClose, teams, soldPlayers, settings }: TeamStandingsOverlayProps) {
-  const categories: SpecialCategory[] = settings?.specialCategories ?? [];
+  const categories: SpecialCategory[] = settings?.specialCategories ?? EMPTY_SPECIAL_CATEGORIES;
   const budgetRules = settings?.budgetRules;
 
   const teamRows = useMemo(() => {
@@ -61,6 +64,20 @@ export function TeamStandingsOverlay({ visible, onClose, teams, soldPlayers, set
       };
     });
   }, [teams, soldPlayers, categories, budgetRules]);
+
+  type TeamStandingsSortColumn = 'team' | 'totalPurse' | 'spent' | 'remaining' | 'playersBought' | 'playersToBuy' | 'maxForOne' | `category:${string}`;
+  const standingsTable = useSortableRows<typeof teamRows[number], TeamStandingsSortColumn>(teamRows, (row, column) => {
+    switch (column) {
+      case 'team': return row.team.name;
+      case 'totalPurse': return row.totalPurse;
+      case 'spent': return row.spent;
+      case 'remaining': return row.remaining;
+      case 'playersBought': return row.playersBought;
+      case 'playersToBuy': return row.playersToBuy;
+      case 'maxForOne': return row.maxForOne;
+      default: return row.categoryCounts[column.slice('category:'.length)] || 0;
+    }
+  });
 
   if (!visible) return null;
 
@@ -104,20 +121,20 @@ export function TeamStandingsOverlay({ visible, onClose, teams, soldPlayers, set
                     animate={{ opacity: 1 }}
                     transition={{ delay: 0.2 }}
                   >
-                    <th className="th-team">Team</th>
-                    <th>Total Purse</th>
-                    <th>Spent</th>
-                    <th>Remaining</th>
-                    <th>Bought</th>
-                    <th>To Buy</th>
-                    <th>Max/Player</th>
+                    <SortableColumnHeader column="team" label="Team" className="th-team" sortState={standingsTable.sortState} onSort={standingsTable.requestSort} />
+                    <SortableColumnHeader column="totalPurse" label="Total Purse" sortState={standingsTable.sortState} onSort={standingsTable.requestSort} />
+                    <SortableColumnHeader column="spent" label="Spent" sortState={standingsTable.sortState} onSort={standingsTable.requestSort} />
+                    <SortableColumnHeader column="remaining" label="Remaining" sortState={standingsTable.sortState} onSort={standingsTable.requestSort} />
+                    <SortableColumnHeader column="playersBought" label="Bought" sortState={standingsTable.sortState} onSort={standingsTable.requestSort} />
+                    <SortableColumnHeader column="playersToBuy" label="To Buy" sortState={standingsTable.sortState} onSort={standingsTable.requestSort} />
+                    <SortableColumnHeader column="maxForOne" label="Max/Player" sortState={standingsTable.sortState} onSort={standingsTable.requestSort} />
                     {categories.map(cat => (
-                      <th key={cat.id} style={{ color: cat.color }}>{cat.label}</th>
+                      <SortableColumnHeader key={cat.id} column={`category:${cat.id}`} label={cat.label} style={{ color: cat.color }} sortState={standingsTable.sortState} onSort={standingsTable.requestSort} />
                     ))}
                   </motion.tr>
                 </thead>
                 <tbody>
-                  {teamRows.map((row, index) => (
+                  {standingsTable.sortedRows.map((row, index) => (
                     <motion.tr
                       key={row.team.id}
                       initial={{ opacity: 0, x: -40 }}

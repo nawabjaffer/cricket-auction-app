@@ -1,0 +1,38 @@
+.sortable-table__header-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.45rem;
+  width: 100%;
+  padding: 0;
+  color: inherit;
+  font: inherit;
+  text-align: inherit;
+  text-transform: inherit;
+  letter-spacing: inherit;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+
+.sortable-table__header-button:hover {
+  color: inherit;
+}
+
+.sortable-table__header-button:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 3px;
+}
+
+.sortable-table__sort-indicator {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  opacity: 0.48;
+}
+
+.sortable-table__header-button:hover .sortable-table__sort-indicator,
+th[aria-sort="ascending"] .sortable-table__sort-indicator,
+th[aria-sort="descending"] .sortable-table__sort-indicator {
+  opacity: 1;
+}

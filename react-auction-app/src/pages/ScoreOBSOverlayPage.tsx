@@ -16,6 +16,7 @@ import { getActiveTenant, tenantPath } from '../services/tenantPath';
 import { useBroadcastOverlaySurface } from '../hooks/useBroadcastOverlaySurface';
 import { overlayMediaPreload, getPreloadedMediaUrl } from '../services/overlayMediaPreload';
 import { ScorecardLayoutView } from '../components/ScorecardCanvas';
+import { SortableColumnHeader, useSortableRows } from '../components/SortableTable';
 import { scorecardLayoutService } from '../services/scorecardLayoutService';
 import { normalizePlayerName } from '../utils/playerName';
 import type { ScorecardLayout } from '../types/scorecardDesigner';
@@ -3203,6 +3204,8 @@ interface TeamStanding {
   points: number;
 }
 
+type PointsTableSortColumn = 'teamName' | 'played' | 'won' | 'lost' | 'points';
+
 function PointsTableOverlay({ allMatches, allTeams }: {
   allMatches: Record<string, { setup: MatchSetup; final?: MatchScore }>;
   allTeams?: { id: string; name: string; logoUrl?: string }[];
@@ -3253,7 +3256,12 @@ function PointsTableOverlay({ allMatches, allTeams }: {
     }
   }
 
-  const sorted = Object.values(standings).sort((a, b) => b.points - a.points || b.won - a.won || a.lost - b.lost);
+  const officialOrder = Object.values(standings).sort((a, b) => b.points - a.points || b.won - a.won || a.lost - b.lost);
+  const qualifyingTeamIds = new Set(officialOrder.slice(0, 2).map(team => team.teamId));
+  const pointsTable = useSortableRows(officialOrder, (team, column: PointsTableSortColumn) => team[column], {
+    column: 'points',
+    direction: 'descending',
+  });
 
   return (
     <motion.div
@@ -3268,16 +3276,16 @@ function PointsTableOverlay({ allMatches, allTeams }: {
         <thead>
           <tr>
             <th>#</th>
-            <th>Team</th>
-            <th>P</th>
-            <th>W</th>
-            <th>L</th>
-            <th>Pts</th>
+            <SortableColumnHeader column="teamName" label="Team" sortState={pointsTable.sortState} onSort={pointsTable.requestSort} />
+            <SortableColumnHeader column="played" label="P" sortState={pointsTable.sortState} onSort={pointsTable.requestSort} />
+            <SortableColumnHeader column="won" label="W" sortState={pointsTable.sortState} onSort={pointsTable.requestSort} />
+            <SortableColumnHeader column="lost" label="L" sortState={pointsTable.sortState} onSort={pointsTable.requestSort} />
+            <SortableColumnHeader column="points" label="Pts" sortState={pointsTable.sortState} onSort={pointsTable.requestSort} />
           </tr>
         </thead>
         <tbody>
-          {sorted.map((t, i) => (
-            <tr key={t.teamId} className={i < 2 ? 'score-obs__points-qualify' : ''}>
+          {pointsTable.sortedRows.map((t, i) => (
+            <tr key={t.teamId} className={qualifyingTeamIds.has(t.teamId) ? 'score-obs__points-qualify' : ''}>
               <td>{i + 1}</td>
               <td className="score-obs__points-team">{t.teamName}</td>
               <td>{t.played}</td>
