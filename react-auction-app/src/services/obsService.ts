@@ -130,8 +130,10 @@ class OBSService {
       return [`${explicitScheme}://${normalizedHost}:${port}`];
     }
 
-    const scheme = globalThis.location?.protocol === 'https:' ? 'wss' : 'ws';
-    return [`${scheme}://${normalizedHost}:${port}`];
+    const securePage = globalThis.location?.protocol === 'https:';
+    const isLoopback = ['localhost', '127.0.0.1', '::1'].includes(normalizedHost.toLowerCase());
+    const schemeOrder = !securePage ? ['ws'] : isLoopback ? ['ws', 'wss'] : ['wss', 'ws'];
+    return schemeOrder.map(scheme => `${scheme}://${normalizedHost}:${port}`);
   }
 
   private isLikelyLanHost(host: string): boolean {
@@ -143,6 +145,10 @@ class OBSService {
     if (/^172\.(1[6-9]|2\d|3[01])\./.test(value)) return true;
     if (/^[\w-]+\.local$/.test(value)) return true;
     return false;
+  }
+
+  private isLoopbackHost(host: string): boolean {
+    return ['localhost', '127.0.0.1', '::1'].includes(host.trim().toLowerCase());
   }
 
   private async tryConnectUrl(wsUrl: string, password?: string): Promise<boolean> {
@@ -196,12 +202,15 @@ class OBSService {
 
         socket.onerror = () => {
           if (timeoutId) clearTimeout(timeoutId);
+          const endpointHost = this.normalizeTarget(wsUrl, 4455).host;
           const guidance = wsUrl.startsWith('wss://')
             ? 'Check that this WSS endpoint is a reachable TLS reverse proxy with a browser-trusted certificate; OBS default port 4455 is plain WS.'
-            : 'Check this is the OBS computer LAN IP (not the browser/dev-server IP), OBS WebSocket is enabled on this port, and the OBS host firewall allows inbound LAN connections.';
+            : this.isLoopbackHost(endpointHost)
+              ? 'Check OBS WebSocket is enabled on this same computer and port. If a regular HTTPS browser blocks the plain socket, open this dock inside OBS Studio or use a trusted WSS endpoint.'
+              : 'Check this is the OBS computer LAN IP (not the browser/dev-server IP), OBS WebSocket is enabled on this port, and the OBS host firewall allows inbound LAN connections.';
           this.lastErrorDetail = `Browser WebSocket error for ${wsUrl}. ${guidance}`;
           if (globalThis.location?.protocol === 'https:' && wsUrl.startsWith('ws://')) {
-            this.lastErrorDetail += ' HTTPS pages cannot open insecure ws:// connections; use WSS or the OBS dock relay.';
+            this.lastErrorDetail += ' HTTPS browser security may block ws://; use the Local OBS Studio dock, Same Wi-Fi relay from another browser, or a trusted WSS endpoint.';
           }
           this.logConnection(this.lastErrorDetail, 'error');
           this.notifyConnectionState('error');
@@ -308,7 +317,7 @@ class OBSService {
     }
 
     if (globalThis.location?.protocol === 'https:' && this.isLikelyLanHost(normalized.host) && urls.some((url) => url.startsWith('ws://'))) {
-      this.lastErrorDetail = `${this.lastErrorDetail || 'Direct OBS socket failed'}. HTTPS page may block ws:// LAN connections on iPhone/Safari. Use OBS relay mode or host the dock over http:// on local network.`;
+      this.lastErrorDetail = `${this.lastErrorDetail || 'Direct OBS socket failed'}. HTTPS browsers may block the plain ws:// fallback. For OBS on this computer, use Local mode inside OBS Studio; from another browser use Same Wi-Fi relay or a trusted WSS endpoint.`;
       this.logConnection(this.lastErrorDetail, 'warning');
     }
 

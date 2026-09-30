@@ -944,7 +944,7 @@ export default function ScoreOBSControlDock() {
             ))}
             {obsMixedContentHint && (
               <p className="score-dock__obs-hint score-dock__obs-hint--warn">
-                iPhone/Safari note: this page is HTTPS, so direct ws:// LAN socket may be blocked. Switch to Same Wi-Fi mode.
+                This HTTPS page may block plain ws://. On the OBS computer, open this page inside OBS Studio and use Local. From another browser, keep that OBS dock connected and use Same Wi-Fi, or configure a trusted WSS endpoint.
               </p>
             )}
           </>

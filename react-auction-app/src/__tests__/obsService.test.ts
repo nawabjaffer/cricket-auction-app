@@ -99,6 +99,63 @@ describe('OBSService connection diagnostics', () => {
     expect(obsService.getConnectionDiagnostics().attemptedUrls).toEqual(['wss://obs.example.com:443']);
   });
 
+  it('connects to OBS plain WS on loopback from an HTTPS page', async () => {
+    vi.stubGlobal('location', { protocol: 'https:' });
+    const attemptedUrls: string[] = [];
+    class LocalOBSWebSocket {
+      static OPEN = 1;
+      readyState = 1;
+      onmessage: ((event: MessageEvent) => void) | null = null;
+      onclose: ((event: CloseEvent) => void) | null = null;
+
+      constructor(url: string) {
+        attemptedUrls.push(url);
+        queueMicrotask(() => this.emit(0, { rpcVersion: 1 }));
+      }
+
+      send(raw: string) {
+        const message = JSON.parse(raw) as { op: number; d: { requestType?: string; requestId?: string } };
+        if (message.op === 1) queueMicrotask(() => this.emit(2, {}));
+        if (message.op === 6) {
+          const responseData = message.d.requestType === 'GetSceneList' ? { scenes: [], currentProgramSceneName: 'Scene' } : {};
+          queueMicrotask(() => this.emit(7, { requestId: message.d.requestId, requestStatus: { result: true }, responseData }));
+        }
+      }
+
+      close() {
+        this.readyState = 3;
+        this.onclose?.({ code: 1000, reason: '' } as CloseEvent);
+      }
+
+      private emit(op: number, data: unknown) {
+        this.onmessage?.({ data: JSON.stringify({ op, d: data }) } as MessageEvent);
+      }
+    }
+    vi.stubGlobal('WebSocket', LocalOBSWebSocket);
+
+    expect(await obsService.connect('127.0.0.1', 4455)).toBe(true);
+    expect(attemptedUrls).toEqual(['ws://127.0.0.1:4455']);
+    expect(obsService.getConnectionDiagnostics().lastSuccessfulUrl).toBe('ws://127.0.0.1:4455');
+  });
+
+  it('tries WSS before plain WS for HTTPS LAN hosts', async () => {
+    vi.stubGlobal('location', { protocol: 'https:' });
+    class BlockedWebSocket {
+      static OPEN = 1;
+      constructor(url: string) {
+        throw new Error(`unreachable: ${url}`);
+      }
+    }
+    vi.stubGlobal('WebSocket', BlockedWebSocket);
+
+    await obsService.connect('192.168.1.40', 4455);
+
+    expect(obsService.getConnectionDiagnostics().attemptedUrls).toEqual([
+      'wss://192.168.1.40:4455',
+      'ws://192.168.1.40:4455',
+    ]);
+  });
+
   it('explains an unreachable plain OBS endpoint and records its abnormal close', async () => {
     class UnreachableWebSocket {
       static OPEN = 1;
