@@ -1776,7 +1776,7 @@
 
 .obs-ws-group .obs-ws-connection-actions {
   display: grid;
-  grid-template-columns: minmax(260px, 1fr) auto auto;
+  grid-template-columns: minmax(260px, 1fr) repeat(3, auto);
   align-items: center;
   gap: 0.65rem;
   margin: 0 0 0.4rem !important;

@@ -10,20 +10,24 @@ describe('animation OBS action settings', () => {
     expect(shouldShowAnimation(animation)).toBe(true);
   });
 
-  it('waits for the animation plus configured delay in combined mode', () => {
-    expect(getAnimationActionDelayMs({ ...animation, actionMode: 'animation_and_obs', obsActionDelayMs: 500 })).toBe(3500);
+  it('runs the OBS action after the configured animation duration in combined mode', () => {
+    expect(getAnimationActionDelayMs({ ...animation, actionMode: 'animation_and_obs' })).toBe(3000);
+  });
+
+  it('ignores any saved legacy OBS delay in combined mode', () => {
+    expect(getAnimationActionDelayMs({ ...animation, actionMode: 'animation_and_obs', obsActionDelayMs: 500 })).toBe(3000);
     expect(shouldShowAnimation({ ...animation, actionMode: 'animation_and_obs' })).toBe(true);
   });
 
-  it('supports delayed OBS-only actions without showing an animation', () => {
+  it('runs OBS-only actions immediately without showing an animation', () => {
     const config = { ...animation, actionMode: 'obs_only' as const, obsActionDelayMs: 250 };
-    expect(getAnimationActionDelayMs(config)).toBe(250);
+    expect(getAnimationActionDelayMs(config)).toBe(0);
     expect(shouldShowAnimation(config)).toBe(false);
   });
 
   it('does not wait for a disabled animation in combined mode', () => {
     const config = { ...animation, enabled: false, actionMode: 'animation_and_obs' as const, obsActionDelayMs: 250 };
-    expect(getAnimationActionDelayMs(config)).toBe(250);
+    expect(getAnimationActionDelayMs(config)).toBe(0);
     expect(shouldShowAnimation(config)).toBe(false);
   });
 });

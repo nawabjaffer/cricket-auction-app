@@ -447,6 +447,7 @@ export interface AnimationConfig {
   actionMode?: AnimationActionMode;
   obsActionButtonId?: string;
   obsActionDelayMs?: number;
+  playbackSpeed?: number;     // playback multiplier for uploaded GIF/video media
   mediaUrl?: string;         // URL for image/video/lottie json
   soundUrl?: string;         // optional sound effect URL
   text?: string;             // text overlay (e.g. "FOUR!", "SIX!", "OUT!")

@@ -2704,21 +2704,11 @@ function AnimationsTab({ config, setConfig, onFeedback }: {
                       <span className="scoring-admin__hint">Create buttons or OBS series in OBS WebSocket &amp; Replay Control first.</span>
                     )}
                   </div>
-                  <div className="scoring-admin__field">
-                    <label>{anim.actionMode === 'animation_and_obs' ? 'Delay after animation (ms)' : 'Delay before OBS action (ms)'}</label>
-                    <input
-                      type="number"
-                      min={0}
-                      max={60000}
-                      step={50}
-                      value={anim.obsActionDelayMs ?? 0}
-                      onChange={e => updateAnim({ obsActionDelayMs: Math.max(0, Number(e.target.value) || 0) })}
-                      className="scoring-admin__input"
-                    />
-                    {anim.actionMode === 'animation_and_obs' && (
-                      <span className="scoring-admin__hint">The OBS action runs when the animation finishes, plus this delay.</span>
-                    )}
-                  </div>
+                  {anim.actionMode === 'animation_and_obs' && (
+                    <span className="scoring-admin__hint" style={{ gridColumn: '1 / -1' }}>
+                      The OBS action runs automatically when this animation's Duration ends.
+                    </span>
+                  )}
                 </>
               )}
 
@@ -2741,6 +2731,13 @@ function AnimationsTab({ config, setConfig, onFeedback }: {
                 <label>Duration (ms)</label>
                 <input type="number" min={500} max={10000} step={100} value={anim.durationMs} onChange={e => updateAnim({ durationMs: Number(e.target.value) })} className="scoring-admin__input" />
               </div>
+              {isCustom && (anim.type === 'image' || anim.type === 'video') && (
+                <div className="scoring-admin__field">
+                  <label>GIF / Video Speed ({(anim.playbackSpeed || 1).toFixed(2)}×)</label>
+                  <input type="range" min={0.5} max={4} step={0.25} value={anim.playbackSpeed || 1} onChange={e => updateAnim({ playbackSpeed: Number(e.target.value) })} />
+                  <small className="scoring-admin__hint">1× is original speed; higher values play faster.</small>
+                </div>
+              )}
               <div className="scoring-admin__field">
                 <label>Display Text</label>
                 <input type="text" value={anim.text || ''} onChange={e => updateAnim({ text: e.target.value })} placeholder="e.g. FOUR!" className="scoring-admin__input" />
@@ -4585,6 +4582,16 @@ function OBSWebSocketTab({ config, setConfig, onFeedback, baseUrl }: {
     }
   };
 
+  const handleDisconnect = async () => {
+    const { obsService } = await import('../services/obsService');
+    obsService.disconnect();
+    setConnectionStatus('disconnected');
+    setConnectionDiagnostics(obsService.getConnectionDiagnostics());
+    setAvailableScenes([]);
+    setAvailableHotkeys([]);
+    onFeedback('Disconnected from OBS');
+  };
+
   const handleRefreshScenes = async () => {
     if (connectionStatus !== 'connected') { onFeedback('Connect to OBS first'); return; }
     const { obsService } = await import('../services/obsService');
@@ -4658,7 +4665,6 @@ function OBSWebSocketTab({ config, setConfig, onFeedback, baseUrl }: {
           ...animation,
           actionMode: 'animation_and_obs',
           obsActionButtonId: 'cricket-preset-instant-replay',
-          obsActionDelayMs: Math.max(0, obsConfig.replayDelaySeconds) * 1000,
         });
         nextConfig.fourAnimation = attachReplayAction(config.fourAnimation, { type: 'css', enabled: true, durationMs: 3000, text: 'FOUR!', color: '#22c55e', scale: 1 });
         nextConfig.sixAnimation = attachReplayAction(config.sixAnimation, { type: 'css', enabled: true, durationMs: 4000, text: 'SIX!', color: '#8b5cf6', scale: 1.2 });
@@ -4901,6 +4907,11 @@ function OBSWebSocketTab({ config, setConfig, onFeedback, baseUrl }: {
             ? sharedObsConnection ? 'OBS Dock connected' : 'Waiting for OBS Dock'
             : connectionStatus === 'connecting' ? 'Connecting…' : connectionStatus === 'connected' ? 'Reconnect' : 'Connect & Test'}
         </button>
+        {connectionStatus === 'connected' && (
+          <button type="button" className="scoring-admin__btn scoring-admin__btn--danger" onClick={() => void handleDisconnect()}>
+            Disconnect
+          </button>
+        )}
         <button className="scoring-admin__btn scoring-admin__btn--secondary" onClick={handleDiscoverHotkeys} disabled={discoveringHotkeys || connectionStatus !== 'connected'}>
           {discoveringHotkeys ? 'Discovering…' : `🔍 Discover Hotkeys (${availableHotkeys.length})`}
         </button>
@@ -5167,17 +5178,6 @@ function OBSWebSocketTab({ config, setConfig, onFeedback, baseUrl }: {
             />
             Auto-trigger OBS replay buffer save on boundaries &amp; wickets
           </label>
-        </div>
-        <div className="scoring-admin__field">
-          <label>Replay Delay (seconds)</label>
-          <input
-            type="number"
-            className="scoring-admin__input"
-            value={obsConfig.replayDelaySeconds}
-            onChange={e => updateOBS({ replayDelaySeconds: Number(e.target.value) })}
-            min={0}
-            max={30}
-          />
         </div>
         <div className="scoring-admin__field">
           <label>Replay Buffer Duration (seconds)</label>

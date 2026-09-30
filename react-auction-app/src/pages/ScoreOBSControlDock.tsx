@@ -117,6 +117,8 @@ export default function ScoreOBSControlDock() {
   const [replayScene, setReplayScene] = useState('');
   const [drsScene, setDrsScene] = useState('');
   const [execBusy, setExecBusy] = useState<string | null>(null);
+  const [queuedActionCount, setQueuedActionCount] = useState(0);
+  const actionQueueRef = useRef<Promise<void>>(Promise.resolve());
   const [obsErrorDetail, setObsErrorDetail] = useState('');
   const [obsAttemptedUrls, setObsAttemptedUrls] = useState<string[]>([]);
   const [obsFailureSummary, setObsFailureSummary] = useState<string[]>([]);
@@ -383,6 +385,24 @@ export default function ScoreOBSControlDock() {
     setTimeout(() => setFeedback(''), 2500);
   }, []);
 
+  const enqueueOBSAction = useCallback((actionId: string, action: () => Promise<void>) => {
+    setQueuedActionCount(count => count + 1);
+    const runAction = async () => {
+      setQueuedActionCount(count => Math.max(0, count - 1));
+      setExecBusy(actionId);
+      try {
+        await action();
+      } catch (error) {
+        showFeedback(`${actionId} failed: ${error instanceof Error ? error.message : String(error)}`);
+      } finally {
+        setExecBusy(null);
+      }
+    };
+    const nextAction = actionQueueRef.current.then(runAction, runAction);
+    actionQueueRef.current = nextAction;
+    return nextAction;
+  }, [showFeedback]);
+
   useEffect(() => {
     const adsScene = replayConfig.inningsBreakSceneName;
     const inBreak = isInningsBreak({
@@ -513,11 +533,10 @@ export default function ScoreOBSControlDock() {
     obsReplaySourceService.stopRelayWatch();
   }, []);
 
-  const execReplayButton = useCallback(async (button: OBSReplayButton) => {
-    if (execBusy || !button.enabled) return;
-    setExecBusy(button.id);
-    try {
-      if (obsStatus === 'connected') {
+  const execReplayButton = useCallback((button: OBSReplayButton) => {
+    if (!button.enabled) return Promise.resolve();
+    return enqueueOBSAction(button.id, async () => {
+      if (obsService.isConnected()) {
         const result = await obsReplaySourceService.executeButton(button);
         if (result.success) {
           showFeedback(`▶ ${button.label} (${result.completedSteps}/${result.totalSteps})`);
@@ -528,21 +547,15 @@ export default function ScoreOBSControlDock() {
         // Relay via Firebase (mobile → dock on OBS machine)
         const commandId = await obsReplaySourceService.sendRelayCommand(selectedMatchId, button.id);
         showFeedback(`📡 ${button.label} sent`);
-        void obsReplaySourceService.waitForRelayResult(selectedMatchId, commandId).then(result => {
-          showFeedback(result.success ? `▶ ${button.label} executed on OBS` : `${button.label} failed: ${result.error || 'OBS action failed'}`);
-        });
+        const result = await obsReplaySourceService.waitForRelayResult(selectedMatchId, commandId);
+        showFeedback(result.success ? `▶ ${button.label} executed on OBS` : `${button.label} failed: ${result.error || 'OBS action failed'}`);
       } else {
         showFeedback('Connect to OBS or select a match');
       }
-    } catch (err) {
-      showFeedback(`Error: ${err}`);
-    } finally {
-      setExecBusy(null);
-    }
-  }, [execBusy, obsStatus, selectedMatchId, showFeedback]);
+    });
+  }, [enqueueOBSAction, selectedMatchId, showFeedback]);
 
   const runReplayBufferAction = useCallback(async (requestType: 'SaveReplayBuffer' | 'StartReplayBuffer' | 'StopReplayBuffer', label: string) => {
-    if (execBusy) return;
     if (!obsService.isConnected()) {
       const presetIds: Record<typeof requestType, string> = {
         SaveReplayBuffer: 'cricket-preset-replay-save',
@@ -557,16 +570,11 @@ export default function ScoreOBSControlDock() {
       showFeedback('OBS not connected');
       return;
     }
-    setExecBusy(requestType);
-    try {
+    await enqueueOBSAction(requestType, async () => {
       await obsService.request(requestType);
       showFeedback(label);
-    } catch (error) {
-      showFeedback(`${label} failed: ${error instanceof Error ? error.message : String(error)}`);
-    } finally {
-      setExecBusy(null);
-    }
-  }, [execBusy, execReplayButton, replayConfig.buttons, selectedMatchId, showFeedback]);
+    });
+  }, [enqueueOBSAction, execReplayButton, replayConfig.buttons, selectedMatchId, showFeedback]);
 
   useEffect(() => {
     if (!selectedMatchId || !autoActionEvent || autoActionEvent.matchId !== selectedMatchId) return;
@@ -574,7 +582,6 @@ export default function ScoreOBSControlDock() {
     const eventKey = `${autoActionEvent.matchId}:${control.lastUpdated}:${control.activeOverlay}`;
     if (lastAutoActionEventRef.current === eventKey) return;
     if (!animationSettings) return;
-    lastAutoActionEventRef.current = eventKey;
 
     const configKey = EVENT_ANIMATION_CONFIG_KEYS[control.activeOverlay];
     const animation = configKey ? animationSettings[configKey] : undefined;
@@ -583,7 +590,11 @@ export default function ScoreOBSControlDock() {
     if (delayMs === null) return;
 
     const button = replayConfig.buttons.find(item => item.id === animation.obsActionButtonId && item.enabled);
-    if (!button) return;
+    if (!button) {
+      if (animation.obsActionButtonId) showFeedback('Configured OBS action button is missing or disabled in Replay Controls.');
+      return;
+    }
+    lastAutoActionEventRef.current = eventKey;
 
     if (delayMs === 0) {
       void execReplayButton(button);
@@ -594,7 +605,7 @@ export default function ScoreOBSControlDock() {
       void execReplayButton(button);
     }, delayMs);
     autoActionTimersRef.current.add(timer);
-  }, [animationSettings, autoActionEvent, execReplayButton, replayConfig.buttons, selectedMatchId]);
+  }, [animationSettings, autoActionEvent, execReplayButton, replayConfig.buttons, selectedMatchId, showFeedback]);
 
   useEffect(() => () => {
     autoActionTimersRef.current.forEach(timer => clearTimeout(timer));
@@ -1023,6 +1034,8 @@ export default function ScoreOBSControlDock() {
         <div className="score-dock__replay-header">
           <span className="score-dock__replay-title">🎬 Replay Control</span>
           {enabledButtons.length > 0 && <span className="score-dock__replay-count">{enabledButtons.length} buttons</span>}
+          {execBusy && <span className="score-dock__replay-count">Running: {enabledButtons.find(button => button.id === execBusy)?.label || execBusy}</span>}
+          {queuedActionCount > 0 && <span className="score-dock__replay-count" role="status">{queuedActionCount} queued</span>}
           {obsIsConnected && <span className="score-dock__replay-live-badge">LIVE</span>}
           {relayReady && !obsIsConnected && <span className="score-dock__replay-relay-badge">RELAY</span>}
         </div>
@@ -1058,7 +1071,7 @@ export default function ScoreOBSControlDock() {
                 className={`score-dock__rpbtn ${execBusy === btn.id ? 'score-dock__rpbtn--busy' : ''}`}
                 style={{ '--rbtn-color': btn.color } as React.CSSProperties}
                 onClick={() => execReplayButton(btn)}
-                disabled={Boolean(execBusy)}
+                disabled={execBusy === btn.id}
                 title={btn.action === 'series'
                   ? `Series: ${(btn.series || []).length} steps`
                   : (btn.hotkeyName ? `Hotkey: ${btn.hotkeyName}` : btn.label)}
@@ -1081,13 +1094,13 @@ export default function ScoreOBSControlDock() {
 
         {/* Quick built-in replay buffer buttons */}
         <div className="score-dock__replay-buffer-row">
-          <button className="score-dock__rbuf-btn" onClick={() => void runReplayBufferAction('SaveReplayBuffer', 'Replay saved')} disabled={Boolean(execBusy)}>
+          <button className="score-dock__rbuf-btn" onClick={() => void runReplayBufferAction('SaveReplayBuffer', 'Replay saved')} disabled={execBusy === 'SaveReplayBuffer'}>
             💾 Save Replay
           </button>
-          <button className="score-dock__rbuf-btn" onClick={() => void runReplayBufferAction('StartReplayBuffer', 'Buffer started')} disabled={Boolean(execBusy)}>
+          <button className="score-dock__rbuf-btn" onClick={() => void runReplayBufferAction('StartReplayBuffer', 'Buffer started')} disabled={execBusy === 'StartReplayBuffer'}>
             ▶ Start Buffer
           </button>
-          <button className="score-dock__rbuf-btn score-dock__rbuf-btn--stop" onClick={() => void runReplayBufferAction('StopReplayBuffer', 'Buffer stopped')} disabled={Boolean(execBusy)}>
+          <button className="score-dock__rbuf-btn score-dock__rbuf-btn--stop" onClick={() => void runReplayBufferAction('StopReplayBuffer', 'Buffer stopped')} disabled={execBusy === 'StopReplayBuffer'}>
             ⏹ Stop
           </button>
         </div>
