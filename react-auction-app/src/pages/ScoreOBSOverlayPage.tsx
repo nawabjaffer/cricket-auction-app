@@ -2629,7 +2629,7 @@ function AwardOverlay({ title, subtitle, color, playerName, value, imageUrl }: {
 }) {
   return (
     <motion.div
-      className="score-obs__overlay-card score-obs__award-v2"
+      className={`score-obs__overlay-card score-obs__award-v2 ${/cap/i.test(title) ? 'score-obs__award-v2--cap' : ''}`}
       initial={{ scale: 0.8, opacity: 0 }}
       animate={{ scale: 1, opacity: 1 }}
       exit={{ scale: 0.8, opacity: 0 }}

@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useTenantNavigate as useNavigate } from '../../hooks/useTenantNavigate';
 import { authService } from '../../services/authService';
 import './AdminLogin.css';
@@ -9,13 +10,22 @@ const AdminLogin: React.FC = () => {
   const [error, setError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const requiresSuperAdmin = searchParams.get('superAdmin') === '1';
+  const returnTo = searchParams.get('returnTo');
+  const redirectAfterLogin = useCallback(() => returnTo?.startsWith('/') && !returnTo.startsWith('//') ? returnTo : '/admin', [returnTo]);
 
-  // If already authenticated, redirect to admin
+  // Honor a scoreboard edit return URL only for a super-admin session.
   useEffect(() => {
     if (authService.isAuthenticated()) {
-      navigate('/admin');
+      const session = authService.getCurrentSession();
+      if (requiresSuperAdmin && session?.role !== 'super-admin') {
+        void authService.logout().then(() => setError('Sign in with a super-admin account to correct this scorecard.'));
+        return;
+      }
+      navigate(redirectAfterLogin());
     }
-  }, [navigate]);
+  }, [navigate, requiresSuperAdmin, redirectAfterLogin]);
 
   const validateEmail = (email: string): boolean => {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -41,12 +51,16 @@ const AdminLogin: React.FC = () => {
     setLoading(true);
 
     try {
-      await authService.login(email);
+      const session = await authService.login(email);
+      if (requiresSuperAdmin && session.role !== 'super-admin') {
+        await authService.logout();
+        throw new Error('This scorecard correction requires a super-admin account.');
+      }
       setSuccessMessage('Login successful! Redirecting...');
       
       // Redirect after short delay
       setTimeout(() => {
-        navigate('/admin');
+        navigate(redirectAfterLogin());
       }, 1000);
     } catch (err: any) {
       console.error('[AdminLogin] Login error:', err);
@@ -68,7 +82,7 @@ const AdminLogin: React.FC = () => {
           <div className="login-header">
             <div className="login-icon">🔐</div>
             <h1>Admin Portal</h1>
-            <p className="login-subtitle">Auction Management System</p>
+            <p className="login-subtitle">{requiresSuperAdmin ? 'Super Admin scorecard correction' : 'Auction Management System'}</p>
           </div>
 
           <form onSubmit={handleSubmit} className="login-form">

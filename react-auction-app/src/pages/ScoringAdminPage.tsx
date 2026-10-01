@@ -5008,7 +5008,7 @@ function OBSWebSocketTab({ config, setConfig, onFeedback, baseUrl }: {
           </div>
         </div>
         <p className="scoring-admin__hint obs-ws-setup-panel__summary">
-          OBS will create capture sources with default device settings. Choose the camera, microphone and Starting Soon window targets in each source's Properties. Every generated output scene includes the shared Audio scene. Mobile scenes are added only when the DroidCam OBS source is installed. Starting Soon includes a looping Media Source; choose its clip in Properties. The Replay scene's Media/VLC sources follow the latest replay saved by OBS.
+          OBS will create capture sources with default device settings. Choose the camera, microphone and Starting Soon window targets in each source's Properties. Every generated output scene includes the shared Audio scene. Mobile scenes are added only when the DroidCam OBS source is installed. Starting Soon includes a looping Media Source; choose its clip in Properties. The Replay scene contains the Camera 1 Replay scene with a non-looping 60% Media Source; VLC is isolated in a fallback scene.
         </p>
         <div className="obs-setup-notes" role="note">
           <div className="obs-setup-notes__heading">
@@ -5050,15 +5050,15 @@ function OBSWebSocketTab({ config, setConfig, onFeedback, baseUrl }: {
             </li>
             <li>
               <strong>Assign the physical sources in OBS.</strong>
-              <span> Open each generated camera, microphone, DroidCam, and Starting Soon capture source's <em>Properties</em> and choose its actual device/window. Choose the Starting Soon media clip there too. OBS cannot infer physical devices. Keep the shared Cricket Audio scene included in the generated output scenes.</span>
+              <span> Open each generated camera, microphone, DroidCam, and Starting Soon capture source's <em>Properties</em> and choose its actual device/window. Choose the Starting Soon media clip there too. In <em>Cricket - Camera 1 Replay</em>, select <em>Cricket Replay Media</em>, verify its speed is 60%, and keep looping off. Match Setup places it inside <em>Cricket - Replay</em>; OBS fills that source with the latest saved replay file. The separate <em>Cricket - Replay VLC Fallback</em> scene is available if VLC is preferred. Keep the shared Cricket Audio scene included in generated output scenes.</span>
             </li>
             <li>
               <strong>Test a complete replay before the match.</strong>
-              <span> Start streaming/recording a short test scene and confirm the OBS Replay Buffer indicator is active. From the OBS Control Dock press <em>Start Replay Buffer</em> if needed, then <em>Test Replay</em>. Its preset sequence saves the current buffer, waits 0.8 seconds, switches to <em>Cricket - Replay</em>, waits the configured buffer duration, and returns to <em>Cricket - Live</em>. When OBS reports the saved file, the preset updates and restarts the Cricket VLC/Media replay source automatically.</span>
+              <span> Start streaming/recording a short test scene and confirm the OBS Replay Buffer indicator is active. From the OBS Control Dock press <em>Start Replay Buffer</em> if needed, then <em>Test Replay</em>. Its preset sequence saves the buffer, waits 0.8 seconds, switches to <em>Cricket - Replay</em>, lets the 60% replay media play once, sends <em>Pause</em> to <em>Cricket Replay Media</em>, then returns to <em>Cricket - Live</em>. At 60% speed the pause wait is approximately 1.67× the saved buffer duration. OBS's saved-file event updates/restarts the media source automatically.</span>
             </li>
             <li>
               <strong>Enable automatic boundary/wicket replays last.</strong>
-              <span> After the manual test succeeds, enable <em>Auto-trigger OBS replay buffer save on boundaries &amp; wickets</em>, set <em>Replay Delay</em>, save OBS settings, and test another event. The saved clip is played in the Replay scene; the series then returns to Live after the configured buffer duration.</span>
+              <span> After the manual test succeeds, enable <em>Auto-trigger OBS replay buffer save on boundaries &amp; wickets</em>, set the event replay delay if needed, save OBS settings, and test another event. The wicket/boundary animation runs first; the configured Instant Replay action then follows its own save → Replay scene → play once → pause → Live sequence. Duplicate button presses are suppressed while the same replay is running.</span>
             </li>
           </ol>
         </details>
@@ -5314,6 +5314,7 @@ function OBSWebSocketTab({ config, setConfig, onFeedback, baseUrl }: {
                       <option value="replay_buffer_save">Save Replay Buffer</option>
                       <option value="replay_buffer_start">Start Replay Buffer</option>
                       <option value="replay_buffer_stop">Stop Replay Buffer</option>
+                      <option value="media_input_action">Control Media Source</option>
                       <option value="series">Series (run multiple steps with delays)</option>
                     </select>
                   </div>
@@ -5354,6 +5355,22 @@ function OBSWebSocketTab({ config, setConfig, onFeedback, baseUrl }: {
                     </div>
                   )}
 
+                  {btn.action === 'media_input_action' && (
+                    <div className="scoring-admin__field" style={{ gridColumn: '1 / -1' }}>
+                      <label>OBS media source</label>
+                      <select className="scoring-admin__select" value={btn.inputName || ''} onChange={event => updateButton(idx, { inputName: event.target.value || undefined })}>
+                        <option value="">Select a media source</option>
+                        {(replayConfig.instantReplaySourceNames || ['Cricket Replay Media']).map(inputName => <option key={inputName} value={inputName}>{inputName}</option>)}
+                      </select>
+                      <label>Media action</label>
+                      <select className="scoring-admin__select" value={btn.mediaAction || 'OBS_WEBSOCKET_MEDIA_INPUT_ACTION_PAUSE'} onChange={event => updateButton(idx, { mediaAction: event.target.value as OBSReplayButton['mediaAction'] })}>
+                        <option value="OBS_WEBSOCKET_MEDIA_INPUT_ACTION_PAUSE">Pause</option>
+                        <option value="OBS_WEBSOCKET_MEDIA_INPUT_ACTION_RESTART">Restart</option>
+                        <option value="OBS_WEBSOCKET_MEDIA_INPUT_ACTION_STOP">Stop</option>
+                      </select>
+                    </div>
+                  )}
+
                   {btn.action === 'series' && (
                     <div className="scoring-admin__field" style={{ gridColumn: '1 / -1' }}>
                       <label>Series Steps</label>
@@ -5390,6 +5407,7 @@ function OBSWebSocketTab({ config, setConfig, onFeedback, baseUrl }: {
                             <option value="replay_buffer_save">Save Replay Buffer</option>
                             <option value="replay_buffer_start">Start Replay Buffer</option>
                             <option value="replay_buffer_stop">Stop Replay Buffer</option>
+                            <option value="media_input_action">Control Media Source</option>
                           </select>
 
                           {step.action === 'hotkey_name' && (
@@ -5413,6 +5431,20 @@ function OBSWebSocketTab({ config, setConfig, onFeedback, baseUrl }: {
                               {step.sceneName && !availableScenes.includes(step.sceneName) && <option value={step.sceneName}>{step.sceneName} · saved</option>}
                               {availableScenes.map(scene => <option key={scene} value={scene}>{scene}</option>)}
                             </select>
+                          )}
+
+                          {step.action === 'media_input_action' && (
+                            <div className="obs-series-step__value obs-series-step__media-action">
+                              <select className="scoring-admin__select" value={step.inputName || ''} onChange={event => updateSeriesStep(idx, stepIdx, { inputName: event.target.value || undefined })}>
+                                <option value="">Select media source</option>
+                                {(replayConfig.instantReplaySourceNames || ['Cricket Replay Media']).map(inputName => <option key={inputName} value={inputName}>{inputName}</option>)}
+                              </select>
+                              <select className="scoring-admin__select" value={step.mediaAction || 'OBS_WEBSOCKET_MEDIA_INPUT_ACTION_PAUSE'} onChange={event => updateSeriesStep(idx, stepIdx, { mediaAction: event.target.value as OBSButtonSeriesStep['mediaAction'] })}>
+                                <option value="OBS_WEBSOCKET_MEDIA_INPUT_ACTION_PAUSE">Pause</option>
+                                <option value="OBS_WEBSOCKET_MEDIA_INPUT_ACTION_RESTART">Restart</option>
+                                <option value="OBS_WEBSOCKET_MEDIA_INPUT_ACTION_STOP">Stop</option>
+                              </select>
+                            </div>
                           )}
 
                           {step.action === 'hotkey_sequence' && (

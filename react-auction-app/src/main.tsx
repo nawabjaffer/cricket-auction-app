@@ -22,6 +22,7 @@ import ScoringAdminPage from './pages/ScoringAdminPage'
 import ScoreUpdatePage from './pages/ScoreUpdatePage'
 import ScoreOBSOverlayPage from './pages/ScoreOBSOverlayPage'
 import ScoreOBSControlDock from './pages/ScoreOBSControlDock'
+import PublicCricketScoreboardPage from './pages/PublicCricketScoreboardPage'
 import TenantScoringRouterPage from './pages/TenantScoringRouterPage'
 import GameScorerPage from './pages/GameScorerPage'
 import PlayerRegistrationPage from './pages/PlayerRegistrationPage'
@@ -115,6 +116,8 @@ createRoot(document.getElementById('root')!).render(
             <Route path="/:tenantSlug/camera" element={<TenantGate><CameraPage /></TenantGate>} />
             <Route path="/:tenantSlug/live" element={<TenantGate><LivePage /></TenantGate>} />
             <Route path="/:tenantSlug/live-admin" element={<TenantGate><LiveAdminPage /></TenantGate>} />
+            <Route path="/:tenantSlug/cricket/scoreboard" element={<TenantGate><PublicCricketScoreboardPage /></TenantGate>} />
+            <Route path="/:tenantSlug/cricket/scoreboard" element={<TenantGate><PublicCricketScoreboardPage /></TenantGate>} />
             <Route path="/:tenantSlug/obs-overlay" element={<TenantGate><OBSOverlayRouterPage /></TenantGate>} />
             <Route path="/:tenantSlug/obs-dock" element={<TenantGate><OBSDockPage /></TenantGate>} />
             <Route path="/:tenantSlug/mirror" element={<TenantGate><MirrorPage /></TenantGate>} />

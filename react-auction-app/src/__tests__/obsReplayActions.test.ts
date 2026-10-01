@@ -22,7 +22,10 @@ vi.mock('firebase/database', () => firebase);
 import { obsReplaySourceService } from '../services/scoring/obsReplaySourceService';
 import {
   CRICKET_REPLAY_INPUT,
+  CRICKET_CAMERA_REPLAY_SCENE,
   CRICKET_REPLAY_SCENE,
+  CRICKET_REPLAY_SPEED_PERCENT,
+  CRICKET_REPLAY_VLC_SCENE,
   inferDesktopReplayDirectory,
   obsStreamingPresetService,
 } from '../services/obsStreamingPresetService';
@@ -70,6 +73,46 @@ describe('OBS replay actions', () => {
     });
     expect(bufferResult.success).toBe(false);
     expect(bufferResult.errors[0]).toContain('Replay Buffer is disabled');
+  });
+
+  it('can pause a selected OBS media input as a replay-series action', async () => {
+    const result = await obsReplaySourceService.executeButton({
+      id: 'pause-media', label: 'Pause replay media', icon: '⏸', color: '#000', action: 'media_input_action', order: 0, enabled: true,
+      inputName: 'Cricket Replay Media',
+      mediaAction: 'OBS_WEBSOCKET_MEDIA_INPUT_ACTION_PAUSE',
+    });
+
+    expect(result.success).toBe(true);
+    expect(obs.request).toHaveBeenCalledWith('TriggerMediaInputAction', {
+      inputName: 'Cricket Replay Media',
+      mediaAction: 'OBS_WEBSOCKET_MEDIA_INPUT_ACTION_PAUSE',
+    });
+  });
+
+  it('cancels a running replay series between steps and reports the completed step', async () => {
+    const controller = new AbortController();
+    const progress: string[] = [];
+    const result = await obsReplaySourceService.executeButton({
+      id: 'instant', label: 'Instant Replay', icon: '↩', color: '#000', action: 'series', order: 0, enabled: true,
+      series: [
+        { id: 'save', action: 'replay_buffer_save', delayMs: 0 },
+        { id: 'wait', action: 'scene_switch', sceneName: 'Cricket - Live', delayMs: 10_000 },
+        { id: 'play', action: 'hotkey_name', hotkeyName: 'ReplaySource.play', delayMs: 0 },
+      ],
+    }, {
+      signal: controller.signal,
+      onProgress: update => {
+        progress.push(`${update.stepIndex}:${update.status}`);
+        if (update.stepIndex === 1 && update.status === 'waiting') controller.abort();
+      },
+    });
+
+    expect(result).toMatchObject({ success: false, cancelled: true, completedSteps: 1, totalSteps: 3 });
+    expect(result.errors).toContain('Cancelled by user.');
+    expect(progress).toContain('0:completed');
+    expect(progress).toContain('1:cancelled');
+    expect(obs.request).toHaveBeenCalledTimes(1);
+    expect(obs.triggerHotkeyByName).not.toHaveBeenCalled();
   });
 
   it('sends relay commands to the shared tenant queue and retains the match id', async () => {
@@ -135,19 +178,33 @@ describe('OBS Cricket Match Setup', () => {
     expect(obs.request).toHaveBeenCalledWith('CreateSceneItem', { sceneName: 'Cricket - Mobile Camera 1', sourceName: 'Cricket - Audio' });
     expect(obs.request).toHaveBeenCalledWith('CreateInput', expect.objectContaining({ sceneName: 'Cricket - Mobile Camera 1', inputKind: 'droidcam_obs' }));
     expect(obs.request).toHaveBeenCalledWith('CreateInput', expect.objectContaining({ sceneName: 'Cricket - Mobile Camera 1', inputName: 'Cricket Overlay Mobile 1', inputKind: 'browser_source' }));
-    expect(obs.request).toHaveBeenCalledWith('CreateInput', expect.objectContaining({ sceneName: CRICKET_REPLAY_SCENE, inputName: CRICKET_REPLAY_INPUT, inputKind: 'vlc_source' }));
-    expect(obs.request).toHaveBeenCalledWith('CreateInput', expect.objectContaining({ sceneName: CRICKET_REPLAY_SCENE, inputName: 'Cricket Replay Media', inputKind: 'ffmpeg_source' }));
-    expect(obs.request).toHaveBeenCalledWith('CreateInput', expect.objectContaining({ sceneName: CRICKET_REPLAY_SCENE, inputName: 'Cricket Instant Replay Source', inputKind: 'replay_source' }));
+    expect(obs.request).toHaveBeenCalledWith('CreateSceneItem', { sceneName: CRICKET_REPLAY_SCENE, sourceName: CRICKET_CAMERA_REPLAY_SCENE });
+    expect(obs.request).toHaveBeenCalledWith('CreateSceneItem', { sceneName: CRICKET_CAMERA_REPLAY_SCENE, sourceName: 'Cricket - Camera 1' });
+    expect(obs.request).toHaveBeenCalledWith('CreateInput', expect.objectContaining({
+      sceneName: CRICKET_CAMERA_REPLAY_SCENE,
+      inputName: 'Cricket Replay Media',
+      inputKind: 'ffmpeg_source',
+      inputSettings: expect.objectContaining({ speed_percent: 60, loop: false }),
+    }));
+    expect(obs.request).toHaveBeenCalledWith('CreateInput', expect.objectContaining({ sceneName: CRICKET_REPLAY_VLC_SCENE, inputName: CRICKET_REPLAY_INPUT, inputKind: 'vlc_source' }));
+    expect(obs.request).toHaveBeenCalledWith('CreateSceneItem', { sceneName: CRICKET_REPLAY_VLC_SCENE, sourceName: 'Cricket - Camera 1' });
+    expect(obs.request).toHaveBeenCalledWith('CreateInput', expect.objectContaining({ sceneName: CRICKET_CAMERA_REPLAY_SCENE, inputName: 'Cricket Instant Replay Source', inputKind: 'replay_source' }));
     expect(obs.request).toHaveBeenCalledWith('StartReplayBuffer');
     expect(obs.request).toHaveBeenCalledWith('SetCurrentProgramScene', { sceneName: 'Cricket - Live' });
     expect(result.scenes).toContain('Cricket - Audio');
     expect(result.scenes).toContain(CRICKET_REPLAY_SCENE);
     expect(result.warnings).toContain('Choose the intro/starting-soon clip in Cricket Starting Soon Media properties.');
-    expect(result.replaySourceName).toBe(CRICKET_REPLAY_INPUT);
+    expect(result.replaySourceName).toBe('Cricket Replay Media');
     expect(result.replaySourceNames).toEqual(['Cricket Replay Media', CRICKET_REPLAY_INPUT]);
     const instantReplay = obsStreamingPresetService.getPresetReplayButtons(20).find(button => button.id === 'cricket-preset-instant-replay');
-    expect(instantReplay?.series).toHaveLength(3);
-    expect(instantReplay?.series?.[2].delayMs).toBe(20_000);
+    expect(instantReplay?.series).toHaveLength(4);
+    expect(instantReplay?.series?.[2]).toMatchObject({
+      action: 'media_input_action',
+      inputName: 'Cricket Replay Media',
+      mediaAction: 'OBS_WEBSOCKET_MEDIA_INPUT_ACTION_PAUSE',
+      delayMs: Math.ceil(20_000 * 100 / CRICKET_REPLAY_SPEED_PERCENT),
+    });
+    expect(instantReplay?.series?.[3]).toMatchObject({ action: 'scene_switch', sceneName: 'Cricket - Live', delayMs: 0 });
   });
 
   it('loads the newest Replay Buffer file into the VLC source and restarts playback', async () => {
@@ -167,7 +224,7 @@ describe('OBS Cricket Match Setup', () => {
 
     expect(obs.request).toHaveBeenCalledWith('SetInputSettings', {
       inputName: 'Cricket Replay Media',
-      inputSettings: { local_file: 'D:/OBS/Replays/replay-01.mkv', is_local_file: true, loop: false, restart_on_activate: true, close_when_inactive: false },
+      inputSettings: { local_file: 'D:/OBS/Replays/replay-01.mkv', is_local_file: true, speed_percent: 60, loop: false, restart_on_activate: true, close_when_inactive: false },
       overlay: true,
     });
     expect(obs.request).toHaveBeenCalledWith('SetInputSettings', {
@@ -296,7 +353,7 @@ describe('OBS Cricket Match Setup', () => {
     expect(obs.request).toHaveBeenCalledWith('SetRecordDirectory', { recordDirectory: 'C:/Users/Alex/Desktop/Cricket Replays' });
     expect(result.replayDurationSeconds).toBe(14);
     expect(result.replayDirectory).toBe('C:/Users/Alex/Desktop/Cricket Replays');
-    expect(obsStreamingPresetService.getPresetReplayButtons(result.replayDurationSeconds).find(button => button.id === 'cricket-preset-instant-replay')?.series?.[2].delayMs).toBe(14_000);
+    expect(obsStreamingPresetService.getPresetReplayButtons(result.replayDurationSeconds).find(button => button.id === 'cricket-preset-instant-replay')?.series?.[2].delayMs).toBe(Math.ceil(14_000 * 100 / CRICKET_REPLAY_SPEED_PERCENT));
   });
 
   it('uses the exact versioned capture kind advertised by OBS', async () => {

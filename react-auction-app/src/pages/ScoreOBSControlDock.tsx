@@ -79,6 +79,16 @@ const DOCK_MODE_OPTIONS: { key: DockConnectionMode; label: string; hint: string 
   { key: 'relay', label: 'Same Wi-Fi', hint: 'Phone sends commands over Firebase to the dock open on the OBS machine.' },
 ];
 
+type ReplayActionLogStatus = 'queued' | 'running' | 'completed' | 'failed' | 'cancelled';
+interface ReplayActionLogEntry {
+  id: string;
+  label: string;
+  status: ReplayActionLogStatus;
+  detail: string;
+  updatedAt: number;
+}
+const REPLAY_BUTTON_DEBOUNCE_MS = 2000;
+
 export default function ScoreOBSControlDock() {
   const [matches, setMatches] = useState<MatchSetup[]>([]);
   const [selectedMatchId, setSelectedMatchId] = useState('');
@@ -118,7 +128,11 @@ export default function ScoreOBSControlDock() {
   const [drsScene, setDrsScene] = useState('');
   const [execBusy, setExecBusy] = useState<string | null>(null);
   const [queuedActionCount, setQueuedActionCount] = useState(0);
+  const [replayActionLogs, setReplayActionLogs] = useState<ReplayActionLogEntry[]>([]);
   const actionQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const queuedReplayButtonIdsRef = useRef(new Set<string>());
+  const lastReplayButtonPressRef = useRef(new Map<string, number>());
+  const activeSeriesAbortRef = useRef<AbortController | null>(null);
   const [obsErrorDetail, setObsErrorDetail] = useState('');
   const [obsAttemptedUrls, setObsAttemptedUrls] = useState<string[]>([]);
   const [obsFailureSummary, setObsFailureSummary] = useState<string[]>([]);
@@ -385,14 +399,36 @@ export default function ScoreOBSControlDock() {
     setTimeout(() => setFeedback(''), 2500);
   }, []);
 
-  const enqueueOBSAction = useCallback((actionId: string, action: () => Promise<void>) => {
+  const updateReplayActionLog = useCallback((id: string, update: Partial<Omit<ReplayActionLogEntry, 'id' | 'updatedAt'>> & Pick<ReplayActionLogEntry, 'label'>) => {
+    setReplayActionLogs(current => {
+      const existing = current.find(entry => entry.id === id);
+      const next: ReplayActionLogEntry = {
+        ...existing,
+        ...update,
+        id,
+        label: update.label || existing?.label || id,
+        status: update.status || existing?.status || 'queued',
+        detail: update.detail || existing?.detail || 'Queued',
+        updatedAt: Date.now(),
+      };
+      return [next, ...current.filter(entry => entry.id !== id)].slice(0, 8);
+    });
+  }, []);
+
+  const enqueueOBSAction = useCallback((actionId: string, label: string, action: () => Promise<void>) => {
     setQueuedActionCount(count => count + 1);
+    updateReplayActionLog(actionId, { label, status: 'queued', detail: 'Queued' });
     const runAction = async () => {
       setQueuedActionCount(count => Math.max(0, count - 1));
       setExecBusy(actionId);
+      updateReplayActionLog(actionId, { label, status: 'running', detail: 'Starting…' });
       try {
         await action();
+        setReplayActionLogs(current => current.map(entry => entry.id === actionId && entry.status === 'running'
+          ? { ...entry, status: 'completed', detail: 'Completed', updatedAt: Date.now() }
+          : entry));
       } catch (error) {
+        updateReplayActionLog(actionId, { label, status: 'failed', detail: error instanceof Error ? error.message : String(error) });
         showFeedback(`${actionId} failed: ${error instanceof Error ? error.message : String(error)}`);
       } finally {
         setExecBusy(null);
@@ -401,7 +437,7 @@ export default function ScoreOBSControlDock() {
     const nextAction = actionQueueRef.current.then(runAction, runAction);
     actionQueueRef.current = nextAction;
     return nextAction;
-  }, [showFeedback]);
+  }, [showFeedback, updateReplayActionLog]);
 
   useEffect(() => {
     const adsScene = replayConfig.inningsBreakSceneName;
@@ -531,29 +567,77 @@ export default function ScoreOBSControlDock() {
   const handleObsDisconnect = useCallback(() => {
     obsService.disconnect();
     obsReplaySourceService.stopRelayWatch();
+    activeSeriesAbortRef.current?.abort();
   }, []);
 
   const execReplayButton = useCallback((button: OBSReplayButton) => {
     if (!button.enabled) return Promise.resolve();
-    return enqueueOBSAction(button.id, async () => {
+    const now = Date.now();
+    const lastPress = lastReplayButtonPressRef.current.get(button.id) || 0;
+    if (queuedReplayButtonIdsRef.current.has(button.id) || now - lastPress < REPLAY_BUTTON_DEBOUNCE_MS) {
+      showFeedback(`${button.label} is already running or was just triggered.`);
+      return Promise.resolve();
+    }
+    queuedReplayButtonIdsRef.current.add(button.id);
+    lastReplayButtonPressRef.current.set(button.id, now);
+
+    const action = enqueueOBSAction(button.id, button.label, async () => {
+      if (!obsService.isConnected() && connectionMode !== 'relay' && !sharedObsBridge) {
+        await handleObsConnect();
+      }
       if (obsService.isConnected()) {
-        const result = await obsReplaySourceService.executeButton(button);
+        const controller = button.action === 'series' ? new AbortController() : null;
+        if (controller) activeSeriesAbortRef.current = controller;
+        updateReplayActionLog(button.id, { label: button.label, status: 'running', detail: controller ? `Running 0/${button.series?.length || 0} steps` : 'Sending action to OBS' });
+        let result;
+        try {
+          result = await obsReplaySourceService.executeButton(button, {
+            signal: controller?.signal,
+            onProgress: progress => updateReplayActionLog(button.id, {
+              label: button.label,
+              status: progress.status === 'cancelled' ? 'cancelled' : progress.status === 'failed' ? 'failed' : 'running',
+              detail: `${progress.status === 'waiting' ? 'Waiting' : progress.status === 'running' ? 'Running' : progress.status} · step ${progress.stepIndex + 1}/${progress.totalSteps}: ${progress.stepLabel}`,
+            }),
+          });
+        } finally {
+          if (controller && activeSeriesAbortRef.current === controller) activeSeriesAbortRef.current = null;
+        }
+        if (result.cancelled) {
+          updateReplayActionLog(button.id, { label: button.label, status: 'cancelled', detail: `${result.completedSteps}/${result.totalSteps} steps completed · cancelled` });
+          showFeedback(`${button.label} cancelled`);
+          return;
+        }
         if (result.success) {
+          updateReplayActionLog(button.id, { label: button.label, status: 'completed', detail: `${result.completedSteps}/${result.totalSteps} steps completed` });
           showFeedback(`▶ ${button.label} (${result.completedSteps}/${result.totalSteps})`);
         } else {
-          showFeedback(`${button.label}: ${result.errors[0] || `${result.completedSteps}/${result.totalSteps} steps completed`}`);
+          const error = result.errors[0] || `${result.completedSteps}/${result.totalSteps} steps completed`;
+          updateReplayActionLog(button.id, { label: button.label, status: 'failed', detail: error });
+          throw new Error(error);
         }
-      } else if (selectedMatchId) {
-        // Relay via Firebase (mobile → dock on OBS machine)
+      } else if (selectedMatchId && sharedObsBridge) {
         const commandId = await obsReplaySourceService.sendRelayCommand(selectedMatchId, button.id);
-        showFeedback(`📡 ${button.label} sent`);
+        updateReplayActionLog(button.id, { label: button.label, status: 'running', detail: 'Sent to connected OBS Dock · waiting for result' });
         const result = await obsReplaySourceService.waitForRelayResult(selectedMatchId, commandId);
-        showFeedback(result.success ? `▶ ${button.label} executed on OBS` : `${button.label} failed: ${result.error || 'OBS action failed'}`);
+        if (!result.success) {
+          updateReplayActionLog(button.id, { label: button.label, status: 'failed', detail: result.error || 'OBS action failed' });
+          throw new Error(result.error || 'OBS action failed');
+        }
+        updateReplayActionLog(button.id, { label: button.label, status: 'completed', detail: 'Executed on OBS Dock' });
+        showFeedback(`▶ ${button.label} executed on OBS`);
       } else {
-        showFeedback('Connect to OBS or select a match');
+        throw new Error(obsService.getLastErrorDetail() || 'OBS is disconnected. Reconnect from this Dock or connect the OBS Dock on the host computer.');
       }
     });
-  }, [enqueueOBSAction, selectedMatchId, showFeedback]);
+    return action.finally(() => queuedReplayButtonIdsRef.current.delete(button.id));
+  }, [connectionMode, enqueueOBSAction, handleObsConnect, selectedMatchId, sharedObsBridge, showFeedback, updateReplayActionLog]);
+
+  const cancelActiveReplaySeries = useCallback(() => {
+    const controller = activeSeriesAbortRef.current;
+    if (!controller) return;
+    controller.abort();
+    if (execBusy) updateReplayActionLog(execBusy, { label: replayConfig.buttons.find(button => button.id === execBusy)?.label || execBusy, status: 'cancelled', detail: 'Cancellation requested…' });
+  }, [execBusy, replayConfig.buttons, updateReplayActionLog]);
 
   const runReplayBufferAction = useCallback(async (requestType: 'SaveReplayBuffer' | 'StartReplayBuffer' | 'StopReplayBuffer', label: string) => {
     if (!obsService.isConnected()) {
@@ -570,7 +654,7 @@ export default function ScoreOBSControlDock() {
       showFeedback('OBS not connected');
       return;
     }
-    await enqueueOBSAction(requestType, async () => {
+    await enqueueOBSAction(requestType, label, async () => {
       await obsService.request(requestType);
       showFeedback(label);
     });
@@ -1104,6 +1188,26 @@ export default function ScoreOBSControlDock() {
             ⏹ Stop
           </button>
         </div>
+
+        {replayActionLogs.length > 0 && (
+          <div className="score-dock__replay-log" aria-live="polite">
+            <div className="score-dock__replay-log-head">
+              <span>Replay activity</span>
+              {activeSeriesAbortRef.current && (
+                <button type="button" onClick={cancelActiveReplaySeries}>Cancel running series</button>
+              )}
+            </div>
+            <ol>
+              {replayActionLogs.map(entry => (
+                <li key={entry.id} data-status={entry.status}>
+                  <span className="score-dock__replay-log-time">{new Date(entry.updatedAt).toLocaleTimeString()}</span>
+                  <strong>{entry.label}</strong>
+                  <span>{entry.detail}</span>
+                </li>
+              ))}
+            </ol>
+          </div>
+        )}
       </div>
 
       {/* Overlay Controls */}

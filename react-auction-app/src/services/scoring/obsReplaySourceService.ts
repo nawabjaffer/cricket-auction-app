@@ -128,6 +128,20 @@ export interface OBSButtonExecutionResult {
   completedSteps: number;
   totalSteps: number;
   errors: string[];
+  cancelled?: boolean;
+}
+
+export interface OBSButtonExecutionProgress {
+  buttonId: string;
+  stepIndex: number;
+  totalSteps: number;
+  stepLabel: string;
+  status: 'waiting' | 'running' | 'completed' | 'failed' | 'cancelled';
+}
+
+export interface OBSButtonExecutionOptions {
+  signal?: AbortSignal;
+  onProgress?: (progress: OBSButtonExecutionProgress) => void;
 }
 
 class OBSReplaySourceService {
@@ -142,35 +156,70 @@ class OBSReplaySourceService {
 
   // ── Direct action execution (when the dock is on the OBS machine) ──────────
 
-  async executeButton(button: OBSReplayButton): Promise<OBSButtonExecutionResult> {
+  async executeButton(button: OBSReplayButton, options: OBSButtonExecutionOptions = {}): Promise<OBSButtonExecutionResult> {
     if (button.action === 'series') {
-      return this.executeSeries(button);
+      return this.executeSeries(button, options);
     }
-    const error = await this.executeAction(button);
+    const error = await this.executeAction(button, options.signal);
     return { success: !error, completedSteps: error ? 0 : 1, totalSteps: 1, errors: error ? [error] : [] };
   }
 
   /** Run each configured step in order, waiting the step delay before firing it. */
-  private async executeSeries(button: OBSReplayButton): Promise<OBSButtonExecutionResult> {
+  private async executeSeries(button: OBSReplayButton, options: OBSButtonExecutionOptions): Promise<OBSButtonExecutionResult> {
     const steps = [...(button.series || [])];
     if (steps.length === 0) return { success: false, completedSteps: 0, totalSteps: 0, errors: ['This series has no steps.'] };
 
     let completedSteps = 0;
     const errors: string[] = [];
     for (const [index, step] of steps.entries()) {
+      const stepLabel = step.label || step.action;
+      if (options.signal?.aborted) {
+        options.onProgress?.({ buttonId: button.id, stepIndex: index, totalSteps: steps.length, stepLabel, status: 'cancelled' });
+        return { success: false, completedSteps, totalSteps: steps.length, errors: ['Cancelled by user.'], cancelled: true };
+      }
       const wait = Math.max(0, Number(step.delayMs) || 0);
       if (wait > 0) {
-        await new Promise(resolve => setTimeout(resolve, wait));
+        options.onProgress?.({ buttonId: button.id, stepIndex: index, totalSteps: steps.length, stepLabel, status: 'waiting' });
+        const continued = await this.waitForDelay(wait, options.signal);
+        if (!continued) {
+          options.onProgress?.({ buttonId: button.id, stepIndex: index, totalSteps: steps.length, stepLabel, status: 'cancelled' });
+          return { success: false, completedSteps, totalSteps: steps.length, errors: ['Cancelled by user.'], cancelled: true };
+        }
       }
-      const error = await this.executeAction(step);
-      if (error) errors.push(`Step ${index + 1} (${step.label || step.action}): ${error}`);
-      else completedSteps += 1;
+      options.onProgress?.({ buttonId: button.id, stepIndex: index, totalSteps: steps.length, stepLabel, status: 'running' });
+      const error = await this.executeAction(step, options.signal);
+      if (options.signal?.aborted) {
+        options.onProgress?.({ buttonId: button.id, stepIndex: index, totalSteps: steps.length, stepLabel, status: 'cancelled' });
+        return { success: false, completedSteps, totalSteps: steps.length, errors: ['Cancelled by user.'], cancelled: true };
+      }
+      if (error) {
+        errors.push(`Step ${index + 1} (${stepLabel}): ${error}`);
+        options.onProgress?.({ buttonId: button.id, stepIndex: index, totalSteps: steps.length, stepLabel, status: 'failed' });
+      } else {
+        completedSteps += 1;
+        options.onProgress?.({ buttonId: button.id, stepIndex: index, totalSteps: steps.length, stepLabel, status: 'completed' });
+      }
     }
     return { success: errors.length === 0, completedSteps, totalSteps: steps.length, errors };
   }
 
-  private async executeAction(step: OBSReplayButton | OBSButtonSeriesStep): Promise<string | null> {
+  private waitForDelay(delayMs: number, signal?: AbortSignal): Promise<boolean> {
+    return new Promise(resolve => {
+      if (signal?.aborted) { resolve(false); return; }
+      const finish = (continued: boolean) => {
+        clearTimeout(timer);
+        signal?.removeEventListener('abort', abort);
+        resolve(continued);
+      };
+      const abort = () => finish(false);
+      const timer = setTimeout(() => finish(true), delayMs);
+      signal?.addEventListener('abort', abort, { once: true });
+    });
+  }
+
+  private async executeAction(step: OBSReplayButton | OBSButtonSeriesStep, signal?: AbortSignal): Promise<string | null> {
     try {
+      if (signal?.aborted) return 'Cancelled by user.';
       switch (step.action) {
         case 'hotkey_name':
           if (!step.hotkeyName) return 'Select an OBS hotkey first.';
@@ -202,6 +251,14 @@ class OBSReplaySourceService {
 
         case 'replay_buffer_stop':
           await obsService.request('StopReplayBuffer');
+          return null;
+
+        case 'media_input_action':
+          if (!step.inputName?.trim()) return 'Select an OBS media source first.';
+          await obsService.request('TriggerMediaInputAction', {
+            inputName: step.inputName.trim(),
+            mediaAction: step.mediaAction || 'OBS_WEBSOCKET_MEDIA_INPUT_ACTION_PAUSE',
+          });
           return null;
 
         default:

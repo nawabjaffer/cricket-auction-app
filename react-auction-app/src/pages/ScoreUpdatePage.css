@@ -232,6 +232,33 @@
   background: rgba(251, 191, 36, 0.06);
 }
 
+.score-update__batsman--pending {
+  color: #fde68a;
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px dashed rgba(245, 158, 11, 0.45);
+}
+
+.score-update__batsman--pending .score-update__bat-name {
+  color: #fde68a;
+}
+
+.score-update__next-batter-required {
+  margin: 0.5rem 1rem;
+  padding: 0.65rem 0.8rem;
+  color: #fde68a;
+  font-size: 0.78rem;
+  background: rgba(245, 158, 11, 0.09);
+  border-left: 3px solid #f59e0b;
+  border-radius: 5px;
+}
+
+.score-update__scoring-controls {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
 .score-update__bat-name {
   font-size: 0.85rem;
   font-weight: 600;
@@ -866,6 +893,17 @@
   gap: 0.75rem;
 }
 
+.score-update__scorecard-player-edit {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+  gap: 0.3rem;
+  min-width: 0;
+}
+
+.score-update__scorecard-player-edit > * {
+  min-width: 0;
+}
+
 .score-update__modal-field {
   display: flex;
   flex-direction: column;
@@ -979,6 +1017,10 @@
 
   .score-update__modal-grid {
     grid-template-columns: 1fr;
+  }
+
+  .score-update__scorecard-player-edit {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .score-update__feed-map-row {

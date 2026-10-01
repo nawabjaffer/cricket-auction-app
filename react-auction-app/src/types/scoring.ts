@@ -213,6 +213,8 @@ export interface LiveBatsman {
   isOnStrike: boolean;
 }
 
+export const PENDING_NEXT_BATSMAN_ID = '__pending_next_batsman__';
+
 export interface LiveBowler {
   playerId: string;
   playerName: string;
@@ -855,7 +857,13 @@ export type OBSButtonAction =
   | 'replay_buffer_save'  // SaveReplayBuffer (built-in replay buffer)
   | 'replay_buffer_start' // StartReplayBuffer
   | 'replay_buffer_stop'  // StopReplayBuffer
+  | 'media_input_action'  // Control a configured OBS media source
   | 'series';             // run several steps in order with delays
+
+export type OBSMediaInputAction =
+  | 'OBS_WEBSOCKET_MEDIA_INPUT_ACTION_RESTART'
+  | 'OBS_WEBSOCKET_MEDIA_INPUT_ACTION_PAUSE'
+  | 'OBS_WEBSOCKET_MEDIA_INPUT_ACTION_STOP';
 
 export interface OBSButtonKeySequence {
   keyId: string;    // OBS key ID string, e.g. "OBS_KEY_F1"
@@ -873,6 +881,8 @@ export interface OBSButtonSeriesStep {
   hotkeyName?: string;
   keySequence?: OBSButtonKeySequence;
   sceneName?: string;
+  inputName?: string;
+  mediaAction?: OBSMediaInputAction;
   label?: string;
 }
 
@@ -885,6 +895,8 @@ export interface OBSReplayButton {
   hotkeyName?: string;    // for action = 'hotkey_name'
   keySequence?: OBSButtonKeySequence; // for action = 'hotkey_sequence'
   sceneName?: string;     // for action = 'scene_switch'
+  inputName?: string;     // for action = 'media_input_action'
+  mediaAction?: OBSMediaInputAction;
   series?: OBSButtonSeriesStep[];     // for action = 'series'
   order: number;
   enabled: boolean;

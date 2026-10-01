@@ -2454,6 +2454,12 @@
   min-width: min(180px, 100%);
 }
 
+.obs-series-step__media-action {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.35rem;
+}
+
 .obs-series-step__actions {
   display: flex;
   gap: 0.25rem;
@@ -2468,6 +2474,10 @@
 
   .obs-series-step__actions {
     margin-left: 0;
+  }
+
+  .obs-series-step__media-action {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 

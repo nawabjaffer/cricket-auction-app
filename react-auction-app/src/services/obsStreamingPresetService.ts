@@ -7,6 +7,9 @@ export const CRICKET_REPLAY_SCENE = 'Cricket - Replay';
 export const CRICKET_LIVE_SCENE = 'Cricket - Live';
 export const CRICKET_REPLAY_MEDIA_INPUT = 'Cricket Replay Media';
 export const CRICKET_REPLAY_VLC_INPUT = 'Cricket Replay VLC';
+export const CRICKET_CAMERA_REPLAY_SCENE = 'Cricket - Camera 1 Replay';
+export const CRICKET_REPLAY_VLC_SCENE = 'Cricket - Replay VLC Fallback';
+export const CRICKET_REPLAY_SPEED_PERCENT = 60;
 export const CRICKET_OVERLAY_WIDTH = 1920;
 export const CRICKET_OVERLAY_HEIGHT = 1080;
 
@@ -278,6 +281,8 @@ class OBSStreamingPresetService {
     await ensureScene(liveScene);
     await ensureScene(audioScene);
     await ensureScene(CRICKET_REPLAY_SCENE);
+    await ensureScene(CRICKET_CAMERA_REPLAY_SCENE);
+    await ensureScene(CRICKET_REPLAY_VLC_SCENE);
     await ensureScene('Cricket - DRS');
 
     const desiredCameraCount = Math.min(8, Math.max(1, Math.floor(options.cameraCount)));
@@ -361,11 +366,18 @@ class OBSStreamingPresetService {
     }
     if (cameraSceneNames.length > 0) {
       await ensureSceneItem(liveScene, cameraSceneNames[0]);
-      await ensureSceneItem(CRICKET_REPLAY_SCENE, cameraSceneNames[0]);
+      await removeSceneItem(CRICKET_CAMERA_REPLAY_SCENE, audioScene);
+      await ensureSceneItem(CRICKET_CAMERA_REPLAY_SCENE, cameraSceneNames[0]);
+      for (const sceneName of cameraSceneNames) await removeSceneItem(CRICKET_REPLAY_SCENE, sceneName);
+      await removeSceneItem(CRICKET_REPLAY_SCENE, audioScene);
+      await ensureSceneItem(CRICKET_REPLAY_SCENE, CRICKET_CAMERA_REPLAY_SCENE);
+      await ensureSceneItem(CRICKET_REPLAY_VLC_SCENE, cameraSceneNames[0]);
       await ensureSceneItem('Cricket - DRS', cameraSceneNames[0]);
     } else {
       await ensureSceneItem(liveScene, audioScene);
-      await ensureSceneItem(CRICKET_REPLAY_SCENE, audioScene);
+      await ensureSceneItem(CRICKET_CAMERA_REPLAY_SCENE, audioScene);
+      await ensureSceneItem(CRICKET_REPLAY_SCENE, CRICKET_CAMERA_REPLAY_SCENE);
+      await ensureSceneItem(CRICKET_REPLAY_VLC_SCENE, audioScene);
       await ensureSceneItem('Cricket - DRS', audioScene);
     }
 
@@ -401,9 +413,10 @@ class OBSStreamingPresetService {
     const replaySourceNames: string[] = [];
     let replaySourceName: string | undefined;
     const mediaKind = availableKind(kinds, 'ffmpeg_source', []);
-    if (mediaKind && await ensureInput(CRICKET_REPLAY_SCENE, CRICKET_REPLAY_MEDIA_INPUT, mediaKind, {
+    if (mediaKind && await ensureInput(CRICKET_CAMERA_REPLAY_SCENE, CRICKET_REPLAY_MEDIA_INPUT, mediaKind, {
       is_local_file: true,
       local_file: '',
+      speed_percent: CRICKET_REPLAY_SPEED_PERCENT,
       loop: false,
       restart_on_activate: true,
       close_when_inactive: false,
@@ -416,20 +429,20 @@ class OBSStreamingPresetService {
 
     const vlcKind = availableKind(kinds, 'vlc_source', []);
     if (vlcKind) {
-      if (await ensureInput(CRICKET_REPLAY_SCENE, CRICKET_REPLAY_VLC_INPUT, vlcKind, {
+      if (await ensureInput(CRICKET_REPLAY_VLC_SCENE, CRICKET_REPLAY_VLC_INPUT, vlcKind, {
         playlist: [],
         loop: false,
         shuffle: false,
       })) {
         replaySourceNames.push(CRICKET_REPLAY_VLC_INPUT);
-        replaySourceName = CRICKET_REPLAY_VLC_INPUT;
+        if (!replaySourceName) replaySourceName = CRICKET_REPLAY_VLC_INPUT;
       }
     } else {
       warnings.push('VLC Video Source is unavailable. Install VLC and the OBS VLC source, then run Match Setup again.');
     }
 
     const instantReplayKind = [...kinds].find(kind => /(?:instant.*replay|replay.*source|source.*replay)/i.test(kind));
-    if (instantReplayKind) await ensureInput(CRICKET_REPLAY_SCENE, 'Cricket Instant Replay Source', instantReplayKind);
+    if (instantReplayKind) await ensureInput(CRICKET_CAMERA_REPLAY_SCENE, 'Cricket Instant Replay Source', instantReplayKind);
     if (replaySourceNames.length > 0) this.configureLatestReplaySource(replaySourceNames);
 
     await obsService.request('SetCurrentProgramScene', { sceneName: liveScene });
@@ -465,10 +478,12 @@ class OBSStreamingPresetService {
   }
 
   getPresetReplayButtons(replayDurationSeconds: number): OBSReplayButton[] {
+    const slowedReplayDurationMs = Math.ceil(Math.max(5, replayDurationSeconds) * 1000 * 100 / CRICKET_REPLAY_SPEED_PERCENT);
     const replaySteps = (prefix: string) => [
       { id: `${prefix}-save`, label: 'Save replay clip', action: 'replay_buffer_save' as const, delayMs: 0 },
       { id: `${prefix}-scene`, label: 'Show replay scene', action: 'scene_switch' as const, sceneName: CRICKET_REPLAY_SCENE, delayMs: 800 },
-      { id: `${prefix}-return`, label: 'Return to live', action: 'scene_switch' as const, sceneName: CRICKET_LIVE_SCENE, delayMs: Math.max(5, replayDurationSeconds) * 1000 },
+      { id: `${prefix}-pause`, label: 'Pause replay after one pass', action: 'media_input_action' as const, inputName: CRICKET_REPLAY_MEDIA_INPUT, mediaAction: 'OBS_WEBSOCKET_MEDIA_INPUT_ACTION_PAUSE' as const, delayMs: slowedReplayDurationMs },
+      { id: `${prefix}-return`, label: 'Return to live', action: 'scene_switch' as const, sceneName: CRICKET_LIVE_SCENE, delayMs: 0 },
     ];
     return [
       { id: 'cricket-preset-buffer-start', label: 'Start Replay Buffer', icon: '⏺', color: '#22c55e', action: 'replay_buffer_start', order: 0, enabled: true },
@@ -490,7 +505,7 @@ class OBSStreamingPresetService {
     try {
       const inputSettings = inputName === CRICKET_REPLAY_VLC_INPUT
         ? { playlist: [{ value: filePath }], loop: false, shuffle: false }
-        : { local_file: filePath, is_local_file: true, loop: false, restart_on_activate: true, close_when_inactive: false };
+        : { local_file: filePath, is_local_file: true, speed_percent: CRICKET_REPLAY_SPEED_PERCENT, loop: false, restart_on_activate: true, close_when_inactive: false };
       await obsService.request('SetInputSettings', { inputName, inputSettings, overlay: true });
       await obsService.request('TriggerMediaInputAction', {
         inputName,

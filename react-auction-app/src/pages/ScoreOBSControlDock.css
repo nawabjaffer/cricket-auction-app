@@ -673,6 +673,63 @@
   border-radius: 10px;
 }
 
+.score-dock__replay-log {
+  display: grid;
+  gap: 0.45rem;
+  padding: 0.6rem 0.75rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.16);
+}
+
+.score-dock__replay-log-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  color: rgba(255, 255, 255, 0.62);
+  font-size: 0.66rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.score-dock__replay-log-head button {
+  padding: 0.3rem 0.5rem;
+  color: #fecaca;
+  font-size: 0.64rem;
+  font-weight: 700;
+  background: rgba(185, 28, 28, 0.2);
+  border: 1px solid rgba(248, 113, 113, 0.35);
+  border-radius: 5px;
+}
+
+.score-dock__replay-log ol {
+  display: grid;
+  gap: 0.25rem;
+  max-height: 132px;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.score-dock__replay-log li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0.15rem 0.5rem;
+  padding: 0.35rem 0.45rem;
+  color: rgba(255, 255, 255, 0.65);
+  font-size: 0.65rem;
+  line-height: 1.35;
+  background: rgba(255, 255, 255, 0.035);
+  border-radius: 4px;
+}
+
+.score-dock__replay-log li[data-status="failed"] { color: #fca5a5; }
+.score-dock__replay-log li[data-status="cancelled"] { color: #fcd34d; }
+.score-dock__replay-log li[data-status="completed"] { color: #86efac; }
+.score-dock__replay-log-time { color: rgba(255, 255, 255, 0.38); font-variant-numeric: tabular-nums; }
+.score-dock__replay-log li > span:last-child { grid-column: 1 / -1; overflow-wrap: anywhere; }
+
 /* Scene switch buttons */
 .score-dock__replay-scenes {
   display: flex;

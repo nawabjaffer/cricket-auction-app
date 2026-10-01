@@ -6,6 +6,7 @@
 // ============================================================================
 
 import { ref, get, set, remove, onValue, push, type Database } from 'firebase/database';
+import { PENDING_NEXT_BATSMAN_ID } from '../../types/scoring';
 import type {
   IScoringAdapter, MatchScore, PlayerMatchStats, LiveScore,
   BallEvent, BallOutcome, WicketDetail, LiveBatsman, LiveBowler,
@@ -18,6 +19,7 @@ export interface BallInput {
   outcome: BallOutcome;
   wicket?: WicketDetail;
   batsmanRuns?: number;
+  suppressAutomaticObsAction?: boolean;
 }
 
 export class ManualScoringAdapter implements IScoringAdapter {
@@ -181,6 +183,17 @@ export class ManualScoringAdapter implements IScoringAdapter {
       updatedBatsmen = updatedBatsmen.map(b =>
         b.playerId === wicket.batsmanId ? newBatsman : b,
       ) as [LiveBatsman, LiveBatsman];
+    } else if (wicket) {
+      updatedBatsmen = updatedBatsmen.map(b => b.playerId === wicket.batsmanId ? {
+        playerId: PENDING_NEXT_BATSMAN_ID,
+        playerName: 'Select next batter',
+        runs: 0,
+        balls: 0,
+        fours: 0,
+        sixes: 0,
+        strikeRate: 0,
+        isOnStrike: b.isOnStrike,
+      } : b) as [LiveBatsman, LiveBatsman];
     }
 
     // Update bowler stats
@@ -361,7 +374,8 @@ export class ManualScoringAdapter implements IScoringAdapter {
     await set(ref(this.db, `${this.basePath}/matches/${matchId}/balls/${ballEvent.id}`), this.stripUndefinedDeep(ballEvent));
 
     // Trigger overlay animation + replay on boundaries and wickets
-    if (ballEvent.isBoundary || ballEvent.isSix || ballEvent.isWicket) {
+    if ((ballEvent.isBoundary || ballEvent.isSix || ballEvent.isWicket)
+      && !(ballEvent.isWicket && input.suppressAutomaticObsAction)) {
       // Determine overlay type — check for duck (batsman out on 0)
       let overlayType: string;
       if (ballEvent.isWicket && wicket) {

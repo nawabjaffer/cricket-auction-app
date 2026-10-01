@@ -16,6 +16,7 @@ export interface AdminSession {
   token: string;
   expiresAt: number;
   isAuthenticated: boolean;
+  role?: AdminAccount['role'];
 }
 
 const ADMIN_ACCOUNTS_PATH = () => tenantPath('admin/accounts');
@@ -151,7 +152,8 @@ class AuthService {
         email,
         token,
         expiresAt,
-        isAuthenticated: true
+        isAuthenticated: true,
+        role: account.role,
       };
 
       // Update last login timestamp

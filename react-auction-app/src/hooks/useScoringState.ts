@@ -14,6 +14,7 @@ import { statsEngine } from '../services/scoring/statsEngine';
 import { ManualScoringAdapter } from '../services/scoring/ManualScoringAdapter';
 import { normalizePlayerName } from '../utils/playerName';
 import { belongsToTeam } from '../utils/teamMembership';
+import { PENDING_NEXT_BATSMAN_ID } from '../types/scoring';
 import type {
   LiveScore, MatchSetup, MatchLineup, Innings, BallOutcome,
   WicketDetail, MatchSquadPlayer, OverlayControlState, OverlayType,
@@ -198,10 +199,15 @@ export function useScoringState(matchId: string | undefined) {
   }, [matchId]);
 
   // Record ball — with debounce protection
-  const recordBall = useCallback(async (outcome: BallOutcome, wicket?: WicketDetail) => {
+  const recordBall = useCallback(async (outcome: BallOutcome, wicket?: WicketDetail, options?: { suppressAutomaticObsAction?: boolean }) => {
     const liveSnapshot = liveScoreRef.current;
     const inningsSnapshot = inningsRef.current;
     if (!matchId || !liveSnapshot || !adapterRef.current || recording || recordingRef.current) return;
+
+    if (liveSnapshot.currentBatsmen.some(batsman => batsman.playerId === PENDING_NEXT_BATSMAN_ID)) {
+      setState(s => ({ ...s, error: 'Select the next batter before recording another delivery.' }));
+      return;
+    }
     
     // Validate: can't take wicket when 10 are already down
     if (wicket && liveSnapshot.wickets >= 10) {
@@ -233,7 +239,7 @@ export function useScoringState(matchId: string | undefined) {
       };
 
       const { ballEvent, updatedLive, updatedInnings, isInningsComplete } = await adapterRef.current.recordBall(
-        matchId, liveSnapshot, innings, { outcome, wicket },
+        matchId, liveSnapshot, innings, { outcome, wicket, ...options },
       );
 
       liveScoreRef.current = updatedLive;
@@ -297,6 +303,7 @@ export function useScoringState(matchId: string | undefined) {
           await setOverlay('match_summary');
         } catch { /* ignore overlay trigger failure */ }
       }
+      return updatedLive;
     } catch (err) {
       setState(s => ({ ...s, error: `Record failed: ${err}` }));
     } finally {

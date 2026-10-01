@@ -13,7 +13,7 @@ import { useTenantNavigate as useNavigate } from '../hooks/useTenantNavigate';
 import { useScoringState } from '../hooks/useScoringState';
 import { useCricHeroesSyncAdapter } from '../hooks/useCricHeroesSyncAdapter';
 import { scoringService } from '../services/scoring';
-import { DEFAULT_FIELD_PLACEMENTS } from '../types/scoring';
+import { DEFAULT_FIELD_PLACEMENTS, PENDING_NEXT_BATSMAN_ID } from '../types/scoring';
 import { statsEngine } from '../services/scoring/statsEngine';
 import { obsReplaySourceService } from '../services/scoring/obsReplaySourceService';
 import { realtimeSync } from '../services/realtimeSync';
@@ -21,6 +21,7 @@ import { liveCommentService } from '../services/liveCommentService';
 import { cricHeroesMappingService } from '../services/cricHeroesMappingService';
 import { getActiveTenant, tenantPath } from '../services/tenantPath';
 import { isPowerplayOver } from '../utils/powerplay';
+import { reconcileEditedLiveScore } from '../utils/scorecardCorrections';
 import { cricHeroesPlayerAliasKey, EMPTY_CRICHEROES_MAPPINGS, normalizeCricHeroesAliasName, normalizeCricHeroesMappings, resolveCricHeroesPlayerAlias } from '../utils/cricHeroesMappings';
 import type { CricHeroesNameMappings } from '../utils/cricHeroesMappings';
 import type {
@@ -108,8 +109,10 @@ export default function ScoreUpdatePage() {
   const [searchParams] = useSearchParams();
   const urlMatchId = searchParams.get('matchId') || undefined;
   const urlPinned = searchParams.get('pin') === '1';
+  const requiresSuperAdmin = searchParams.get('superAdmin') === '1';
   const navigate = useNavigate();
-  const { isAuthenticated, extendSession } = useAdminAuth();
+  const { session, isAuthenticated, extendSession } = useAdminAuth();
+  const canCorrectScorecard = !requiresSuperAdmin || session?.role === 'super-admin';
 
   const [singleOverlayMode, setSingleOverlayMode] = useState(false);
   const [activeMatchId, setActiveMatchId] = useState<string | null>(null);
@@ -117,6 +120,11 @@ export default function ScoreUpdatePage() {
   const matchId = singleOverlayMode
     ? (urlPinned ? (urlMatchId || activeMatchId || undefined) : (activeMatchId || urlMatchId || undefined))
     : urlMatchId;
+  const [cricHeroesNameMappings, setCricHeroesNameMappings] = useState<CricHeroesNameMappings>(() => {
+    try {
+      return normalizeCricHeroesMappings(JSON.parse(localStorage.getItem(`cricheroes-name-mappings:${getActiveTenant()}`) || '{}'));
+    } catch { return EMPTY_CRICHEROES_MAPPINGS; }
+  });
 
   // Single Overlay Mode: resolve + follow the tenant's active match when no explicit matchId in URL
   useEffect(() => {
@@ -168,6 +176,13 @@ export default function ScoreUpdatePage() {
   const [showMatchCompleteModal, setShowMatchCompleteModal] = useState(false);
   const [expandedExtra, setExpandedExtra] = useState<'NB' | 'WD' | 'B' | 'LB' | 'PEN' | null>(null);
   const [pendingExtraOutcome, setPendingExtraOutcome] = useState<BallOutcome | null>(null); // for wicket-on-extra flow
+  const wicketObsActionPreviewRef = useRef(false);
+  const openWicketModal = useCallback((extraOutcome?: BallOutcome) => {
+    setPendingExtraOutcome(extraOutcome || null);
+    wicketObsActionPreviewRef.current = true;
+    void setOverlay('wicket');
+    setShowWicketModal(true);
+  }, [setOverlay]);
   const [showFieldEditor, setShowFieldEditor] = useState(false);
   const [showAddPlayerModal, setShowAddPlayerModal] = useState(false);
   const [showPlayerStatsModal, setShowPlayerStatsModal] = useState(false);
@@ -179,19 +194,13 @@ export default function ScoreUpdatePage() {
   const [tournamentStats, setTournamentStats] = useState<TournamentStats | null>(null);
   const [recordAlertDismissed, setRecordAlertDismissed] = useState(false);
   const [feedImportSnapshot, setFeedImportSnapshot] = useState<CricHeroesSyncData | null>(null);
-  const [cricHeroesNameMappings, setCricHeroesNameMappings] = useState<CricHeroesNameMappings>(() => {
-    try {
-      return normalizeCricHeroesMappings(JSON.parse(localStorage.getItem(`cricheroes-name-mappings:${getActiveTenant()}`) || '{}'));
-    } catch { return EMPTY_CRICHEROES_MAPPINGS; }
-  });
 
   const { latest: cricHeroesFeed } = useCricHeroesSyncAdapter(({ outcome }) => {
     if (!liveScore) return true;
     if (recording) return false;
     if (outcome === 'W') {
       if (showWicketModal) return false;
-      setPendingExtraOutcome(null);
-      setShowWicketModal(true);
+      openWicketModal();
     } else {
       void recordBall(outcome);
     }
@@ -356,11 +365,18 @@ export default function ScoreUpdatePage() {
   }, [isInningsComplete, isMatchComplete]);
 
   useEffect(() => {
-    if (!isAuthenticated) navigate('/admin/login');
+    if (!isAuthenticated || !canCorrectScorecard) {
+      if (requiresSuperAdmin && urlMatchId) {
+        const returnTo = `/cricket/scorer/update?matchId=${encodeURIComponent(urlMatchId)}&superAdmin=1`;
+        navigate(`/admin/login?superAdmin=1&returnTo=${encodeURIComponent(returnTo)}`);
+      } else {
+        navigate('/admin/login');
+      }
+    }
     const handleActivity = () => extendSession();
     window.addEventListener('click', handleActivity);
     return () => window.removeEventListener('click', handleActivity);
-  }, [isAuthenticated, navigate, extendSession]);
+  }, [isAuthenticated, canCorrectScorecard, requiresSuperAdmin, urlMatchId, navigate, extendSession]);
 
   // Tournament records — powers the "closing in on the highest score" alert
   useEffect(() => {
@@ -466,12 +482,12 @@ export default function ScoreUpdatePage() {
       else if (key === '4') recordBall('4');
       else if (key === '5') recordBall('5');
       else if (key === '6') recordBall('6');
-      else if (key.toLowerCase() === 'w') setShowWicketModal(true);
+      else if (key.toLowerCase() === 'w') openWicketModal();
       else if (key.toLowerCase() === 'z' && (e.ctrlKey || e.metaKey)) undoLastBall();
     };
     window.addEventListener('keydown', handleKey);
     return () => window.removeEventListener('keydown', handleKey);
-  }, [liveScore, recording, recordBall, undoLastBall]);
+  }, [liveScore, recording, recordBall, undoLastBall, openWicketModal]);
 
   const handleRunClick = useCallback((outcome: BallOutcome) => {
     recordBall(outcome);
@@ -503,7 +519,7 @@ export default function ScoreUpdatePage() {
     }
   }, [matchId, setOverlay]);
 
-  if (!isAuthenticated) return null;
+  if (!isAuthenticated || !canCorrectScorecard) return null;
 
   if (loading) {
     return (
@@ -638,6 +654,7 @@ export default function ScoreUpdatePage() {
   // Get lineup for batting/bowling teams
   const battingLineup = lineups.teamA?.teamId === liveScore.battingTeamId ? lineups.teamA : lineups.teamB;
   const bowlingLineup = lineups.teamA?.teamId === liveScore.bowlingTeamId ? lineups.teamA : lineups.teamB;
+  const needsNextBatsman = liveScore.currentBatsmen.some(batsman => batsman.playerId === PENDING_NEXT_BATSMAN_ID);
 
   // Record chase: alert the scorer when the total closes in on the tournament best
   const teamRecord = tournamentStats?.highestTeamScore || null;
@@ -653,18 +670,26 @@ export default function ScoreUpdatePage() {
     <div className="score-update">
       <ScoreHeader match={match} />
 
-      {singleOverlayMode && match.status === 'completed' && (
+      {match.status === 'live' && canCorrectScorecard && (
+        <div className="score-update__session-banner">
+          <span>Correct a scorecard entry or player from either innings.</span>
+          <button className="score-update__overlay-btn" onClick={() => setShowCompletedEditModal(true)}>Correct Scorecard</button>
+          {completedEditFeedback && <span className="score-update__hint">{completedEditFeedback}</span>}
+        </div>
+      )}
+
+      {singleOverlayMode && match.status === 'completed' && canCorrectScorecard && (
         <div className="score-update__session-banner">
           <span>🏁 This match has ended</span>
           <button className="score-update__overlay-btn" onClick={handleStartNextMatch}>▶ Start Next Match</button>
           <button className="score-update__overlay-btn score-update__overlay-btn--clear" onClick={handleEndScorerSession}>End Session</button>
-          <button className="score-update__overlay-btn" onClick={() => setShowCompletedEditModal(true)}>Edit Completed Scorecard</button>
+          <button className="score-update__overlay-btn" onClick={() => setShowCompletedEditModal(true)}>Correct Scorecard</button>
           {matchActionFeedback && <span className="score-update__hint">{matchActionFeedback}</span>}
           {completedEditFeedback && <span className="score-update__hint">{completedEditFeedback}</span>}
         </div>
       )}
 
-      {!singleOverlayMode && match.status === 'completed' && (
+      {!singleOverlayMode && match.status === 'completed' && canCorrectScorecard && (
         <div className="score-update__session-banner">
           <span>🏁 Match completed</span>
           <button className="score-update__overlay-btn" onClick={() => setShowCompletedEditModal(true)}>Edit Completed Scorecard</button>
@@ -788,7 +813,7 @@ export default function ScoreUpdatePage() {
         {(liveScore.currentBatsmen || []).map((bat, i) => (
           <div
             key={bat.playerId}
-            className={`score-update__batsman ${bat.isOnStrike ? 'score-update__batsman--strike' : ''}`}
+            className={`score-update__batsman ${bat.isOnStrike ? 'score-update__batsman--strike' : ''} ${bat.playerId === PENDING_NEXT_BATSMAN_ID ? 'score-update__batsman--pending' : ''}`}
             onClick={() => setShowBatsmanPicker(i === 0 ? 'striker' : 'non-striker')}
           >
             <span className="score-update__bat-name">
@@ -805,6 +830,11 @@ export default function ScoreUpdatePage() {
           P'ship: {(liveScore.partnership || { runs: 0, balls: 0 }).runs} ({(liveScore.partnership || { runs: 0, balls: 0 }).balls})
         </div>
       </div>
+      {needsNextBatsman && (
+        <div className="score-update__next-batter-required" role="status">
+          Wicket recorded. Tap <strong>Select next batter</strong> above before entering the next delivery.
+        </div>
+      )}
 
       {/* ── Bowler ────────────────────────────────────────────────────── */}
       <div className="score-update__bowler" onClick={() => setShowBowlerPicker(true)}>
@@ -817,6 +847,7 @@ export default function ScoreUpdatePage() {
         <IoChevronDown size={14} />
       </div>
 
+      <fieldset className="score-update__scoring-controls" disabled={recording || needsNextBatsman}>
       {/* ── Run Buttons ───────────────────────────────────────────────── */}
       <div className="score-update__run-grid">
         {RUN_BUTTONS.map(btn => (
@@ -835,7 +866,7 @@ export default function ScoreUpdatePage() {
       <div className="score-update__action-row">
         <button
           className="score-update__btn score-update__btn--wicket"
-          onClick={() => setShowWicketModal(true)}
+          onClick={() => openWicketModal()}
           disabled={recording}
         >
           W
@@ -901,7 +932,7 @@ export default function ScoreUpdatePage() {
             ))}
             <button
               className="score-update__btn score-update__btn--sub score-update__btn--runout"
-              onClick={() => { setPendingExtraOutcome('NB+0'); setShowWicketModal(true); setExpandedExtra(null); }}
+              onClick={() => { openWicketModal('NB+0'); setExpandedExtra(null); }}
               disabled={recording}
             >
               NB + Run Out
@@ -929,7 +960,7 @@ export default function ScoreUpdatePage() {
             ))}
             <button
               className="score-update__btn score-update__btn--sub score-update__btn--runout"
-              onClick={() => { setPendingExtraOutcome('WD'); setShowWicketModal(true); setExpandedExtra(null); }}
+              onClick={() => { openWicketModal('WD'); setExpandedExtra(null); }}
               disabled={recording}
             >
               WD + Stumped/Run Out
@@ -957,7 +988,7 @@ export default function ScoreUpdatePage() {
             ))}
             <button
               className="score-update__btn score-update__btn--sub score-update__btn--runout"
-              onClick={() => { setPendingExtraOutcome('B+1'); setShowWicketModal(true); setExpandedExtra(null); }}
+              onClick={() => { openWicketModal('B+1'); setExpandedExtra(null); }}
               disabled={recording}
             >
               B + Run Out
@@ -985,7 +1016,7 @@ export default function ScoreUpdatePage() {
             ))}
             <button
               className="score-update__btn score-update__btn--sub score-update__btn--runout"
-              onClick={() => { setPendingExtraOutcome('LB+1'); setShowWicketModal(true); setExpandedExtra(null); }}
+              onClick={() => { openWicketModal('LB+1'); setExpandedExtra(null); }}
               disabled={recording}
             >
               LB + Run Out
@@ -1014,6 +1045,7 @@ export default function ScoreUpdatePage() {
           </motion.div>
         )}
       </AnimatePresence>
+      </fieldset>
 
       {/* ── Undo + Controls ───────────────────────────────────────────── */}
       <div className="score-update__controls">
@@ -1048,7 +1080,7 @@ export default function ScoreUpdatePage() {
       <div className="score-update__overlay-triggers">
         <span className="score-update__overlay-label">Overlay:</span>
         {[
-          { type: 'full_scorecard' as const, label: 'Scorecard' },
+          { type: 'full_scorecard' as const, label: 'Show Scorecard' },
           { type: 'batsman_striker' as const, label: 'Striker' },
           { type: 'batsman_nonstriker' as const, label: 'Non-Striker' },
           { type: 'bowler' as const, label: 'Bowler' },
@@ -1214,11 +1246,19 @@ export default function ScoreUpdatePage() {
                   outcome = 'W';
                 }
               }
-              await recordBall(outcome, wicket);
+              const updatedLive = await recordBall(outcome, wicket, { suppressAutomaticObsAction: wicketObsActionPreviewRef.current });
+              wicketObsActionPreviewRef.current = false;
               setShowWicketModal(false);
               setPendingExtraOutcome(null);
+              if (!wicket.newBatsmanId && updatedLive) {
+                const pendingIndex = updatedLive.currentBatsmen.findIndex(batsman => batsman.playerId === PENDING_NEXT_BATSMAN_ID);
+                const inningsEnded = updatedLive.wickets >= 10
+                  || updatedLive.overs >= match.maxOvers
+                  || (updatedLive.target != null && updatedLive.runs >= updatedLive.target);
+                if (pendingIndex >= 0 && !inningsEnded) setShowBatsmanPicker(pendingIndex === 0 ? 'striker' : 'non-striker');
+              }
             }}
-            onClose={() => { setShowWicketModal(false); setPendingExtraOutcome(null); }}
+            onClose={() => { wicketObsActionPreviewRef.current = false; setShowWicketModal(false); setPendingExtraOutcome(null); }}
           />
         )}
       </AnimatePresence>
@@ -1422,13 +1462,14 @@ export default function ScoreUpdatePage() {
         <CompletedScorecardEditModal
           matchId={matchId}
           liveScore={liveScore}
+          lineups={lineups}
           maxOvers={match.maxOvers}
           onClose={() => setShowCompletedEditModal(false)}
           onSaved={async (message) => {
             setShowCompletedEditModal(false);
             setCompletedEditFeedback(message);
             setTimeout(() => setCompletedEditFeedback(''), 3500);
-            await completeMatch();
+            if (match.status === 'completed') await completeMatch();
           }}
         />
       )}
@@ -1511,11 +1552,9 @@ function WicketModal({ battingLineup, bowlingLineup, currentBatsmen, currentBowl
   const availableBatsmen = battingLineup.filter(
     p => !dismissedIds.has(p.playerId) && !currentIds.has(p.playerId),
   );
-  const requiresNewBatsman = availableBatsmen.length > 0;
   const missingRequiredFields = [
     !outBatsman && 'Out batsman',
     needsFielder && !fielderId && 'Fielder',
-    requiresNewBatsman && !availableBatsmen.some(p => p.playerId === newBatsmanId) && 'New batsman',
   ].filter((field): field is string => Boolean(field));
   const canConfirm = missingRequiredFields.length === 0;
 
@@ -1566,11 +1605,12 @@ function WicketModal({ battingLineup, bowlingLineup, currentBatsmen, currentBowl
         )}
 
         <div className="score-update__modal-field">
-          <label>New Batsman{requiresNewBatsman ? ' *' : ''}</label>
+          <label>Next Batsman (optional)</label>
           <select value={newBatsmanId} onChange={e => setNewBatsmanId(e.target.value)} className="score-update__select">
-            <option value="">Select new batsman</option>
+            <option value="">Choose later from the live scorecard</option>
             {availableBatsmen.map(p => <option key={p.playerId} value={p.playerId}>{p.playerName}</option>)}
           </select>
+          {!newBatsmanId && availableBatsmen.length > 0 && <small className="score-update__hint">You can confirm the wicket now. Scoring pauses until you select the incoming batter.</small>}
         </div>
 
         {!canConfirm && (
@@ -2562,12 +2602,14 @@ function validateInningsCorrection(innings: Innings): string[] {
 function CompletedScorecardEditModal({
   matchId,
   liveScore,
+  lineups,
   maxOvers,
   onClose,
   onSaved,
 }: {
   matchId: string;
   liveScore: LiveScore;
+  lineups: { teamA: MatchLineup | null; teamB: MatchLineup | null };
   maxOvers: number;
   onClose: () => void;
   onSaved: (message: string) => void | Promise<void>;
@@ -2575,6 +2617,8 @@ function CompletedScorecardEditModal({
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [selectedInnings, setSelectedInnings] = useState<1 | 2>(liveScore.currentInnings);
+    const [selectedBatsmanId, setSelectedBatsmanId] = useState('');
+    const [selectedBowlerId, setSelectedBowlerId] = useState('');
   const [inningsMap, setInningsMap] = useState<Record<1 | 2, Innings | null>>({ 1: null, 2: null });
   const [errors, setErrors] = useState<string[]>([]);
 
@@ -2593,6 +2637,66 @@ function CompletedScorecardEditModal({
   }, [matchId]);
 
   const current = inningsMap[selectedInnings];
+  const battingLineup = current
+    ? (lineups.teamA?.teamId === current.battingTeamId ? lineups.teamA : lineups.teamB)
+    : null;
+  const bowlingLineup = current
+    ? (lineups.teamA?.teamId === current.bowlingTeamId ? lineups.teamA : lineups.teamB)
+    : null;
+  const availableBatters = current
+    ? (battingLineup?.players || []).filter(player => !current.batsmen.some(batsman => batsman.playerId === player.playerId))
+    : [];
+  const availableBowlers = current
+    ? (bowlingLineup?.players || []).filter(player => !current.bowlers.some(bowler => bowler.playerId === player.playerId))
+    : [];
+  const addLineupBatsman = () => {
+    const player = battingLineup?.players.find(candidate => candidate.playerId === selectedBatsmanId);
+    if (!current || !player) return;
+    patchCurrent({
+      ...current,
+      batsmen: [...current.batsmen, {
+        playerId: player.playerId,
+        playerName: player.playerName,
+        runs: 0,
+        balls: 0,
+        fours: 0,
+        sixes: 0,
+        strikeRate: 0,
+        dismissal: 'not out',
+        isOut: false,
+        order: Math.max(0, ...current.batsmen.map(batsman => batsman.order)) + 1,
+      }],
+    });
+    setSelectedBatsmanId('');
+  };
+  const addLineupBowler = () => {
+    const player = bowlingLineup?.players.find(candidate => candidate.playerId === selectedBowlerId);
+    if (!current || !player) return;
+    patchCurrent({
+      ...current,
+      bowlers: [...current.bowlers, {
+        playerId: player.playerId,
+        playerName: player.playerName,
+        overs: 0,
+        maidens: 0,
+        runs: 0,
+        wickets: 0,
+        economy: 0,
+        wides: 0,
+        noBalls: 0,
+        dots: 0,
+      }],
+    });
+    setSelectedBowlerId('');
+  };
+  const addManualBatsman = () => {
+    if (!current) return;
+    patchCurrent({ ...current, batsmen: [...current.batsmen, { playerId: `bat_${Date.now()}`, playerName: 'New Batsman', runs: 0, balls: 0, fours: 0, sixes: 0, strikeRate: 0, dismissal: 'not out', isOut: false, order: current.batsmen.length + 1 }] });
+  };
+  const addManualBowler = () => {
+    if (!current) return;
+    patchCurrent({ ...current, bowlers: [...current.bowlers, { playerId: `bowl_${Date.now()}`, playerName: 'New Bowler', overs: 0, maidens: 0, runs: 0, wickets: 0, economy: 0, wides: 0, noBalls: 0, dots: 0 }] });
+  };
 
   const patchCurrent = (next: Innings) => {
     setInningsMap(prev => ({ ...prev, [selectedInnings]: next }));
@@ -2613,56 +2717,7 @@ function CompletedScorecardEditModal({
 
       const updatedCurrent = inningsMap[liveScore.currentInnings];
       if (updatedCurrent) {
-        const notOut = updatedCurrent.batsmen.filter(b => !b.isOut);
-        const striker = notOut[0] || updatedCurrent.batsmen[0];
-        const nonStriker = notOut[1] || updatedCurrent.batsmen[1] || striker;
-        const primaryBowler = [...updatedCurrent.bowlers].sort((a, b) => asNum(b.overs) - asNum(a.overs))[0] || liveScore.currentBowler;
-        const balls = Math.floor(asNum(updatedCurrent.totalOvers)) * 6 + Math.round((asNum(updatedCurrent.totalOvers) % 1) * 10);
-        const rr = balls > 0 ? Math.round((asNum(updatedCurrent.totalRuns) / balls) * 6 * 100) / 100 : 0;
-
-        const nextLive: LiveScore = {
-          ...liveScore,
-          runs: asNum(updatedCurrent.totalRuns),
-          wickets: asNum(updatedCurrent.totalWickets),
-          overs: asNum(updatedCurrent.totalOvers),
-          runRate: rr,
-          currentBatsmen: [
-            {
-              playerId: striker.playerId,
-              playerName: striker.playerName,
-              runs: asNum(striker.runs),
-              balls: asNum(striker.balls),
-              fours: asNum(striker.fours),
-              sixes: asNum(striker.sixes),
-              strikeRate: asNum(striker.strikeRate),
-              isOnStrike: true,
-            },
-            {
-              playerId: nonStriker.playerId,
-              playerName: nonStriker.playerName,
-              runs: asNum(nonStriker.runs),
-              balls: asNum(nonStriker.balls),
-              fours: asNum(nonStriker.fours),
-              sixes: asNum(nonStriker.sixes),
-              strikeRate: asNum(nonStriker.strikeRate),
-              isOnStrike: false,
-            },
-          ],
-          currentBowler: {
-            playerId: primaryBowler.playerId,
-            playerName: primaryBowler.playerName,
-            overs: asNum(primaryBowler.overs),
-            maidens: asNum(primaryBowler.maidens),
-            runs: asNum(primaryBowler.runs),
-            wickets: asNum(primaryBowler.wickets),
-            economy: asNum(primaryBowler.economy),
-            dots: asNum(primaryBowler.dots),
-          },
-          allBatsmen: updatedCurrent.batsmen,
-          allBowlers: updatedCurrent.bowlers,
-          lastUpdated: Date.now(),
-        };
-        await scoringService.saveLiveScore(matchId, nextLive);
+        await scoringService.saveLiveScore(matchId, reconcileEditedLiveScore(liveScore, updatedCurrent, inningsMap[1]));
       }
 
       await onSaved('Completed scorecard corrected and validated');
@@ -2677,7 +2732,28 @@ function CompletedScorecardEditModal({
     <div className="score-update__modal-overlay" onClick={onClose}>
       <div className="score-update__modal score-update__modal--wide" style={{ width: 'min(1100px, 96vw)' }} onClick={e => e.stopPropagation()}>
         <h3>Completed Match Scorecard Corrections</h3>
-        <p className="score-update__hint">Edit innings safely. Validation blocks duplicate batsmen/bowlers and inconsistent cricket totals.</p>
+        <h3>Scorecard Corrections</h3>
+        <p className="score-update__hint">Correct either innings, update player figures, or restore a missed player from the saved team lineup. Validation blocks duplicate players and inconsistent totals.</p>
+              <div className="score-update__modal-actions">
+                <select className="score-update__input" value={selectedBatsmanId} onChange={event => setSelectedBatsmanId(event.target.value)}>
+                  <option value="">Add from batting lineup</option>
+                  {availableBatters.map(player => (
+                    <option key={player.playerId} value={player.playerId}>{player.playerName} · {player.role}</option>
+                  ))}
+                </select>
+                <button className="score-update__btn score-update__btn--secondary" onClick={addLineupBatsman} disabled={!selectedBatsmanId}>Add lineup batter</button>
+                <button className="score-update__btn" onClick={addManualBatsman}>Add manual batter</button>
+              </div>
+              <div className="score-update__modal-actions">
+                <select className="score-update__input" value={selectedBowlerId} onChange={event => setSelectedBowlerId(event.target.value)}>
+                  <option value="">Add from bowling lineup</option>
+                  {availableBowlers.map(player => (
+                    <option key={player.playerId} value={player.playerId}>{player.playerName} · {player.role}</option>
+                  ))}
+                </select>
+                <button className="score-update__btn score-update__btn--secondary" onClick={addLineupBowler} disabled={!selectedBowlerId}>Add lineup bowler</button>
+                <button className="score-update__btn" onClick={addManualBowler}>Add manual bowler</button>
+              </div>
 
         <div className="score-update__modal-actions" style={{ justifyContent: 'flex-start', marginBottom: '0.5rem' }}>
           <button className={`score-update__btn ${selectedInnings === 1 ? 'score-update__btn--primary' : ''}`} onClick={() => setSelectedInnings(1)}>Innings 1</button>
@@ -2708,11 +2784,25 @@ function CompletedScorecardEditModal({
               <h4 style={{ margin: 0 }}>Batsmen</h4>
               {current.batsmen.map((b, i) => (
                 <div key={`${b.playerId}-${i}`} className="score-update__modal-grid" style={{ gridTemplateColumns: '2fr 0.8fr 0.8fr 0.8fr 0.8fr 1fr 1.4fr 0.8fr auto', marginBottom: '0.35rem' }}>
-                  <input className="score-update__input" value={b.playerName} onChange={e => {
-                    const next = [...current.batsmen];
-                    next[i] = { ...next[i], playerName: e.target.value, playerId: next[i].playerId || e.target.value.toLowerCase().replace(/\s+/g, '_') };
-                    patchCurrent({ ...current, batsmen: next });
-                  }} />
+                  <div className="score-update__scorecard-player-edit">
+                    <select className="score-update__input" value={b.playerId} onChange={event => {
+                      const player = battingLineup?.players.find(candidate => candidate.playerId === event.target.value);
+                      if (!player) return;
+                      const next = [...current.batsmen];
+                      next[i] = { ...next[i], playerId: player.playerId, playerName: player.playerName };
+                      patchCurrent({ ...current, batsmen: next });
+                    }}>
+                      <option value={b.playerId}>{b.playerName} · current</option>
+                      {(battingLineup?.players || []).filter(player => player.playerId !== b.playerId).map(player => (
+                        <option key={player.playerId} value={player.playerId}>{player.playerName} · {player.role}</option>
+                      ))}
+                    </select>
+                    <input className="score-update__input" value={b.playerName} aria-label={`Batter ${i + 1} display name`} onChange={e => {
+                      const next = [...current.batsmen];
+                      next[i] = { ...next[i], playerName: e.target.value, playerId: next[i].playerId || e.target.value.toLowerCase().replace(/\s+/g, '_') };
+                      patchCurrent({ ...current, batsmen: next });
+                    }} />
+                  </div>
                   <input className="score-update__input" type="number" value={b.runs} onChange={e => {
                     const next = [...current.batsmen]; next[i] = { ...next[i], runs: asNum(e.target.value) }; patchCurrent({ ...current, batsmen: next });
                   }} />
@@ -2747,11 +2837,25 @@ function CompletedScorecardEditModal({
               <h4 style={{ margin: 0 }}>Bowlers</h4>
               {current.bowlers.map((b, i) => (
                 <div key={`${b.playerId}-${i}`} className="score-update__modal-grid" style={{ gridTemplateColumns: '2fr repeat(6, 0.85fr) auto', marginBottom: '0.35rem' }}>
-                  <input className="score-update__input" value={b.playerName} onChange={e => {
-                    const next = [...current.bowlers];
-                    next[i] = { ...next[i], playerName: e.target.value, playerId: next[i].playerId || e.target.value.toLowerCase().replace(/\s+/g, '_') };
-                    patchCurrent({ ...current, bowlers: next });
-                  }} />
+                  <div className="score-update__scorecard-player-edit">
+                    <select className="score-update__input" value={b.playerId} onChange={event => {
+                      const player = bowlingLineup?.players.find(candidate => candidate.playerId === event.target.value);
+                      if (!player) return;
+                      const next = [...current.bowlers];
+                      next[i] = { ...next[i], playerId: player.playerId, playerName: player.playerName };
+                      patchCurrent({ ...current, bowlers: next });
+                    }}>
+                      <option value={b.playerId}>{b.playerName} · current</option>
+                      {(bowlingLineup?.players || []).filter(player => player.playerId !== b.playerId).map(player => (
+                        <option key={player.playerId} value={player.playerId}>{player.playerName} · {player.role}</option>
+                      ))}
+                    </select>
+                    <input className="score-update__input" value={b.playerName} aria-label={`Bowler ${i + 1} display name`} onChange={e => {
+                      const next = [...current.bowlers];
+                      next[i] = { ...next[i], playerName: e.target.value, playerId: next[i].playerId || e.target.value.toLowerCase().replace(/\s+/g, '_') };
+                      patchCurrent({ ...current, bowlers: next });
+                    }} />
+                  </div>
                   <input className="score-update__input" type="number" step="0.1" value={b.overs} onChange={e => { const next = [...current.bowlers]; next[i] = { ...next[i], overs: asNum(e.target.value) }; patchCurrent({ ...current, bowlers: next }); }} />
                   <input className="score-update__input" type="number" value={b.maidens} onChange={e => { const next = [...current.bowlers]; next[i] = { ...next[i], maidens: asNum(e.target.value) }; patchCurrent({ ...current, bowlers: next }); }} />
                   <input className="score-update__input" type="number" value={b.runs} onChange={e => { const next = [...current.bowlers]; next[i] = { ...next[i], runs: asNum(e.target.value) }; patchCurrent({ ...current, bowlers: next }); }} />

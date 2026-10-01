@@ -23,6 +23,7 @@ import type { PremiumTier } from '../../types/premium';
 import type { SuccessAnimationType } from '../../types/streaming';
 import type { ScoringOverlayConfig } from '../../types/scoring';
 import ObsStudioPanel, { type ObsOverlaySource } from './ObsStudioPanel';
+import BroadcastScheduleManager from './BroadcastScheduleManager';
 
 export type StreamingSection = 'obs' | 'live' | 'rtmp' | 'sports';
 
@@ -299,6 +300,7 @@ export default function StreamingTab({ onClose, section }: StreamingTabProps) {
 
       {show('live') && (
         <>
+      <BroadcastScheduleManager />
       {/* Quick Launch */}
       <div className="admin-panel__section">
         <h3 className="admin-panel__section-title">
