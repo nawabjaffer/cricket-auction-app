@@ -261,6 +261,17 @@ class OBSReplaySourceService {
           });
           return null;
 
+        case 'media_input_seek': {
+          if (!step.inputName?.trim()) return 'Select an OBS media source first.';
+          const inputName = step.inputName.trim();
+          const status = await obsService.request<{ mediaDuration: number | null; mediaCursor: number | null }>('GetMediaInputStatus', { inputName });
+          if (!Number.isFinite(status.mediaCursor)) return 'The replay media is not loaded yet. Save or play a replay before seeking.';
+          const nextCursor = Number(status.mediaCursor) + (Number(step.mediaCursorOffset) || 0);
+          const boundedCursor = Math.max(0, status.mediaDuration == null ? nextCursor : Math.min(status.mediaDuration, nextCursor));
+          await obsService.request('SetMediaInputCursor', { inputName, mediaCursor: boundedCursor });
+          return null;
+        }
+
         default:
           return `Unsupported OBS action: ${step.action}.`;
       }

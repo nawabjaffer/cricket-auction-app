@@ -854,6 +854,7 @@ export type OBSButtonAction =
   | 'hotkey_name'       // TriggerHotkeyByName — best for Replay Source plugin
   | 'hotkey_sequence'   // TriggerHotkeyByKeySequence — simulates a keypress
   | 'scene_switch'      // SetCurrentProgramScene
+  | 'media_input_seek'  // Seek a media input by a relative cursor offset
   | 'replay_buffer_save'  // SaveReplayBuffer (built-in replay buffer)
   | 'replay_buffer_start' // StartReplayBuffer
   | 'replay_buffer_stop'  // StopReplayBuffer
@@ -861,6 +862,7 @@ export type OBSButtonAction =
   | 'series';             // run several steps in order with delays
 
 export type OBSMediaInputAction =
+  | 'OBS_WEBSOCKET_MEDIA_INPUT_ACTION_PLAY'
   | 'OBS_WEBSOCKET_MEDIA_INPUT_ACTION_RESTART'
   | 'OBS_WEBSOCKET_MEDIA_INPUT_ACTION_PAUSE'
   | 'OBS_WEBSOCKET_MEDIA_INPUT_ACTION_STOP';
@@ -883,6 +885,7 @@ export interface OBSButtonSeriesStep {
   sceneName?: string;
   inputName?: string;
   mediaAction?: OBSMediaInputAction;
+  mediaCursorOffset?: number;
   label?: string;
 }
 
@@ -897,6 +900,7 @@ export interface OBSReplayButton {
   sceneName?: string;     // for action = 'scene_switch'
   inputName?: string;     // for action = 'media_input_action'
   mediaAction?: OBSMediaInputAction;
+  mediaCursorOffset?: number;
   series?: OBSButtonSeriesStep[];     // for action = 'series'
   order: number;
   enabled: boolean;

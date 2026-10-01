@@ -13,7 +13,7 @@ import { realtimeSync } from '../services/realtimeSync';
 import { tenantPath } from '../services/tenantPath';
 import { obsService } from '../services/obsService';
 import { obsConnectionBridgeService, type OBSConnectionBridgePresence } from '../services/obsConnectionBridgeService';
-import { obsStreamingPresetService } from '../services/obsStreamingPresetService';
+import { CRICKET_REPLAY_MEDIA_INPUT, obsStreamingPresetService } from '../services/obsStreamingPresetService';
 import { obsReplaySourceService } from '../services/scoring/obsReplaySourceService';
 import { liveCommentService } from '../services/liveCommentService';
 import { requestYouTubeReadToken, startYouTubeLiveChat } from '../services/youtubeLiveChat';
@@ -78,6 +78,15 @@ const DOCK_MODE_OPTIONS: { key: DockConnectionMode; label: string; hint: string 
   { key: 'local', label: 'Local', hint: 'Dock is running on the same computer as OBS (127.0.0.1).' },
   { key: 'relay', label: 'Same Wi-Fi', hint: 'Phone sends commands over Firebase to the dock open on the OBS machine.' },
 ];
+const DRS_REPLAY_BUTTON_IDS = new Set([
+  'cricket-preset-drs-play',
+  'cricket-preset-drs-pause',
+  'cricket-preset-drs-restart',
+  'cricket-preset-drs-back-frame',
+  'cricket-preset-drs-forward-frame',
+  'cricket-preset-drs-back-second',
+  'cricket-preset-drs-forward-second',
+]);
 
 type ReplayActionLogStatus = 'queued' | 'running' | 'completed' | 'failed' | 'cancelled';
 interface ReplayActionLogEntry {
@@ -126,6 +135,7 @@ export default function ScoreOBSControlDock() {
   const [replayConfig, setReplayConfig] = useState<OBSReplayConfig>({ buttons: [] });
   const [replayScene, setReplayScene] = useState('');
   const [drsScene, setDrsScene] = useState('');
+  const [drsMediaStatus, setDrsMediaStatus] = useState<{ mediaState: string; mediaDuration: number | null; mediaCursor: number | null } | null>(null);
   const [execBusy, setExecBusy] = useState<string | null>(null);
   const [queuedActionCount, setQueuedActionCount] = useState(0);
   const [replayActionLogs, setReplayActionLogs] = useState<ReplayActionLogEntry[]>([]);
@@ -386,6 +396,27 @@ export default function ScoreOBSControlDock() {
   // obsService is a singleton, no deps needed
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (obsStatus !== 'connected') {
+      setDrsMediaStatus(null);
+      return;
+    }
+    let active = true;
+    const refreshMediaStatus = async () => {
+      try {
+        const status = await obsService.request<{ mediaState: string; mediaDuration: number | null; mediaCursor: number | null }>(
+          'GetMediaInputStatus', { inputName: CRICKET_REPLAY_MEDIA_INPUT },
+        );
+        if (active) setDrsMediaStatus(status);
+      } catch {
+        if (active) setDrsMediaStatus(null);
+      }
+    };
+    void refreshMediaStatus();
+    const timer = window.setInterval(() => { if (!document.hidden) void refreshMediaStatus(); }, 1_000);
+    return () => { active = false; window.clearInterval(timer); };
+  }, [obsStatus]);
 
   useEffect(() => {
     if (obsStatus !== 'connected') return;
@@ -915,7 +946,8 @@ export default function ScoreOBSControlDock() {
   }, [activeOverlay, selectedMatch?.status, selectedMatchId]);
   const obsIsConnected = obsStatus === 'connected';
   const relayReady = connectionMode === 'relay' || relayOnlyMode || (!obsIsConnected && obsStatus !== 'connecting');
-  const enabledButtons = replayConfig.buttons.filter(b => b.enabled).sort((a, b) => a.order - b.order);
+  const enabledButtons = replayConfig.buttons.filter(b => b.enabled && !DRS_REPLAY_BUTTON_IDS.has(b.id)).sort((a, b) => a.order - b.order);
+  const enabledDrsButtons = replayConfig.buttons.filter(button => button.enabled && DRS_REPLAY_BUTTON_IDS.has(button.id)).sort((a, b) => a.order - b.order);
   const audienceUrl = new URL(globalThis.location.href);
   audienceUrl.pathname = audienceUrl.pathname.replace(/\/obs-dock$/, '/live-chat');
   if (selectedMatchId) audienceUrl.searchParams.set('matchId', selectedMatchId);
@@ -1174,6 +1206,30 @@ export default function ScoreOBSControlDock() {
             <span>No replay buttons configured.</span>
             <span>Go to Scoring Admin → OBS WS → Replay Buttons to set up.</span>
           </div>
+        )}
+
+        {(drsScene || enabledDrsButtons.length > 0) && (
+          <section className="score-dock__drs-review">
+            <header>
+              <div><strong>DRS Replay Review</strong><span>Frame-by-frame replay control</span></div>
+              {drsMediaStatus && <span className={`score-dock__drs-state score-dock__drs-state--${drsMediaStatus.mediaState.toLowerCase().replace(/[^a-z]+/g, '-')}`}>
+                {drsMediaStatus.mediaState.replace(/^OBS_MEDIA_STATE_/, '').toLowerCase()}
+                {drsMediaStatus.mediaCursor != null && drsMediaStatus.mediaDuration != null ? ` · ${(drsMediaStatus.mediaCursor / 1000).toFixed(1)}s / ${(drsMediaStatus.mediaDuration / 1000).toFixed(1)}s` : ''}
+              </span>}
+            </header>
+            {drsScene && <button type="button" className="score-dock__drs-view" onClick={() => handleSwitchReplayScene(drsScene)}>Show DRS View</button>}
+            {enabledDrsButtons.length > 0 ? (
+              <div className="score-dock__drs-controls">
+                {enabledDrsButtons.map(button => (
+                  <button key={button.id} type="button" onClick={() => void execReplayButton(button)} disabled={execBusy === button.id} title={button.label}>
+                    <span>{button.icon}</span>{button.label}
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <p>Run Match Setup to add play, pause, restart and frame/second seek controls.</p>
+            )}
+          </section>
         )}
 
         {/* Quick built-in replay buffer buttons */}

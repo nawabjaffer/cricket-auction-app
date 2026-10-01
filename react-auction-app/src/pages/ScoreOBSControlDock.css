@@ -730,6 +730,95 @@
 .score-dock__replay-log-time { color: rgba(255, 255, 255, 0.38); font-variant-numeric: tabular-nums; }
 .score-dock__replay-log li > span:last-child { grid-column: 1 / -1; overflow-wrap: anywhere; }
 
+.score-dock__drs-review {
+  display: grid;
+  gap: 0.5rem;
+  margin: 0 0.65rem 0.65rem;
+  padding: 0.65rem;
+  background: rgba(14, 165, 233, 0.08);
+  border: 1px solid rgba(56, 189, 248, 0.22);
+  border-radius: 7px;
+}
+
+.score-dock__drs-review > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.score-dock__drs-review > header > div {
+  display: grid;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.score-dock__drs-review > header strong {
+  color: #e0f2fe;
+  font-size: 0.73rem;
+}
+
+.score-dock__drs-review > header span {
+  color: #7dd3fc;
+  font-size: 0.61rem;
+}
+
+.score-dock__drs-state {
+  flex: 0 0 auto;
+  padding: 0.2rem 0.35rem;
+  color: #bae6fd;
+  font-size: 0.59rem;
+  font-variant-numeric: tabular-nums;
+  background: rgba(2, 132, 199, 0.15);
+  border-radius: 4px;
+}
+
+.score-dock__drs-state--obs-media-state-playing { color: #86efac !important; }
+.score-dock__drs-state--obs-media-state-paused { color: #fde68a !important; }
+
+.score-dock__drs-view {
+  padding: 0.4rem 0.5rem;
+  color: #e0f2fe;
+  font-size: 0.65rem;
+  font-weight: 750;
+  background: rgba(14, 165, 233, 0.17);
+  border: 1px solid rgba(56, 189, 248, 0.28);
+  border-radius: 5px;
+}
+
+.score-dock__drs-controls {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.35rem;
+}
+
+.score-dock__drs-controls button {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0.35rem;
+  min-width: 0;
+  min-height: 32px;
+  padding: 0.35rem 0.45rem;
+  color: #dbeafe;
+  font-size: 0.63rem;
+  text-align: left;
+  background: rgba(255, 255, 255, 0.055);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 5px;
+}
+
+.score-dock__drs-controls button span { flex: 0 0 auto; color: #7dd3fc; }
+.score-dock__drs-controls button:hover:not(:disabled) { background: rgba(14, 165, 233, 0.18); }
+.score-dock__drs-controls button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.score-dock__drs-review > p {
+  margin: 0;
+  color: #94a3b8;
+  font-size: 0.63rem;
+  line-height: 1.4;
+}
+
 /* Scene switch buttons */
 .score-dock__replay-scenes {
   display: flex;

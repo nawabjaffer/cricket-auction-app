@@ -372,14 +372,15 @@ class OBSStreamingPresetService {
       await removeSceneItem(CRICKET_REPLAY_SCENE, audioScene);
       await ensureSceneItem(CRICKET_REPLAY_SCENE, CRICKET_CAMERA_REPLAY_SCENE);
       await ensureSceneItem(CRICKET_REPLAY_VLC_SCENE, cameraSceneNames[0]);
-      await ensureSceneItem('Cricket - DRS', cameraSceneNames[0]);
     } else {
       await ensureSceneItem(liveScene, audioScene);
       await ensureSceneItem(CRICKET_CAMERA_REPLAY_SCENE, audioScene);
       await ensureSceneItem(CRICKET_REPLAY_SCENE, CRICKET_CAMERA_REPLAY_SCENE);
       await ensureSceneItem(CRICKET_REPLAY_VLC_SCENE, audioScene);
-      await ensureSceneItem('Cricket - DRS', audioScene);
     }
+    if (cameraSceneNames[0]) await removeSceneItem('Cricket - DRS', cameraSceneNames[0]);
+    await removeSceneItem('Cricket - DRS', audioScene);
+    await ensureSceneItem('Cricket - DRS', CRICKET_CAMERA_REPLAY_SCENE);
 
     const mobileKind = [...kinds].find(kind => /droid.?cam/i.test(kind));
     for (let index = 1; index <= desiredMobileCameraCount; index += 1) {
@@ -490,6 +491,13 @@ class OBSStreamingPresetService {
       { id: 'cricket-preset-replay-save', label: 'Save Replay', icon: '💾', color: '#f59e0b', action: 'replay_buffer_save', order: 1, enabled: true },
       { id: 'cricket-preset-switch-replay', label: 'Replay Scene', icon: '📺', color: '#2563eb', action: 'scene_switch', sceneName: CRICKET_REPLAY_SCENE, order: 2, enabled: true },
       { id: 'cricket-preset-switch-drs', label: 'DRS Scene', icon: '🔍', color: '#f97316', action: 'scene_switch', sceneName: 'Cricket - DRS', order: 3, enabled: true },
+      { id: 'cricket-preset-drs-play', label: 'DRS Play', icon: '▶', color: '#22c55e', action: 'media_input_action', inputName: CRICKET_REPLAY_MEDIA_INPUT, mediaAction: 'OBS_WEBSOCKET_MEDIA_INPUT_ACTION_PLAY', order: 7, enabled: true },
+      { id: 'cricket-preset-drs-pause', label: 'DRS Pause', icon: '⏸', color: '#f59e0b', action: 'media_input_action', inputName: CRICKET_REPLAY_MEDIA_INPUT, mediaAction: 'OBS_WEBSOCKET_MEDIA_INPUT_ACTION_PAUSE', order: 8, enabled: true },
+      { id: 'cricket-preset-drs-restart', label: 'DRS Restart', icon: '↺', color: '#2563eb', action: 'media_input_action', inputName: CRICKET_REPLAY_MEDIA_INPUT, mediaAction: 'OBS_WEBSOCKET_MEDIA_INPUT_ACTION_RESTART', order: 9, enabled: true },
+      { id: 'cricket-preset-drs-back-frame', label: '−1 Frame', icon: '◀|', color: '#64748b', action: 'media_input_seek', inputName: CRICKET_REPLAY_MEDIA_INPUT, mediaCursorOffset: -33, order: 10, enabled: true },
+      { id: 'cricket-preset-drs-forward-frame', label: '+1 Frame', icon: '|▶', color: '#64748b', action: 'media_input_seek', inputName: CRICKET_REPLAY_MEDIA_INPUT, mediaCursorOffset: 33, order: 11, enabled: true },
+      { id: 'cricket-preset-drs-back-second', label: '−1 Second', icon: '↶', color: '#64748b', action: 'media_input_seek', inputName: CRICKET_REPLAY_MEDIA_INPUT, mediaCursorOffset: -1000, order: 12, enabled: true },
+      { id: 'cricket-preset-drs-forward-second', label: '+1 Second', icon: '↷', color: '#64748b', action: 'media_input_seek', inputName: CRICKET_REPLAY_MEDIA_INPUT, mediaCursorOffset: 1000, order: 13, enabled: true },
       { id: 'cricket-preset-instant-replay', label: 'Instant Replay', icon: '↩', color: '#3b82f6', action: 'series', order: 4, enabled: true, series: replaySteps('cricket-replay') },
       { id: 'cricket-preset-test-replay', label: 'Test Replay', icon: '🧪', color: '#14b8a6', action: 'series', order: 5, enabled: true, series: replaySteps('cricket-test-replay') },
       { id: 'cricket-preset-buffer-stop', label: 'Stop Replay Buffer', icon: '⏹', color: '#ef4444', action: 'replay_buffer_stop', order: 6, enabled: true },
