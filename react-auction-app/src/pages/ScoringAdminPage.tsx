@@ -26,7 +26,8 @@ import type { CricHeroesSnapshot } from '../services/scoring/cricHeroesReader';
 import { useCricHeroesSyncAdapter } from '../hooks/useCricHeroesSyncAdapter';
 import { uploadFileToStorage } from '../services';
 import { CRICHEROES_EXTENSION } from '../config/cricheroesExtension';
-import { CRICKET_REPLAY_SCENE, obsStreamingPresetService } from '../services/obsStreamingPresetService';
+import { CRICKET_REPLAY_SCENE, CRICKET_DRS_MEDIA_INPUT, CRICKET_LIVE_SCENE, obsStreamingPresetService } from '../services/obsStreamingPresetService';
+import BroadcastScheduleManager from '../components/AdminPanel/BroadcastScheduleManager';
 import { obsConnectionBridgeService, type OBSConnectionBridgePresence } from '../services/obsConnectionBridgeService';
 import type { OBSConnectionDiagnostics } from '../services/obsService';
 import { DEFAULT_LIVE_COMMENT_SETTINGS, DEFAULT_MVP_WEIGHTS, MATCH_STAGE_LABELS } from '../types/scoring';
@@ -39,6 +40,7 @@ import { belongsToTeam } from '../utils/teamMembership';
 import { EMPTY_CRICHEROES_MAPPINGS, normalizeCricHeroesAliasName, normalizeCricHeroesMappings, resolveCricHeroesPlayerAlias } from '../utils/cricHeroesMappings';
 import type { CricHeroesNameMappings } from '../utils/cricHeroesMappings';
 import { DEFAULT_PLAYER_STATS_SEQUENCE_CONFIG, normalizePlayerStatsSequenceConfig } from '../utils/playerStatsSequence';
+import { buildPoolAssignments } from '../utils/pointsTable';
 
 const EMPTY_OBS_REPLAY_CONFIG: OBSReplayConfig = { buttons: [] };
 const DEFAULT_OBS_WEBSOCKET_CONFIG: OBSWebSocketConfig = {
@@ -249,6 +251,7 @@ function ScoringAdminPageContent() {
             navigate={navigate}
             baseUrl={baseUrl}
             config={overlayConfig}
+            setConfig={setOverlayConfig}
             sync={cricHeroesSync}
             nameMappings={cricHeroesNameMappings}
             setNameMappings={setCricHeroesNameMappings}
@@ -344,7 +347,7 @@ export default withScorerAdminChrome(ScoringAdminPageContent, {
 // MATCHES TAB
 // ═══════════════════════════════════════════════════════════════════════════════
 
-function MatchesTab({ matches, teams, soldPlayers, onFeedback, saving, setSaving, navigate, baseUrl, config, sync, nameMappings, setNameMappings }: {
+function MatchesTab({ matches, teams, soldPlayers, onFeedback, saving, setSaving, navigate, baseUrl, config, setConfig, sync, nameMappings, setNameMappings }: {
   matches: MatchSetup[];
   teams: { id: string; name: string; logoUrl?: string; brandLogoUrl?: string; primaryColor?: string }[];
   soldPlayers: SoldPlayer[];
@@ -354,10 +357,48 @@ function MatchesTab({ matches, teams, soldPlayers, onFeedback, saving, setSaving
   navigate: (to: string) => void;
   baseUrl: string;
   config: ScoringOverlayConfig;
+  setConfig: (c: ScoringOverlayConfig) => void;
   sync: CricHeroesSyncState;
   nameMappings: CricHeroesNameMappings;
   setNameMappings: React.Dispatch<React.SetStateAction<CricHeroesNameMappings>>;
 }) {
+  const [poolDraft, setPoolDraft] = useState<NonNullable<ScoringOverlayConfig['pointsTablePools']>>(() => config.pointsTablePools || {
+    poolCount: 2,
+    teamsPerPool: 4,
+    teamAssignments: {},
+  });
+  useEffect(() => {
+    setPoolDraft(config.pointsTablePools || { poolCount: 2, teamsPerPool: 4, teamAssignments: {} });
+  }, [config.pointsTablePools]);
+  const poolPreview = useMemo(
+    () => buildPoolAssignments(teams, poolDraft.poolCount, poolDraft.teamsPerPool, poolDraft.teamAssignments),
+    [teams, poolDraft],
+  );
+  const poolLoads = useMemo(() => poolPreview.poolIds.reduce<Record<string, number>>((loads, poolId) => {
+    loads[poolId] = Object.values(poolPreview.assignments).filter(assignedPool => assignedPool === poolId).length;
+    return loads;
+  }, {}), [poolPreview]);
+  const handleSavePools = async () => {
+    if (poolPreview.unassignedTeamIds.length > 0) {
+      onFeedback(`Pool capacity is short by ${poolPreview.unassignedTeamIds.length} team(s). Increase pools or teams per pool.`);
+      return;
+    }
+    setSaving(true);
+    const nextConfig = {
+      ...config,
+      pointsTablePools: { ...poolDraft, teamAssignments: poolPreview.assignments },
+    };
+    try {
+      await scoringService.saveOverlayConfig(nextConfig);
+      setConfig(nextConfig);
+      setPoolDraft(nextConfig.pointsTablePools);
+      onFeedback('Points table pools saved');
+    } catch {
+      onFeedback('Failed to save points table pools');
+    } finally {
+      setSaving(false);
+    }
+  };
   type MatchListMode = 'time-default' | 'upcoming' | 'not-done' | 'live' | 'completed';
   const formatDateTimeInput = (value: string) => {
     if (!value) return '';
@@ -816,7 +857,7 @@ function MatchesTab({ matches, teams, soldPlayers, onFeedback, saving, setSaving
     <div className="scoring-admin__section scoring-admin__section--prematch">
       <div className="scoring-admin__section-header">
         <h2>Matches</h2>
-        <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', marginLeft: 'auto' }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem', alignItems: 'center', marginLeft: 'auto' }}>
           <select
             className="scoring-admin__select"
             value={matchListMode}
@@ -832,6 +873,7 @@ function MatchesTab({ matches, teams, soldPlayers, onFeedback, saving, setSaving
           <button className="scoring-admin__btn scoring-admin__btn--primary" onClick={() => setShowForm(!showForm)}>
             <IoAdd size={16} /> {showForm ? 'Cancel' : 'New Match'}
           </button>
+          <BroadcastScheduleManager compact />
         </div>
       </div>
 
@@ -853,6 +895,91 @@ function MatchesTab({ matches, teams, soldPlayers, onFeedback, saving, setSaving
           )}
         </div>
       )}
+
+      <div className="scoring-admin__form-card" style={{ marginBottom: '1rem' }}>
+        <div className="scoring-admin__section-header" style={{ marginBottom: '0.75rem' }}>
+          <h3>Points Table Pools</h3>
+          <button
+            type="button"
+            className="scoring-admin__btn scoring-admin__btn--sm scoring-admin__btn--primary"
+            onClick={() => void handleSavePools()}
+            disabled={saving || teams.length === 0 || poolPreview.unassignedTeamIds.length > 0}
+          >
+            <IoSave size={14} /> Save Pools
+          </button>
+        </div>
+        <div className="scoring-admin__form-grid">
+          <div className="scoring-admin__field">
+            <label htmlFor="points-pool-count">Number of Pools</label>
+            <input
+              id="points-pool-count"
+              type="number"
+              min={1}
+              max={16}
+              value={poolDraft.poolCount}
+              onChange={event => setPoolDraft(current => ({
+                ...current,
+                poolCount: Math.min(16, Math.max(1, Number(event.target.value) || 1)),
+              }))}
+              className="scoring-admin__input"
+            />
+          </div>
+          <div className="scoring-admin__field">
+            <label htmlFor="points-pool-capacity">Teams per Pool</label>
+            <input
+              id="points-pool-capacity"
+              type="number"
+              min={2}
+              max={32}
+              value={poolDraft.teamsPerPool}
+              onChange={event => setPoolDraft(current => ({
+                ...current,
+                teamsPerPool: Math.min(32, Math.max(2, Number(event.target.value) || 2)),
+              }))}
+              className="scoring-admin__input"
+            />
+          </div>
+        </div>
+        {teams.length === 0 ? (
+          <p className="scoring-admin__hint">Add teams before configuring points table pools.</p>
+        ) : (
+          <div className="scoring-admin__form-grid" style={{ marginTop: '0.75rem' }}>
+            {teams.map(team => {
+              const assignedPool = poolPreview.assignments[team.id] || '';
+              return (
+                <div className="scoring-admin__field" key={team.id}>
+                  <label htmlFor={`pool-team-${team.id}`}>{team.name}</label>
+                  <select
+                    id={`pool-team-${team.id}`}
+                    className="scoring-admin__select"
+                    value={assignedPool}
+                    onChange={event => setPoolDraft(current => ({
+                      ...current,
+                      teamAssignments: { ...current.teamAssignments, [team.id]: event.target.value },
+                    }))}
+                  >
+                    {!assignedPool && <option value="" disabled>Unassigned</option>}
+                    {poolPreview.poolIds.map((poolId, index) => (
+                      <option
+                        key={poolId}
+                        value={poolId}
+                        disabled={poolLoads[poolId] >= poolDraft.teamsPerPool && assignedPool !== poolId}
+                      >
+                        Pool {String.fromCharCode(65 + index)}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              );
+            })}
+          </div>
+        )}
+        {poolPreview.unassignedTeamIds.length > 0 && (
+          <p className="scoring-admin__hint" role="alert">
+            Capacity is short by {poolPreview.unassignedTeamIds.length} team(s). Increase the pool count or teams per pool.
+          </p>
+        )}
+      </div>
 
       {showForm && (
         <div className="scoring-admin__form-card" style={{ marginBottom: '1rem' }}>
@@ -4617,6 +4744,7 @@ function OBSWebSocketTab({ config, setConfig, onFeedback, baseUrl }: {
         microphoneCount: presetMicrophoneCount,
         includeDesktopAudio: presetDesktopAudio,
         replayDurationSeconds: obsConfig.replayDurationSeconds,
+        drsDurationSeconds: replayConfig.drsDurationSeconds || 40,
         overlayUrl: `${baseUrl}/cricket/scorer/obs-overlay`,
         replayDirectory: replayConfig.replayDirectory,
       });
@@ -4629,7 +4757,7 @@ function OBSWebSocketTab({ config, setConfig, onFeedback, baseUrl }: {
         setupWarnings.push(`Scene list refresh failed: ${error instanceof Error ? error.message : String(error)}`);
       }
       const buttons = [...replayConfig.buttons];
-      for (const presetButton of obsStreamingPresetService.getPresetReplayButtons(result.replayDurationSeconds)) {
+      for (const presetButton of obsStreamingPresetService.getPresetReplayButtons(result.replayDurationSeconds, replayConfig)) {
         const existingIndex = buttons.findIndex(button => button.id === presetButton.id);
         if (existingIndex < 0) {
           buttons.push({ ...presetButton, order: buttons.length });
@@ -4641,7 +4769,8 @@ function OBSWebSocketTab({ config, setConfig, onFeedback, baseUrl }: {
             icon: existing.icon,
             color: existing.color,
             order: existing.order,
-            enabled: true,
+            enabled: existing.enabled,
+            showInDock: existing.showInDock ?? true,
           };
         }
       }
@@ -4649,6 +4778,9 @@ function OBSWebSocketTab({ config, setConfig, onFeedback, baseUrl }: {
         ...replayConfig,
         replaySceneName: CRICKET_REPLAY_SCENE,
         drsSceneName: 'Cricket - DRS',
+        drsMediaInputName: replayConfig.drsMediaInputName || CRICKET_DRS_MEDIA_INPUT,
+        drsDurationSeconds: replayConfig.drsDurationSeconds || 40,
+        liveSceneName: replayConfig.liveSceneName || CRICKET_LIVE_SCENE,
         replayDirectory: replayConfig.replayDirectory || result.replayDirectory,
         instantReplaySourceName: result.replaySourceName,
         instantReplaySourceNames: result.replaySourceNames,
@@ -5111,6 +5243,29 @@ function OBSWebSocketTab({ config, setConfig, onFeedback, baseUrl }: {
       <section className="obs-ws-group obs-ws-scene-group">
       <div className="obs-ws-subgroup">
       <h3 className="scoring-admin__subsection-title">Replay &amp; DRS Scene Mapping</h3>
+      <div className="scoring-admin__form-grid">
+        <div className="scoring-admin__field">
+          <label htmlFor="drs-duration">DRS Capture Duration (seconds)</label>
+          <input id="drs-duration" className="scoring-admin__input" type="number" min={5} max={120} value={replayConfig.drsDurationSeconds || 40} onChange={event => updateReplayConfig({ drsDurationSeconds: Math.max(5, Math.min(120, Number(event.target.value) || 40)) })} />
+        </div>
+        <div className="scoring-admin__field">
+          <label htmlFor="drs-frame-step">Frames per Review Step</label>
+          <input id="drs-frame-step" className="scoring-admin__input" type="number" min={1} max={120} step={1} value={replayConfig.drsFrameStep || 1} onChange={event => updateReplayConfig({ drsFrameStep: Math.max(1, Math.min(120, Math.round(Number(event.target.value) || 1))) })} />
+        </div>
+        <div className="scoring-admin__field">
+          <label htmlFor="drs-fps">Replay Video FPS</label>
+          <input id="drs-fps" className="scoring-admin__input" type="number" min={1} max={240} value={replayConfig.drsFramesPerSecond || 30} onChange={event => updateReplayConfig({ drsFramesPerSecond: Math.max(1, Math.min(240, Number(event.target.value) || 30)) })} />
+        </div>
+        <div className="scoring-admin__field">
+          <label htmlFor="drs-live-scene">Go Live Scene</label>
+          <select id="drs-live-scene" className="scoring-admin__select" value={replayConfig.liveSceneName || CRICKET_LIVE_SCENE} onChange={event => updateReplayConfig({ liveSceneName: event.target.value })}>
+            {[...new Set([replayConfig.liveSceneName || CRICKET_LIVE_SCENE, ...availableScenes])].map(scene => <option key={scene} value={scene}>{scene}</option>)}
+          </select>
+        </div>
+        <div className="scoring-admin__field scoring-admin__field--checkbox">
+          <label><input type="checkbox" checked={replayConfig.dockReplayOnly || false} onChange={event => updateReplayConfig({ dockReplayOnly: event.target.checked })} />Replay-only OBS dock</label>
+        </div>
+      </div>
       <p className="scoring-admin__hint">
         Scenes to switch to when showing replays or DRS review. Leave blank to skip scene switch.
       </p>
@@ -5231,6 +5386,9 @@ function OBSWebSocketTab({ config, setConfig, onFeedback, baseUrl }: {
                 {btn.hotkeyName && <span className="obs-btn-config-hotkey">{btn.hotkeyName}</span>}
               </div>
               <div className="obs-btn-config-actions">
+              <label className="obs-btn-config-dock-toggle">
+                <input type="checkbox" checked={btn.showInDock !== false} onChange={event => updateButton(idx, { showInDock: event.target.checked })} />Dock
+              </label>
               <button className="scoring-admin__btn-icon" onClick={() => moveButton(idx, -1)} disabled={idx === 0} title="Move up">↑</button>
               <button className="scoring-admin__btn-icon" onClick={() => moveButton(idx, 1)} disabled={idx === replayConfig.buttons.length - 1} title="Move down">↓</button>
               <button
@@ -5311,11 +5469,20 @@ function OBSWebSocketTab({ config, setConfig, onFeedback, baseUrl }: {
                       <option value="hotkey_name">Trigger OBS Hotkey by Name (Replay Source)</option>
                       <option value="hotkey_sequence">Trigger by Key Sequence (simulate keypress)</option>
                       <option value="scene_switch">Switch Scene</option>
+                      <option value="drs_review">Capture DRS Review</option>
                       <option value="replay_buffer_save">Save Replay Buffer</option>
                       <option value="replay_buffer_start">Start Replay Buffer</option>
                       <option value="replay_buffer_stop">Stop Replay Buffer</option>
                       <option value="media_input_action">Control Media Source</option>
+                      <option value="media_input_seek">Seek Media Source</option>
                       <option value="series">Series (run multiple steps with delays)</option>
+                    </select>
+                  </div>
+
+                  <div className="scoring-admin__field">
+                    <label htmlFor={`dock-view-${btn.id}`}>Dock View</label>
+                    <select id={`dock-view-${btn.id}`} className="scoring-admin__select" value={btn.dockView || (btn.id.startsWith('cricket-preset-drs-') ? 'drs' : 'main')} onChange={event => updateButton(idx, { dockView: event.target.value as 'main' | 'drs' })}>
+                      <option value="main">Main Replay Controls</option><option value="drs">DRS Review Controls</option>
                     </select>
                   </div>
 
@@ -5355,19 +5522,21 @@ function OBSWebSocketTab({ config, setConfig, onFeedback, baseUrl }: {
                     </div>
                   )}
 
-                  {btn.action === 'media_input_action' && (
+                  {(btn.action === 'media_input_action' || btn.action === 'media_input_seek' || btn.action === 'drs_review') && (
                     <div className="scoring-admin__field" style={{ gridColumn: '1 / -1' }}>
                       <label>OBS media source</label>
                       <select className="scoring-admin__select" value={btn.inputName || ''} onChange={event => updateButton(idx, { inputName: event.target.value || undefined })}>
                         <option value="">Select a media source</option>
-                        {(replayConfig.instantReplaySourceNames || ['Cricket Replay Media']).map(inputName => <option key={inputName} value={inputName}>{inputName}</option>)}
+                        {[...new Set([btn.inputName, replayConfig.drsMediaInputName || CRICKET_DRS_MEDIA_INPUT, ...(replayConfig.instantReplaySourceNames || ['Cricket Replay Media'])].filter((name): name is string => !!name))].map(inputName => <option key={inputName} value={inputName}>{inputName}</option>)}
                       </select>
                       <label>Media action</label>
                       <select className="scoring-admin__select" value={btn.mediaAction || 'OBS_WEBSOCKET_MEDIA_INPUT_ACTION_PAUSE'} onChange={event => updateButton(idx, { mediaAction: event.target.value as OBSReplayButton['mediaAction'] })}>
+                        <option value="OBS_WEBSOCKET_MEDIA_INPUT_ACTION_PLAY">Play</option>
                         <option value="OBS_WEBSOCKET_MEDIA_INPUT_ACTION_PAUSE">Pause</option>
                         <option value="OBS_WEBSOCKET_MEDIA_INPUT_ACTION_RESTART">Restart</option>
                         <option value="OBS_WEBSOCKET_MEDIA_INPUT_ACTION_STOP">Stop</option>
                       </select>
+                      {btn.action === 'media_input_seek' && <label>Seek Offset (milliseconds)<input type="number" className="scoring-admin__input" value={btn.mediaCursorOffset || 0} onChange={event => updateButton(idx, { mediaCursorOffset: Number(event.target.value) || 0 })} /></label>}
                     </div>
                   )}
 

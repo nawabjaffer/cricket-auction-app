@@ -20,11 +20,13 @@ vi.mock('../services/obsService', () => ({ obsService: obs }));
 vi.mock('firebase/database', () => firebase);
 
 import { obsReplaySourceService } from '../services/scoring/obsReplaySourceService';
+import { getDockReplayButtons } from '../utils/obsReplayConfig';
 import {
   CRICKET_REPLAY_INPUT,
   CRICKET_CAMERA_REPLAY_SCENE,
   CRICKET_REPLAY_SCENE,
   CRICKET_REPLAY_MEDIA_INPUT,
+  CRICKET_DRS_MEDIA_INPUT,
   CRICKET_REPLAY_SPEED_PERCENT,
   CRICKET_REPLAY_VLC_SCENE,
   inferDesktopReplayDirectory,
@@ -32,6 +34,19 @@ import {
 } from '../services/obsStreamingPresetService';
 
 describe('OBS replay actions', () => {
+  it('filters hidden/disabled dock buttons and resolves current DRS frame settings', () => {
+    const buttons = obsStreamingPresetService.getPresetReplayButtons(20);
+    buttons.find(button => button.id === 'cricket-preset-buffer-stop')!.showInDock = false;
+    buttons.find(button => button.id === 'cricket-preset-replay-save')!.enabled = false;
+    const config = { buttons, drsFrameStep: 5, drsFramesPerSecond: 60 };
+    const main = getDockReplayButtons(config, 'main');
+    expect(main.some(button => button.id === 'cricket-preset-buffer-stop')).toBe(false);
+    expect(main.some(button => button.id === 'cricket-preset-replay-save')).toBe(false);
+    expect(main.some(button => button.id.startsWith('cricket-preset-drs-'))).toBe(false);
+    const review = getDockReplayButtons(config, 'drs');
+    expect(review.find(button => button.id === 'cricket-preset-drs-back-frame')).toMatchObject({ mediaFrameOffset: -5, mediaFramesPerSecond: 60 });
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
     obs.isConnected.mockReturnValue(true);
@@ -161,6 +176,45 @@ describe('OBS Cricket Match Setup', () => {
     });
   });
 
+  it('pauses before stepping X frames at the configured frame rate', async () => {
+    obs.request.mockImplementation(async (type: string) => type === 'GetMediaInputStatus'
+      ? { mediaCursor: 1000, mediaDuration: 40_000 } : {});
+    const result = await obsReplaySourceService.executeButton({
+      id: 'frames', label: 'Reverse 5 frames', icon: 'R', color: '#000', action: 'media_input_seek', order: 0, enabled: true,
+      inputName: CRICKET_DRS_MEDIA_INPUT, mediaFrameOffset: -5, mediaFramesPerSecond: 50,
+    });
+    expect(result.success).toBe(true);
+    expect(obs.request).toHaveBeenNthCalledWith(1, 'TriggerMediaInputAction', expect.objectContaining({ mediaAction: 'OBS_WEBSOCKET_MEDIA_INPUT_ACTION_PAUSE' }));
+    expect(obs.request).toHaveBeenLastCalledWith('SetMediaInputCursor', { inputName: CRICKET_DRS_MEDIA_INPUT, mediaCursor: 900 });
+  });
+
+  it('loads DRS only after the saved-file event and leaves it paused', async () => {
+    const handlers: Array<(event: string, data: unknown) => void> = [];
+    obs.onEvent.mockImplementation(handler => { handlers.push(handler); return () => {}; });
+    obs.request.mockImplementation(async (type: string) => {
+      if (type === 'SaveReplayBuffer') queueMicrotask(() => handlers.forEach(handler => handler('ReplayBufferSaved', { savedReplayPath: '/replays/drs.mkv' })));
+      if (type === 'GetReplayBufferStatus') return { outputActive: true };
+      if (type === 'GetProfileParameter') return { parameterValue: '40' };
+      if (type === 'GetMediaInputStatus') return { mediaDuration: 40_000 };
+      return {};
+    });
+    const result = await obsReplaySourceService.executeButton({
+      id: 'drs', label: 'DRS', icon: 'D', color: '#000', action: 'drs_review', order: 0, enabled: true,
+      inputName: CRICKET_DRS_MEDIA_INPUT, sceneName: 'Cricket - DRS',
+    });
+    expect(result.success).toBe(true);
+    expect(obs.request).toHaveBeenCalledWith('SetInputSettings', expect.objectContaining({ inputName: CRICKET_DRS_MEDIA_INPUT, inputSettings: expect.objectContaining({ local_file: '/replays/drs.mkv' }) }));
+    expect(obs.request).toHaveBeenCalledWith('TriggerMediaInputAction', { inputName: CRICKET_DRS_MEDIA_INPUT, mediaAction: 'OBS_WEBSOCKET_MEDIA_INPUT_ACTION_PAUSE' });
+    expect(obs.request).toHaveBeenLastCalledWith('SetMediaInputCursor', { inputName: CRICKET_DRS_MEDIA_INPUT, mediaCursor: 0 });
+  });
+
+  it('cancels DRS capture without changing the program scene', async () => {
+    const controller = new AbortController();
+    obs.request.mockImplementation(async () => { controller.abort(); return {}; });
+    await expect(obsStreamingPresetService.openDRSReview(CRICKET_DRS_MEDIA_INPUT, 'Cricket - DRS', controller.signal)).rejects.toThrow('Cancelled');
+    expect(obs.request).not.toHaveBeenCalledWith('SetCurrentProgramScene', expect.anything());
+  });
+
   it('infers Desktop replay folders from standard Windows/macOS OBS recording paths', () => {
     expect(inferDesktopReplayDirectory('C:\\Users\\Alex\\Videos', 'windows')).toBe('C:/Users/Alex/Desktop/Cricket Replays');
     expect(inferDesktopReplayDirectory('/Users/alex/Movies', 'macos')).toBe('/Users/alex/Desktop/Cricket Replays');
@@ -193,7 +247,8 @@ describe('OBS Cricket Match Setup', () => {
     expect(obs.request).toHaveBeenCalledWith('CreateInput', expect.objectContaining({ sceneName: 'Cricket - Mobile Camera 1', inputKind: 'droidcam_obs' }));
     expect(obs.request).toHaveBeenCalledWith('CreateInput', expect.objectContaining({ sceneName: 'Cricket - Mobile Camera 1', inputName: 'Cricket Overlay Mobile 1', inputKind: 'browser_source' }));
     expect(obs.request).toHaveBeenCalledWith('CreateSceneItem', { sceneName: CRICKET_REPLAY_SCENE, sourceName: CRICKET_CAMERA_REPLAY_SCENE });
-    expect(obs.request).toHaveBeenCalledWith('CreateSceneItem', { sceneName: 'Cricket - DRS', sourceName: CRICKET_CAMERA_REPLAY_SCENE });
+    expect(obs.request).toHaveBeenCalledWith('CreateInput', expect.objectContaining({ sceneName: 'Cricket - DRS', inputName: CRICKET_DRS_MEDIA_INPUT, inputKind: 'ffmpeg_source' }));
+    expect(obs.request).toHaveBeenCalledWith('CreateInput', expect.objectContaining({ inputName: 'Cricket DRS Instant Replay Source', inputSettings: expect.objectContaining({ duration: 40_000 }) }));
     expect(obs.request).toHaveBeenCalledWith('CreateSceneItem', { sceneName: CRICKET_CAMERA_REPLAY_SCENE, sourceName: 'Cricket - Camera 1' });
     expect(obs.request).toHaveBeenCalledWith('CreateInput', expect.objectContaining({
       sceneName: CRICKET_CAMERA_REPLAY_SCENE,
@@ -243,6 +298,7 @@ describe('OBS Cricket Match Setup', () => {
     });
     obs.request.mockImplementation(async (type: string) => {
       if (type === 'GetInputSettings') return { inputSettings: { loop: true, playlist: [] } };
+      if (type === 'GetMediaInputStatus') return { mediaDuration: 40_000 };
       return {};
     });
 
@@ -379,9 +435,9 @@ describe('OBS Cricket Match Setup', () => {
 
     expect(obs.request).toHaveBeenCalledWith('GetProfileParameter', { parameterCategory: 'AdvOut', parameterName: 'RecRBTime' });
     expect(obs.request).toHaveBeenCalledWith('SetRecordDirectory', { recordDirectory: 'C:/Users/Alex/Desktop/Cricket Replays' });
-    expect(result.replayDurationSeconds).toBe(14);
+    expect(result.replayDurationSeconds).toBe(30);
     expect(result.replayDirectory).toBe('C:/Users/Alex/Desktop/Cricket Replays');
-    expect(obsStreamingPresetService.getPresetReplayButtons(result.replayDurationSeconds).find(button => button.id === 'cricket-preset-instant-replay')?.series?.[2].delayMs).toBe(Math.ceil(14_000 * 100 / CRICKET_REPLAY_SPEED_PERCENT));
+    expect(obsStreamingPresetService.getPresetReplayButtons(result.replayDurationSeconds).find(button => button.id === 'cricket-preset-instant-replay')?.series?.[2].delayMs).toBe(Math.ceil(30_000 * 100 / CRICKET_REPLAY_SPEED_PERCENT));
   });
 
   it('uses the exact versioned capture kind advertised by OBS', async () => {

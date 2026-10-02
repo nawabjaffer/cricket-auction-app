@@ -740,6 +740,15 @@
   border-radius: 7px;
 }
 
+.score-dock--review .score-dock__drs-review { margin-top: 0.75rem; }
+.score-dock--review .score-dock__header { flex-wrap: wrap; gap: 0.4rem; }
+.score-dock--review .score-dock__drs-review > header { flex-wrap: wrap; }
+.score-dock__drs-live { display: inline-flex; justify-content: center; align-items: center; gap: 0.5rem; min-height: 44px; width: 100%; color: #fff; background: #b91c1c; border: 1px solid #f87171; border-radius: 6px; font-weight: 700; cursor: pointer; }
+.score-dock__drs-feedback { margin: 0; color: #e0f2fe; font-size: 12px; overflow-wrap: anywhere; }
+.score-dock--review .score-dock__drs-controls { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.score-dock--review .score-dock__drs-controls button { min-height: 48px; display: flex; align-items: center; justify-content: center; gap: 6px; white-space: normal; overflow-wrap: anywhere; }
+.score-dock--review .score-dock__drs-controls button svg { flex: 0 0 18px; }
+
 .score-dock__drs-review > header {
   display: flex;
   align-items: flex-start;

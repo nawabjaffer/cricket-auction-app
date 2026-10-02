@@ -10,6 +10,7 @@ const obs = vi.hoisted(() => ({
   isConnected: vi.fn(),
   getConfig: vi.fn(),
   onConnectionChange: vi.fn(),
+  assertYouTubeBroadcastReady: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock('firebase/database', () => firebase);

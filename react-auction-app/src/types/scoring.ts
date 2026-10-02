@@ -507,10 +507,17 @@ export interface ScoringOverlayConfig {
   // whichever match is marked active (see ScoringService.setActiveMatch). When false
   // (default), each match keeps its own per-match links — existing behavior is unchanged.
   singleOverlayMode?: boolean;
+  pointsTablePools?: TournamentPoolSettings;
   // MVP point weights (customizable)
   mvpWeights?: MVPWeights;
   // Minimum balls for strike rate eligibility
   minBallsForSR?: number; // default 10
+}
+
+export interface TournamentPoolSettings {
+  poolCount: number;
+  teamsPerPool: number;
+  teamAssignments: Record<string, string>;
 }
 
 // ── Scoring Adapter Interface ──
@@ -855,6 +862,7 @@ export type OBSButtonAction =
   | 'hotkey_sequence'   // TriggerHotkeyByKeySequence — simulates a keypress
   | 'scene_switch'      // SetCurrentProgramScene
   | 'media_input_seek'  // Seek a media input by a relative cursor offset
+  | 'drs_review'
   | 'replay_buffer_save'  // SaveReplayBuffer (built-in replay buffer)
   | 'replay_buffer_start' // StartReplayBuffer
   | 'replay_buffer_stop'  // StopReplayBuffer
@@ -886,6 +894,9 @@ export interface OBSButtonSeriesStep {
   inputName?: string;
   mediaAction?: OBSMediaInputAction;
   mediaCursorOffset?: number;
+  mediaFrameOffset?: number;
+  mediaFramesPerSecond?: number;
+  drsDurationSeconds?: number;
   label?: string;
 }
 
@@ -901,6 +912,11 @@ export interface OBSReplayButton {
   inputName?: string;     // for action = 'media_input_action'
   mediaAction?: OBSMediaInputAction;
   mediaCursorOffset?: number;
+  mediaFrameOffset?: number;
+  mediaFramesPerSecond?: number;
+  drsDurationSeconds?: number;
+  showInDock?: boolean;
+  dockView?: 'main' | 'drs';
   series?: OBSButtonSeriesStep[];     // for action = 'series'
   order: number;
   enabled: boolean;
@@ -909,6 +925,12 @@ export interface OBSReplayButton {
 export interface OBSReplayConfig {
   replaySceneName?: string;  // scene to switch to when showing replay
   drsSceneName?: string;     // scene to switch to for DRS review
+  drsMediaInputName?: string;
+  drsDurationSeconds?: number;
+  drsFrameStep?: number;
+  drsFramesPerSecond?: number;
+  liveSceneName?: string;
+  dockReplayOnly?: boolean;
   inningsBreakSceneName?: string;
   inningsBreakReturnSceneName?: string;
   replayDirectory?: string;

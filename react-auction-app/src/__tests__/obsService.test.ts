@@ -5,7 +5,23 @@ import { obsService } from '../services/obsService';
 describe('OBSService connection diagnostics', () => {
   afterEach(() => {
     obsService.disconnect();
+    vi.restoreAllMocks();
     vi.unstubAllGlobals();
+  });
+
+  it('requires OBS and a configured YouTube destination before scheduling', async () => {
+    vi.spyOn(obsService, 'isConnected').mockReturnValue(false);
+    const request = vi.spyOn(obsService, 'request');
+    await expect(obsService.assertYouTubeBroadcastReady()).rejects.toThrow('Connect this app to OBS');
+    expect(request).not.toHaveBeenCalled();
+    vi.mocked(obsService.isConnected).mockReturnValue(true);
+    request.mockResolvedValue({ streamServiceSettings: { service: 'Twitch', key: 'private-key' } });
+    await expect(obsService.assertYouTubeBroadcastReady()).rejects.toThrow('Select a YouTube');
+    request.mockResolvedValue({ streamServiceSettings: { service: 'YouTube - RTMPS', key: 'private-key' } });
+    await expect(obsService.assertYouTubeBroadcastReady()).resolves.toBeUndefined();
+    request.mockResolvedValue({ streamServiceSettings: { service: 'YouTube - RTMPS' } });
+    vi.spyOn(obsService, 'getStreamingStatus').mockResolvedValue({ outputActive: false, outputDuration: 0 });
+    await expect(obsService.assertYouTubeBroadcastReady()).rejects.toThrow('stream key');
   });
 
   it('captures constructor security errors for every attempted endpoint', async () => {

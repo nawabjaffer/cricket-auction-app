@@ -1,18 +1,20 @@
 import { useEffect, useMemo, useState } from 'react';
 import { onValue, ref, type Database } from 'firebase/database';
 import { useSearchParams } from 'react-router-dom';
-import { IoCalendarOutline, IoChevronDown, IoFootballOutline, IoShieldCheckmarkOutline, IoStatsChartOutline } from 'react-icons/io5';
+import { IoCalendarOutline, IoChevronDown, IoFootballOutline, IoShieldCheckmarkOutline, IoStatsChartOutline, IoTrophyOutline } from 'react-icons/io5';
 import { SortableColumnHeader, useSortableRows } from '../components/SortableTable';
 import { useTenantNavigate as useNavigate, getTenantSlugFromPath } from '../hooks/useTenantNavigate';
 import { realtimeSync } from '../services/realtimeSync';
 import { scoringService } from '../services/scoring';
 import { tenantPath } from '../services/tenantPath';
-import type { BallEvent, Innings, LiveScore, MatchScore, MatchSetup } from '../types/scoring';
+import type { BallEvent, Innings, LiveScore, MatchScore, MatchSetup, MatchStatsSnapshot, ScoringOverlayConfig } from '../types/scoring';
+import { buildPointsTableStandings, buildPoolAssignments, type PointsTableMatch } from '../utils/pointsTable';
 import './PublicCricketScoreboardPage.css';
 
-type PublicScoreboardTab = 'summary' | 'scorecards' | 'commentary';
+type PublicScoreboardTab = 'summary' | 'scorecards' | 'commentary' | 'standings';
 type BattingSortColumn = 'name' | 'runs' | 'balls' | 'fours' | 'sixes' | 'strikeRate' | 'dismissal';
 type BowlingSortColumn = 'name' | 'overs' | 'maidens' | 'runs' | 'wickets' | 'economy';
+type StandingsSortColumn = 'teamName' | 'played' | 'won' | 'lost' | 'nrr' | 'points';
 
 function formatOvers(overs: number): string {
   const value = Number.isFinite(overs) ? Math.max(0, overs) : 0;
@@ -112,6 +114,108 @@ function BattingScorecard({ innings, teamName }: { innings: Innings; teamName: s
   );
 }
 
+function PublicPointsTable({ matches, teams, poolSettings }: {
+  matches: PointsTableMatch[];
+  teams: { id: string; name: string; logoUrl?: string }[];
+  poolSettings?: ScoringOverlayConfig['pointsTablePools'];
+}) {
+  const standings = buildPointsTableStandings(matches, teams);
+  const table = useSortableRows(standings, (team, column: StandingsSortColumn) => team[column], {
+    column: 'points',
+    direction: 'descending',
+  });
+  const poolPreview = poolSettings
+    ? buildPoolAssignments(
+      standings.map(team => ({ id: team.teamId, name: team.teamName })),
+      poolSettings.poolCount,
+      poolSettings.teamsPerPool,
+      poolSettings.teamAssignments,
+    )
+    : null;
+  const sections = poolPreview
+    ? [
+      ...poolPreview.poolIds.map((poolId, index) => ({
+        id: poolId,
+        title: `Pool ${String.fromCharCode(65 + index)}`,
+        teams: standings.filter(team => poolPreview.assignments[team.teamId] === poolId),
+      })),
+      ...(poolPreview.unassignedTeamIds.length > 0 ? [{
+        id: 'unassigned',
+        title: 'Unassigned',
+        teams: standings.filter(team => poolPreview.unassignedTeamIds.includes(team.teamId)),
+      }] : []),
+    ]
+    : [{ id: 'overall', title: 'Overall standings', teams: standings }];
+
+  if (standings.length === 0) return <div className="public-scoreboard__empty">No tournament teams are available yet.</div>;
+
+  return (
+    <div className="public-scoreboard__standings-grid">
+      {sections.map(section => {
+        const teamIds = new Set(section.teams.map(team => team.teamId));
+        const sectionRows = table.sortedRows.filter(team => teamIds.has(team.teamId));
+        const qualifiers = new Set(section.teams.slice(0, 2).map(team => team.teamId));
+        return (
+          <section className="public-scoreboard__pool-section" key={section.id}>
+            <h3>{section.title}</h3>
+            <div className="public-scoreboard__score-table-wrap">
+              <table className="public-scoreboard__table public-scoreboard__standings-table">
+                <thead><tr>
+                  <th>#</th>
+                  <SortableColumnHeader column="teamName" label="Team" sortState={table.sortState} onSort={table.requestSort} />
+                  <SortableColumnHeader column="played" label="P" sortState={table.sortState} onSort={table.requestSort} />
+                  <SortableColumnHeader column="won" label="W" sortState={table.sortState} onSort={table.requestSort} />
+                  <SortableColumnHeader column="lost" label="L" sortState={table.sortState} onSort={table.requestSort} />
+                  <SortableColumnHeader column="nrr" label="NRR" sortState={table.sortState} onSort={table.requestSort} />
+                  <SortableColumnHeader column="points" label="Pts" sortState={table.sortState} onSort={table.requestSort} />
+                </tr></thead>
+                <tbody>
+                  {sectionRows.map((team, index) => <tr key={team.teamId} className={qualifiers.has(team.teamId) ? 'public-scoreboard__standing-qualifier' : ''}>
+                    <td>{index + 1}</td><td><strong>{team.teamName}</strong></td><td>{team.played}</td><td>{team.won}</td><td>{team.lost}</td>
+                    <td>{team.nrr > 0 ? '+' : ''}{team.nrr.toFixed(3)}</td><td><strong>{team.points}</strong></td>
+                  </tr>)}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        );
+      })}
+    </div>
+  );
+}
+
+function MatchAwards({ innings, stats }: { innings: Innings[]; stats: MatchStatsSnapshot | null }) {
+  const batters = innings.flatMap(score => (score.batsmen || []).map(player => ({ ...player, teamId: score.battingTeamId })));
+  const bowlers = innings.flatMap(score => (score.bowlers || []).map(player => ({ ...player, teamId: score.bowlingTeamId })));
+  const mvp = stats?.mvpLeaderboard?.find(player => player.total > 0)
+    || stats?.mvpPoints?.find(player => player.totalPoints > 0);
+  const bestBatter = stats?.topRunScorers?.[0] || [...batters].sort((left, right) => right.runs - left.runs || left.balls - right.balls)[0];
+  const bestBowler = stats?.topWicketTakers?.[0] || [...bowlers].sort((left, right) => right.wickets - left.wickets || left.runs - right.runs)[0];
+  const mostSixes = stats?.topSixes?.[0] || [...batters].sort((left, right) => right.sixes - left.sixes)[0];
+  const mostFours = stats?.topFours?.[0] || [...batters].sort((left, right) => right.fours - left.fours)[0];
+  const awards = [
+    { title: 'Player of the Match', name: mvp?.playerName, detail: mvp ? `${'total' in mvp ? mvp.total : mvp.totalPoints} MVP points` : '' },
+    { title: 'Best Batter', name: bestBatter?.playerName, detail: bestBatter ? `${bestBatter.runs} runs · ${bestBatter.balls} balls` : '' },
+    { title: 'Best Bowler', name: bestBowler?.playerName, detail: bestBowler ? `${bestBowler.wickets}/${bestBowler.runs}` : '' },
+    { title: 'Most Sixes', name: mostSixes?.sixes ? mostSixes.playerName : undefined, detail: mostSixes?.sixes ? `${mostSixes.sixes} sixes` : '' },
+    { title: 'Most Fours', name: mostFours?.fours ? mostFours.playerName : undefined, detail: mostFours?.fours ? `${mostFours.fours} fours` : '' },
+  ];
+  const hasAwards = awards.some(award => Boolean(award.name));
+
+  return (
+    <section className="public-scoreboard__awards-section">
+      <div className="public-scoreboard__section-heading"><div><span>MATCH AWARDS</span><h2>Players of the Match</h2></div></div>
+      {hasAwards ? (
+        <div className="public-scoreboard__award-grid">
+          {awards.filter(award => award.name).map(award => <article className="public-scoreboard__award" key={award.title}>
+            <span>{award.title}</span><strong>{award.name}</strong><small>{award.detail}</small>
+          </article>)}
+        </div>
+      ) : <div className="public-scoreboard__empty">Match awards will appear as scorecard data is recorded.</div>}
+    </section>
+  );
+}
+
 export default function PublicCricketScoreboardPage() {
   const navigate = useNavigate();
   const tenantSlug = getTenantSlugFromPath(window.location.pathname);
@@ -125,6 +229,10 @@ export default function PublicCricketScoreboardPage() {
   const [innings, setInnings] = useState<Innings[]>([]);
   const [balls, setBalls] = useState<BallEvent[]>([]);
   const [finalScore, setFinalScore] = useState<MatchScore | null>(null);
+  const [matchStats, setMatchStats] = useState<MatchStatsSnapshot | null>(null);
+  const [standingsMatches, setStandingsMatches] = useState<PointsTableMatch[]>([]);
+  const [allTeams, setAllTeams] = useState<{ id: string; name: string; logoUrl?: string }[]>([]);
+  const [poolSettings, setPoolSettings] = useState<ScoringOverlayConfig['pointsTablePools']>();
   const [activeTab, setActiveTab] = useState<PublicScoreboardTab>('summary');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -164,9 +272,41 @@ export default function PublicCricketScoreboardPage() {
   }, [matches, selectedMatchId]);
 
   useEffect(() => {
+    if (!database) return;
+    const stopStandings = onValue(ref(database, tenantPath('scoring/matches')), snapshot => {
+      if (!snapshot.exists()) {
+        setStandingsMatches([]);
+        return;
+      }
+      const records = snapshot.val() as Record<string, { setup?: MatchSetup; final?: MatchScore; innings?: Record<string, Innings> }>;
+      const allScores: PointsTableMatch[] = [];
+      for (const record of Object.values(records)) {
+        if (record?.setup) allScores.push({ setup: record.setup, final: record.final, innings: record.innings });
+      }
+      setStandingsMatches(allScores);
+    });
+    const stopTeams = onValue(ref(database, tenantPath('auction/teams')), snapshot => {
+      if (!snapshot.exists()) {
+        setAllTeams([]);
+        return;
+      }
+      const records = snapshot.val() as Record<string, { id?: string; name?: string; logoUrl?: string }>;
+      setAllTeams(Object.values(records).flatMap(team => team?.id && team.name
+        ? [{ id: team.id, name: team.name, logoUrl: team.logoUrl }]
+        : []));
+    });
+    const stopOverlayConfig = onValue(ref(database, tenantPath('scoring/overlayConfig')), snapshot => {
+      const config = snapshot.exists() ? snapshot.val() as ScoringOverlayConfig : undefined;
+      setPoolSettings(config?.pointsTablePools);
+    });
+    return () => { stopStandings(); stopTeams(); stopOverlayConfig(); };
+  }, [database]);
+
+  useEffect(() => {
     if (!database || !selectedMatchId) return;
     setLoading(true);
     setError('');
+    setMatchStats(null);
     const base = `scoring/matches/${selectedMatchId}`;
     const unsubs = [
       onValue(ref(database, tenantPath(`${base}/setup`)), snapshot => setMatch(snapshot.exists() ? snapshot.val() as MatchSetup : null)),
@@ -180,6 +320,7 @@ export default function PublicCricketScoreboardPage() {
         setBalls(Object.values(value).filter(Boolean).sort((left, right) => left.inningsNumber - right.inningsNumber || left.overNumber - right.overNumber || left.ballInOver - right.ballInOver || left.timestamp - right.timestamp));
       }),
       onValue(ref(database, tenantPath(`${base}/final`)), snapshot => setFinalScore(snapshot.exists() ? snapshot.val() as MatchScore : null)),
+      onValue(ref(database, tenantPath(`${base}/stats`)), snapshot => setMatchStats(snapshot.exists() ? snapshot.val() as MatchStatsSnapshot : null)),
     ];
     setLoading(false);
     return () => unsubs.forEach(unsubscribe => unsubscribe());
@@ -255,8 +396,8 @@ export default function PublicCricketScoreboardPage() {
           </section>
 
           <nav className="public-scoreboard__tabs" aria-label="Scoreboard sections">
-            {(['summary', 'scorecards', 'commentary'] as PublicScoreboardTab[]).map(tab => <button key={tab} className={activeTab === tab ? 'is-active' : ''} onClick={() => setActiveTab(tab)}>
-              {tab === 'summary' ? <IoStatsChartOutline /> : tab === 'scorecards' ? <IoShieldCheckmarkOutline /> : <IoCalendarOutline />}{tab === 'summary' ? 'Match Summary' : tab === 'scorecards' ? 'Scorecards' : 'Ball-by-ball'}
+            {(['summary', 'scorecards', 'commentary', 'standings'] as PublicScoreboardTab[]).map(tab => <button key={tab} className={activeTab === tab ? 'is-active' : ''} onClick={() => setActiveTab(tab)}>
+              {tab === 'summary' ? <IoStatsChartOutline /> : tab === 'scorecards' ? <IoShieldCheckmarkOutline /> : tab === 'standings' ? <IoTrophyOutline /> : <IoCalendarOutline />}{tab === 'summary' ? 'Match Summary' : tab === 'scorecards' ? 'Scorecards' : tab === 'standings' ? 'Points Table' : 'Ball-by-ball'}
             </button>)}
           </nav>
 
@@ -264,6 +405,7 @@ export default function PublicCricketScoreboardPage() {
             {activeTab === 'summary' && (
               <>
                 <div className="public-scoreboard__section-heading"><div><span>MATCH CENTRE</span><h2>Batting &amp; Bowling Summary</h2></div><span>{innings.length} innings</span></div>
+                <MatchAwards innings={innings} stats={matchStats} />
                 {innings.length === 0 ? <div className="public-scoreboard__empty">Scorecard will appear once the innings starts.</div> : (
                   <div className="public-scoreboard__innings-grid">
                     {innings.map(inningsScore => <article key={inningsScore.number} className="public-scoreboard__summary-card">
@@ -300,6 +442,12 @@ export default function PublicCricketScoreboardPage() {
                     })}
                   </ol>
                 )}
+              </>
+            )}
+            {activeTab === 'standings' && (
+              <>
+                <div className="public-scoreboard__section-heading"><div><span>TOURNAMENT</span><h2>Points Table</h2></div><span>{allTeams.length} teams</span></div>
+                <PublicPointsTable matches={standingsMatches} teams={allTeams} poolSettings={poolSettings} />
               </>
             )}
           </section>

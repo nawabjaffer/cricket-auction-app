@@ -659,6 +659,27 @@ class OBSService {
     }
   }
 
+  async assertYouTubeBroadcastReady(): Promise<void> {
+    if (!this.isConnected()) throw new Error('Connect this app to OBS before scheduling a broadcast.');
+    const response = await this.request<{ streamServiceSettings: Record<string, unknown> }>('GetStreamServiceSettings');
+    const settings = response.streamServiceSettings || {};
+    const service = typeof settings.service === 'string' ? settings.service : '';
+    const server = typeof settings.server === 'string' ? settings.server : '';
+    let youtubeServer = false;
+    try {
+      const hostname = new URL(server).hostname.toLowerCase();
+      youtubeServer = hostname === 'youtube.com' || hostname.endsWith('.youtube.com');
+    } catch { /* automatic OBS server selection is identified by service */ }
+    if (!/^youtube(?:\s|$)/i.test(service) && !youtubeServer) {
+      throw new Error('Select a YouTube streaming service in OBS before scheduling a broadcast.');
+    }
+    const hasKey = typeof settings.key === 'string' && settings.key.trim().length > 0;
+    if (!hasKey) {
+      const status = await this.getStreamingStatus();
+      if (!status?.outputActive) throw new Error('Connect your YouTube account or configure its stream key in OBS first.');
+    }
+  }
+
   /**
    * Stop streaming
    */

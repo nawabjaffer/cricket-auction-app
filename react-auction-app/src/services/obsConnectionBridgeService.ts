@@ -1,7 +1,8 @@
-import { ref, runTransaction, set, type Database } from 'firebase/database';
+import { get, ref, runTransaction, set, type Database } from 'firebase/database';
 import type { OBSReplayConfig } from '../types/scoring';
 import { obsReplaySourceService } from './scoring/obsReplaySourceService';
 import { obsService } from './obsService';
+import { tenantPath } from './tenantPath';
 
 export interface OBSConnectionBridgePresence {
   ownerId: string;
@@ -10,6 +11,8 @@ export interface OBSConnectionBridgePresence {
   lastSeen: number;
   host: string;
   port: number;
+  youtubeReady?: boolean;
+  youtubeError?: string;
 }
 
 const HEARTBEAT_MS = 5_000;
@@ -57,6 +60,27 @@ class OBSConnectionBridgeService {
     return Boolean(presence && presence.ownerId === this.ownerId);
   }
 
+  async assertBroadcastReady(db: Database): Promise<void> {
+    if (obsService.isConnected()) return obsService.assertYouTubeBroadcastReady();
+    const snapshot = await get(ref(db, tenantPath('scoring/obsConnectionBridge')));
+    const presence = snapshot.exists() ? snapshot.val() as OBSConnectionBridgePresence : null;
+    if (!this.isAlive(presence)) throw new Error('Connect the app or OBS Dock to OBS before scheduling a broadcast.');
+    if (!presence.youtubeReady) throw new Error(presence.youtubeError || 'Connect your YouTube account or configure its stream key in OBS first.');
+  }
+
+  async startYouTubeBroadcast(db: Database, matchId: string): Promise<void> {
+    await this.assertBroadcastReady(db);
+    if (obsService.isConnected()) {
+      const status = await obsService.request<{ outputActive: boolean }>('GetStreamStatus');
+      if (!status.outputActive) await obsService.request('StartStream');
+      return;
+    }
+    obsReplaySourceService.initialize(db, tenantPath('scoring'));
+    const commandId = await obsReplaySourceService.sendRelayCommand(matchId, '__youtube_broadcast_start__');
+    const result = await obsReplaySourceService.waitForRelayResult(matchId, commandId);
+    if (!result.success) throw new Error(result.error || 'The OBS owner could not start YouTube streaming.');
+  }
+
   private activate(): void {
     if (!this.db || !this.path) return;
     if (this.ownerType === 'admin') obsReplaySourceService.watchRelayCommands(null, this.replayConfig);
@@ -67,6 +91,8 @@ class OBSConnectionBridgeService {
 
   private async publishPresence(): Promise<void> {
     if (!this.db || !this.path || !obsService.isConnected()) return;
+    const database = this.db;
+    const path = this.path;
     const config = obsService.getConfig();
     const presence: OBSConnectionBridgePresence = {
       ownerId: this.ownerId,
@@ -77,7 +103,16 @@ class OBSConnectionBridgeService {
       port: config.port,
     };
     try {
-      await set(ref(this.db, this.path), presence);
+      try {
+        await obsService.assertYouTubeBroadcastReady();
+        presence.youtubeReady = true;
+      } catch (error) {
+        presence.youtubeReady = false;
+        presence.youtubeError = error instanceof Error ? error.message : String(error);
+      }
+      if (!obsService.isConnected() || this.db !== database || this.path !== path) return;
+      presence.lastSeen = Date.now();
+      await set(ref(database, path), presence);
     } catch (error) {
       console.warn('[OBS Bridge] Could not publish connected presence:', error);
     }

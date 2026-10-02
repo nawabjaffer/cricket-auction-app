@@ -39,6 +39,7 @@ import { getMatchSquadOverlayStyle, normalizeMatchSquadOverlayDesign } from '../
 import { getPremiumPartStyle, isPremiumTickerCustomized, normalizePremiumTickerDesign } from '../utils/premiumTickerDesign';
 import type { PremiumTickerDesign, PremiumTickerEditor, PremiumTickerPartKey } from '../types/premiumTicker';
 import { normalizePlayerStatsSequenceConfig } from '../utils/playerStatsSequence';
+import { buildPointsTableStandings, buildPoolAssignments } from '../utils/pointsTable';
 import { isInningsBreak } from '../utils/inningsBreak';
 import { shouldShowAnimation } from '../utils/animationAction';
 import './ScoreOBSOverlayPage.css';
@@ -977,7 +978,7 @@ export default function ScoreOBSOverlayPage() {
         {/* Show tournament overlays even without live score */}
         <AnimatePresence mode="wait">
           {localOverlay === 'points_table' && (
-            <PointsTableOverlay allMatches={allMatches} allTeams={allTeams} />
+            <PointsTableOverlay allMatches={allMatches} allTeams={allTeams} poolSettings={config.pointsTablePools} />
           )}
           {localOverlay === 'award_orange_cap' && tournamentStats && (
             <AwardOverlay title="ORANGE CAP" subtitle="Most Runs — Tournament" color="#f97316"
@@ -1347,7 +1348,7 @@ export default function ScoreOBSOverlayPage() {
           />
         )}
         {effectiveOverlay === 'points_table' && (
-          <PointsTableOverlay allMatches={allMatches} allTeams={allTeams} />
+          <PointsTableOverlay allMatches={allMatches} allTeams={allTeams} poolSettings={config.pointsTablePools} />
         )}
         {effectiveOverlay === 'match_intro' && match && (
           <MatchIntroOverlay match={match} config={config} lineups={lineups} playerImages={playerImages} impactPlayers={preMatch?.impactPlayers} squadDesign={squadDesign} />
@@ -3219,108 +3220,89 @@ export function ScorecardTicker({ live, match, battingTeam, bowlingTeam, config,
 
 // ── Points Table Overlay ──
 
-interface TeamStanding {
-  teamId: string;
-  teamName: string;
-  played: number;
-  won: number;
-  lost: number;
-  nrr: number;
-  points: number;
-}
+type PointsTableSortColumn = 'teamName' | 'played' | 'won' | 'lost' | 'nrr' | 'points';
 
-type PointsTableSortColumn = 'teamName' | 'played' | 'won' | 'lost' | 'points';
-
-function PointsTableOverlay({ allMatches, allTeams }: {
+function PointsTableOverlay({ allMatches, allTeams, poolSettings }: {
   allMatches: Record<string, { setup: MatchSetup; final?: MatchScore }>;
   allTeams?: { id: string; name: string; logoUrl?: string }[];
+  poolSettings?: ScoringOverlayConfig['pointsTablePools'];
 }) {
-  // Compute standings from completed matches
-  const standings: Record<string, TeamStanding> = {};
-
-  for (const m of Object.values(allMatches)) {
-    const { setup, final: matchScore } = m;
-    if (setup.status !== 'completed' || !matchScore?.result) continue;
-
-    // Ensure both teams exist
-    for (const team of [setup.teamA, setup.teamB]) {
-      if (!standings[team.id]) {
-        standings[team.id] = { teamId: team.id, teamName: team.name, played: 0, won: 0, lost: 0, nrr: 0, points: 0 };
-      }
-    }
-
-    standings[setup.teamA.id].played++;
-    standings[setup.teamB.id].played++;
-
-    if (matchScore.result.winner === setup.teamA.id) {
-      standings[setup.teamA.id].won++;
-      standings[setup.teamA.id].points += 2;
-      standings[setup.teamB.id].lost++;
-    } else if (matchScore.result.winner === setup.teamB.id) {
-      standings[setup.teamB.id].won++;
-      standings[setup.teamB.id].points += 2;
-      standings[setup.teamA.id].lost++;
-    }
-  }
-
-  // Also add teams from scheduled/live matches that haven't completed
-  for (const m of Object.values(allMatches)) {
-    for (const team of [m.setup.teamA, m.setup.teamB]) {
-      if (!standings[team.id]) {
-        standings[team.id] = { teamId: team.id, teamName: team.name, played: 0, won: 0, lost: 0, nrr: 0, points: 0 };
-      }
-    }
-  }
-
-  // Add ALL tournament teams from auction (even those without matches yet)
-  if (allTeams) {
-    for (const team of allTeams) {
-      if (!standings[team.id]) {
-        standings[team.id] = { teamId: team.id, teamName: team.name, played: 0, won: 0, lost: 0, nrr: 0, points: 0 };
-      }
-    }
-  }
-
-  const officialOrder = Object.values(standings).sort((a, b) => b.points - a.points || b.won - a.won || a.lost - b.lost);
-  const qualifyingTeamIds = new Set(officialOrder.slice(0, 2).map(team => team.teamId));
+  const matches = Object.values(allMatches);
+  const officialOrder = buildPointsTableStandings(matches, allTeams);
   const pointsTable = useSortableRows(officialOrder, (team, column: PointsTableSortColumn) => team[column], {
     column: 'points',
     direction: 'descending',
   });
+  const poolPreview = poolSettings
+    ? buildPoolAssignments(
+      officialOrder.map(team => ({ id: team.teamId, name: team.teamName })),
+      poolSettings.poolCount,
+      poolSettings.teamsPerPool,
+      poolSettings.teamAssignments,
+    )
+    : null;
+  const poolSections = poolPreview
+    ? [
+      ...poolPreview.poolIds.map((poolId, index) => ({
+        id: poolId,
+        title: `POOL ${String.fromCharCode(65 + index)}`,
+        rows: officialOrder.filter(team => poolPreview.assignments[team.teamId] === poolId),
+      })),
+      ...(poolPreview.unassignedTeamIds.length > 0 ? [{
+        id: 'unassigned',
+        title: 'UNASSIGNED',
+        rows: officialOrder.filter(team => poolPreview.unassignedTeamIds.includes(team.teamId)),
+      }] : []),
+    ]
+    : [{ id: 'overall', title: 'STANDINGS', rows: officialOrder }];
+  const qualifyingTeamIds = new Set(poolSections.flatMap(section => section.rows.slice(0, 2).map(team => team.teamId)));
 
   return (
     <motion.div
-      className="score-obs__overlay-card score-obs__points-table"
+      className={`score-obs__overlay-card score-obs__points-table${poolPreview ? ' score-obs__points-table--pools' : ''}`}
       initial={{ y: -40, opacity: 0 }}
       animate={{ y: 0, opacity: 1 }}
       exit={{ y: -40, opacity: 0 }}
       transition={{ type: 'spring', stiffness: 200, damping: 25 }}
     >
       <div className="score-obs__points-title">POINTS TABLE</div>
-      <table className="score-obs__points-grid">
-        <thead>
-          <tr>
-            <th>#</th>
-            <SortableColumnHeader column="teamName" label="Team" sortState={pointsTable.sortState} onSort={pointsTable.requestSort} />
-            <SortableColumnHeader column="played" label="P" sortState={pointsTable.sortState} onSort={pointsTable.requestSort} />
-            <SortableColumnHeader column="won" label="W" sortState={pointsTable.sortState} onSort={pointsTable.requestSort} />
-            <SortableColumnHeader column="lost" label="L" sortState={pointsTable.sortState} onSort={pointsTable.requestSort} />
-            <SortableColumnHeader column="points" label="Pts" sortState={pointsTable.sortState} onSort={pointsTable.requestSort} />
-          </tr>
-        </thead>
-        <tbody>
-          {pointsTable.sortedRows.map((t, i) => (
-            <tr key={t.teamId} className={qualifyingTeamIds.has(t.teamId) ? 'score-obs__points-qualify' : ''}>
-              <td>{i + 1}</td>
-              <td className="score-obs__points-team">{t.teamName}</td>
-              <td>{t.played}</td>
-              <td>{t.won}</td>
-              <td>{t.lost}</td>
-              <td className="score-obs__points-pts">{t.points}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <div className="score-obs__points-pools">
+        {poolSections.map(section => {
+          const sectionTeamIds = new Set(section.rows.map(team => team.teamId));
+          const sectionRows = pointsTable.sortedRows.filter(team => sectionTeamIds.has(team.teamId));
+          return (
+            <section className="score-obs__points-pool" key={section.id}>
+              {poolPreview && <div className="score-obs__points-pool-title">{section.title}</div>}
+              <table className="score-obs__points-grid">
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <SortableColumnHeader column="teamName" label="Team" sortState={pointsTable.sortState} onSort={pointsTable.requestSort} />
+                    <SortableColumnHeader column="played" label="P" sortState={pointsTable.sortState} onSort={pointsTable.requestSort} />
+                    <SortableColumnHeader column="won" label="W" sortState={pointsTable.sortState} onSort={pointsTable.requestSort} />
+                    <SortableColumnHeader column="lost" label="L" sortState={pointsTable.sortState} onSort={pointsTable.requestSort} />
+                    <SortableColumnHeader column="nrr" label="NRR" sortState={pointsTable.sortState} onSort={pointsTable.requestSort} />
+                    <SortableColumnHeader column="points" label="Pts" sortState={pointsTable.sortState} onSort={pointsTable.requestSort} />
+                  </tr>
+                </thead>
+                <tbody>
+                  {sectionRows.map((team, index) => (
+                    <tr key={team.teamId} className={qualifyingTeamIds.has(team.teamId) ? 'score-obs__points-qualify' : ''}>
+                      <td>{index + 1}</td>
+                      <td className="score-obs__points-team">{team.teamName}</td>
+                      <td>{team.played}</td>
+                      <td>{team.won}</td>
+                      <td>{team.lost}</td>
+                      <td>{team.nrr > 0 ? '+' : ''}{team.nrr.toFixed(3)}</td>
+                      <td className="score-obs__points-pts">{team.points}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </section>
+          );
+        })}
+      </div>
     </motion.div>
   );
 }

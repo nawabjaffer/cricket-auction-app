@@ -9,6 +9,10 @@
   border-radius: 8px;
 }
 
+.broadcast-schedule__compact { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; max-width: 420px; }
+.broadcast-schedule__time-default { display: inline-flex; align-items: center; gap: 0.4rem; color: #64748b; font-size: 0.75rem; }
+.broadcast-schedule__compact-message { flex-basis: 100%; color: #b45309; font-size: 0.72rem; overflow-wrap: anywhere; }
+
 .broadcast-schedule__header,
 .broadcast-schedule__toolbar,
 .broadcast-schedule__match {

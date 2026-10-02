@@ -6,6 +6,7 @@
 // ============================================================================
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { IoPlay, IoPause, IoPlayBack, IoPlayForward, IoRefresh, IoRadio } from 'react-icons/io5';
 import { onValue, ref } from 'firebase/database';
 import { scoringService } from '../services/scoring';
 import { initializeSharedOBSProfileService, sharedOBSProfileService } from '../services/sharedOBSProfileService';
@@ -13,7 +14,7 @@ import { realtimeSync } from '../services/realtimeSync';
 import { tenantPath } from '../services/tenantPath';
 import { obsService } from '../services/obsService';
 import { obsConnectionBridgeService, type OBSConnectionBridgePresence } from '../services/obsConnectionBridgeService';
-import { CRICKET_REPLAY_MEDIA_INPUT, obsStreamingPresetService } from '../services/obsStreamingPresetService';
+import { CRICKET_REPLAY_MEDIA_INPUT, CRICKET_LIVE_SCENE, obsStreamingPresetService } from '../services/obsStreamingPresetService';
 import { obsReplaySourceService } from '../services/scoring/obsReplaySourceService';
 import { liveCommentService } from '../services/liveCommentService';
 import { requestYouTubeReadToken, startYouTubeLiveChat } from '../services/youtubeLiveChat';
@@ -21,6 +22,7 @@ import { nextLiveComment } from '../utils/liveComments';
 import { normalizePlayerName } from '../utils/playerName';
 import { isInningsBreak } from '../utils/inningsBreak';
 import { getAnimationActionDelayMs } from '../utils/animationAction';
+import { getDockReplayButtons, resolveReplayButton } from '../utils/obsReplayConfig';
 import type {
   MatchSetup, LiveScore, OverlayControlState, OverlayType,
   OBSReplayButton, OBSReplayConfig, ScoringOverlayConfig, LiveComment, LiveCommentSettings,
@@ -78,15 +80,6 @@ const DOCK_MODE_OPTIONS: { key: DockConnectionMode; label: string; hint: string 
   { key: 'local', label: 'Local', hint: 'Dock is running on the same computer as OBS (127.0.0.1).' },
   { key: 'relay', label: 'Same Wi-Fi', hint: 'Phone sends commands over Firebase to the dock open on the OBS machine.' },
 ];
-const DRS_REPLAY_BUTTON_IDS = new Set([
-  'cricket-preset-drs-play',
-  'cricket-preset-drs-pause',
-  'cricket-preset-drs-restart',
-  'cricket-preset-drs-back-frame',
-  'cricket-preset-drs-forward-frame',
-  'cricket-preset-drs-back-second',
-  'cricket-preset-drs-forward-second',
-]);
 
 type ReplayActionLogStatus = 'queued' | 'running' | 'completed' | 'failed' | 'cancelled';
 interface ReplayActionLogEntry {
@@ -133,8 +126,10 @@ export default function ScoreOBSControlDock() {
   const [obsStatus, setObsStatus] = useState<'disconnected' | 'connecting' | 'connected' | 'error'>('disconnected');
   const [obsConnecting, setObsConnecting] = useState(false);
   const [replayConfig, setReplayConfig] = useState<OBSReplayConfig>({ buttons: [] });
-  const [replayScene, setReplayScene] = useState('');
-  const [drsScene, setDrsScene] = useState('');
+  const [drsReviewOpen, setDrsReviewOpen] = useState(false);
+  const drsReviewRef = useRef(false);
+  drsReviewRef.current = drsReviewOpen;
+  const actionGeneration = useRef(0);
   const [drsMediaStatus, setDrsMediaStatus] = useState<{ mediaState: string; mediaDuration: number | null; mediaCursor: number | null } | null>(null);
   const [execBusy, setExecBusy] = useState<string | null>(null);
   const [queuedActionCount, setQueuedActionCount] = useState(0);
@@ -296,9 +291,7 @@ export default function ScoreOBSControlDock() {
         }
         if (cfg?.obsReplayConfig) {
           setReplayConfig(cfg.obsReplayConfig);
-          setReplayScene(cfg.obsReplayConfig.replaySceneName || '');
-          setDrsScene(cfg.obsReplayConfig.drsSceneName || '');
-          obsStreamingPresetService.configureLatestReplaySource(cfg.obsReplayConfig.instantReplaySourceNames ?? cfg.obsReplayConfig.instantReplaySourceName);
+          obsStreamingPresetService.configureLatestReplaySource(cfg.obsReplayConfig.instantReplaySourceNames ?? cfg.obsReplayConfig.instantReplaySourceName, cfg.obsWebSocketConfig?.replayDurationSeconds);
         }
 
         // Keep following Single Overlay Mode + the active match reactively after load
@@ -307,9 +300,7 @@ export default function ScoreOBSControlDock() {
           setAnimationSettings(liveCfg);
           if (liveCfg.obsReplayConfig) {
             setReplayConfig(liveCfg.obsReplayConfig);
-            setReplayScene(liveCfg.obsReplayConfig.replaySceneName || '');
-            setDrsScene(liveCfg.obsReplayConfig.drsSceneName || '');
-            obsStreamingPresetService.configureLatestReplaySource(liveCfg.obsReplayConfig.instantReplaySourceNames ?? liveCfg.obsReplayConfig.instantReplaySourceName);
+            obsStreamingPresetService.configureLatestReplaySource(liveCfg.obsReplayConfig.instantReplaySourceNames ?? liveCfg.obsReplayConfig.instantReplaySourceName, liveCfg.obsWebSocketConfig?.replayDurationSeconds);
           }
         }));
         dockCleanupRef.current.push(liveCommentService.subscribeSettings(setLiveCommentSettings));
@@ -398,7 +389,18 @@ export default function ScoreOBSControlDock() {
   }, []);
 
   useEffect(() => {
-    if (obsStatus !== 'connected') {
+    return obsService.onEvent((event, data) => {
+      if (event !== 'CurrentProgramSceneChanged') return;
+      const sceneName = (data as { sceneName?: string } | null)?.sceneName;
+      if (!sceneName) return;
+      const reviewing = sceneName === (replayConfig.drsSceneName || 'Cricket - DRS');
+      drsReviewRef.current = reviewing;
+      setDrsReviewOpen(reviewing);
+    });
+  }, [replayConfig.drsSceneName]);
+
+  useEffect(() => {
+    if (obsStatus !== 'connected' || !drsReviewOpen) {
       setDrsMediaStatus(null);
       return;
     }
@@ -406,7 +408,7 @@ export default function ScoreOBSControlDock() {
     const refreshMediaStatus = async () => {
       try {
         const status = await obsService.request<{ mediaState: string; mediaDuration: number | null; mediaCursor: number | null }>(
-          'GetMediaInputStatus', { inputName: CRICKET_REPLAY_MEDIA_INPUT },
+          'GetMediaInputStatus', { inputName: replayConfig.drsMediaInputName || replayConfig.buttons.find(button => button.id === 'cricket-preset-drs-play')?.inputName || CRICKET_REPLAY_MEDIA_INPUT },
         );
         if (active) setDrsMediaStatus(status);
       } catch {
@@ -416,7 +418,7 @@ export default function ScoreOBSControlDock() {
     void refreshMediaStatus();
     const timer = window.setInterval(() => { if (!document.hidden) void refreshMediaStatus(); }, 1_000);
     return () => { active = false; window.clearInterval(timer); };
-  }, [obsStatus]);
+  }, [obsStatus, drsReviewOpen, replayConfig.drsMediaInputName, replayConfig.buttons]);
 
   useEffect(() => {
     if (obsStatus !== 'connected') return;
@@ -472,6 +474,7 @@ export default function ScoreOBSControlDock() {
 
   useEffect(() => {
     const adsScene = replayConfig.inningsBreakSceneName;
+    if (drsReviewRef.current) return;
     const inBreak = isInningsBreak({
       firstInningsComplete,
       currentInnings: liveScore?.currentInnings,
@@ -496,7 +499,7 @@ export default function ScoreOBSControlDock() {
         });
       }
     }
-  }, [firstInningsComplete, liveScore?.currentInnings, obsStatus, replayConfig.inningsBreakSceneName, replayConfig.inningsBreakReturnSceneName, showFeedback]);
+  }, [firstInningsComplete, liveScore?.currentInnings, obsStatus, replayConfig.inningsBreakSceneName, replayConfig.inningsBreakReturnSceneName, showFeedback, drsReviewOpen]);
 
   const handleObsConnect = useCallback(async () => {
     if (connectionMode === 'relay') {
@@ -601,23 +604,35 @@ export default function ScoreOBSControlDock() {
     activeSeriesAbortRef.current?.abort();
   }, []);
 
-  const execReplayButton = useCallback((button: OBSReplayButton) => {
+  const execReplayButton = useCallback((configuredButton: OBSReplayButton) => {
+    const button = resolveReplayButton(configuredButton, replayConfig);
     if (!button.enabled) return Promise.resolve();
+    const opensDRS = button.action === 'drs_review' || button.id === 'drs' || button.id === 'cricket-preset-switch-drs'
+      || (button.action === 'scene_switch' && button.sceneName === replayConfig.drsSceneName);
     const now = Date.now();
     const lastPress = lastReplayButtonPressRef.current.get(button.id) || 0;
-    if (queuedReplayButtonIdsRef.current.has(button.id) || now - lastPress < REPLAY_BUTTON_DEBOUNCE_MS) {
+    const transport = button.action === 'media_input_seek' || button.action === 'media_input_action';
+    if ((!transport && queuedReplayButtonIdsRef.current.has(button.id)) || (!transport && now - lastPress < REPLAY_BUTTON_DEBOUNCE_MS)) {
       showFeedback(`${button.label} is already running or was just triggered.`);
       return Promise.resolve();
     }
+    if (opensDRS) {
+      activeSeriesAbortRef.current?.abort();
+      actionGeneration.current++;
+      drsReviewRef.current = true;
+      setDrsReviewOpen(true);
+    }
+    const generation = actionGeneration.current;
     queuedReplayButtonIdsRef.current.add(button.id);
     lastReplayButtonPressRef.current.set(button.id, now);
 
     const action = enqueueOBSAction(button.id, button.label, async () => {
+      if (generation !== actionGeneration.current) return;
       if (!obsService.isConnected() && connectionMode !== 'relay' && !sharedObsBridge) {
         await handleObsConnect();
       }
       if (obsService.isConnected()) {
-        const controller = button.action === 'series' ? new AbortController() : null;
+        const controller = button.action === 'series' || button.action === 'drs_review' ? new AbortController() : null;
         if (controller) activeSeriesAbortRef.current = controller;
         updateReplayActionLog(button.id, { label: button.label, status: 'running', detail: controller ? `Running 0/${button.series?.length || 0} steps` : 'Sending action to OBS' });
         let result;
@@ -661,7 +676,7 @@ export default function ScoreOBSControlDock() {
       }
     });
     return action.finally(() => queuedReplayButtonIdsRef.current.delete(button.id));
-  }, [connectionMode, enqueueOBSAction, handleObsConnect, selectedMatchId, sharedObsBridge, showFeedback, updateReplayActionLog]);
+  }, [connectionMode, enqueueOBSAction, handleObsConnect, selectedMatchId, sharedObsBridge, showFeedback, updateReplayActionLog, replayConfig]);
 
   const cancelActiveReplaySeries = useCallback(() => {
     const controller = activeSeriesAbortRef.current;
@@ -670,28 +685,8 @@ export default function ScoreOBSControlDock() {
     if (execBusy) updateReplayActionLog(execBusy, { label: replayConfig.buttons.find(button => button.id === execBusy)?.label || execBusy, status: 'cancelled', detail: 'Cancellation requested…' });
   }, [execBusy, replayConfig.buttons, updateReplayActionLog]);
 
-  const runReplayBufferAction = useCallback(async (requestType: 'SaveReplayBuffer' | 'StartReplayBuffer' | 'StopReplayBuffer', label: string) => {
-    if (!obsService.isConnected()) {
-      const presetIds: Record<typeof requestType, string> = {
-        SaveReplayBuffer: 'cricket-preset-replay-save',
-        StartReplayBuffer: 'cricket-preset-buffer-start',
-        StopReplayBuffer: 'cricket-preset-buffer-stop',
-      };
-      const relayButton = replayConfig.buttons.find(button => button.id === presetIds[requestType] && button.enabled);
-      if (selectedMatchId && relayButton) {
-        await execReplayButton(relayButton);
-        return;
-      }
-      showFeedback('OBS not connected');
-      return;
-    }
-    await enqueueOBSAction(requestType, label, async () => {
-      await obsService.request(requestType);
-      showFeedback(label);
-    });
-  }, [enqueueOBSAction, execReplayButton, replayConfig.buttons, selectedMatchId, showFeedback]);
-
   useEffect(() => {
+    if (drsReviewRef.current) return;
     if (!selectedMatchId || !autoActionEvent || autoActionEvent.matchId !== selectedMatchId) return;
     const { control } = autoActionEvent;
     const eventKey = `${autoActionEvent.matchId}:${control.lastUpdated}:${control.activeOverlay}`;
@@ -717,7 +712,7 @@ export default function ScoreOBSControlDock() {
     }
     const timer = setTimeout(() => {
       autoActionTimersRef.current.delete(timer);
-      void execReplayButton(button);
+      if (!drsReviewRef.current) void execReplayButton(button);
     }, delayMs);
     autoActionTimersRef.current.add(timer);
   }, [animationSettings, autoActionEvent, execReplayButton, replayConfig.buttons, selectedMatchId, showFeedback]);
@@ -726,25 +721,6 @@ export default function ScoreOBSControlDock() {
     autoActionTimersRef.current.forEach(timer => clearTimeout(timer));
     autoActionTimersRef.current.clear();
   }, [selectedMatchId]);
-
-  const handleSwitchReplayScene = useCallback(async (scene: string) => {
-    if (!scene) return;
-    if (!obsService.isConnected()) {
-      const relayButton = replayConfig.buttons.find(button => button.action === 'scene_switch' && button.sceneName === scene && button.enabled);
-      if (selectedMatchId && relayButton) {
-        await execReplayButton(relayButton);
-        return;
-      }
-      showFeedback('OBS not connected; configure a scene-switch replay button to use the shared connection.');
-      return;
-    }
-    try {
-      await obsService.request('SetCurrentProgramScene', { sceneName: scene });
-      showFeedback(`Scene: ${scene}`);
-    } catch (error) {
-      showFeedback(`Could not switch to ${scene}: ${error instanceof Error ? error.message : String(error)}`);
-    }
-  }, [execReplayButton, replayConfig.buttons, selectedMatchId, showFeedback]);
 
   const triggerOverlay = useCallback(async (overlay: OverlayType) => {
     if (!selectedMatchId) return;
@@ -909,6 +885,7 @@ export default function ScoreOBSControlDock() {
   // Keyboard shortcuts
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
+      if (drsReviewRef.current || replayConfig.dockReplayOnly) return;
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement) return;
       const key = e.key.toUpperCase();
       const mapping: Record<string, OverlayType> = {
@@ -932,7 +909,7 @@ export default function ScoreOBSControlDock() {
     };
     globalThis.addEventListener('keydown', handler);
     return () => globalThis.removeEventListener('keydown', handler);
-  }, [triggerOverlay, clearOverlay]);
+  }, [triggerOverlay, clearOverlay, replayConfig.dockReplayOnly]);
 
   const selectedMatch = matches.find(m => m.id === selectedMatchId);
   useEffect(() => {
@@ -946,12 +923,59 @@ export default function ScoreOBSControlDock() {
   }, [activeOverlay, selectedMatch?.status, selectedMatchId]);
   const obsIsConnected = obsStatus === 'connected';
   const relayReady = connectionMode === 'relay' || relayOnlyMode || (!obsIsConnected && obsStatus !== 'connecting');
-  const enabledButtons = replayConfig.buttons.filter(b => b.enabled && !DRS_REPLAY_BUTTON_IDS.has(b.id)).sort((a, b) => a.order - b.order);
-  const enabledDrsButtons = replayConfig.buttons.filter(button => button.enabled && DRS_REPLAY_BUTTON_IDS.has(button.id)).sort((a, b) => a.order - b.order);
+  const enabledButtons = getDockReplayButtons(replayConfig, 'main');
+  const enabledDrsButtons = getDockReplayButtons(replayConfig, 'drs').filter(button => button.id !== 'cricket-preset-drs-live');
   const audienceUrl = new URL(globalThis.location.href);
   audienceUrl.pathname = audienceUrl.pathname.replace(/\/obs-dock$/, '/live-chat');
   if (selectedMatchId) audienceUrl.searchParams.set('matchId', selectedMatchId);
   else audienceUrl.searchParams.delete('matchId');
+
+  const goLive = async () => {
+    activeSeriesAbortRef.current?.abort();
+    actionGeneration.current++;
+    try {
+      await actionQueueRef.current;
+      const sceneName = replayConfig.liveSceneName || CRICKET_LIVE_SCENE;
+      if (obsService.isConnected()) {
+        await obsService.request('SetCurrentProgramScene', { sceneName });
+      } else {
+        const button = replayConfig.buttons.find(item => item.id === 'cricket-preset-drs-live' && item.enabled);
+        if (!button || !selectedMatchId || !sharedObsBridge) throw new Error('Reconnect OBS or enable Go Live in OBS WS Admin.');
+        const id = await obsReplaySourceService.sendRelayCommand(selectedMatchId, button.id);
+        const result = await obsReplaySourceService.waitForRelayResult(selectedMatchId, id);
+        if (!result.success) throw new Error(result.error || 'Could not return to live.');
+      }
+      drsReviewRef.current = false;
+      setDrsReviewOpen(false);
+      showFeedback('Live scene restored');
+    } catch (error) {
+      showFeedback(error instanceof Error ? error.message : String(error));
+    }
+  };
+
+  if (drsReviewOpen) return (
+    <div className="score-dock score-dock--review">
+      <header className="score-dock__header"><strong>DRS Review</strong><span>{obsIsConnected ? 'OBS connected' : sharedObsBridge ? 'Shared OBS' : 'OBS disconnected'}</span></header>
+      <section className="score-dock__drs-review">
+        <header><strong>{replayConfig.drsDurationSeconds || 40}s capture</strong>
+          <span>{drsMediaStatus?.mediaState?.replace(/^OBS_MEDIA_STATE_/, '').toLowerCase() || (execBusy ? 'Loading clip...' : 'Awaiting media status')}
+            {drsMediaStatus?.mediaCursor != null && drsMediaStatus.mediaDuration != null ? ` · ${(drsMediaStatus.mediaCursor / 1000).toFixed(1)} / ${(drsMediaStatus.mediaDuration / 1000).toFixed(1)}s` : ''}
+          </span>
+        </header>
+        <div className="score-dock__drs-controls">
+          {enabledDrsButtons.map(button => <button key={button.id} type="button" title={button.label} onClick={() => void execReplayButton(button)}>
+            {button.action === 'media_input_seek' ? (Number(button.mediaFrameOffset ?? button.mediaCursorOffset) < 0 ? <IoPlayBack /> : <IoPlayForward />)
+              : button.mediaAction?.endsWith('_PAUSE') ? <IoPause /> : button.mediaAction?.endsWith('_RESTART') ? <IoRefresh /> : <IoPlay />}
+            <span>{button.label}</span>
+          </button>)}
+        </div>
+        <button className="score-dock__drs-live" type="button" onClick={() => void goLive()}><IoRadio />Go Live</button>
+        {activeSeriesAbortRef.current && <button type="button" onClick={cancelActiveReplaySeries}>Cancel replay</button>}
+        {feedback && <p className="score-dock__drs-feedback" role="status">{feedback}</p>}
+        {replayActionLogs.slice(0, 1).map(entry => <p className="score-dock__drs-feedback" key={entry.id} role="status">{entry.label}: {entry.detail}</p>)}
+      </section>
+    </div>
+  );
 
   return (
     <div className="score-dock">
@@ -970,6 +994,7 @@ export default function ScoreOBSControlDock() {
       </div>
 
       {/* OBS Connection Panel */}
+      {(!replayConfig.dockReplayOnly || !obsIsConnected) && (
       <div className="score-dock__obs-connect-panel">
         {sharedObsBridge && !obsIsConnected ? (
           <div className="score-dock__obs-shared-connection" role="status">
@@ -1077,8 +1102,10 @@ export default function ScoreOBSControlDock() {
           </>
         )}
       </div>
+      )}
 
       {/* Match Selector */}
+      {!replayConfig.dockReplayOnly && <>
       <div className="score-dock__match-selector">
         <div className="score-dock__match-selector-label">Match</div>
         <select
@@ -1146,6 +1173,7 @@ export default function ScoreOBSControlDock() {
       )}
 
       {/* ═══ REPLAY SOURCE CONTROL ═══ */}
+      </>}
       <div className="score-dock__replay-panel">
         <div className="score-dock__replay-header">
           <span className="score-dock__replay-title">🎬 Replay Control</span>
@@ -1155,28 +1183,6 @@ export default function ScoreOBSControlDock() {
           {obsIsConnected && <span className="score-dock__replay-live-badge">LIVE</span>}
           {relayReady && !obsIsConnected && <span className="score-dock__replay-relay-badge">RELAY</span>}
         </div>
-
-        {/* Scene switchers — only shown when scenes are actually configured */}
-        {(replayScene || drsScene) && (
-          <div className="score-dock__replay-scenes">
-            {replayScene && (
-              <button
-                className="score-dock__scene-switch-btn score-dock__scene-switch-btn--replay"
-                onClick={() => handleSwitchReplayScene(replayScene)}
-              >
-                📺 Replay Scene
-              </button>
-            )}
-            {drsScene && (
-              <button
-                className="score-dock__scene-switch-btn score-dock__scene-switch-btn--drs"
-                onClick={() => handleSwitchReplayScene(drsScene)}
-              >
-                🔍 DRS Scene
-              </button>
-            )}
-          </div>
-        )}
 
         {/* Configurable hotkey buttons from admin config */}
         {enabledButtons.length > 0 ? (
@@ -1208,42 +1214,6 @@ export default function ScoreOBSControlDock() {
           </div>
         )}
 
-        {(drsScene || enabledDrsButtons.length > 0) && (
-          <section className="score-dock__drs-review">
-            <header>
-              <div><strong>DRS Replay Review</strong><span>Frame-by-frame replay control</span></div>
-              {drsMediaStatus && <span className={`score-dock__drs-state score-dock__drs-state--${drsMediaStatus.mediaState.toLowerCase().replace(/[^a-z]+/g, '-')}`}>
-                {drsMediaStatus.mediaState.replace(/^OBS_MEDIA_STATE_/, '').toLowerCase()}
-                {drsMediaStatus.mediaCursor != null && drsMediaStatus.mediaDuration != null ? ` · ${(drsMediaStatus.mediaCursor / 1000).toFixed(1)}s / ${(drsMediaStatus.mediaDuration / 1000).toFixed(1)}s` : ''}
-              </span>}
-            </header>
-            {drsScene && <button type="button" className="score-dock__drs-view" onClick={() => handleSwitchReplayScene(drsScene)}>Show DRS View</button>}
-            {enabledDrsButtons.length > 0 ? (
-              <div className="score-dock__drs-controls">
-                {enabledDrsButtons.map(button => (
-                  <button key={button.id} type="button" onClick={() => void execReplayButton(button)} disabled={execBusy === button.id} title={button.label}>
-                    <span>{button.icon}</span>{button.label}
-                  </button>
-                ))}
-              </div>
-            ) : (
-              <p>Run Match Setup to add play, pause, restart and frame/second seek controls.</p>
-            )}
-          </section>
-        )}
-
-        {/* Quick built-in replay buffer buttons */}
-        <div className="score-dock__replay-buffer-row">
-          <button className="score-dock__rbuf-btn" onClick={() => void runReplayBufferAction('SaveReplayBuffer', 'Replay saved')} disabled={execBusy === 'SaveReplayBuffer'}>
-            💾 Save Replay
-          </button>
-          <button className="score-dock__rbuf-btn" onClick={() => void runReplayBufferAction('StartReplayBuffer', 'Buffer started')} disabled={execBusy === 'StartReplayBuffer'}>
-            ▶ Start Buffer
-          </button>
-          <button className="score-dock__rbuf-btn score-dock__rbuf-btn--stop" onClick={() => void runReplayBufferAction('StopReplayBuffer', 'Buffer stopped')} disabled={execBusy === 'StopReplayBuffer'}>
-            ⏹ Stop
-          </button>
-        </div>
 
         {replayActionLogs.length > 0 && (
           <div className="score-dock__replay-log" aria-live="polite">
@@ -1267,6 +1237,7 @@ export default function ScoreOBSControlDock() {
       </div>
 
       {/* Overlay Controls */}
+      {!replayConfig.dockReplayOnly && <>
       <div className="score-dock__section">
         <div className="score-dock__section-label">Overlay Controls</div>
         <div className="score-dock__overlay-grid">
@@ -1362,7 +1333,6 @@ export default function ScoreOBSControlDock() {
       </div>
 
       {/* Feedback toast */}
-      {feedback && <div className="score-dock__feedback">{feedback}</div>}
 
       {/* Shortcuts Reference */}
       <div className="score-dock__section score-dock__shortcuts">
@@ -1380,6 +1350,8 @@ export default function ScoreOBSControlDock() {
           </div>
         </div>
       </div>
+      </>}
+      {feedback && <div className="score-dock__feedback">{feedback}</div>}
     </div>
   );
 }

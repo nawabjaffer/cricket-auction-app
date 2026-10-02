@@ -602,3 +602,14 @@ src/components/AdminPanel/
 - [ ] Admin can configure scoring provider per match
 - [ ] API keys stored securely in Firebase (not in client code)
 - [ ] TypeScript compiles clean with all scoring types
+
+## 11. OBS DRS Review And Broadcast Scheduling
+
+- In Scorer Admin > OBS WS, configure DRS capture duration (default 40 seconds), frames per step, replay video FPS, and the Go Live scene. Save settings and run Match Setup to create/update the separate DRS media and Replay Source inputs. Existing button enable/disable and Dock visibility choices are preserved.
+- OBS has one built-in Replay Buffer. Its duration must cover the longer of normal replay and DRS. If the buffer is already running with a shorter duration, stop it and rerun Match Setup. Allow the buffer to fill before reviewing; a newly started buffer cannot recover video from before it started. Also allocate sufficient replay-buffer memory in OBS Output settings.
+- DRS waits for the actual saved-file event, loads the separate media source at 60% speed, and pauses it for review. Reverse/forward frame controls pause before seeking. Set FPS to the recorded video's FPS; OBS WebSocket seeks in milliseconds, not codec frame numbers. Normal replay playback keeps its separate configured window.
+- The DRS dock view hides other controls until Go Live. The OBS WS button editor controls Dock visibility and Main/DRS placement. Replay-only dock mode hides scoring sections and connected-state connection controls. Go Live remains available as a safety exit.
+- In Matches, Broadcast schedules creates missing schedules in bulk. Time default creates missing fixture schedules at kickoff minus 10 minutes, including newly added fixtures. Existing entries are never overwritten by either action, even after a failed start.
+- Scheduling requires a live app/Dock OBS connection and a configured YouTube output destination with a stream key (or an already-active YouTube output). The connected OBS owner checks readiness again when executing the start. Stream keys are not stored in bridge presence or schedule entries. OBS WebSocket cannot prove that a YouTube OAuth account is signed in or that a configured key is valid.
+- Keep Matches or the Streaming tab open and the OBS owner connected for automatic starts. These are browser-driven OBS start schedules, not server-side timers or YouTube scheduled-event creation. Firebase schedule creation and start claims use transactions to prevent duplicate creation/start attempts across open clients.
+- No real OBS/YouTube broadcast is started by automated tests. Perform a private YouTube/OBS smoke test on the target production machine before operating a live match.

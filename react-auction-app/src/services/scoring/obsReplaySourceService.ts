@@ -15,7 +15,9 @@
 
 import { ref, onValue, set, push, runTransaction, type Database } from 'firebase/database';
 import { obsService } from '../obsService';
+import { obsStreamingPresetService } from '../obsStreamingPresetService';
 import type { OBSReplayButton, OBSReplayConfig, OBSButtonSeriesStep } from '../../types/scoring';
+import { resolveReplayButton } from '../../utils/obsReplayConfig';
 
 // Default preset buttons — each maps to the typical Replay Source hotkey names.
 // The user can override these after running "Discover Hotkeys".
@@ -241,6 +243,10 @@ class OBSReplaySourceService {
           await obsService.request('SetCurrentProgramScene', { sceneName: step.sceneName.trim() });
           return null;
 
+        case 'drs_review':
+          await obsStreamingPresetService.openDRSReview(step.inputName, step.sceneName, signal, step.drsDurationSeconds);
+          return null;
+
         case 'replay_buffer_save':
           await obsService.request('SaveReplayBuffer');
           return null;
@@ -264,9 +270,15 @@ class OBSReplaySourceService {
         case 'media_input_seek': {
           if (!step.inputName?.trim()) return 'Select an OBS media source first.';
           const inputName = step.inputName.trim();
+          if (step.mediaFrameOffset != null) {
+            await obsService.request('TriggerMediaInputAction', { inputName, mediaAction: 'OBS_WEBSOCKET_MEDIA_INPUT_ACTION_PAUSE' });
+          }
           const status = await obsService.request<{ mediaDuration: number | null; mediaCursor: number | null }>('GetMediaInputStatus', { inputName });
           if (!Number.isFinite(status.mediaCursor)) return 'The replay media is not loaded yet. Save or play a replay before seeking.';
-          const nextCursor = Number(status.mediaCursor) + (Number(step.mediaCursorOffset) || 0);
+          const offset = step.mediaFrameOffset != null
+            ? Math.round(step.mediaFrameOffset * 1000 / Math.max(1, step.mediaFramesPerSecond || 30))
+            : Number(step.mediaCursorOffset) || 0;
+          const nextCursor = Number(status.mediaCursor) + offset;
           const boundedCursor = Math.max(0, status.mediaDuration == null ? nextCursor : Math.min(status.mediaDuration, nextCursor));
           await obsService.request('SetMediaInputCursor', { inputName, mediaCursor: boundedCursor });
           return null;
@@ -348,7 +360,7 @@ class OBSReplaySourceService {
       if (!snap.exists()) return;
       snap.forEach((child) => {
         const cmd = child.val() as OBSRelayCommand;
-        if (matchId && cmd.matchId && cmd.matchId !== matchId) return;
+        if (matchId && cmd.matchId && cmd.matchId !== matchId && cmd.buttonId !== '__youtube_broadcast_start__') return;
         if (!cmd.timestamp || Date.now() - cmd.timestamp > 120_000) return;
         if (cmd.consumed || cmd.status === 'running' || cmd.status === 'success' || cmd.status === 'error') return;
         const commandRef = ref(this.db!, `${commandsPath}/${child.key}`);
@@ -360,8 +372,17 @@ class OBSReplaySourceService {
           const claimed = claim.snapshot.val() as OBSRelayCommand;
           const button = config.buttons.find(b => b.id === claimed.buttonId && b.enabled);
           let result: OBSButtonExecutionResult;
-          if (button) {
-            result = await this.executeButton(button);
+          if (claimed.buttonId === '__youtube_broadcast_start__') {
+            try {
+              await obsService.assertYouTubeBroadcastReady();
+              const status = await obsService.request<{ outputActive: boolean }>('GetStreamStatus');
+              if (!status.outputActive) await obsService.request('StartStream');
+              result = { success: true, completedSteps: 1, totalSteps: 1, errors: [] };
+            } catch (error) {
+              result = { success: false, completedSteps: 0, totalSteps: 1, errors: [error instanceof Error ? error.message : String(error)] };
+            }
+          } else if (button) {
+            result = await this.executeButton(resolveReplayButton(button, config));
           } else {
             result = { success: false, completedSteps: 0, totalSteps: 0, errors: ['Configured button was not found or is disabled on the OBS dock.'] };
           }

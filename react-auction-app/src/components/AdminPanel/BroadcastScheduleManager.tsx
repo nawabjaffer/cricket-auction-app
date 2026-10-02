@@ -4,6 +4,7 @@ import { IoCalendar, IoCheckmarkCircle, IoPlay, IoWarning } from 'react-icons/io
 import { realtimeSync } from '../../services/realtimeSync';
 import { scoringService } from '../../services/scoring';
 import { obsService } from '../../services/obsService';
+import { obsConnectionBridgeService } from '../../services/obsConnectionBridgeService';
 import { tenantPath } from '../../services/tenantPath';
 import type { MatchSetup } from '../../types/scoring';
 import './BroadcastScheduleManager.css';
@@ -18,6 +19,7 @@ interface BroadcastScheduleEntry {
   createdAt: number;
   startedAt?: number;
   error?: string;
+  claimOwner?: string;
 }
 
 function getKickoffTimestamp(match: MatchSetup): number | null {
@@ -25,7 +27,7 @@ function getKickoffTimestamp(match: MatchSetup): number | null {
   return Number.isFinite(timestamp) ? timestamp : null;
 }
 
-export default function BroadcastScheduleManager() {
+export default function BroadcastScheduleManager({ compact = false }: { compact?: boolean }) {
   const [database, setDatabase] = useState<Database | null>(null);
   const [matches, setMatches] = useState<MatchSetup[]>([]);
   const [schedules, setSchedules] = useState<Record<string, BroadcastScheduleEntry>>({});
@@ -33,12 +35,16 @@ export default function BroadcastScheduleManager() {
   const [obsConnected, setObsConnected] = useState(obsService.isConnected());
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
+  const [autoSchedule, setAutoSchedule] = useState(false);
   const claimedMatchIds = useRef(new Set<string>());
+  const autoCreating = useRef(false);
 
   useEffect(() => {
     let active = true;
     let stopMatches = () => {};
     let stopSchedules = () => {};
+    let stopSettings = () => {};
+    let stopBridge = () => {};
 
     const initialize = async () => {
       try {
@@ -52,42 +58,46 @@ export default function BroadcastScheduleManager() {
         stopSchedules = onValue(ref(db, tenantPath('scoring/broadcastSchedule')), snapshot => {
           setSchedules(snapshot.exists() ? snapshot.val() as Record<string, BroadcastScheduleEntry> : {});
         });
+        stopSettings = onValue(ref(db, tenantPath('scoring/broadcastScheduleSettings/timeDefault')), snapshot => setAutoSchedule(snapshot.val() === true));
+        stopBridge = onValue(ref(db, tenantPath('scoring/obsConnectionBridge')), snapshot => {
+          setObsConnected(obsService.isConnected() || obsConnectionBridgeService.isAlive(snapshot.val()));
+        });
       } catch (error) {
         if (active) setMessage(`Could not load match schedule: ${error instanceof Error ? error.message : String(error)}`);
       }
     };
 
     void initialize();
-    return () => { active = false; stopMatches(); stopSchedules(); };
+    return () => { active = false; stopMatches(); stopSchedules(); stopSettings(); stopBridge(); };
   }, []);
 
   useEffect(() => obsService.onConnectionChange(state => setObsConnected(state === 'connected')), []);
 
   const startScheduledMatch = useCallback(async (matchId: string, force = false) => {
-    if (!database || !obsService.isConnected() || claimedMatchIds.current.has(matchId)) return;
+    if (!database || claimedMatchIds.current.has(matchId)) return;
     claimedMatchIds.current.add(matchId);
     const entryRef = ref(database, `${tenantPath('scoring/broadcastSchedule')}/${matchId}`);
+    const claimOwner = crypto.randomUUID();
     try {
+      await obsConnectionBridgeService.assertBroadcastReady(database);
       const claim = await runTransaction(entryRef, current => {
         const schedule = current as BroadcastScheduleEntry | null;
-        if (!schedule || schedule.status === 'starting' || schedule.status === 'started') return;
+        if (!schedule || schedule.status === 'started') return;
+        if (schedule.status === 'starting' && Date.now() - (schedule.startedAt || 0) < 60_000) return;
         if (!force && schedule.startAt > Date.now()) return;
-        return { ...schedule, status: 'starting', error: null, startedAt: Date.now() };
+        return { ...schedule, status: 'starting', error: null, startedAt: Date.now(), claimOwner };
       });
       if (!claim.committed) return;
 
-      const currentStatus = await obsService.getStreamingStatus();
-      const success = currentStatus?.outputActive || await obsService.startStreaming();
-      const claimedSchedule = claim.snapshot.val() as BroadcastScheduleEntry;
-      await set(entryRef, {
-        ...claimedSchedule,
-        status: success ? 'started' : 'failed',
-        startedAt: success ? Date.now() : null,
-        error: success ? null : obsService.getLastErrorDetail() || 'OBS did not start streaming.',
-      });
-      setMessage(success ? `Streaming started for ${matches.find(match => match.id === matchId)?.teamA.name || 'scheduled match'}.` : 'OBS could not start streaming. Check the OBS output settings.');
+      await obsConnectionBridgeService.startYouTubeBroadcast(database, matchId);
+      await runTransaction(entryRef, current => current?.claimOwner === claimOwner
+        ? { ...current, status: 'started', startedAt: Date.now(), error: null } : undefined);
+      setMessage(`Streaming started for ${matches.find(match => match.id === matchId)?.teamA.name || 'scheduled match'}.`);
     } catch (error) {
-      setMessage(`Could not start scheduled stream: ${error instanceof Error ? error.message : String(error)}`);
+      const detail = error instanceof Error ? error.message : String(error);
+      await runTransaction(entryRef, current => current?.status === 'starting' && current.claimOwner === claimOwner
+        ? { ...current, status: 'failed', error: detail } : undefined).catch(() => {});
+      setMessage(`Could not start scheduled stream: ${detail}`);
     } finally {
       claimedMatchIds.current.delete(matchId);
     }
@@ -98,45 +108,102 @@ export default function BroadcastScheduleManager() {
     const timer = window.setInterval(() => {
       const now = Date.now();
       for (const [matchId, schedule] of Object.entries(schedules)) {
-        if (schedule.status === 'scheduled' && schedule.startAt <= now) {
+        const fixture = matches.find(match => match.id === matchId);
+        if (fixture && (fixture.status === 'scheduled' || fixture.status === 'live')
+          && (schedule.status === 'scheduled' || (schedule.status === 'starting' && now - (schedule.startedAt || 0) >= 60_000))
+          && schedule.startAt <= now && (getKickoffTimestamp(fixture) || 0) >= now - 3_600_000) {
           void startScheduledMatch(matchId);
         }
       }
     }, 5_000);
     return () => window.clearInterval(timer);
-  }, [database, obsConnected, schedules, startScheduledMatch]);
+  }, [database, obsConnected, schedules, startScheduledMatch, matches]);
 
-  const createSchedule = async (match: MatchSetup, overwrite = false) => {
+  const createSchedule = useCallback(async (match: MatchSetup, minutes = leadMinutes) => {
     if (!database) return false;
     const kickoff = getKickoffTimestamp(match);
     if (kickoff === null) return false;
-    const existing = schedules[match.id];
-    if (!overwrite && existing && ['starting', 'started'].includes(existing.status)) return true;
     const entry: BroadcastScheduleEntry = {
       matchId: match.id,
-      startAt: kickoff - leadMinutes * 60_000,
-      leadMinutes,
+      startAt: kickoff - minutes * 60_000,
+      leadMinutes: minutes,
       status: 'scheduled',
-      createdAt: existing?.createdAt || Date.now(),
+      createdAt: Date.now(),
     };
-    await set(ref(database, `${tenantPath('scoring/broadcastSchedule')}/${match.id}`), entry);
-    return true;
-  };
+    const result = await runTransaction(ref(database, `${tenantPath('scoring/broadcastSchedule')}/${match.id}`), current => current == null ? entry : undefined);
+    return result.committed;
+  }, [database, leadMinutes]);
 
   const handleSyncAll = async () => {
     setBusy(true);
     setMessage('');
     try {
+      if (!database) throw new Error('Broadcast scheduling is still loading.');
+      await obsConnectionBridgeService.assertBroadcastReady(database);
       const upcoming = matches.filter(match => match.status === 'scheduled' && getKickoffTimestamp(match) !== null);
       const results = await Promise.all(upcoming.map(match => createSchedule(match)));
       const count = results.filter(Boolean).length;
-      setMessage(count > 0 ? `Synced ${count} scheduled match${count === 1 ? '' : 'es'}.` : 'No scheduled fixtures found to sync.');
+      setMessage(count > 0 ? `Created ${count} broadcast schedule${count === 1 ? '' : 's'}; existing schedules were kept.` : 'No missing broadcast schedules. Existing schedules were kept.');
     } catch (error) {
       setMessage(`Could not sync schedules: ${error instanceof Error ? error.message : String(error)}`);
     } finally {
       setBusy(false);
     }
   };
+
+  const toggleTimeDefault = async (enabled: boolean) => {
+    if (!database) return;
+    try {
+      if (enabled) await obsConnectionBridgeService.assertBroadcastReady(database);
+      await set(ref(database, tenantPath('scoring/broadcastScheduleSettings/timeDefault')), enabled);
+      setAutoSchedule(enabled);
+      setMessage(enabled ? 'Time default enabled: kickoff minus 10 minutes.' : 'Time default disabled.');
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : String(error));
+    }
+  };
+
+  useEffect(() => {
+    if (!database || !autoSchedule || !obsConnected) return;
+    let active = true;
+    const createMissing = async () => {
+      if (autoCreating.current) return;
+      const missing = matches.filter(match => match.status === 'scheduled' && !schedules[match.id]
+        && (getKickoffTimestamp(match) || 0) >= Date.now() - 600_000);
+      if (!missing.length) return;
+      autoCreating.current = true;
+      try {
+        await obsConnectionBridgeService.assertBroadcastReady(database);
+        for (const match of missing) {
+          if (!active) break;
+          await createSchedule(match, 10);
+        }
+      } catch (error) {
+        if (active) setMessage(`Automatic scheduling blocked: ${error instanceof Error ? error.message : String(error)}`);
+      } finally {
+        autoCreating.current = false;
+      }
+    };
+    void createMissing();
+    const timer = window.setInterval(() => void createMissing(), 15_000);
+    return () => { active = false; window.clearInterval(timer); };
+  }, [autoSchedule, database, obsConnected, matches, schedules, createSchedule]);
+
+  const timeDefaultControl = <label className="broadcast-schedule__time-default">
+    <input type="checkbox" checked={autoSchedule} disabled={!database || busy} onChange={event => void toggleTimeDefault(event.target.checked)} />
+    Time default (-10 min)
+  </label>;
+
+  if (compact) return (
+    <div className="broadcast-schedule__compact">
+      <button type="button" className="scoring-admin__btn scoring-admin__btn--secondary" onClick={() => void handleSyncAll()} disabled={busy || !database}>
+        <IoCalendar size={16} />{busy ? 'Scheduling...' : 'Broadcast schedules'}
+      </button>
+      {timeDefaultControl}
+      {message && <span className="broadcast-schedule__compact-message" role="status">{message}</span>}
+      {!obsConnected && <span className="broadcast-schedule__compact-message" role="alert">Connect the app to OBS with YouTube output configured.</span>}
+    </div>
+  );
 
   const upcomingMatches = matches
     .filter(match => match.status !== 'completed' && match.status !== 'abandoned')
@@ -163,6 +230,7 @@ export default function BroadcastScheduleManager() {
         <button type="button" className="admin-panel__btn admin-panel__btn--primary" onClick={() => void handleSyncAll()} disabled={busy || !database}>
           <IoCalendar size={15} /> {busy ? 'Syncing…' : 'Create all schedules'}
         </button>
+        {timeDefaultControl}
       </div>
 
       {message && <p className="broadcast-schedule__message" role="status">{message}</p>}
@@ -189,7 +257,7 @@ export default function BroadcastScheduleManager() {
                   <span className="broadcast-schedule__started"><IoCheckmarkCircle size={16} /> Streaming</span>
                 ) : (
                   <div className="broadcast-schedule__actions">
-                    {!schedule && <button type="button" onClick={() => void createSchedule(match).then(ok => setMessage(ok ? 'Match schedule created.' : 'Match date is invalid.'))}>Schedule</button>}
+                    {!schedule && <button type="button" onClick={() => void obsConnectionBridgeService.assertBroadcastReady(database!).then(() => createSchedule(match)).then(ok => setMessage(ok ? 'Match schedule created.' : 'Already scheduled or invalid match date.')).catch(error => setMessage(error instanceof Error ? error.message : String(error)))}>Schedule</button>}
                     <button type="button" className="is-primary" disabled={!obsConnected || !schedule || schedule.status === 'starting' || kickoff === null} onClick={() => void startScheduledMatch(match.id, true)}>
                       <IoPlay size={14} /> {schedule?.status === 'failed' ? 'Retry stream' : 'Start stream now'}
                     </button>
@@ -202,7 +270,7 @@ export default function BroadcastScheduleManager() {
       )}
 
       <footer className="broadcast-schedule__footer">
-        <IoWarning size={14} /> OBS must remain connected and this Streaming tab must stay open for automatic scheduled starts.
+        <IoWarning size={14} /> Keep Matches or Streaming open with OBS connected for automatic starts. These are OBS start schedules, not YouTube event creation.
       </footer>
     </section>
   );
