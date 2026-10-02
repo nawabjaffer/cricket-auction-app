@@ -12,6 +12,7 @@
 .public-scoreboard__topbar {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   justify-content: space-between;
   gap: 1rem;
   padding: 0.9rem clamp(1rem, 4vw, 3.5rem);
@@ -36,7 +37,11 @@
 
 .public-scoreboard__brand svg { font-size: 1.15rem; }
 
-.public-scoreboard__top-actions { gap: 0.65rem; }
+.public-scoreboard__top-actions { flex: 1 1 auto; flex-wrap: wrap; justify-content: flex-end; gap: 0.55rem; }
+
+.public-scoreboard__match-filters { display: inline-flex; align-items: center; padding: 2px; background: #edf3f0; border: 1px solid var(--ps-line); border-radius: 6px; }
+.public-scoreboard__match-filters button { min-height: 32px; padding: 0.35rem 0.55rem; color: #52616c; font-size: 0.7rem; font-weight: 700; background: transparent; border: 0; border-radius: 4px; cursor: pointer; }
+.public-scoreboard__match-filters button.is-active { color: #fff; background: var(--ps-green); }
 
 .public-scoreboard__match-picker {
   gap: 0.5rem;
@@ -61,6 +66,9 @@
 .public-scoreboard__match-picker svg { flex: 0 0 auto; }
 
 .public-scoreboard__admin-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
   padding: 0.5rem 0.7rem;
   color: #fff;
   font-size: 0.72rem;
@@ -72,6 +80,29 @@
 }
 
 .public-scoreboard__admin-link:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.public-scoreboard__top-action,
+.public-scoreboard__edit-scorecard {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  min-height: 34px;
+  padding: 0.45rem 0.7rem;
+  color: #334155;
+  font-size: 0.72rem;
+  font-weight: 750;
+  background: #fff;
+  border: 1px solid var(--ps-line);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.public-scoreboard__top-action.is-active,
+.public-scoreboard__edit-scorecard { color: var(--ps-green); border-color: #8bc9b6; }
+.public-scoreboard__top-action svg,
+.public-scoreboard__edit-scorecard svg { flex: 0 0 auto; }
+.public-scoreboard__edit-message { margin: 0 0 0.85rem; color: #166534; font-size: 0.78rem; }
 
 .public-scoreboard__hero {
   padding: clamp(1.3rem, 4vw, 2.5rem) clamp(1rem, 5vw, 4rem) 1.4rem;
@@ -244,12 +275,57 @@
 .public-scoreboard__empty { padding: 2rem; color: var(--ps-muted); text-align: center; background: white; border: 1px dashed var(--ps-line); border-radius: 7px; }
 .public-scoreboard__footer { padding: 1rem; color: #94a3b8; font-size: 0.65rem; text-align: center; border-top: 1px solid var(--ps-line); }
 
+.public-scoreboard__auth-backdrop,
+.public-scoreboard__editor-backdrop { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; padding: 1rem; background: rgba(9, 20, 26, 0.72); }
+.public-scoreboard__auth-dialog { display: grid; gap: 0.8rem; width: min(390px, 100%); padding: 1.2rem; background: #fff; border: 1px solid var(--ps-line); border-radius: 8px; box-shadow: 0 20px 60px rgba(0, 0, 0, 0.28); }
+.public-scoreboard__auth-dialog > span,
+.public-scoreboard__editor-header > div > span { color: var(--ps-green); font-size: 0.64rem; font-weight: 850; }
+.public-scoreboard__auth-dialog h2 { margin: -0.45rem 0 0.1rem; font-size: 1.15rem; }
+.public-scoreboard__auth-dialog label,
+.public-scoreboard__editor label { display: grid; gap: 0.3rem; min-width: 0; color: #52616c; font-size: 0.7rem; font-weight: 700; }
+.public-scoreboard__auth-dialog input,
+.public-scoreboard__editor input { width: 100%; min-width: 0; min-height: 38px; padding: 0.45rem 0.55rem; color: var(--ps-ink); font: inherit; font-size: 0.8rem; background: #fff; border: 1px solid var(--ps-line); border-radius: 5px; }
+.public-scoreboard__auth-error { margin: 0; color: #b91c1c; font-size: 0.75rem; }
+.public-scoreboard__auth-actions,
+.public-scoreboard__editor-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 0.5rem; }
+.public-scoreboard__auth-actions button,
+.public-scoreboard__editor-actions button { display: inline-flex; align-items: center; justify-content: center; gap: 0.4rem; min-height: 40px; padding: 0.5rem 0.8rem; color: #334155; font-size: 0.76rem; font-weight: 750; background: #fff; border: 1px solid var(--ps-line); border-radius: 5px; cursor: pointer; }
+.public-scoreboard__auth-actions button[type="submit"],
+.public-scoreboard__editor-actions button:first-child { color: #fff; background: var(--ps-green); border-color: var(--ps-green); }
+.public-scoreboard__auth-actions button:disabled,
+.public-scoreboard__editor-actions button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.public-scoreboard__editor { display: grid; grid-template-rows: auto auto minmax(0, 1fr) auto auto; gap: 0.75rem; width: min(1080px, 100%); max-height: min(92vh, 960px); padding: 1rem; overflow: hidden; background: #f8faf9; border: 1px solid var(--ps-line); border-radius: 8px; box-shadow: 0 20px 60px rgba(0, 0, 0, 0.32); }
+.public-scoreboard__editor-header { display: flex; align-items: center; justify-content: space-between; gap: 0.8rem; }
+.public-scoreboard__editor-header h2 { margin: 0.2rem 0 0; font-size: 1rem; }
+.public-scoreboard__editor-header > button { width: 38px; height: 38px; color: #475569; font-size: 1.35rem; background: transparent; border: 1px solid var(--ps-line); border-radius: 5px; cursor: pointer; }
+.public-scoreboard__editor-note { margin: 0; color: var(--ps-muted); font-size: 0.72rem; line-height: 1.45; }
+.public-scoreboard__editor-innings { display: grid; gap: 0.75rem; min-height: 0; padding: 2px; overflow: auto; }
+.public-scoreboard__editor-innings-card { display: grid; gap: 0.65rem; min-width: 0; margin: 0; padding: 0.75rem; background: #fff; border: 1px solid var(--ps-line); border-radius: 6px; }
+.public-scoreboard__editor-innings-card legend { padding: 0 0.35rem; color: var(--ps-green); font-size: 0.78rem; font-weight: 850; }
+.public-scoreboard__editor-innings-card h3 { margin: 0; color: #334155; font-size: 0.75rem; }
+.public-scoreboard__editor-totals { display: grid; grid-template-columns: repeat(auto-fit, minmax(105px, 1fr)); gap: 0.5rem; }
+.public-scoreboard__editor-player-list { display: grid; gap: 0.45rem; }
+.public-scoreboard__editor-player { display: grid; grid-template-columns: repeat(auto-fit, minmax(92px, 1fr)); gap: 0.5rem; padding: 0.55rem; background: #f7faf9; border: 1px solid #e8eeeb; border-radius: 5px; }
+.public-scoreboard__editor-checkbox { display: flex !important; align-items: center; align-self: end; gap: 0.35rem !important; min-height: 38px; }
+.public-scoreboard__editor-checkbox input { width: 18px; min-height: 18px; }
+.public-scoreboard__editor-errors { max-height: 100px; padding: 0.45rem 0.7rem; overflow: auto; color: #991b1b; font-size: 0.72rem; background: #fff1f2; border: 1px solid #fecdd3; border-radius: 5px; }
+.public-scoreboard__editor-errors p { margin: 0.15rem 0; }
+
 @media (max-width: 760px) {
-  .public-scoreboard__topbar { align-items: flex-start; flex-direction: column; }
-  .public-scoreboard__top-actions { width: 100%; justify-content: space-between; }
+  .public-scoreboard__topbar { align-items: stretch; flex-direction: column; }
+  .public-scoreboard__top-actions { width: 100%; justify-content: flex-start; }
+  .public-scoreboard__match-filters { width: 100%; }
+  .public-scoreboard__match-filters button { flex: 1; }
   .public-scoreboard__match-picker { min-width: 0; flex: 1; }
   .public-scoreboard__match-picker select { min-width: 0; flex: 1; }
+  .public-scoreboard__match-picker { flex-basis: 100%; }
+  .public-scoreboard__top-action { flex: 1; }
+  .public-scoreboard__admin-link { flex: 1; }
   .public-scoreboard__innings-grid { grid-template-columns: minmax(0, 1fr); }
   .public-scoreboard__commentary li { grid-template-columns: 3.5rem minmax(0, 1fr); }
   .public-scoreboard__commentary li > strong { grid-column: 2; }
+  .public-scoreboard__editor-backdrop { padding: 0; }
+  .public-scoreboard__editor { width: 100%; max-height: 100dvh; height: 100dvh; padding: 0.75rem; border-radius: 0; }
+  .public-scoreboard__editor-player { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }

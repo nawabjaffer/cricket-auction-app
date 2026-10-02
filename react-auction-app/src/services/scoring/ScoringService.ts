@@ -4,13 +4,13 @@
 // convenience methods for match lifecycle.
 // ============================================================================
 
-import { ref, get, set, onValue, remove, type Database } from 'firebase/database';
+import { ref, get, set, update, onValue, remove, type Database } from 'firebase/database';
 import { MatchIndex } from '../matchIndex';
 import { ManualScoringAdapter } from './ManualScoringAdapter';
 import { CricHeroesAdapter } from './CricHeroesAdapter';
 import type {
   IScoringAdapter, ScoringProvider, MatchSetup, MatchScoringConfig,
-  LiveScore, PlayerMatchStats, PlayerCareerStats,
+  LiveScore, PlayerMatchStats, PlayerCareerStats, MatchScore,
   ScoringOverlayConfig, ScoringAd, OverlayControlState, MatchLineup,
   PreMatchState, Innings, QuickTeam,
 } from '../../types/scoring';
@@ -271,6 +271,20 @@ export class ScoringService {
   async saveInnings(matchId: string, inningsNumber: 1 | 2, innings: Innings): Promise<void> {
     const db = this.ensureDb();
     await set(ref(db, `${this.basePath}/matches/${matchId}/innings/${inningsNumber}`), this.stripUndefinedDeep(innings));
+  }
+
+  async saveScorecardCorrection(
+    matchId: string,
+    innings: Innings[],
+    live?: LiveScore,
+    final?: MatchScore,
+  ): Promise<void> {
+    const db = this.ensureDb();
+    const updates: Record<string, unknown> = {};
+    for (const entry of innings) updates[`innings/${entry.number}`] = entry;
+    if (live) updates.live = live;
+    if (final) updates.final = final;
+    await update(ref(db, `${this.basePath}/matches/${matchId}`), this.stripUndefinedDeep(updates));
   }
 
   async saveLiveScore(matchId: string, live: LiveScore): Promise<void> {

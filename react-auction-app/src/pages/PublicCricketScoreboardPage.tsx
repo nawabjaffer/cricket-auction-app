@@ -1,14 +1,16 @@
 import { useEffect, useMemo, useState } from 'react';
 import { onValue, ref, type Database } from 'firebase/database';
 import { useSearchParams } from 'react-router-dom';
-import { IoCalendarOutline, IoChevronDown, IoFootballOutline, IoShieldCheckmarkOutline, IoStatsChartOutline, IoTrophyOutline } from 'react-icons/io5';
+import { IoCalendarOutline, IoChevronDown, IoFootballOutline, IoShieldCheckmarkOutline, IoStatsChartOutline, IoTrophyOutline, IoPencilOutline, IoSaveOutline, IoLockClosedOutline } from 'react-icons/io5';
 import { SortableColumnHeader, useSortableRows } from '../components/SortableTable';
-import { useTenantNavigate as useNavigate, getTenantSlugFromPath } from '../hooks/useTenantNavigate';
+import { getTenantSlugFromPath } from '../hooks/useTenantNavigate';
 import { realtimeSync } from '../services/realtimeSync';
 import { scoringService } from '../services/scoring';
 import { tenantPath } from '../services/tenantPath';
-import type { BallEvent, Innings, LiveScore, MatchScore, MatchSetup, MatchStatsSnapshot, ScoringOverlayConfig } from '../types/scoring';
+import type { BallEvent, BatsmanInnings, BowlerInnings, Innings, LiveScore, MatchScore, MatchSetup, MatchStatsSnapshot, ScoringOverlayConfig } from '../types/scoring';
 import { buildPointsTableStandings, buildPoolAssignments, type PointsTableMatch } from '../utils/pointsTable';
+import { buildCorrectedFinalScore, filterPublicMatches, type PublicMatchFilter, validatePublicInningsCorrection, verifySuperAdminMobileCredentials } from '../utils/publicScoreboard';
+import { reconcileEditedLiveScore } from '../utils/scorecardCorrections';
 import './PublicCricketScoreboardPage.css';
 
 type PublicScoreboardTab = 'summary' | 'scorecards' | 'commentary' | 'standings';
@@ -216,14 +218,161 @@ function MatchAwards({ innings, stats }: { innings: Innings[]; stats: MatchStats
   );
 }
 
+function cloneInnings(innings: Innings[]): Innings[] {
+  return innings.map(entry => ({
+    ...entry,
+    extras: { ...entry.extras },
+    batsmen: entry.batsmen.map(batter => ({ ...batter })),
+    bowlers: entry.bowlers.map(bowler => ({ ...bowler })),
+    fallOfWickets: entry.fallOfWickets.map(wicket => ({ ...wicket })),
+    overs: entry.overs.map(over => ({ ...over, balls: [...over.balls] })),
+  }));
+}
+
+function correctedEconomy(overs: number, runs: number): number {
+  const legalBalls = Math.floor(overs) * 6 + Math.min(5, Math.max(0, Math.round((overs % 1) * 10)));
+  return legalBalls ? Math.round((runs / legalBalls) * 600) / 100 : 0;
+}
+
+function PublicScorecardEditor({ match, innings, live, finalScore, onClose, onSave }: {
+  match: MatchSetup;
+  innings: Innings[];
+  live: LiveScore | null;
+  finalScore: MatchScore | null;
+  onClose: () => void;
+  onSave: (draft: Innings[], liveScore?: LiveScore, final?: MatchScore) => Promise<void>;
+}) {
+  const [draft, setDraft] = useState(() => cloneInnings(innings));
+  const [errors, setErrors] = useState<string[]>([]);
+  const [saving, setSaving] = useState(false);
+  const setInnings = (number: 1 | 2, update: (entry: Innings) => Innings) => {
+    setDraft(current => current.map(entry => entry.number === number ? update(entry) : entry));
+  };
+  const updateBatter = (number: 1 | 2, index: number, update: Partial<BatsmanInnings>) => {
+    setInnings(number, entry => {
+      const batsmen = entry.batsmen.map((batter, row) => row === index ? { ...batter, ...update } : batter);
+      const batsmanRuns = batsmen.reduce((total, batter) => total + batter.runs, 0);
+      return {
+        ...entry,
+        batsmen,
+        totalRuns: batsmanRuns + entry.extras.total,
+        totalWickets: batsmen.filter(batter => batter.isOut).length,
+      };
+    });
+  };
+  const updateBowler = (number: 1 | 2, index: number, update: Partial<BowlerInnings>) => {
+    setInnings(number, entry => ({
+      ...entry,
+      bowlers: entry.bowlers.map((bowler, row) => {
+        if (row !== index) return bowler;
+        const next = { ...bowler, ...update };
+        if ('overs' in update || 'runs' in update) next.economy = correctedEconomy(next.overs, next.runs);
+        return next;
+      }),
+    }));
+  };
+  const updateExtras = (number: 1 | 2, field: keyof Innings['extras'], value: number) => {
+    setInnings(number, entry => {
+      const extras = { ...entry.extras, [field]: value };
+      const batsmanRuns = entry.batsmen.reduce((total, batter) => total + batter.runs, 0);
+      return { ...entry, extras, totalRuns: batsmanRuns + extras.total };
+    });
+  };
+  const save = async () => {
+    const validationErrors = draft.flatMap(validatePublicInningsCorrection);
+    setErrors(validationErrors);
+    if (validationErrors.length) return;
+    setSaving(true);
+    try {
+      let correctedLive: LiveScore | undefined;
+      if (match.status === 'live' && live) {
+        const currentInnings = draft.find(entry => entry.number === live.currentInnings);
+        if (currentInnings) correctedLive = reconcileEditedLiveScore(live, currentInnings, draft.find(entry => entry.number === 1));
+      }
+      const correctedFinal = match.status === 'completed' && finalScore
+        ? buildCorrectedFinalScore(finalScore, draft)
+        : undefined;
+      await onSave(draft, correctedLive, correctedFinal);
+    } catch (error) {
+      setErrors([error instanceof Error ? error.message : String(error)]);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="public-scoreboard__editor-backdrop" onMouseDown={event => { if (event.target === event.currentTarget && !saving) onClose(); }}>
+      <section className="public-scoreboard__editor" role="dialog" aria-modal="true" aria-labelledby="scorecard-editor-title">
+        <header className="public-scoreboard__editor-header">
+          <div><span>SUPER ADMIN</span><h2 id="scorecard-editor-title">Edit scorecard · {match.teamA.name} vs {match.teamB.name}</h2></div>
+          <button type="button" onClick={onClose} disabled={saving} aria-label="Close scorecard editor">×</button>
+        </header>
+        <p className="public-scoreboard__editor-note">Batter changes recalculate innings runs, wickets, and strike rate. Check the validation messages before saving.</p>
+        <div className="public-scoreboard__editor-innings">
+          {draft.map(entry => (
+            <fieldset className="public-scoreboard__editor-innings-card" key={entry.number}>
+              <legend>Innings {entry.number} · {entry.battingTeamId === match.teamA.id ? match.teamA.name : match.teamB.name}</legend>
+              <div className="public-scoreboard__editor-totals">
+                <label>Total runs<input aria-label={`Innings ${entry.number} total runs`} type="number" min={0} value={entry.totalRuns} onChange={event => setInnings(entry.number, current => ({ ...current, totalRuns: Number(event.target.value) || 0 }))} /></label>
+                <label>Wickets<input aria-label={`Innings ${entry.number} wickets`} type="number" min={0} max={10} value={entry.totalWickets} onChange={event => setInnings(entry.number, current => ({ ...current, totalWickets: Number(event.target.value) || 0 }))} /></label>
+                <label>Overs<input aria-label={`Innings ${entry.number} overs`} type="number" min={0} step="0.1" value={entry.totalOvers} onChange={event => setInnings(entry.number, current => ({ ...current, totalOvers: Number(event.target.value) || 0 }))} /></label>
+                <label>Max overs<input aria-label={`Innings ${entry.number} max overs`} type="number" min={1} value={entry.maxOvers} onChange={event => setInnings(entry.number, current => ({ ...current, maxOvers: Number(event.target.value) || 1 }))} /></label>
+              </div>
+              <h3>Extras</h3>
+              <div className="public-scoreboard__editor-totals">
+                {(['total', 'wides', 'noBalls', 'byes', 'legByes', 'penalty'] as const).map(field => <label key={field}>{field === 'noBalls' ? 'No balls' : field === 'legByes' ? 'Leg byes' : field[0].toUpperCase() + field.slice(1)}<input type="number" min={0} value={entry.extras[field]} onChange={event => updateExtras(entry.number, field, Number(event.target.value) || 0)} /></label>)}
+              </div>
+              <h3>Batters</h3>
+              <div className="public-scoreboard__editor-player-list">
+                {entry.batsmen.map((batter, index) => <div className="public-scoreboard__editor-player" key={batter.playerId}>
+                  <label>Player<input aria-label={`Innings ${entry.number} batter ${index + 1} name`} value={batter.playerName} onChange={event => updateBatter(entry.number, index, { playerName: event.target.value })} /></label>
+                  <label>Runs<input type="number" min={0} value={batter.runs} onChange={event => {
+                    const runs = Number(event.target.value) || 0;
+                    const strikeRate = batter.balls > 0 ? Math.round(runs / batter.balls * 10000) / 100 : 0;
+                    updateBatter(entry.number, index, { runs, strikeRate });
+                  }} /></label>
+                  <label>Balls<input type="number" min={0} value={batter.balls} onChange={event => {
+                    const balls = Number(event.target.value) || 0;
+                    updateBatter(entry.number, index, { balls, strikeRate: balls ? Math.round(batter.runs / balls * 10000) / 100 : 0 });
+                  }} /></label>
+                  <label>4s<input type="number" min={0} value={batter.fours} onChange={event => updateBatter(entry.number, index, { fours: Number(event.target.value) || 0 })} /></label>
+                  <label>6s<input type="number" min={0} value={batter.sixes} onChange={event => updateBatter(entry.number, index, { sixes: Number(event.target.value) || 0 })} /></label>
+                  <label>Dismissal<input value={batter.dismissal} onChange={event => updateBatter(entry.number, index, { dismissal: event.target.value, isOut: Boolean(event.target.value && event.target.value.toLowerCase() !== 'not out') })} /></label>
+                  <label className="public-scoreboard__editor-checkbox"><input type="checkbox" checked={batter.isOut} onChange={event => updateBatter(entry.number, index, { isOut: event.target.checked, dismissal: event.target.checked ? batter.dismissal : 'not out' })} />Out</label>
+                </div>)}
+              </div>
+              <h3>Bowlers</h3>
+              <div className="public-scoreboard__editor-player-list">
+                {entry.bowlers.map((bowler, index) => <div className="public-scoreboard__editor-player" key={bowler.playerId}>
+                  <label>Player<input value={bowler.playerName} onChange={event => updateBowler(entry.number, index, { playerName: event.target.value })} /></label>
+                  <label>Overs<input type="number" min={0} step="0.1" value={bowler.overs} onChange={event => updateBowler(entry.number, index, { overs: Number(event.target.value) || 0 })} /></label>
+                  <label>Maidens<input type="number" min={0} value={bowler.maidens} onChange={event => updateBowler(entry.number, index, { maidens: Number(event.target.value) || 0 })} /></label>
+                  <label>Runs<input type="number" min={0} value={bowler.runs} onChange={event => updateBowler(entry.number, index, { runs: Number(event.target.value) || 0 })} /></label>
+                  <label>Wickets<input type="number" min={0} value={bowler.wickets} onChange={event => updateBowler(entry.number, index, { wickets: Number(event.target.value) || 0 })} /></label>
+                  <label>Economy<input type="number" min={0} step="0.01" value={bowler.economy} onChange={event => updateBowler(entry.number, index, { economy: Number(event.target.value) || 0 })} /></label>
+                </div>)}
+              </div>
+            </fieldset>
+          ))}
+        </div>
+        {errors.length > 0 && <div className="public-scoreboard__editor-errors" role="alert">{errors.map((error, index) => <p key={`${index}-${error}`}>{error}</p>)}</div>}
+        <footer className="public-scoreboard__editor-actions">
+          <button type="button" onClick={() => void save()} disabled={saving}>{saving ? 'Saving…' : <><IoSaveOutline />Save scorecard</>}</button>
+          <button type="button" onClick={onClose} disabled={saving}>Cancel</button>
+        </footer>
+      </section>
+    </div>
+  );
+}
+
 export default function PublicCricketScoreboardPage() {
-  const navigate = useNavigate();
   const tenantSlug = getTenantSlugFromPath(window.location.pathname);
   const [searchParams, setSearchParams] = useSearchParams();
   const queryMatchId = searchParams.get('matchId') || '';
   const [database, setDatabase] = useState<Database | null>(null);
   const [matches, setMatches] = useState<MatchSetup[]>([]);
   const [selectedMatchId, setSelectedMatchId] = useState(queryMatchId);
+  const [matchFilter, setMatchFilter] = useState<PublicMatchFilter>('all');
   const [match, setMatch] = useState<MatchSetup | null>(null);
   const [live, setLive] = useState<LiveScore | null>(null);
   const [innings, setInnings] = useState<Innings[]>([]);
@@ -233,6 +382,14 @@ export default function PublicCricketScoreboardPage() {
   const [standingsMatches, setStandingsMatches] = useState<PointsTableMatch[]>([]);
   const [allTeams, setAllTeams] = useState<{ id: string; name: string; logoUrl?: string }[]>([]);
   const [poolSettings, setPoolSettings] = useState<ScoringOverlayConfig['pointsTablePools']>();
+  const [mobileAdminCredentials, setMobileAdminCredentials] = useState<{ superAdminUsername?: string; superAdminPassword?: string } | null>(null);
+  const [loginOpen, setLoginOpen] = useState(false);
+  const [loginUsername, setLoginUsername] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
+  const [loginError, setLoginError] = useState('');
+  const [isSuperAdminAuthenticated, setIsSuperAdminAuthenticated] = useState(false);
+  const [scorecardEditorOpen, setScorecardEditorOpen] = useState(false);
+  const [editMessage, setEditMessage] = useState('');
   const [activeTab, setActiveTab] = useState<PublicScoreboardTab>('summary');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -244,6 +401,7 @@ export default function PublicCricketScoreboardPage() {
   useEffect(() => {
     let active = true;
     let stopMatches = () => {};
+    let stopAdminSettings = () => {};
     const initialize = async () => {
       try {
         await realtimeSync.ensureInitialized();
@@ -254,6 +412,10 @@ export default function PublicCricketScoreboardPage() {
         setDatabase(db);
         setMatches(await scoringService.getAllMatches());
         stopMatches = scoringService.subscribeMatches(setMatches);
+        stopAdminSettings = onValue(ref(db, tenantPath('auction/adminSettings')), snapshot => {
+          const settings = snapshot.exists() ? snapshot.val() as { superAdminUsername?: string; superAdminPassword?: string } : null;
+          setMobileAdminCredentials(settings);
+        });
       } catch (loadError) {
         if (active) setError(loadError instanceof Error ? loadError.message : String(loadError));
       } finally {
@@ -261,15 +423,23 @@ export default function PublicCricketScoreboardPage() {
       }
     };
     void initialize();
-    return () => { active = false; stopMatches(); };
+    return () => { active = false; stopMatches(); stopAdminSettings(); };
   }, []);
 
+  const filteredMatches = useMemo(() => filterPublicMatches(matches, matchFilter), [matches, matchFilter]);
+
   useEffect(() => {
-    if (!matches.length || selectedMatchId) return;
-    const next = matches.find(item => item.status === 'live')
-      || [...matches].sort((left, right) => new Date(right.date).getTime() - new Date(left.date).getTime())[0];
-    if (next) setSelectedMatchId(next.id);
-  }, [matches, selectedMatchId]);
+    if (!matches.length) return;
+    if (selectedMatchId && filteredMatches.some(item => item.id === selectedMatchId)) return;
+    const next = filteredMatches[0];
+    setSelectedMatchId(next?.id || '');
+    setActiveTab(matchFilter === 'completed' ? 'scorecards' : 'summary');
+  }, [filteredMatches, matchFilter, matches.length, selectedMatchId, setSearchParams]);
+
+  useEffect(() => {
+    if (!match) return;
+    setActiveTab(match.status === 'completed' ? 'scorecards' : 'summary');
+  }, [match?.id, match?.status]);
 
   useEffect(() => {
     if (!database) return;
@@ -306,6 +476,11 @@ export default function PublicCricketScoreboardPage() {
     if (!database || !selectedMatchId) return;
     setLoading(true);
     setError('');
+    setMatch(null);
+    setLive(null);
+    setInnings([]);
+    setBalls([]);
+    setFinalScore(null);
     setMatchStats(null);
     const base = `scoring/matches/${selectedMatchId}`;
     const unsubs = [
@@ -319,7 +494,11 @@ export default function PublicCricketScoreboardPage() {
         const value = snapshot.exists() ? snapshot.val() as Record<string, BallEvent> : {};
         setBalls(Object.values(value).filter(Boolean).sort((left, right) => left.inningsNumber - right.inningsNumber || left.overNumber - right.overNumber || left.ballInOver - right.ballInOver || left.timestamp - right.timestamp));
       }),
-      onValue(ref(database, tenantPath(`${base}/final`)), snapshot => setFinalScore(snapshot.exists() ? snapshot.val() as MatchScore : null)),
+      onValue(ref(database, tenantPath(`${base}/final`)), snapshot => {
+        const value = snapshot.exists() ? snapshot.val() as MatchScore : null;
+        setFinalScore(value);
+        if (value?.innings?.length) setInnings(current => current.length ? current : value.innings);
+      }),
       onValue(ref(database, tenantPath(`${base}/stats`)), snapshot => setMatchStats(snapshot.exists() ? snapshot.val() as MatchStatsSnapshot : null)),
     ];
     setLoading(false);
@@ -347,33 +526,101 @@ export default function PublicCricketScoreboardPage() {
       ? `Target ${live.target} · ${live.target - live.runs} to win`
       : match?.status === 'live' ? 'Match in progress' : match?.status === 'completed' ? 'Match completed' : 'Match scheduled';
 
-  const openAdminEdit = () => {
-    if (!selectedMatchId) return;
-    const returnTo = `/cricket/scorer/update?matchId=${encodeURIComponent(selectedMatchId)}&superAdmin=1`;
-    navigate(`/admin/login?superAdmin=1&returnTo=${encodeURIComponent(returnTo)}`);
+  const handleMatchFilterChange = (filter: PublicMatchFilter) => {
+    setMatchFilter(filter);
+    const next = filterPublicMatches(matches, filter)[0];
+    setSelectedMatchId(next?.id || '');
+    setSearchParams(next ? { matchId: next.id } : {}, { replace: true });
+    setActiveTab(filter === 'completed' ? 'scorecards' : 'summary');
+    setEditMessage('');
   };
+
+  const handleMatchSelection = (matchId: string) => {
+    const next = matches.find(item => item.id === matchId);
+    setSelectedMatchId(matchId);
+    setSearchParams(matchId ? { matchId } : {}, { replace: true });
+    setActiveTab(next?.status === 'completed' ? 'scorecards' : 'summary');
+    setEditMessage('');
+  };
+
+  const handleMobileAdminLogin = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!mobileAdminCredentials?.superAdminUsername || !mobileAdminCredentials.superAdminPassword) {
+      setLoginError('Super Admin Mobile Access credentials are not configured in Auction Admin.');
+      return;
+    }
+    if (!verifySuperAdminMobileCredentials(mobileAdminCredentials, loginUsername, loginPassword)) {
+      setLoginError('Username or password is incorrect.');
+      return;
+    }
+    setIsSuperAdminAuthenticated(true);
+    setLoginOpen(false);
+    setLoginError('');
+    setLoginUsername('');
+    setLoginPassword('');
+  };
+
+  const handleScorecardEditClick = () => {
+    if (!isSuperAdminAuthenticated) {
+      setLoginError('');
+      setLoginOpen(true);
+      return;
+    }
+    setScorecardEditorOpen(true);
+  };
+
+  const savePublicScorecard = async (correctedInnings: Innings[], correctedLive?: LiveScore, correctedFinal?: MatchScore) => {
+    if (!isSuperAdminAuthenticated || !selectedMatchId) throw new Error('Sign in with Super Admin Mobile Access to edit this scorecard.');
+    const validationErrors = correctedInnings.flatMap(validatePublicInningsCorrection);
+    if (validationErrors.length) throw new Error(validationErrors.join(' '));
+    if (match?.status === 'completed' && !correctedFinal) throw new Error('The completed match final score is not available yet. Reload the scoreboard and try again.');
+    await scoringService.saveScorecardCorrection(selectedMatchId, correctedInnings, correctedLive, correctedFinal);
+    setScorecardEditorOpen(false);
+    setEditMessage('Scorecard saved successfully.');
+  };
+
+  const standingsSection = <>
+    <div className="public-scoreboard__section-heading"><div><span>TOURNAMENT</span><h2>Points Table</h2></div><span>{allTeams.length} teams</span></div>
+    <PublicPointsTable matches={standingsMatches} teams={allTeams} poolSettings={poolSettings} />
+  </>;
 
   return (
     <main className="public-scoreboard">
       <header className="public-scoreboard__topbar">
         <div className="public-scoreboard__brand"><IoFootballOutline /><span>LIVE SCOREBOARD</span></div>
         <div className="public-scoreboard__top-actions">
+          <div className="public-scoreboard__match-filters" role="group" aria-label="Filter matches">
+            {(['all', 'live', 'upcoming', 'completed'] as PublicMatchFilter[]).map(filter => <button
+              type="button"
+              key={filter}
+              className={matchFilter === filter ? 'is-active' : ''}
+              onClick={() => handleMatchFilterChange(filter)}
+            >{filter === 'all' ? 'All' : filter[0].toUpperCase() + filter.slice(1)}</button>)}
+          </div>
           <label className="public-scoreboard__match-picker">
             <span>Match</span>
-            <select value={selectedMatchId} onChange={event => {
-              const matchId = event.target.value;
-              setSelectedMatchId(matchId);
-              setSearchParams(matchId ? { matchId } : {}, { replace: true });
-            }}>
-              {matches.map(item => <option key={item.id} value={item.id}>{item.teamA.name} vs {item.teamB.name} · {new Date(item.date).toLocaleDateString()}</option>)}
+            <select value={selectedMatchId} onChange={event => handleMatchSelection(event.target.value)}>
+              {filteredMatches.length === 0 && <option value="">No {matchFilter === 'all' ? '' : `${matchFilter} `}matches</option>}
+              {filteredMatches.map(item => <option key={item.id} value={item.id}>{item.teamA.name} vs {item.teamB.name} · {new Date(item.date).toLocaleDateString()}</option>)}
             </select>
             <IoChevronDown />
           </label>
-          <button className="public-scoreboard__admin-link" onClick={openAdminEdit} disabled={!selectedMatchId}>Super Admin edit</button>
+          <button className={`public-scoreboard__top-action ${activeTab === 'standings' ? 'is-active' : ''}`} onClick={() => setActiveTab(current => current === 'standings' ? 'summary' : 'standings')}>
+            <IoTrophyOutline />Points Table
+          </button>
+          {isSuperAdminAuthenticated ? (
+            <button className="public-scoreboard__admin-link" onClick={() => { setIsSuperAdminAuthenticated(false); setScorecardEditorOpen(false); setEditMessage(''); }}> <IoLockClosedOutline />Lock Edit</button>
+          ) : (
+            <button className="public-scoreboard__admin-link" onClick={() => { setLoginError(''); setLoginOpen(true); }} disabled={!selectedMatchId}>Super Admin Edit</button>
+          )}
         </div>
       </header>
 
-      {error ? <div className="public-scoreboard__empty">{error}</div> : loading ? <div className="public-scoreboard__empty">Loading live score…</div> : !match ? <div className="public-scoreboard__empty">No match found. Ask the tournament admin to schedule a fixture.</div> : (
+      {error ? <div className="public-scoreboard__empty">{error}</div> : loading ? <div className="public-scoreboard__empty">Loading live score…</div> : !match
+        ? activeTab === 'standings'
+          ? <section className="public-scoreboard__content">{standingsSection}</section>
+          : <div className="public-scoreboard__empty">No match found. Ask the tournament admin to schedule a fixture.</div>
+        : (
         <>
           <section className="public-scoreboard__hero">
             <div className="public-scoreboard__eyebrow"><span className={`public-scoreboard__live-indicator ${match.status === 'live' ? 'is-live' : ''}`} />{match.status === 'live' ? 'LIVE MATCH' : match.status.toUpperCase()}</div>
@@ -396,12 +643,13 @@ export default function PublicCricketScoreboardPage() {
           </section>
 
           <nav className="public-scoreboard__tabs" aria-label="Scoreboard sections">
-            {(['summary', 'scorecards', 'commentary', 'standings'] as PublicScoreboardTab[]).map(tab => <button key={tab} className={activeTab === tab ? 'is-active' : ''} onClick={() => setActiveTab(tab)}>
-              {tab === 'summary' ? <IoStatsChartOutline /> : tab === 'scorecards' ? <IoShieldCheckmarkOutline /> : tab === 'standings' ? <IoTrophyOutline /> : <IoCalendarOutline />}{tab === 'summary' ? 'Match Summary' : tab === 'scorecards' ? 'Scorecards' : tab === 'standings' ? 'Points Table' : 'Ball-by-ball'}
+            {(['summary', ...(match.status !== 'scheduled' ? ['scorecards', 'commentary'] : [])] as PublicScoreboardTab[]).map(tab => <button key={tab} className={activeTab === tab ? 'is-active' : ''} onClick={() => setActiveTab(tab)}>
+              {tab === 'summary' ? <IoStatsChartOutline /> : tab === 'scorecards' ? <IoShieldCheckmarkOutline /> : <IoCalendarOutline />}{tab === 'summary' ? 'Match Summary' : tab === 'scorecards' ? 'Scorecards' : 'Ball-by-ball'}
             </button>)}
           </nav>
 
           <section className="public-scoreboard__content">
+            {editMessage && <p className="public-scoreboard__edit-message" role="status">{editMessage}</p>}
             {activeTab === 'summary' && (
               <>
                 <div className="public-scoreboard__section-heading"><div><span>MATCH CENTRE</span><h2>Batting &amp; Bowling Summary</h2></div><span>{innings.length} innings</span></div>
@@ -421,13 +669,13 @@ export default function PublicCricketScoreboardPage() {
             )}
             {activeTab === 'scorecards' && (
               <>
-                <div className="public-scoreboard__section-heading"><div><span>FULL SCORECARD</span><h2>Batting &amp; Bowling</h2></div></div>
+                <div className="public-scoreboard__section-heading"><div><span>{match.status === 'completed' ? 'COMPLETED MATCH' : 'LIVE MATCH'}</span><h2>Batting &amp; Bowling</h2></div>{innings.length > 0 && <button className="public-scoreboard__edit-scorecard" onClick={handleScorecardEditClick}><IoPencilOutline />Edit scorecard</button>}</div>
                 {innings.length === 0 ? <div className="public-scoreboard__empty">No scorecard is available yet.</div> : <div className="public-scoreboard__innings-grid">{innings.map(inningsScore => <BattingScorecard key={inningsScore.number} innings={inningsScore} teamName={inningsTeamName(inningsScore)} />)}</div>}
               </>
             )}
             {activeTab === 'commentary' && (
               <>
-                <div className="public-scoreboard__section-heading"><div><span>LIVE FEED</span><h2>Ball-by-ball Commentary</h2></div><span>{balls.length} deliveries</span></div>
+                <div className="public-scoreboard__section-heading"><div><span>LIVE FEED</span><h2>Ball-by-ball Commentary</h2></div><span>{balls.length} deliveries</span>{innings.length > 0 && <button className="public-scoreboard__edit-scorecard" onClick={handleScorecardEditClick}><IoPencilOutline />Edit scorecard</button>}</div>
                 {balls.length === 0 ? <div className="public-scoreboard__empty">Commentary will appear as balls are recorded.</div> : (
                   <ol className="public-scoreboard__commentary">
                     {balls.map(ball => {
@@ -445,14 +693,29 @@ export default function PublicCricketScoreboardPage() {
               </>
             )}
             {activeTab === 'standings' && (
-              <>
-                <div className="public-scoreboard__section-heading"><div><span>TOURNAMENT</span><h2>Points Table</h2></div><span>{allTeams.length} teams</span></div>
-                <PublicPointsTable matches={standingsMatches} teams={allTeams} poolSettings={poolSettings} />
-              </>
+              standingsSection
             )}
           </section>
         </>
       )}
+      {loginOpen && <div className="public-scoreboard__auth-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) setLoginOpen(false); }}>
+        <form className="public-scoreboard__auth-dialog" role="dialog" aria-modal="true" aria-labelledby="public-scoreboard-auth-title" onSubmit={handleMobileAdminLogin}>
+          <span>RESTRICTED ACCESS</span>
+          <h2 id="public-scoreboard-auth-title">Super Admin sign in</h2>
+          <label>Username<input autoComplete="username" value={loginUsername} onChange={event => setLoginUsername(event.target.value)} /></label>
+          <label>Password<input type="password" autoComplete="current-password" value={loginPassword} onChange={event => setLoginPassword(event.target.value)} /></label>
+          {loginError && <p className="public-scoreboard__auth-error" role="alert">{loginError}</p>}
+          <div className="public-scoreboard__auth-actions"><button type="submit">Sign in</button><button type="button" onClick={() => setLoginOpen(false)}>Cancel</button></div>
+        </form>
+      </div>}
+      {scorecardEditorOpen && match && <PublicScorecardEditor
+        match={match}
+        innings={innings}
+        live={live}
+        finalScore={finalScore}
+        onClose={() => setScorecardEditorOpen(false)}
+        onSave={savePublicScorecard}
+      />}
       {tenantSlug && <footer className="public-scoreboard__footer">{tenantSlug.toUpperCase()} · Live scoring updates automatically</footer>}
     </main>
   );
