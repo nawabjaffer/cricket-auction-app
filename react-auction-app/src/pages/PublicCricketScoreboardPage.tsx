@@ -371,7 +371,6 @@ export default function PublicCricketScoreboardPage() {
   const queryMatchId = searchParams.get('matchId') || '';
   const [database, setDatabase] = useState<Database | null>(null);
   const [matches, setMatches] = useState<MatchSetup[]>([]);
-  const [selectedMatchId, setSelectedMatchId] = useState(queryMatchId);
   const [matchFilter, setMatchFilter] = useState<PublicMatchFilter>('all');
   const [match, setMatch] = useState<MatchSetup | null>(null);
   const [live, setLive] = useState<LiveScore | null>(null);
@@ -393,10 +392,6 @@ export default function PublicCricketScoreboardPage() {
   const [activeTab, setActiveTab] = useState<PublicScoreboardTab>('summary');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-
-  useEffect(() => {
-    if (queryMatchId && queryMatchId !== selectedMatchId) setSelectedMatchId(queryMatchId);
-  }, [queryMatchId, selectedMatchId]);
 
   useEffect(() => {
     let active = true;
@@ -427,14 +422,17 @@ export default function PublicCricketScoreboardPage() {
   }, []);
 
   const filteredMatches = useMemo(() => filterPublicMatches(matches, matchFilter), [matches, matchFilter]);
+  const selectedMatchId = filteredMatches.some(item => item.id === queryMatchId)
+    ? queryMatchId
+    : filteredMatches[0]?.id || '';
 
   useEffect(() => {
-    if (!matches.length) return;
-    if (selectedMatchId && filteredMatches.some(item => item.id === selectedMatchId)) return;
+    if (!matches.length || (queryMatchId && filteredMatches.some(item => item.id === queryMatchId))) return;
     const next = filteredMatches[0];
-    setSelectedMatchId(next?.id || '');
+    if ((next?.id || '') === queryMatchId) return;
+    setSearchParams(next ? { matchId: next.id } : {}, { replace: true });
     setActiveTab(matchFilter === 'completed' ? 'scorecards' : 'summary');
-  }, [filteredMatches, matchFilter, matches.length, selectedMatchId, setSearchParams]);
+  }, [filteredMatches, matchFilter, matches.length, queryMatchId, setSearchParams]);
 
   useEffect(() => {
     if (!match) return;
@@ -473,15 +471,18 @@ export default function PublicCricketScoreboardPage() {
   }, [database]);
 
   useEffect(() => {
-    if (!database || !selectedMatchId) return;
-    setLoading(true);
-    setError('');
     setMatch(null);
     setLive(null);
     setInnings([]);
     setBalls([]);
     setFinalScore(null);
     setMatchStats(null);
+    if (!database || !selectedMatchId) {
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    setError('');
     const base = `scoring/matches/${selectedMatchId}`;
     const unsubs = [
       onValue(ref(database, tenantPath(`${base}/setup`)), snapshot => setMatch(snapshot.exists() ? snapshot.val() as MatchSetup : null)),
@@ -529,7 +530,6 @@ export default function PublicCricketScoreboardPage() {
   const handleMatchFilterChange = (filter: PublicMatchFilter) => {
     setMatchFilter(filter);
     const next = filterPublicMatches(matches, filter)[0];
-    setSelectedMatchId(next?.id || '');
     setSearchParams(next ? { matchId: next.id } : {}, { replace: true });
     setActiveTab(filter === 'completed' ? 'scorecards' : 'summary');
     setEditMessage('');
@@ -537,7 +537,6 @@ export default function PublicCricketScoreboardPage() {
 
   const handleMatchSelection = (matchId: string) => {
     const next = matches.find(item => item.id === matchId);
-    setSelectedMatchId(matchId);
     setSearchParams(matchId ? { matchId } : {}, { replace: true });
     setActiveTab(next?.status === 'completed' ? 'scorecards' : 'summary');
     setEditMessage('');

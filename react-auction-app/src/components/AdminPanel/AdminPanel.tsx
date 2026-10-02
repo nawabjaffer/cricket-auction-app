@@ -467,6 +467,7 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
   const [processingEditorImage, setProcessingEditorImage] = useState(false);
   const [editorImageBlob, setEditorImageBlob] = useState<Blob | undefined>();
   const [loadedAdminSettings, setLoadedAdminSettings] = useState<AdminSettings | null>(null);
+  const [adminSettingsLoaded, setAdminSettingsLoaded] = useState(false);
   // Holds the latest extended settings from ThemeSettingsExtended, merged on save
   const extendedSettingsRef = useRef<Partial<AdminSettings>>({});
   const csvFileInputRef = useRef<HTMLInputElement | null>(null);
@@ -735,7 +736,67 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
     ? (playerImageSources[editingPlayerId] || getPlayerImageSourceMode(playerDraft.imageUrl))
     : 'drive';
 
-  // Load admin settings on mount
+  useEffect(() => {
+    if (!isOpen) {
+      setAdminSettingsLoaded(false);
+      return;
+    }
+    let isMounted = true;
+    setAdminSettingsLoaded(false);
+    const loadSettings = async () => {
+      try {
+        const ready = await realtimeSync.ensureInitialized();
+        if (!ready) return;
+        const db = realtimeSync.getDatabase();
+        if (!db) return;
+        auctionPersistence.initialize(db);
+        const settings = await auctionPersistence.getAdminSettings();
+        if (!settings || !isMounted) return;
+        setLoadedAdminSettings(settings);
+        setOrganizerName(settings.organizerName);
+        setOrganizerLogo(settings.organizerLogo);
+        setAuctionTitle(settings.auctionTitle);
+        if (settings.sport) {
+          setSelectedSport(settings.sport);
+          useAuctionStore.getState().setSport(settings.sport);
+        }
+        setPrimaryColor(settings.themeColors.primary);
+        setSecondaryColor(settings.themeColors.secondary);
+        setAccentColor(settings.themeColors.accent);
+        setGifHueRotate(typeof settings.gifHueRotate === 'number' ? settings.gifHueRotate : null);
+        setGifHueRotateByAsset(Object.fromEntries(
+          Object.entries(settings.gifHueRotateByAsset ?? {}).map(([path, hue]) => [path, hue]),
+        ));
+        setMaxUnsoldRounds(settings.maxUnsoldRounds ?? 1);
+        useAuctionStore.getState().setMaxUnsoldRounds(settings.maxUnsoldRounds ?? 1);
+        if (settings.auctionRoleOrder?.length) setAuctionRoleOrder(settings.auctionRoleOrder);
+        setEasyLoginMode(settings.easyLoginMode !== false);
+        setSuperAdminUsername(settings.superAdminUsername ?? '');
+        setSuperAdminPassword(settings.superAdminPassword ?? '');
+        if (settings.branding) setBrandingSettings(prev => ({ ...prev, ...settings.branding }));
+        if (settings.currencySuffix) {
+          setCurrencySuffix(settings.currencySuffix);
+          useAuctionStore.getState().setCurrencySuffix(settings.currencySuffix);
+        }
+        if (settings.obsOverlayStyle) setObsOverlayStyle(settings.obsOverlayStyle);
+        if (settings.obsOverlayAccent) setObsOverlayAccent(settings.obsOverlayAccent);
+        if (settings.auctionLayout) setAuctionLayout(settings.auctionLayout);
+        if (settings.bidIncrementRanges?.length) {
+          setBidIncrementRanges(settings.bidIncrementRanges);
+          useAuctionStore.getState().setBidIncrementRanges(settings.bidIncrementRanges);
+        }
+        if (settings.budgetMode) setBudgetMode(settings.budgetMode);
+      } catch (error) {
+        console.error('[AdminPanel] Failed to load settings:', error);
+      } finally {
+        if (isMounted) setAdminSettingsLoaded(true);
+      }
+    };
+    void loadSettings();
+    return () => { isMounted = false; };
+  }, [isOpen]);
+
+  // Load related Admin data and initialize editable team/player drafts.
   useEffect(() => {
     let isMounted = true;
 
@@ -748,58 +809,6 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
         return true;
       }
       return false;
-    };
-
-    const loadSettings = async () => {
-      try {
-        const dbReady = await ensureDb();
-        if (!dbReady || !isMounted) return;
-        const settings = await auctionPersistence.getAdminSettings();
-        if (settings) {
-          setLoadedAdminSettings(settings);
-          setOrganizerName(settings.organizerName);
-          setOrganizerLogo(settings.organizerLogo);
-          setAuctionTitle(settings.auctionTitle);
-          if (settings.sport) {
-            setSelectedSport(settings.sport);
-            useAuctionStore.getState().setSport(settings.sport);
-          }
-          setPrimaryColor(settings.themeColors.primary);
-          setSecondaryColor(settings.themeColors.secondary);
-          setAccentColor(settings.themeColors.accent);
-          setGifHueRotate(typeof settings.gifHueRotate === 'number' ? settings.gifHueRotate : null);
-          setGifHueRotateByAsset(Object.fromEntries(
-            Object.entries(settings.gifHueRotateByAsset ?? {}).map(([path, hue]) => [path, hue]),
-          ));
-          setMaxUnsoldRounds(settings.maxUnsoldRounds ?? 1);
-          useAuctionStore.getState().setMaxUnsoldRounds(settings.maxUnsoldRounds ?? 1);
-          if (settings.auctionRoleOrder?.length) {
-            setAuctionRoleOrder(settings.auctionRoleOrder);
-          }
-          setEasyLoginMode(settings.easyLoginMode !== false); // default true
-          setSuperAdminUsername(settings.superAdminUsername ?? '');
-          setSuperAdminPassword(settings.superAdminPassword ?? '');
-          if (settings.branding) {
-            setBrandingSettings(prev => ({ ...prev, ...settings.branding }));
-          }
-          if (settings.currencySuffix) {
-            setCurrencySuffix(settings.currencySuffix);
-            useAuctionStore.getState().setCurrencySuffix(settings.currencySuffix);
-          }
-          if (settings.obsOverlayStyle) setObsOverlayStyle(settings.obsOverlayStyle);
-          if (settings.obsOverlayAccent) setObsOverlayAccent(settings.obsOverlayAccent);
-          if (settings.auctionLayout) setAuctionLayout(settings.auctionLayout);
-          if (settings.bidIncrementRanges?.length) {
-            setBidIncrementRanges(settings.bidIncrementRanges);
-            useAuctionStore.getState().setBidIncrementRanges(settings.bidIncrementRanges);
-          }
-          if (settings.budgetMode) {
-            setBudgetMode(settings.budgetMode);
-          }
-        }
-      } catch (error) {
-        console.error('[AdminPanel] Failed to load settings:', error);
-      }
     };
 
     const loadSponsors = async () => {
@@ -839,7 +848,6 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
     };
 
     if (isOpen) {
-      loadSettings();
       loadSponsors();
       loadPlayerTrash();
       setEditingTeams(teams.map((team) => ({ ...team })));
@@ -911,7 +919,7 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
         updatedAt: Date.now(),
         auctionRoleOrder,
         easyLoginMode,
-        superAdminUsername: superAdminUsername || undefined,
+        superAdminUsername: superAdminUsername.trim() || undefined,
         superAdminPassword: superAdminPassword || undefined,
         // Preserve the seating order saved from the mobile Super Admin screen —
         // this form has no editor for it, so never let a theme save clobber it.
@@ -932,6 +940,8 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
 
       await auctionPersistence.saveAdminSettings(clean);
       setLoadedAdminSettings(clean);
+      setSuperAdminUsername(clean.superAdminUsername ?? '');
+      setSuperAdminPassword(clean.superAdminPassword ?? '');
       onSettingsSaved?.(clean);
 
       // Apply theme colors to document
@@ -3785,8 +3795,9 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
                         id="super-admin-username"
                         type="text"
                         value={superAdminUsername}
-                        onChange={(e) => setSuperAdminUsername(e.target.value.trim())}
-                        placeholder="e.g. organizer"
+                        disabled={!adminSettingsLoaded}
+                        onChange={(e) => setSuperAdminUsername(e.target.value)}
+                        placeholder={adminSettingsLoaded ? 'e.g. organizer' : 'Loading settings...'}
                       />
                     </div>
                     <div className="form-group">
@@ -3795,8 +3806,9 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
                         id="super-admin-password"
                         type="text"
                         value={superAdminPassword}
-                        onChange={(e) => setSuperAdminPassword(e.target.value.trim())}
-                        placeholder="Shared with trusted helpers only"
+                        disabled={!adminSettingsLoaded}
+                        onChange={(e) => setSuperAdminPassword(e.target.value)}
+                        placeholder={adminSettingsLoaded ? 'Shared with trusted helpers only' : 'Loading settings...'}
                       />
                     </div>
                   </div>
@@ -3992,7 +4004,7 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
                     <button
                       className="admin-btn admin-btn-primary"
                       onClick={handleSaveTheme}
-                      disabled={isSaving}
+                      disabled={isSaving || !adminSettingsLoaded}
                     >
                       <IoSave size={18} /> Save Settings
                     </button>

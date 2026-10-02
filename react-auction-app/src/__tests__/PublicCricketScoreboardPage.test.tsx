@@ -11,14 +11,9 @@ const mocks = vi.hoisted(() => ({
   subscribeMatches: vi.fn(),
   saveScorecardCorrection: vi.fn(),
   onValue: vi.fn(),
-  setSearchParams: vi.fn(),
   finalOnlyCompletedInnings: false,
 }));
 
-vi.mock('react-router-dom', async importOriginal => {
-  const actual = await importOriginal<typeof import('react-router-dom')>();
-  return { ...actual, useSearchParams: () => [new URLSearchParams(), mocks.setSearchParams] };
-});
 vi.mock('../services/realtimeSync', () => ({ realtimeSync: { ensureInitialized: vi.fn().mockResolvedValue(undefined), getDatabase: () => ({}) } }));
 vi.mock('../services/tenantPath', () => ({ tenantPath: (path: string) => `tenants/ppl-2026/${path}` }));
 vi.mock('../services/scoring', () => ({ scoringService: {
@@ -127,6 +122,13 @@ describe('public cricket scoreboard editing workflow', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Completed' }));
     await waitFor(() => expect(screen.getByLabelText('Match')).toHaveValue(completedMatch.id));
     expect(screen.getByRole('heading', { name: 'Batting & Bowling' })).toBeInTheDocument();
+    for (let index = 0; index < 4; index += 1) {
+      fireEvent.click(screen.getByRole('button', { name: 'Completed' }));
+      await waitFor(() => expect(screen.getByLabelText('Match')).toHaveValue(completedMatch.id));
+    }
+    await new Promise(resolve => setTimeout(resolve, 75));
+    expect(screen.getByLabelText('Match')).toHaveValue(completedMatch.id);
+    expect(screen.getByRole('button', { name: 'Scorecards' })).toHaveClass('is-active');
     fireEvent.click(screen.getByRole('button', { name: /Points Table/ }));
     expect(await screen.findByRole('heading', { name: 'Points Table' })).toBeInTheDocument();
   });
@@ -190,6 +192,8 @@ describe('public cricket scoreboard editing workflow', () => {
     mocks.records = {};
     renderPage();
     fireEvent.click(await screen.findByRole('button', { name: 'Upcoming' }));
+    expect(await screen.findByText('No match found. Ask the tournament admin to schedule a fixture.')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Completed' }));
     expect(await screen.findByText('No match found. Ask the tournament admin to schedule a fixture.')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /Points Table/ }));
     expect(await screen.findByRole('heading', { name: 'Points Table' })).toBeInTheDocument();
