@@ -8,9 +8,9 @@
 
 import type { ComponentType } from 'react';
 import { useLocation } from 'react-router-dom';
-import { IoClose, IoPencil, IoDesktop, IoVideocam, IoGameController, IoSettings, IoColorPalette } from 'react-icons/io5';
+import { IoClose, IoPencil, IoDesktop, IoVideocam, IoGameController, IoSettings, IoColorPalette, IoHelpCircleOutline } from 'react-icons/io5';
 import { useTenantNavigate as useNavigate, getTenantSlugFromPath } from '../hooks/useTenantNavigate';
-import { gameTypeIcon, gameTypeLabel, SUPPORTED_GAME_TYPES, type SupportedGameType } from './scorerPages';
+import { gameTypeIcon, gameTypeLabel, type SupportedGameType } from './scorerPages';
 import './withScorerAdminChrome.css';
 
 interface ScorerAdminChromeConfig {
@@ -42,9 +42,14 @@ export function withScorerAdminChrome<P extends object>(
               <p className="scorer-chrome__subtitle">{subtitle}</p>
             </div>
           </div>
-          <button className="scorer-chrome__close-btn" onClick={() => navigate('/admin')} title="Back to Auction Admin">
-            <IoClose size={20} />
-          </button>
+          <div className="scorer-chrome__header-actions">
+            <button className="scorer-chrome__guide-btn" onClick={() => openQuickTab('/help?section=broadcast')}>
+              <IoHelpCircleOutline size={16} /> Guides
+            </button>
+            <button className="scorer-chrome__close-btn" onClick={() => navigate('/admin')} title="Back to Auction Admin" aria-label="Back to Auction Admin">
+              <IoClose size={20} />
+            </button>
+          </div>
         </header>
 
         <div className="scorer-chrome__quick-actions">
@@ -66,11 +71,6 @@ export function withScorerAdminChrome<P extends object>(
           <button className="scorer-chrome__quick-btn" onClick={() => openQuickTab(`/${gameType}/scorer/designer`)}>
             <IoColorPalette size={14} /> Scorecard Designer
           </button>
-          {SUPPORTED_GAME_TYPES.filter(sport => sport !== gameType).map(sport => (
-            <button key={sport} className="scorer-chrome__quick-btn" onClick={() => openQuickTab(`/${sport}/scorer/admin`)}>
-              <span>{gameTypeIcon(sport)}</span> {gameTypeLabel(sport)} Scorer
-            </button>
-          ))}
           <button className="scorer-chrome__quick-btn" onClick={() => openQuickTab('/admin')}>
             <IoSettings size={14} /> Auction Admin
           </button>

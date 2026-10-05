@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { IoArrowBackOutline, IoBookOutline, IoSearchOutline } from 'react-icons/io5';
 import { useTenantNavigate } from '../hooks/useTenantNavigate';
+import { useSearchParams } from 'react-router-dom';
 import './GuidesPage.css';
 
 const GUIDE_META: Record<string, { title: string; summary: string }> = {
@@ -32,7 +33,13 @@ const GUIDE_SECTIONS = Object.entries(guideFiles)
 
 export default function GuidesPage() {
   const navigate = useTenantNavigate();
-  const [activeId, setActiveId] = useState(GUIDE_SECTIONS[0]?.id ?? 'auction');
+  const [searchParams] = useSearchParams();
+  const [activeId, setActiveId] = useState(() => {
+    const requestedSection = searchParams.get('section');
+    return GUIDE_SECTIONS.some(section => section.id === requestedSection)
+      ? requestedSection!
+      : GUIDE_SECTIONS[0]?.id ?? 'auction';
+  });
   const [query, setQuery] = useState('');
   const activeGuide = GUIDE_SECTIONS.find(section => section.id === activeId) ?? GUIDE_SECTIONS[0];
   const visibleGuides = useMemo(() => {

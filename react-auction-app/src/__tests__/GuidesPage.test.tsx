@@ -27,4 +27,14 @@ describe('guide center', () => {
     expect(screen.getByRole('button', { name: /Broadcast & OBS/ })).toBeTruthy();
     expect(screen.queryByRole('button', { name: /Kabaddi/ })).toBeNull();
   });
+
+  it('opens the requested guide section from the scorer header link', () => {
+    render(
+      <MemoryRouter initialEntries={['/help?section=broadcast']}>
+        <Routes><Route path="/help" element={<GuidesPage />} /></Routes>
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByRole('heading', { name: 'Broadcast and OBS Guide' })).toBeTruthy();
+  });
 });

@@ -21,7 +21,7 @@ import { featureFlagsService } from '../../services/featureFlagsService';
 import { useFeatureFlags } from '../../hooks/useFeatureFlags';
 import type { PremiumTier } from '../../types/premium';
 import type { SuccessAnimationType } from '../../types/streaming';
-import type { ScoringOverlayConfig } from '../../types/scoring';
+import type { OBSReplayConfig, ScoringOverlayConfig } from '../../types/scoring';
 import ObsStudioPanel, { type ObsOverlaySource } from './ObsStudioPanel';
 import BroadcastScheduleManager from './BroadcastScheduleManager';
 
@@ -72,6 +72,7 @@ export default function StreamingTab({ onClose, section }: StreamingTabProps) {
   const [singleOverlayMode, setSingleOverlayMode] = useState(false);
   const [savingSingleOverlay, setSavingSingleOverlay] = useState(false);
   const [enabledSports, setEnabledSports] = useState<SportKey[]>([]);
+  const [obsReplayConfig, setObsReplayConfig] = useState<OBSReplayConfig>({ buttons: [] });
 
   useEffect(() => {
     let cancelled = false;
@@ -123,9 +124,11 @@ export default function StreamingTab({ onClose, section }: StreamingTabProps) {
           scoringService.getOverlayConfig().catch(() => null),
           kabaddiService.getOverlayConfig().catch(() => null),
         ]);
+        setObsReplayConfig(cricketCfg?.obsReplayConfig ?? { buttons: [] });
         setSingleOverlayMode(Boolean(cricketCfg?.singleOverlayMode || kabaddiCfg?.singleOverlayMode));
 
         unsubCricket = scoringService.subscribeOverlayConfig((liveCfg) => {
+          setObsReplayConfig(liveCfg?.obsReplayConfig ?? { buttons: [] });
           if (liveCfg?.singleOverlayMode !== undefined) {
             setSingleOverlayMode(Boolean(liveCfg.singleOverlayMode));
           }
@@ -337,7 +340,7 @@ export default function StreamingTab({ onClose, section }: StreamingTabProps) {
       )}
 
       {/* OBS Studio control panel */}
-      {show('obs') && <ObsStudioPanel locked={obsLocked} sources={obsSources} />}
+      {show('obs') && <ObsStudioPanel locked={obsLocked} sources={obsSources} replayConfig={obsReplayConfig} />}
 
       {show('obs') && (
         <>

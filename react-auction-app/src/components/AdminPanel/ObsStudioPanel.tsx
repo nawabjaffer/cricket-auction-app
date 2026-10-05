@@ -2,11 +2,15 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   IoAdd, IoCheckmarkCircle, IoCopyOutline, IoPlay, IoRadioButtonOn, IoRefresh, IoSave, IoStop, IoWarning,
 } from 'react-icons/io5';
+import { onValue, ref } from 'firebase/database';
 import { obsService } from '../../services/obsService';
-import { getActiveTenant } from '../../services/tenantPath';
+import { obsConnectionBridgeService, type OBSConnectionBridgePresence } from '../../services/obsConnectionBridgeService';
+import { realtimeSync } from '../../services/realtimeSync';
+import { getActiveTenant, tenantPath } from '../../services/tenantPath';
 import { useLiveStreamingStore } from '../../store/liveStreamingStore';
 import { useFeatureFlags } from '../../hooks/useFeatureFlags';
 import type { OBSConnectionState } from '../../types/streaming';
+import type { OBSReplayConfig } from '../../types/scoring';
 import './ObsStudioPanel.css';
 
 export interface ObsOverlaySource {
@@ -19,6 +23,7 @@ export interface ObsOverlaySource {
 interface ObsStudioPanelProps {
   locked?: boolean;
   sources: ObsOverlaySource[];
+  replayConfig: OBSReplayConfig;
 }
 
 interface SceneList { currentProgramSceneName: string; scenes: Array<{ sceneName: string; sceneIndex: number }> }
@@ -57,7 +62,7 @@ function formatDuration(ms: number): string {
 
 const settled = <T,>(promise: Promise<T>) => promise.catch(() => null);
 
-export default function ObsStudioPanel({ locked = false, sources }: Readonly<ObsStudioPanelProps>) {
+export default function ObsStudioPanel({ locked = false, sources, replayConfig }: Readonly<ObsStudioPanelProps>) {
   const { isEnabled } = useFeatureFlags();
   const { setOBSEnabled, setOBSConnectionState } = useLiveStreamingStore();
   const initial = useRef(loadConnection()).current;
@@ -67,6 +72,7 @@ export default function ObsStudioPanel({ locked = false, sources }: Readonly<Obs
   const [password, setPassword] = useState(initial.password ?? '');
   const [remember, setRemember] = useState(initial.remember);
   const [status, setStatus] = useState<OBSConnectionState>(obsService.getConnectionState());
+  const [sharedConnection, setSharedConnection] = useState<OBSConnectionBridgePresence | null>(null);
   const [connecting, setConnecting] = useState(false);
   const [version, setVersion] = useState<ObsVersion | null>(null);
   const [scenes, setScenes] = useState<string[]>([]);
@@ -84,6 +90,36 @@ export default function ObsStudioPanel({ locked = false, sources }: Readonly<Obs
     setStatus(state);
     setOBSConnectionState(state);
   }), [setOBSConnectionState]);
+
+  useEffect(() => {
+    let active = true;
+    let unsubscribe = () => {};
+    void realtimeSync.ensureInitialized().then(() => {
+      if (!active) return;
+      const db = realtimeSync.getDatabase();
+      if (!db) return;
+      unsubscribe = onValue(ref(db, tenantPath('scoring/obsConnectionBridge')), snapshot => {
+        const presence = snapshot.exists() ? snapshot.val() as OBSConnectionBridgePresence : null;
+        setSharedConnection(obsConnectionBridgeService.isAlive(presence) && !obsConnectionBridgeService.isOwner(presence)
+          ? presence
+          : null);
+      });
+    }).catch(() => {});
+    return () => { active = false; unsubscribe(); };
+  }, []);
+
+  useEffect(() => {
+    if (!connected) return undefined;
+    let cancelled = false;
+    void (async () => {
+      await realtimeSync.ensureInitialized();
+      const db = realtimeSync.getDatabase();
+      if (cancelled || !db) return;
+      obsConnectionBridgeService.start(db, tenantPath('scoring'), replayConfig, 'admin');
+      obsConnectionBridgeService.updateReplayConfig(replayConfig);
+    })();
+    return () => { cancelled = true; };
+  }, [connected, replayConfig]);
 
   const refresh = useCallback(async () => {
     if (!obsService.isConnected()) return;
@@ -114,6 +150,14 @@ export default function ObsStudioPanel({ locked = false, sources }: Readonly<Obs
     const timer = window.setInterval(() => { if (!document.hidden) void refresh(); }, 2000);
     return () => window.clearInterval(timer);
   }, [connected, refresh]);
+
+  useEffect(() => {
+    if (!sharedConnection) return undefined;
+    const timer = window.setInterval(() => {
+      if (obsConnectionBridgeService.isExpired(sharedConnection)) setSharedConnection(null);
+    }, 1_000);
+    return () => window.clearInterval(timer);
+  }, [sharedConnection]);
 
   const handleConnect = async () => {
     setConnecting(true);
@@ -208,6 +252,7 @@ export default function ObsStudioPanel({ locked = false, sources }: Readonly<Obs
 
   const droppedPct = stream?.outputTotalFrames ? ((stream.outputSkippedFrames ?? 0) / stream.outputTotalFrames) * 100 : 0;
   const diagnostics = connected ? null : obsService.getConnectionDiagnostics();
+  const displayStatus = !connected && sharedConnection ? 'connected' : status;
 
   return (
     <div className="obs-panel">
@@ -215,10 +260,12 @@ export default function ObsStudioPanel({ locked = false, sources }: Readonly<Obs
         <header className="obs-card__head">
           <div>
             <h3>OBS Studio connection</h3>
-            <p>Control OBS Studio through its built-in WebSocket server (OBS 28+ or obs-websocket 5).</p>
+            <p>Control OBS Studio through its built-in WebSocket server. For another device on the same Wi-Fi, enter the OBS computer’s LAN IP; use <code>localhost</code> only on the OBS computer.</p>
           </div>
-          <span className={`obs-pill obs-pill--${status}`}>
-            {status === 'connected' ? 'Connected' : status === 'connecting' ? 'Connecting…' : status === 'error' ? 'Connection failed' : 'Disconnected'}
+          <span className={`obs-pill obs-pill--${displayStatus}`}>
+            {connected ? 'Connected here' : sharedConnection
+              ? `Connected via ${sharedConnection.ownerType === 'dock' ? 'OBS Dock' : 'another tab'}`
+              : status === 'connecting' ? 'Connecting…' : status === 'error' ? 'Connection failed' : 'Disconnected'}
           </span>
         </header>
 
@@ -237,13 +284,18 @@ export default function ObsStudioPanel({ locked = false, sources }: Readonly<Obs
             <button type="button" className="obs-btn" onClick={handleDisconnect}><IoStop size={15} /> Disconnect</button>
           ) : (
             <button type="button" className="obs-btn obs-btn--primary" onClick={() => void handleConnect()} disabled={connecting || locked}>
-              <IoPlay size={15} /> {connecting ? 'Connecting…' : 'Connect to OBS'}
+              <IoPlay size={15} /> {connecting ? 'Connecting…' : sharedConnection ? 'Connect directly here' : 'Connect to OBS'}
             </button>
           )}
           {version && <span className="obs-meta">OBS {version.obsVersion} · WebSocket {version.obsWebSocketVersion}</span>}
         </div>
 
         {locked && <p className="obs-note obs-note--warn"><IoWarning size={15} /> OBS control requires a Pro or Enterprise plan.</p>}
+        {sharedConnection && !connected && (
+          <p className="obs-note obs-note--ok" role="status">
+            <IoCheckmarkCircle size={15} /> OBS is active at {sharedConnection.host}:{sharedConnection.port}. Connect directly here to manage scenes and stream controls; the OBS Dock can relay replay actions over the same Wi-Fi.
+          </p>
+        )}
         {notice && <p className={`obs-note obs-note--${notice.tone === 'ok' ? 'ok' : 'error'}`}>{notice.tone === 'ok' ? <IoCheckmarkCircle size={15} /> : <IoWarning size={15} />} {notice.text}</p>}
         {diagnostics?.mixedContentLikely && (
           <p className="obs-note obs-note--warn"><IoWarning size={15} /> This page is served over HTTPS, so browsers may block ws:// connections to OBS. Use wss:// or open this admin over http on the same network.</p>

@@ -12,6 +12,9 @@
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 .scorer-chrome__header-left { display: flex; align-items: center; gap: 14px; }
+.scorer-chrome__header-actions { display: flex; align-items: center; gap: 8px; }
+.scorer-chrome__guide-btn { display: inline-flex; align-items: center; gap: 6px; min-height: 38px; padding: 0 12px; border: 1px solid rgba(255, 255, 255, 0.15); border-radius: 8px; background: rgba(255, 255, 255, 0.08); color: #e2e8f0; font: inherit; font-size: 0.78rem; font-weight: 650; cursor: pointer; }
+.scorer-chrome__guide-btn:hover { background: rgba(255, 255, 255, 0.16); color: #fff; }
 .scorer-chrome__icon { font-size: 28px; line-height: 1; }
 .scorer-chrome__title { margin: 0; font-size: 1.4rem; font-weight: 800; color: #fff; }
 .scorer-chrome__subtitle { margin: 4px 0 0; font-size: 0.82rem; color: rgba(255, 255, 255, 0.65); }
@@ -55,4 +58,6 @@
 
 @media (max-width: 720px) {
   .scorer-chrome__header, .scorer-chrome__quick-actions { padding: 14px 16px; }
+  .scorer-chrome__header-actions { gap: 6px; }
+  .scorer-chrome__guide-btn { min-height: 36px; padding: 0 9px; }
 }

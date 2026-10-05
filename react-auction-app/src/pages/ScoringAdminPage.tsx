@@ -44,6 +44,7 @@ import type { CricHeroesNameMappings } from '../utils/cricHeroesMappings';
 import { DEFAULT_PLAYER_STATS_SEQUENCE_CONFIG, normalizePlayerStatsSequenceConfig } from '../utils/playerStatsSequence';
 import { buildPoolAssignments } from '../utils/pointsTable';
 import { getMatchNumbers } from '../utils/publicScoreboard';
+import { isScoringAdminTabVisible, type ScoringAdminTabKey } from '../utils/scoringAdminTabs';
 import type { MatchScheduleDefaults } from '../types/scoring';
 
 const EMPTY_OBS_REPLAY_CONFIG: OBSReplayConfig = { buttons: [] };
@@ -57,7 +58,7 @@ const DEFAULT_OBS_WEBSOCKET_CONFIG: OBSWebSocketConfig = {
 import { withScorerAdminChrome } from './withScorerAdminChrome';
 import './ScoringAdminPage.css';
 
-type Tab = 'matches' | 'provider' | 'ads' | 'overlay' | 'animations' | 'prematch' | 'ticker' | 'stats' | 'obs';
+type Tab = ScoringAdminTabKey;
 const prematchSequenceTimers = new Map<string, ReturnType<typeof setTimeout>[]>();
 
 function cancelPreMatchSequence(matchId: string): void {
@@ -119,7 +120,10 @@ function ScoringAdminPageContent({ configurationOnly = false }: { configurationO
   const tenantSlug = getTenantSlugFromPath(location.pathname);
   const baseUrl = window.location.origin + (tenantSlug ? `/${tenantSlug}` : '');
   const { isAuthenticated, extendSession } = useAdminAuth();
-  const [activeTab, setActiveTab] = useState<Tab>('matches');
+  const [activeTab, setActiveTab] = useState<Tab>(() => {
+    const requestedTab = new URLSearchParams(location.search).get('tab') as Tab | null;
+    return requestedTab && isScoringAdminTabVisible(requestedTab, false) ? requestedTab : 'matches';
+  });
   const cricHeroesSync = useCricHeroesSyncAdapter();
 
   useInitialData();
@@ -230,8 +234,8 @@ function ScoringAdminPageContent({ configurationOnly = false }: { configurationO
           { key: 'prematch', icon: <IoVideocam size={16} />, label: 'Pre-Match' },
           { key: 'ticker', icon: <IoDesktop size={16} />, label: 'Ticker' },
           { key: 'stats', icon: <IoTrophy size={16} />, label: 'Stats' },
-          { key: 'obs', icon: <IoLink size={16} />, label: 'OBS WS' },
-        ] as { key: Tab; icon: React.ReactNode; label: string }[]).filter(tab => configurationOnly || ['matches', 'provider', 'obs'].includes(tab.key)).map(tab => (
+          { key: 'obs', icon: <IoLink size={16} />, label: 'OBS Settings' },
+        ] as { key: Tab; icon: React.ReactNode; label: string }[]).filter(tab => isScoringAdminTabVisible(tab.key, configurationOnly)).map(tab => (
           <button
             key={tab.key}
             className={`scoring-admin__tab ${activeTab === tab.key ? 'active' : ''}`}
@@ -5250,6 +5254,15 @@ function OBSWebSocketTab({ config, setConfig, onFeedback, baseUrl }: {
             <li>
               <strong>Test a complete replay before the match.</strong>
               <span> Start streaming/recording a short test scene and confirm the OBS Replay Buffer indicator is active. From the OBS Control Dock press <em>Start Replay Buffer</em> if needed, then <em>Test Replay</em>. Its preset sequence saves the buffer, waits 0.8 seconds, switches to <em>Cricket - Replay</em>, lets the 60% replay media play once, sends <em>Pause</em> to <em>Cricket Replay Media</em>, then returns to <em>Cricket - Live</em>. At 60% speed the pause wait is approximately 1.67× the saved buffer duration. OBS's saved-file event updates/restarts the media source automatically.</span>
+            </li>
+            <li>
+              <strong>Use Super Movements and Match Highlights.</strong>
+              <span> In Cricket Match Setup, enable either or both options, then run <em>Match Setup</em> again so OBS receives the selected settings. These are manual dock actions; they do not automatically play after every boundary or wicket.</span>
+              <ul>
+                <li><strong>Save Super Movements:</strong> <a href="/assets/obs-super-movements.py" download>Download the OBS Python script</a>, select a Python version compatible with your OBS release under <em>Tools → Scripts → Python Settings</em>, and load it from <em>Tools → Scripts</em>. Keep OBS open with the script loaded and Replay Buffer enabled. In the OBS Control Dock choose <em>Super Movements</em>. The dock saves the current buffer; the script copies that exact saved file at its original speed to a <em>Super Movements</em> folder beside <em>Cricket Replays</em>. Only the on-air replay scene plays slowed at 60%.</li>
+                <li><strong>Match Highlights:</strong> This creates a <em>Match Highlights</em> scene with a non-looping, non-shuffled VLC playlist reading from the <em>Super Movements</em> folder. Enable <em>Save Super Movements</em> as well to populate it with new clips; with only Match Highlights enabled, it can play files already in that folder but does not create new ones. Choose <em>Match Highlights</em> in the OBS Control Dock to show the playlist, then press <em>Go Live</em> to return to the live scene.</li>
+              </ul>
+              <span>Test both buttons before broadcast. If a copy fails, check the hidden <em>Cricket Super Movements Control</em> source exists, the script is loaded, the replay folder is writable, and the OBS computer has free disk space. Check the OBS script log for copy or playlist errors.</span>
             </li>
             <li>
               <strong>Enable automatic boundary/wicket replays last.</strong>
