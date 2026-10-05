@@ -224,4 +224,26 @@ describe('public cricket scoreboard editing workflow', () => {
     expect(await screen.findByRole('heading', { name: 'Batting & Bowling' })).toBeInTheDocument();
     expect(screen.getByText('Batter One')).toBeInTheDocument();
   });
+
+  it('shows live and knockout fixtures from match records even when absent from the match index', async () => {
+    const liveRecent = { ...liveMatch, id: 'live-recent', teamA: { id: 'team-d', name: 'Team D' }, teamB: { id: 'team-e', name: 'Team E' } } as MatchSetup;
+    const semiFinal = { ...upcomingMatch, id: 'semi-final', stage: 'semi_final' as const, matchNumber: 7, teamA: { id: 'team-f', name: 'Team F' }, teamB: { id: 'team-g', name: 'Team G' } } as MatchSetup;
+    const final = { ...upcomingMatch, id: 'final', stage: 'final' as const, matchNumber: 8, teamA: { id: 'team-h', name: 'Team H' }, teamB: { id: 'team-i', name: 'Team I' } } as MatchSetup;
+    mocks.matches = [completedMatch, upcomingMatch];
+    mocks.records = {
+      ...mocks.records,
+      [liveRecent.id]: { setup: liveRecent },
+      [semiFinal.id]: { setup: semiFinal },
+      [final.id]: { setup: final },
+    };
+
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Live' }));
+    expect(await screen.findByRole('button', { name: 'View Team D vs Team E' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Upcoming' }));
+    expect(await screen.findByRole('button', { name: 'View Team F vs Team G' })).toBeInTheDocument();
+    expect(screen.getByText(/Semi Final · Match 7/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'View Team H vs Team I' })).toBeInTheDocument();
+    expect(screen.getByText(/Final · Match 8/)).toBeInTheDocument();
+  });
 });

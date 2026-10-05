@@ -7,6 +7,7 @@ import { getTenantSlugFromPath } from '../hooks/useTenantNavigate';
 import { realtimeSync } from '../services/realtimeSync';
 import { scoringService } from '../services/scoring';
 import { tenantPath } from '../services/tenantPath';
+import { MATCH_STAGE_LABELS } from '../types/scoring';
 import type { BallEvent, BatsmanInnings, BowlerInnings, Innings, LiveScore, MatchScore, MatchSetup, MatchStatsSnapshot, ScoringOverlayConfig } from '../types/scoring';
 import { buildPointsTableStandings, buildPoolAssignments, type PointsTableMatch } from '../utils/pointsTable';
 import { buildCorrectedFinalScore, buildPublicTournamentPlayers, publicMatchResult, filterPublicMatches, type PublicMatchFilter, validatePublicInningsCorrection, verifySuperAdminMobileCredentials } from '../utils/publicScoreboard';
@@ -397,7 +398,6 @@ export default function PublicCricketScoreboardPage() {
 
   useEffect(() => {
     let active = true;
-    let stopMatches = () => {};
     let stopAdminSettings = () => {};
     const initialize = async () => {
       try {
@@ -407,8 +407,6 @@ export default function PublicCricketScoreboardPage() {
         scoringService.initialize(db, tenantPath('scoring'));
         if (!active) return;
         setDatabase(db);
-        setMatches(await scoringService.getAllMatches());
-        stopMatches = scoringService.subscribeMatches(setMatches);
         stopAdminSettings = onValue(ref(db, tenantPath('auction/adminSettings')), snapshot => {
           const settings = snapshot.exists() ? snapshot.val() as { superAdminUsername?: string; superAdminPassword?: string } : null;
           setMobileAdminCredentials(settings);
@@ -420,7 +418,7 @@ export default function PublicCricketScoreboardPage() {
       }
     };
     void initialize();
-    return () => { active = false; stopMatches(); stopAdminSettings(); };
+    return () => { active = false; stopAdminSettings(); };
   }, []);
 
   const filteredMatches = useMemo(() => filterPublicMatches(matches, matchFilter), [matches, matchFilter]);
@@ -441,10 +439,14 @@ export default function PublicCricketScoreboardPage() {
       }
       const records = snapshot.val() as Record<string, { setup?: MatchSetup; final?: MatchScore; innings?: Record<string, Innings>; live?: LiveScore }>;
       const allScores: (PointsTableMatch & { live?: LiveScore })[] = [];
-      for (const record of Object.values(records)) {
-        if (record?.setup) allScores.push({ setup: record.setup, final: record.final, innings: record.innings, live: record.live });
+      for (const [matchId, record] of Object.entries(records)) {
+        if (record?.setup) {
+          const setup = record.setup.id ? record.setup : { ...record.setup, id: matchId };
+          allScores.push({ setup, final: record.final, innings: record.innings, live: record.live });
+        }
       }
       setStandingsMatches(allScores);
+      setMatches(allScores.map(record => record.setup));
     });
     const stopTeams = onValue(ref(database, tenantPath('auction/teams')), snapshot => {
       if (!snapshot.exists()) {
@@ -612,7 +614,7 @@ export default function PublicCricketScoreboardPage() {
             <div className="public-scoreboard__section-heading"><h2>{matchFilter === 'all' ? 'All Matches' : `${matchFilter[0].toUpperCase()}${matchFilter.slice(1)} Matches`}</h2><span>{filteredMatches.length} matches</span></div>
             <div className="public-scoreboard__match-list">
               {filteredMatches.map(item => <button type="button" className="public-scoreboard__match-row" key={item.id} onClick={() => handleMatchSelection(item.id)} aria-label={`View ${item.teamA.name} vs ${item.teamB.name}`}>
-                <span><small>{item.matchNumber ? `Match ${item.matchNumber} · ` : ''}{new Date(item.date).toLocaleString()}</small><strong>{item.teamA.name} vs {item.teamB.name}</strong><small>{item.venue}</small></span>
+                <span><small>{item.stage ? MATCH_STAGE_LABELS[item.stage] : MATCH_STAGE_LABELS.league}{item.matchNumber ? ` · Match ${item.matchNumber}` : ''} · {new Date(item.date).toLocaleString()}</small><strong>{item.teamA.name} vs {item.teamB.name}</strong><small>{item.venue}</small></span>
                 <span className={item.status === 'live' ? 'is-live' : ''}>{publicMatchResult(item, standingsMatches.find(record => record.setup.id === item.id)?.final)}</span>
               </button>)}
               {!filteredMatches.length && <div className="public-scoreboard__empty">No matches in this section.</div>}

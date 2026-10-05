@@ -7,7 +7,7 @@
 
 import { get, onValue, ref, set, update } from 'firebase/database';
 import { realtimeSync } from './realtimeSync';
-import { DEFAULT_TENANT_ID, platformPath } from './tenantPath';
+import { DEFAULT_TENANT_ID, platformPath, tenantPathFor } from './tenantPath';
 import type { FootballRulesConfig } from '../types/football';
 import type { KabaddiRulesConfig } from '../types/kabaddi';
 
@@ -49,6 +49,11 @@ export interface TenantRecord {
   // When omitted, NO sheet is fetched for this tenant — only RTDB-stored
   // admin players are used. This keeps tenants strictly isolated.
   sheetId?: string;
+}
+
+export interface ActiveSessionCleanupSummary {
+  matchesScanned: number;
+  matchesClosed: number;
 }
 
 const TENANT_REGISTRY_PATH = () => platformPath('tenants');
@@ -167,6 +172,92 @@ class TenantService {
     if (slug && slug !== id) {
       await set(ref(db, `tenants/${slug}`), null);
     }
+  }
+
+  /** Close live matches and remove transient broadcast/session state, preserving match results and event history. */
+  async clearActiveSessionState(tenantId: string): Promise<ActiveSessionCleanupSummary> {
+    if (!/^[a-zA-Z0-9_-]+$/.test(tenantId)) throw new Error('Invalid tenant id');
+    const db = await this.getDb();
+    if (!db) throw new Error('Database not initialized');
+    const tenantSnapshot = await get(ref(db, `${TENANT_REGISTRY_PATH()}/${tenantId}`));
+    if (!tenantSnapshot.exists()) throw new Error('Tournament not found');
+
+    const sports = [
+      { key: 'scoring', hasActivePointer: true, cricket: true },
+      { key: 'football', hasActivePointer: false, cricket: false },
+      { key: 'kabaddi', hasActivePointer: true, cricket: false },
+    ] as const;
+    const matchSets = await Promise.all(sports.map(async sport => {
+      const base = tenantPathFor(tenantId, sport.key);
+      const [indexSnapshot, activeSnapshot] = await Promise.all([
+        get(ref(db, `${base}/matchIndex`)),
+        sport.hasActivePointer ? get(ref(db, `${base}/activeMatch/matchId`)) : Promise.resolve(null),
+      ]);
+      const ids = new Set<string>(indexSnapshot?.exists() ? Object.keys(indexSnapshot.val()) : []);
+      const activeId = activeSnapshot?.exists() ? activeSnapshot.val() as string : '';
+      if (activeId) ids.add(activeId);
+
+      if (!indexSnapshot?.exists()) {
+        const legacyMatches = await get(ref(db, `${base}/matches`));
+        if (legacyMatches.exists()) Object.keys(legacyMatches.val()).forEach(id => ids.add(id));
+      }
+
+      const matches = await Promise.all([...ids].map(async id => {
+        const setupSnapshot = await get(ref(db, `${base}/matches/${id}/setup`));
+        return setupSnapshot.exists()
+          ? { id, setup: setupSnapshot.val() as { status?: string } }
+          : null;
+      }));
+      return { ...sport, base, matches: matches.filter((match): match is NonNullable<typeof match> => match !== null) };
+    }));
+
+    const now = Date.now();
+    const changes: Record<string, unknown> = {};
+    const auctionPaths = [
+      'auction/currentState', 'auction/mobileBids', 'auction/adminCommands',
+      'auction/broadcastControl', 'auction/overlayMarquee', 'auction/overlayRequest',
+    ];
+    for (const path of auctionPaths) changes[tenantPathFor(tenantId, path)] = null;
+    changes[tenantPathFor(tenantId, 'auction/sessionReset')] = {
+      timestamp: now,
+      sessionId: 'platform_admin',
+      reason: 'platform-admin-clear-active-sessions',
+    };
+
+    let matchesScanned = 0;
+    let matchesClosed = 0;
+    for (const sport of matchSets) {
+      changes[tenantPathFor(tenantId, `${sport.key}/activeMatch`)] = null;
+      for (const { id, setup } of sport.matches) {
+        matchesScanned++;
+        const matchPath = `${sport.base}/matches/${id}`;
+        changes[`${matchPath}/overlay`] = null;
+
+        if (sport.cricket) {
+          changes[`${matchPath}/preMatch`] = null;
+          changes[`${matchPath}/replayTrigger`] = null;
+          changes[`${matchPath}/liveComments`] = null;
+          changes[`${matchPath}/liveCam`] = null;
+          changes[`${matchPath}/activeFieldPlacement`] = null;
+        }
+
+        if (setup.status === 'live') {
+          matchesClosed++;
+          changes[`${matchPath}/setup/status`] = 'abandoned';
+          changes[`${matchPath}/setup/updatedAt`] = now;
+          if (sport.cricket) {
+            changes[`${matchPath}/setup/interruption`] = {
+              kind: 'abandoned',
+              reason: 'Closed by Platform Admin',
+              updatedAt: now,
+            };
+          }
+        }
+      }
+    }
+
+    await update(ref(db), changes);
+    return { matchesScanned, matchesClosed };
   }
 
   /** Ensure the default tenant record exists (one-time bootstrap). */

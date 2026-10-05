@@ -20,6 +20,7 @@ import { realtimeSync } from '../services/realtimeSync';
 import { liveCommentService } from '../services/liveCommentService';
 import { cricHeroesMappingService } from '../services/cricHeroesMappingService';
 import { getActiveTenant, tenantPath } from '../services/tenantPath';
+import { MATCH_STAGE_LABELS } from '../types/scoring';
 import { isPowerplayOver } from '../utils/powerplay';
 import { reconcileEditedLiveScore } from '../utils/scorecardCorrections';
 import { cricHeroesPlayerAliasKey, EMPTY_CRICHEROES_MAPPINGS, normalizeCricHeroesAliasName, normalizeCricHeroesMappings, resolveCricHeroesPlayerAlias } from '../utils/cricHeroesMappings';
@@ -107,7 +108,7 @@ const TICKER_WIDGET_OPTIONS: Array<{ key: TickerStatWidget; label: string }> = [
 ];
 
 export default function ScoreUpdatePage() {
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const urlMatchId = searchParams.get('matchId') || undefined;
   const urlPinned = searchParams.get('pin') === '1';
   const requiresSuperAdmin = searchParams.get('superAdmin') === '1';
@@ -118,6 +119,10 @@ export default function ScoreUpdatePage() {
   const [singleOverlayMode, setSingleOverlayMode] = useState(false);
   const [activeMatchId, setActiveMatchId] = useState<string | null>(null);
   const [matchActionFeedback, setMatchActionFeedback] = useState('');
+  const [scheduledMatches, setScheduledMatches] = useState<MatchSetup[]>([]);
+  const [scheduledMatchesLoading, setScheduledMatchesLoading] = useState(true);
+  const [scheduledMatchesError, setScheduledMatchesError] = useState('');
+  const [startingMatchId, setStartingMatchId] = useState<string | null>(null);
   const matchId = singleOverlayMode
     ? (urlPinned ? (urlMatchId || activeMatchId || undefined) : (activeMatchId || urlMatchId || undefined))
     : urlMatchId;
@@ -196,6 +201,58 @@ export default function ScoreUpdatePage() {
   const [recordAlertDismissed, setRecordAlertDismissed] = useState(false);
   const [feedImportSnapshot, setFeedImportSnapshot] = useState<CricHeroesSyncData | null>(null);
   const [scoreboardVisible, setScoreboardVisible] = useState(true);
+
+  useEffect(() => {
+    if (!isAuthenticated || !canCorrectScorecard || matchId) return;
+    let cancelled = false;
+    let unsubscribe = () => {};
+    const applyMatches = (matches: MatchSetup[]) => {
+      const scheduled = matches.filter(item => item.status === 'scheduled' && !item.interruption);
+      scheduled.sort((left, right) => {
+        const leftDate = Date.parse(left.date);
+        const rightDate = Date.parse(right.date);
+        return (Number.isFinite(leftDate) ? leftDate : Number.MAX_SAFE_INTEGER)
+          - (Number.isFinite(rightDate) ? rightDate : Number.MAX_SAFE_INTEGER);
+      });
+      setScheduledMatches(scheduled);
+    };
+
+    const loadScheduledMatches = async () => {
+      setScheduledMatchesLoading(true);
+      setScheduledMatchesError('');
+      try {
+        await realtimeSync.ensureInitialized();
+        const db = realtimeSync.getDatabase();
+        if (!db) throw new Error('Scoring database is unavailable.');
+        scoringService.initialize(db, tenantPath('scoring'));
+        applyMatches(await scoringService.getAllMatches());
+        if (!cancelled) unsubscribe = scoringService.subscribeMatches(applyMatches);
+      } catch (loadError) {
+        if (!cancelled) setScheduledMatchesError(loadError instanceof Error ? loadError.message : String(loadError));
+      } finally {
+        if (!cancelled) setScheduledMatchesLoading(false);
+      }
+    };
+
+    void loadScheduledMatches();
+    return () => { cancelled = true; unsubscribe(); };
+  }, [canCorrectScorecard, isAuthenticated, matchId]);
+
+  const startScheduledMatch = async (scheduledMatch: MatchSetup) => {
+    setStartingMatchId(scheduledMatch.id);
+    setScheduledMatchesError('');
+    try {
+      await scoringService.startMatchQuick(scheduledMatch.id);
+      setActiveMatchId(scheduledMatch.id);
+      const nextParams = new URLSearchParams(searchParams);
+      nextParams.set('matchId', scheduledMatch.id);
+      setSearchParams(nextParams, { replace: true });
+    } catch (startError) {
+      setScheduledMatchesError(startError instanceof Error ? startError.message : String(startError));
+    } finally {
+      setStartingMatchId(null);
+    }
+  };
 
   useEffect(() => {
     if (!matchId || loading) return;
@@ -519,6 +576,48 @@ export default function ScoreUpdatePage() {
   }, [matchId, setOverlay]);
 
   if (!isAuthenticated || !canCorrectScorecard) return null;
+
+  if (!matchId) {
+    return (
+      <main className="score-update score-update--no-match">
+        <section className="score-update__no-match-panel">
+          <p className="score-update__no-match-eyebrow">CRICKET SCORER</p>
+          <h1>No match is currently started</h1>
+          <p className="score-update__no-match-intro">Choose a scheduled fixture to start scoring. Fixtures are listed in start-time order.</p>
+          {scheduledMatchesError && <p className="score-update__no-match-error" role="alert">{scheduledMatchesError}</p>}
+          {scheduledMatchesLoading ? <p className="score-update__no-match-empty">Loading scheduled matches…</p> : scheduledMatches.length > 0 ? (
+            <section className="score-update__scheduled-matches" aria-labelledby="scheduled-matches-heading">
+              <h2 id="scheduled-matches-heading">Scheduled matches</h2>
+              {scheduledMatches.map(scheduledMatch => <article className="score-update__scheduled-match" key={scheduledMatch.id}>
+                <div>
+                  <strong>{scheduledMatch.teamA.name} vs {scheduledMatch.teamB.name}</strong>
+                  <span>
+                    {MATCH_STAGE_LABELS[scheduledMatch.stage || 'league']} · Match {scheduledMatch.matchNumber ?? '—'} · {scheduledMatch.maxOvers} overs
+                  </span>
+                  <span>{new Date(scheduledMatch.date).toLocaleString()} · {scheduledMatch.venue || 'Venue TBC'}</span>
+                </div>
+                <button
+                  className="score-update__btn score-update__btn--primary"
+                  onClick={() => void startScheduledMatch(scheduledMatch)}
+                  disabled={startingMatchId !== null}
+                >
+                  <IoPlay aria-hidden="true" /> {startingMatchId === scheduledMatch.id ? 'Starting…' : 'Start match'}
+                </button>
+              </article>)}
+            </section>
+          ) : (
+            <div className="score-update__no-match-empty">
+              <h2>No match is scheduled or started</h2>
+              <p>Create a cricket fixture in Scoring Admin, then return here to start it.</p>
+            </div>
+          )}
+          <button onClick={() => navigate('/cricket/scorer/admin')} className="score-update__no-match-back">
+            Back to Scoring Admin
+          </button>
+        </section>
+      </main>
+    );
+  }
 
   if (loading) {
     return (

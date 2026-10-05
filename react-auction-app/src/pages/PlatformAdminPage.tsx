@@ -34,6 +34,9 @@ export default function PlatformAdminPage() {
   const [rulesFor, setRulesFor] = useState<TenantRecord | null>(null);
   const [kabaddiRulesFor, setKabaddiRulesFor] = useState<TenantRecord | null>(null);
   const [deleteFor, setDeleteFor] = useState<TenantRecord | null>(null);
+  const [clearSessionsFor, setClearSessionsFor] = useState<TenantRecord | null>(null);
+  const [clearSessionsConfirmation, setClearSessionsConfirmation] = useState('');
+  const [clearingSessions, setClearingSessions] = useState(false);
 
   const refresh = async () => {
     setLoading(true);
@@ -95,6 +98,23 @@ export default function PlatformAdminPage() {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setDeleting(false);
+    }
+  };
+
+  const handleClearActiveSessions = async () => {
+    if (!clearSessionsFor || clearSessionsConfirmation.trim().toUpperCase() !== 'CLEAR') return;
+    setClearingSessions(true);
+    setError(null);
+    try {
+      const summary = await tenantService.clearActiveSessionState(clearSessionsFor.id);
+      setSuccessMsg(`Closed ${summary.matchesClosed} live match(es) and cleared active session state for "${clearSessionsFor.name}". Scanned ${summary.matchesScanned} match(es).`);
+      setTimeout(() => setSuccessMsg(null), 5000);
+      setClearSessionsFor(null);
+      setClearSessionsConfirmation('');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setClearingSessions(false);
     }
   };
 
@@ -243,6 +263,11 @@ export default function PlatformAdminPage() {
                       </a>
                     </div>
                     <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+                      <button onClick={() => { setError(null); setClearSessionsFor(t); setClearSessionsConfirmation(''); }}
+                        style={{ ...btnGhost, padding: '5px 10px', fontSize: 11, color: '#fbbf24', borderColor: 'rgba(251, 191, 36, 0.35)' }}
+                        title="Close active matches and clear transient broadcast sessions">
+                        Clear sessions
+                      </button>
                       <button onClick={() => toggle(t)}
                         style={{
                           ...btnGhost,
@@ -275,6 +300,39 @@ export default function PlatformAdminPage() {
           )}
         </section>
       </div>
+
+      {clearSessionsFor && (
+        <div style={modalOverlay} onClick={() => { if (!clearingSessions) setClearSessionsFor(null); }}>
+          <div style={{ ...modalCard, maxWidth: 520, border: '1px solid #f59e0b' }} onClick={(e) => e.stopPropagation()}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+              <h2 style={{ margin: 0, fontSize: 18, color: '#fbbf24' }}>Clear Active Sessions</h2>
+              <button onClick={() => setClearSessionsFor(null)} style={{ ...btnGhost, padding: '6px 10px' }} disabled={clearingSessions}>✕</button>
+            </div>
+            <p style={{ fontSize: 13, color: '#e2e8f0', lineHeight: 1.5 }}>
+              Close active sessions for <strong>{clearSessionsFor.name}</strong> (<code>{clearSessionsFor.id}</code>)?
+            </p>
+            <div style={{ background: '#211b0d', border: '1px solid #854d0e', borderRadius: 8, padding: 12, margin: '12px 0', fontSize: 12, color: '#fde68a', lineHeight: 1.55 }}>
+              <strong>This will:</strong>
+              <ul style={{ margin: '6px 0 0 16px', padding: 0 }}>
+                <li>Mark matches currently live in Cricket, Football, or Kabaddi as abandoned.</li>
+                <li>Clear active match pointers, overlays, replay/pre-match triggers, auction broadcast queues, and camera WebRTC signalling.</li>
+                <li>Preserve completed results and all score/event history.</li>
+                <li>Close open scorer, auction, and OBS tabs first; connected tabs can recreate session state.</li>
+              </ul>
+            </div>
+            <label style={{ display: 'grid', gap: 5, fontSize: 12, color: '#cbd5e1' }}>
+              <span>Type <strong style={{ color: '#f8fafc' }}>CLEAR</strong> to confirm</span>
+              <input value={clearSessionsConfirmation} onChange={(event) => setClearSessionsConfirmation(event.target.value)} style={inp} autoComplete="off" />
+            </label>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 18 }}>
+              <button onClick={() => setClearSessionsFor(null)} style={btnGhost} disabled={clearingSessions}>Cancel</button>
+              <button onClick={handleClearActiveSessions} disabled={clearingSessions || clearSessionsConfirmation.trim().toUpperCase() !== 'CLEAR'} style={{ ...btnPrimary, background: '#b45309' }}>
+                {clearingSessions ? 'Clearing…' : 'Close Matches & Clear Sessions'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Delete Tenant Confirmation Modal */}
       {deleteFor && (
