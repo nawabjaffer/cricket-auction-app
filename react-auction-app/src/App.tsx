@@ -2650,6 +2650,7 @@ function ErrorScreen({ error, onRetry }: { error: Error | null; onRetry: () => v
 
 // Help Modal
 function HelpModal({ onClose }: { onClose: () => void }) {
+  const navigate = useNavigate();
   const hotkeyList = useHotkeyHelp();
   const [activeTab, setActiveTab] = useState<'features' | 'shortcuts'>('features');
 
@@ -2797,6 +2798,12 @@ function HelpModal({ onClose }: { onClose: () => void }) {
 
         {/* Disclaimer */}
         <div className="px-6 pb-5 pt-2 border-t border-[var(--theme-secondary)]/20">
+          <button
+            onClick={() => { onClose(); navigate('/help'); }}
+            className="w-full rounded-lg bg-[var(--theme-accent)] px-4 py-2.5 text-sm font-semibold text-white hover:opacity-90"
+          >
+            Read all guides
+          </button>
           <p className="text-[10px] text-[var(--theme-text-secondary)]/60 leading-relaxed text-center">
             For private use only. Player stats sourced from public cricket records. NJS Creative Labs is not affiliated with any cricket board or franchise. All team names and logos are property of their respective owners.
           </p>

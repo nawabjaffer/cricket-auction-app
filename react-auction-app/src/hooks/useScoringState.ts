@@ -95,6 +95,8 @@ export function useScoringState(matchId: string | undefined) {
     if (!db) { setState(s => ({ ...s, loading: false, error: 'Database not ready' })); return; }
     dbRef.current = db;
     const basePath = tenantPath('scoring');
+    let cancelled = false;
+    let latestMatch: MatchSetup | null = null;
 
     try {
       scoringService.initialize(db, basePath);
@@ -157,9 +159,10 @@ export function useScoringState(matchId: string | undefined) {
           } catch { /* auction data not available, lineups stay empty */ }
         }
 
+        if (cancelled) return;
         setState(s => ({
           ...s,
-          match,
+          match: latestMatch || match,
           lineups: { teamA: normalizeLineup(lineupA), teamB: normalizeLineup(lineupB) },
           loading: false,
         }));
@@ -168,6 +171,10 @@ export function useScoringState(matchId: string | undefined) {
       }
     };
     load();
+    const unsubMatch = onValue(ref(db, `${basePath}/matches/${matchId}/setup`), snapshot => {
+      latestMatch = snapshot.exists() ? snapshot.val() as MatchSetup : null;
+      setState(current => ({ ...current, match: latestMatch }));
+    });
 
     // Subscribe live
     const unsubLive = scoringService.subscribeLiveScore(matchId, (live) => {
@@ -195,7 +202,7 @@ export function useScoringState(matchId: string | undefined) {
       }
     });
 
-    return () => { unsubLive(); unsubOverlay(); unsubInn(); };
+    return () => { cancelled = true; unsubMatch(); unsubLive(); unsubOverlay(); unsubInn(); };
   }, [matchId]);
 
   // Record ball — with debounce protection
@@ -203,6 +210,7 @@ export function useScoringState(matchId: string | undefined) {
     const liveSnapshot = liveScoreRef.current;
     const inningsSnapshot = inningsRef.current;
     if (!matchId || !liveSnapshot || !adapterRef.current || recording || recordingRef.current) return;
+    if (state.match?.interruption || state.match?.status !== 'live') return;
 
     if (liveSnapshot.currentBatsmen.some(batsman => batsman.playerId === PENDING_NEXT_BATSMAN_ID)) {
       setState(s => ({ ...s, error: 'Select the next batter before recording another delivery.' }));

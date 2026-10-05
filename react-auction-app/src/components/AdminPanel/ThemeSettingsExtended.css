@@ -10,8 +10,8 @@
 }
 
 .admin-section-card {
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--adm-surface, #ffffff);
+  border: 1px solid var(--adm-border, #dbe2df);
   border-radius: 12px;
   padding: 24px;
 }
@@ -19,13 +19,13 @@
 .admin-section-title {
   font-size: 1.1rem;
   font-weight: 700;
-  color: #fff;
+  color: var(--adm-text, #14211f);
   margin-bottom: 6px;
 }
 
 .admin-section-desc {
   font-size: 0.82rem;
-  color: rgba(0, 0, 0, 0.5);
+  color: var(--adm-text-muted, #5a6866);
   margin-bottom: 16px;
   line-height: 1.5;
 }
@@ -66,12 +66,12 @@
   gap: 8px;
   padding: 8px 12px;
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.02);
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: var(--adm-primary, #f5f6f3);
+  border: 1px solid var(--adm-border, #dbe2df);
   cursor: pointer;
   transition: all 0.15s;
   font-size: 0.85rem;
-  color: #000;
+  color: var(--adm-text, #14211f);
 }
 .admin-checkbox-item:hover {
   background: rgba(59, 130, 246, 0.08);

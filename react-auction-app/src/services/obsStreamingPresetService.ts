@@ -14,6 +14,9 @@ export const CRICKET_REPLAY_VLC_SCENE = 'Cricket - Replay VLC Fallback';
 export const CRICKET_REPLAY_SPEED_PERCENT = 60;
 export const CRICKET_OVERLAY_WIDTH = 1920;
 export const CRICKET_OVERLAY_HEIGHT = 1080;
+export const CRICKET_HIGHLIGHTS_SCENE = 'Match Highlights';
+export const CRICKET_HIGHLIGHTS_INPUT = 'Cricket Match Highlights VLC';
+export const CRICKET_SUPER_MOVEMENTS_CONTROL = 'Cricket Super Movements Control';
 
 export interface CricketStreamingPresetOptions {
   cameraCount: number;
@@ -24,6 +27,8 @@ export interface CricketStreamingPresetOptions {
   drsDurationSeconds?: number;
   overlayUrl?: string;
   replayDirectory?: string;
+  matchHighlightsEnabled?: boolean;
+  saveSuperMovements?: boolean;
 }
 
 export interface CricketStreamingPresetResult {
@@ -103,6 +108,7 @@ class OBSStreamingPresetService {
   private replayEventUnsubscribe: (() => void) | null = null;
   private capturingDRS = false;
   private normalReplaySeconds = 14;
+  private replayRecoveryTimer: ReturnType<typeof setTimeout> | undefined;
 
   async createCricketMatchSetup(options: CricketStreamingPresetOptions): Promise<CricketStreamingPresetResult> {
     if (!obsService.isConnected()) throw new Error('Connect to OBS before creating the streaming setup.');
@@ -465,6 +471,29 @@ class OBSStreamingPresetService {
       warnings.push('VLC Video Source is unavailable. Install VLC and the OBS VLC source, then run Match Setup again.');
     }
 
+    if (options.matchHighlightsEnabled) {
+      await ensureScene(CRICKET_HIGHLIGHTS_SCENE);
+      if (vlcKind) {
+        await ensureInput(CRICKET_HIGHLIGHTS_SCENE, CRICKET_HIGHLIGHTS_INPUT, vlcKind, {
+          playlist: [], loop: false, shuffle: false,
+        });
+      } else warnings.push('Match Highlights requires VLC Video Source. Install VLC and rerun Match Setup.');
+    }
+    if (options.saveSuperMovements || options.matchHighlightsEnabled) {
+      const textKind = availableKind(kinds, 'text_gdiplus', ['text_ft2_source']);
+      const created = await ensureInput(audioScene, CRICKET_SUPER_MOVEMENTS_CONTROL, textKind, {
+        text: JSON.stringify({ saveEnabled: !!options.saveSuperMovements, highlightsEnabled: !!options.matchHighlightsEnabled, replayDirectory: replayDirectory || '' }),
+      });
+      if (created) {
+        const items = await obsService.request<SceneItemsResponse>('GetSceneItemList', { sceneName: audioScene });
+        const control = items.sceneItems.find(item => item.sourceName === CRICKET_SUPER_MOVEMENTS_CONTROL);
+        if (control) await obsService.request('SetSceneItemEnabled', { sceneName: audioScene, sceneItemId: control.sceneItemId, sceneItemEnabled: false });
+      } else warnings.push('Super Movements requires an OBS Text source for script communication.');
+      warnings.push('Load obs-super-movements.py in OBS Tools > Scripts (Python required) to copy Super Movements and refresh the Match Highlights playlist. The browser cannot install OBS scripts.');
+    } else if (inputs.has(CRICKET_SUPER_MOVEMENTS_CONTROL)) {
+      await obsService.request('SetInputSettings', { inputName: CRICKET_SUPER_MOVEMENTS_CONTROL, inputSettings: { text: JSON.stringify({ saveEnabled: false, highlightsEnabled: false }) }, overlay: true });
+    }
+
     const instantReplayKind = [...kinds].find(kind => /(?:instant.*replay|replay.*source|source.*replay)/i.test(kind));
     if (instantReplayKind === 'replay_source') {
       await ensureInput(CRICKET_CAMERA_REPLAY_SCENE, 'Cricket Instant Replay Source', instantReplayKind, {
@@ -498,17 +527,60 @@ class OBSStreamingPresetService {
     };
   }
 
-  configureLatestReplaySource(inputNames?: string | string[], durationSeconds = 14): void {
-    this.normalReplaySeconds = Math.max(5, Math.min(120, durationSeconds));
+  configureLatestReplaySource(inputNames?: string | string[], durationSeconds?: number, config: Partial<OBSReplayConfig> = {}): void {
+    this.normalReplaySeconds = Math.max(5, Math.min(120, durationSeconds ?? config.replayDurationSeconds ?? this.normalReplaySeconds));
     this.replayEventUnsubscribe?.();
     this.replayEventUnsubscribe = null;
+    if (this.replayRecoveryTimer) clearTimeout(this.replayRecoveryTimer);
     const names = Array.isArray(inputNames) ? inputNames.filter(Boolean) : inputNames ? [inputNames] : [];
     if (names.length === 0) return;
     this.replayEventUnsubscribe = obsService.onEvent((event, data) => {
+      if (event === 'CurrentProgramSceneChanged') {
+        if (this.replayRecoveryTimer) clearTimeout(this.replayRecoveryTimer);
+        const sceneName = (data as { sceneName?: string } | null)?.sceneName;
+        const replayScenes = [config.replaySceneName || CRICKET_REPLAY_SCENE, CRICKET_CAMERA_REPLAY_SCENE, CRICKET_REPLAY_VLC_SCENE];
+        if (sceneName && replayScenes.includes(sceneName)) {
+          this.replayRecoveryTimer = setTimeout(() => {
+            void this.recoverReplayScene(sceneName, config.liveSceneName || CRICKET_LIVE_SCENE);
+          }, Math.ceil(this.normalReplaySeconds * 1000 * 100 / CRICKET_REPLAY_SPEED_PERCENT) + 5000);
+        }
+      }
       if (event !== 'ReplayBufferSaved') return;
       const savedReplayPath = (data as { savedReplayPath?: string } | null)?.savedReplayPath;
       if (savedReplayPath && !this.capturingDRS) void Promise.all(names.map(name => this.playLatestReplay(name, savedReplayPath)));
     });
+  }
+
+  private async recoverReplayScene(replayScene: string, liveScene: string): Promise<void> {
+    try {
+      if (!obsService.isConnected()) return;
+      const current = await obsService.request<{ currentProgramSceneName: string }>('GetCurrentProgramScene');
+      if (current.currentProgramSceneName === replayScene) {
+        await obsService.request('SetCurrentProgramScene', { sceneName: liveScene });
+      }
+    } catch (error) { console.error('[OBS Replay] Live recovery failed:', error); }
+  }
+
+  async saveSuperMovement(signal?: AbortSignal): Promise<void> {
+    if (signal?.aborted) throw new Error('Cancelled by user.');
+    const settings = await obsService.request<{ inputSettings: { text?: string } }>('GetInputSettings', { inputName: CRICKET_SUPER_MOVEMENTS_CONTROL });
+    const control = JSON.parse(settings.inputSettings.text || '{}') as Record<string, unknown>;
+    if (!control.saveEnabled) throw new Error('Enable Save Super Movements and run Match Setup first.');
+    if (Date.now() - Number(control.readyAt || 0) > 5000) throw new Error('Load the Super Movements Python script in OBS Tools > Scripts first.');
+    const requestId = crypto.randomUUID();
+    await obsService.request('SetInputSettings', { inputName: CRICKET_SUPER_MOVEMENTS_CONTROL,
+      inputSettings: { text: JSON.stringify({ ...control, requestId, armedAt: Date.now(), status: 'armed', error: '', savedPath: '' }) }, overlay: true });
+    if (signal?.aborted) throw new Error('Cancelled by user.');
+    await obsService.request('SaveReplayBuffer');
+    for (let attempt = 0; attempt < 150; attempt++) {
+      if (signal?.aborted) throw new Error('Cancelled by user. The saved clip may still finish copying in OBS.');
+      const response = await obsService.request<{ inputSettings: { text?: string } }>('GetInputSettings', { inputName: CRICKET_SUPER_MOVEMENTS_CONTROL });
+      const result = JSON.parse(response.inputSettings.text || '{}') as Record<string, unknown>;
+      if (result.requestId === requestId && result.status === 'saved') return;
+      if (result.requestId === requestId && result.status === 'error') throw new Error(String(result.error || 'OBS could not copy the Super Movement.'));
+      await new Promise<void>(resolve => setTimeout(resolve, 200));
+    }
+    throw new Error('Timed out waiting for the Super Movements copy. Check the OBS script log and disk space.');
   }
 
   async openDRSReview(inputName = CRICKET_DRS_MEDIA_INPUT, sceneName = 'Cricket - DRS', signal?: AbortSignal, durationSeconds = 40): Promise<void> {
@@ -564,9 +636,9 @@ class OBSStreamingPresetService {
     const slowedReplayDurationMs = Math.ceil(Math.max(5, replayDurationSeconds) * 1000 * 100 / CRICKET_REPLAY_SPEED_PERCENT);
     const replaySteps = (prefix: string) => [
       { id: `${prefix}-save`, label: 'Save replay clip', action: 'replay_buffer_save' as const, delayMs: 0 },
-      { id: `${prefix}-scene`, label: 'Show replay scene', action: 'scene_switch' as const, sceneName: CRICKET_REPLAY_SCENE, delayMs: 800 },
+      { id: `${prefix}-scene`, label: 'Show replay scene', action: 'scene_switch' as const, sceneName: config.replaySceneName || CRICKET_REPLAY_SCENE, delayMs: 800 },
       { id: `${prefix}-pause`, label: 'Pause replay after one pass', action: 'media_input_action' as const, inputName: CRICKET_REPLAY_MEDIA_INPUT, mediaAction: 'OBS_WEBSOCKET_MEDIA_INPUT_ACTION_PAUSE' as const, delayMs: slowedReplayDurationMs },
-      { id: `${prefix}-return`, label: 'Return to live', action: 'scene_switch' as const, sceneName: CRICKET_LIVE_SCENE, delayMs: 0 },
+      { id: `${prefix}-return`, label: 'Return to live', action: 'scene_switch' as const, sceneName: config.liveSceneName || CRICKET_LIVE_SCENE, delayMs: 0 },
     ];
     const buttons: OBSReplayButton[] = [
       { id: 'cricket-preset-buffer-start', label: 'Start Replay Buffer', icon: '⏺', color: '#22c55e', action: 'replay_buffer_start', order: 0, enabled: true },
@@ -580,9 +652,13 @@ class OBSStreamingPresetService {
       { id: 'cricket-preset-drs-forward-frame', label: '+1 Frame', icon: '|▶', color: '#64748b', action: 'media_input_seek', inputName: CRICKET_REPLAY_MEDIA_INPUT, mediaCursorOffset: 33, order: 11, enabled: true },
       { id: 'cricket-preset-drs-back-second', label: '−1 Second', icon: '↶', color: '#64748b', action: 'media_input_seek', inputName: CRICKET_REPLAY_MEDIA_INPUT, mediaCursorOffset: -1000, order: 12, enabled: true },
       { id: 'cricket-preset-drs-forward-second', label: '+1 Second', icon: '↷', color: '#64748b', action: 'media_input_seek', inputName: CRICKET_REPLAY_MEDIA_INPUT, mediaCursorOffset: 1000, order: 13, enabled: true },
-      { id: 'cricket-preset-instant-replay', label: 'Instant Replay', icon: '↩', color: '#3b82f6', action: 'series', order: 4, enabled: true, series: replaySteps('cricket-replay') },
-      { id: 'cricket-preset-test-replay', label: 'Test Replay', icon: '🧪', color: '#14b8a6', action: 'series', order: 5, enabled: true, series: replaySteps('cricket-test-replay') },
+      { id: 'cricket-preset-instant-replay', label: 'Instant Replay', icon: '↩', color: '#3b82f6', action: 'series', returnToLiveSceneName: config.liveSceneName || CRICKET_LIVE_SCENE, order: 4, enabled: true, series: replaySteps('cricket-replay') },
+      { id: 'cricket-preset-test-replay', label: 'Test Replay', icon: '🧪', color: '#14b8a6', action: 'series', returnToLiveSceneName: config.liveSceneName || CRICKET_LIVE_SCENE, order: 5, enabled: true, series: replaySteps('cricket-test-replay') },
+      { id: 'cricket-preset-super-movement', label: 'Super Movements', icon: 'S', color: '#059669', action: 'series', returnToLiveSceneName: config.liveSceneName || CRICKET_LIVE_SCENE, order: 16, enabled: !!config.saveSuperMovements,
+        series: replaySteps('cricket-super').map((step, index) => index === 0 ? { ...step, action: 'super_movement_save' as const, label: 'Save replay and Super Movement' } : step) },
+      { id: 'cricket-preset-match-highlights', label: 'Match Highlights', icon: 'H', color: '#059669', action: 'scene_switch', sceneName: CRICKET_HIGHLIGHTS_SCENE, order: 17, enabled: !!config.matchHighlightsEnabled },
       { id: 'cricket-preset-buffer-stop', label: 'Stop Replay Buffer', icon: '⏹', color: '#ef4444', action: 'replay_buffer_stop', order: 6, enabled: true },
+      { id: 'cricket-preset-go-live', label: 'Go Live', icon: 'LIVE', color: '#ef4444', action: 'scene_switch', sceneName: config.liveSceneName || CRICKET_LIVE_SCENE, order: 15, enabled: true },
       { id: 'cricket-preset-drs-live', label: 'Go Live', icon: 'LIVE', color: '#ef4444', action: 'scene_switch', sceneName: config.liveSceneName || CRICKET_LIVE_SCENE, dockView: 'drs', order: 14, enabled: true },
     ];
     return buttons.map(button => {
@@ -606,6 +682,8 @@ class OBSStreamingPresetService {
   dispose(): void {
     this.replayEventUnsubscribe?.();
     this.replayEventUnsubscribe = null;
+    if (this.replayRecoveryTimer) clearTimeout(this.replayRecoveryTimer);
+    this.replayRecoveryTimer = undefined;
   }
 
   private async waitForReplayMedia(inputName: string, signal?: AbortSignal): Promise<number> {

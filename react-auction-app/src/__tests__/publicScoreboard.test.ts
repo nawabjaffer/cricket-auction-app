@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Innings, MatchSetup } from '../types/scoring';
-import { buildCorrectedFinalScore, filterPublicMatches, validatePublicInningsCorrection, verifySuperAdminMobileCredentials } from '../utils/publicScoreboard';
+import { buildCorrectedFinalScore, buildPublicTournamentPlayers, getMatchNumbers, publicMatchResult, filterPublicMatches, validatePublicInningsCorrection, verifySuperAdminMobileCredentials } from '../utils/publicScoreboard';
 
 const makeMatch = (id: string, status: MatchSetup['status'], date: string): MatchSetup => ({
   id,
@@ -32,6 +32,28 @@ const validInnings: Innings = {
 };
 
 describe('public scoreboard helpers', () => {
+  it('aggregates tournament boundaries and maidens without counting final snapshots twice', () => {
+    const setup = { ...makeMatch('one', 'completed', ''), teamA: { id: 'a', name: 'Team A' }, teamB: { id: 'b', name: 'Team B' } };
+    const score = { ...validInnings, bowlers: [{ ...validInnings.bowlers[0], maidens: 2 }] };
+    const players = buildPublicTournamentPlayers([
+      { setup, innings: { 1: score }, final: { matchId: 'one', status: 'completed', innings: [score], teams: [], result: null, toss: null, venue: '', date: '' } },
+      { setup: { ...setup, id: 'two' }, innings: { 1: score } },
+    ]);
+    expect(players.find(player => player.playerId === 'batter-1')).toMatchObject({ runs: 20, fours: 2, matches: 2, teamName: 'Team A' });
+    expect(players.find(player => player.playerId === 'bowler-1')).toMatchObject({ wickets: 2, maidens: 4, bowlingBalls: 24, economy: 6 });
+  });
+
+  it('preserves stored match numbers while assigning unique legacy numbers', () => {
+    const first = makeMatch('a', 'scheduled', '');
+    const second = { ...makeMatch('b', 'scheduled', ''), matchNumber: 1 };
+    expect([...getMatchNumbers([first, second]).values()].sort()).toEqual([1, 2]);
+  });
+
+  it('includes abandoned fixtures in completed and shows the interruption reason', () => {
+    const match = { ...makeMatch('rain', 'abandoned', ''), interruption: { kind: 'abandoned' as const, reason: 'Rain', updatedAt: 1 } };
+    expect(filterPublicMatches([match], 'completed')).toHaveLength(1);
+    expect(publicMatchResult(match)).toBe('Match abandoned: Rain');
+  });
   it('verifies configured mobile credentials without trimming the password', () => {
     const configured = { superAdminUsername: 'organizer', superAdminPassword: 'secure pass' };
     expect(verifySuperAdminMobileCredentials(configured, ' organizer ', 'secure pass')).toBe(true);

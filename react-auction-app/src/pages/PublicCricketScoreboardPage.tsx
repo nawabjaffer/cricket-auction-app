@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { onValue, ref, type Database } from 'firebase/database';
 import { useSearchParams } from 'react-router-dom';
-import { IoCalendarOutline, IoChevronDown, IoFootballOutline, IoShieldCheckmarkOutline, IoStatsChartOutline, IoTrophyOutline, IoPencilOutline, IoSaveOutline, IoLockClosedOutline } from 'react-icons/io5';
+import { IoCalendarOutline, IoFootballOutline, IoShieldCheckmarkOutline, IoStatsChartOutline, IoTrophyOutline, IoPencilOutline, IoSaveOutline, IoLockClosedOutline } from 'react-icons/io5';
 import { SortableColumnHeader, useSortableRows } from '../components/SortableTable';
 import { getTenantSlugFromPath } from '../hooks/useTenantNavigate';
 import { realtimeSync } from '../services/realtimeSync';
@@ -9,7 +9,8 @@ import { scoringService } from '../services/scoring';
 import { tenantPath } from '../services/tenantPath';
 import type { BallEvent, BatsmanInnings, BowlerInnings, Innings, LiveScore, MatchScore, MatchSetup, MatchStatsSnapshot, ScoringOverlayConfig } from '../types/scoring';
 import { buildPointsTableStandings, buildPoolAssignments, type PointsTableMatch } from '../utils/pointsTable';
-import { buildCorrectedFinalScore, filterPublicMatches, type PublicMatchFilter, validatePublicInningsCorrection, verifySuperAdminMobileCredentials } from '../utils/publicScoreboard';
+import { buildCorrectedFinalScore, buildPublicTournamentPlayers, publicMatchResult, filterPublicMatches, type PublicMatchFilter, validatePublicInningsCorrection, verifySuperAdminMobileCredentials } from '../utils/publicScoreboard';
+import { PlayerImage } from '../components/PlayerImage/PlayerImage';
 import { reconcileEditedLiveScore } from '../utils/scorecardCorrections';
 import './PublicCricketScoreboardPage.css';
 
@@ -378,7 +379,8 @@ export default function PublicCricketScoreboardPage() {
   const [balls, setBalls] = useState<BallEvent[]>([]);
   const [finalScore, setFinalScore] = useState<MatchScore | null>(null);
   const [matchStats, setMatchStats] = useState<MatchStatsSnapshot | null>(null);
-  const [standingsMatches, setStandingsMatches] = useState<PointsTableMatch[]>([]);
+  const [standingsMatches, setStandingsMatches] = useState<(PointsTableMatch & { live?: LiveScore })[]>([]);
+  const [playerImages, setPlayerImages] = useState<Record<string, string>>({});
   const [allTeams, setAllTeams] = useState<{ id: string; name: string; logoUrl?: string }[]>([]);
   const [poolSettings, setPoolSettings] = useState<ScoringOverlayConfig['pointsTablePools']>();
   const [mobileAdminCredentials, setMobileAdminCredentials] = useState<{ superAdminUsername?: string; superAdminPassword?: string } | null>(null);
@@ -422,17 +424,8 @@ export default function PublicCricketScoreboardPage() {
   }, []);
 
   const filteredMatches = useMemo(() => filterPublicMatches(matches, matchFilter), [matches, matchFilter]);
-  const selectedMatchId = filteredMatches.some(item => item.id === queryMatchId)
-    ? queryMatchId
-    : filteredMatches[0]?.id || '';
-
-  useEffect(() => {
-    if (!matches.length || (queryMatchId && filteredMatches.some(item => item.id === queryMatchId))) return;
-    const next = filteredMatches[0];
-    if ((next?.id || '') === queryMatchId) return;
-    setSearchParams(next ? { matchId: next.id } : {}, { replace: true });
-    setActiveTab(matchFilter === 'completed' ? 'scorecards' : 'summary');
-  }, [filteredMatches, matchFilter, matches.length, queryMatchId, setSearchParams]);
+  const selectedMatchId = matches.some(item => item.id === queryMatchId) ? queryMatchId : '';
+  const tournamentPlayers = buildPublicTournamentPlayers(standingsMatches);
 
   useEffect(() => {
     if (!match) return;
@@ -446,10 +439,10 @@ export default function PublicCricketScoreboardPage() {
         setStandingsMatches([]);
         return;
       }
-      const records = snapshot.val() as Record<string, { setup?: MatchSetup; final?: MatchScore; innings?: Record<string, Innings> }>;
-      const allScores: PointsTableMatch[] = [];
+      const records = snapshot.val() as Record<string, { setup?: MatchSetup; final?: MatchScore; innings?: Record<string, Innings>; live?: LiveScore }>;
+      const allScores: (PointsTableMatch & { live?: LiveScore })[] = [];
       for (const record of Object.values(records)) {
-        if (record?.setup) allScores.push({ setup: record.setup, final: record.final, innings: record.innings });
+        if (record?.setup) allScores.push({ setup: record.setup, final: record.final, innings: record.innings, live: record.live });
       }
       setStandingsMatches(allScores);
     });
@@ -467,7 +460,12 @@ export default function PublicCricketScoreboardPage() {
       const config = snapshot.exists() ? snapshot.val() as ScoringOverlayConfig : undefined;
       setPoolSettings(config?.pointsTablePools);
     });
-    return () => { stopStandings(); stopTeams(); stopOverlayConfig(); };
+    const stopImages = onValue(ref(database, tenantPath('auction/soldPlayers')), snapshot => {
+      const players = snapshot.val() as Record<string, { id?: string; imageUrl?: string; processedImageUrl?: string }> | null;
+      setPlayerImages(Object.fromEntries(Object.values(players || {}).flatMap(player => player?.id && (player.processedImageUrl || player.imageUrl)
+        ? [[player.id, player.processedImageUrl || player.imageUrl!]] : [])));
+    });
+    return () => { stopStandings(); stopTeams(); stopOverlayConfig(); stopImages(); };
   }, [database]);
 
   useEffect(() => {
@@ -529,9 +527,9 @@ export default function PublicCricketScoreboardPage() {
 
   const handleMatchFilterChange = (filter: PublicMatchFilter) => {
     setMatchFilter(filter);
-    const next = filterPublicMatches(matches, filter)[0];
-    setSearchParams(next ? { matchId: next.id } : {}, { replace: true });
-    setActiveTab(filter === 'completed' ? 'scorecards' : 'summary');
+    setSearchParams({}, { replace: true });
+    setActiveTab('summary');
+    setScorecardEditorOpen(false);
     setEditMessage('');
   };
 
@@ -596,14 +594,6 @@ export default function PublicCricketScoreboardPage() {
               onClick={() => handleMatchFilterChange(filter)}
             >{filter === 'all' ? 'All' : filter[0].toUpperCase() + filter.slice(1)}</button>)}
           </div>
-          <label className="public-scoreboard__match-picker">
-            <span>Match</span>
-            <select value={selectedMatchId} onChange={event => handleMatchSelection(event.target.value)}>
-              {filteredMatches.length === 0 && <option value="">No {matchFilter === 'all' ? '' : `${matchFilter} `}matches</option>}
-              {filteredMatches.map(item => <option key={item.id} value={item.id}>{item.teamA.name} vs {item.teamB.name} · {new Date(item.date).toLocaleDateString()}</option>)}
-            </select>
-            <IoChevronDown />
-          </label>
           <button className={`public-scoreboard__top-action ${activeTab === 'standings' ? 'is-active' : ''}`} onClick={() => setActiveTab(current => current === 'standings' ? 'summary' : 'standings')}>
             <IoTrophyOutline />Points Table
           </button>
@@ -615,17 +605,58 @@ export default function PublicCricketScoreboardPage() {
         </div>
       </header>
 
-      {error ? <div className="public-scoreboard__empty">{error}</div> : loading ? <div className="public-scoreboard__empty">Loading live score…</div> : !match
+      {error ? <div className="public-scoreboard__empty">{error}</div> : loading ? <div className="public-scoreboard__empty">Loading live score…</div> : !selectedMatchId
         ? activeTab === 'standings'
           ? <section className="public-scoreboard__content">{standingsSection}</section>
-          : <div className="public-scoreboard__empty">No match found. Ask the tournament admin to schedule a fixture.</div>
+          : <section className="public-scoreboard__content">
+            <div className="public-scoreboard__section-heading"><h2>{matchFilter === 'all' ? 'All Matches' : `${matchFilter[0].toUpperCase()}${matchFilter.slice(1)} Matches`}</h2><span>{filteredMatches.length} matches</span></div>
+            <div className="public-scoreboard__match-list">
+              {filteredMatches.map(item => <button type="button" className="public-scoreboard__match-row" key={item.id} onClick={() => handleMatchSelection(item.id)} aria-label={`View ${item.teamA.name} vs ${item.teamB.name}`}>
+                <span><small>{item.matchNumber ? `Match ${item.matchNumber} · ` : ''}{new Date(item.date).toLocaleString()}</small><strong>{item.teamA.name} vs {item.teamB.name}</strong><small>{item.venue}</small></span>
+                <span className={item.status === 'live' ? 'is-live' : ''}>{publicMatchResult(item, standingsMatches.find(record => record.setup.id === item.id)?.final)}</span>
+              </button>)}
+              {!filteredMatches.length && <div className="public-scoreboard__empty">No matches in this section.</div>}
+            </div>
+            {matchFilter === 'all' && <section className="public-scoreboard__tournament-stats">
+              <div className="public-scoreboard__section-heading"><h2>Tournament Stats</h2></div>
+              <div className="public-scoreboard__leaderboards">
+                {([
+                  { key: 'runs', title: 'Most Runs' }, { key: 'fours', title: 'Most Fours' },
+                  { key: 'sixes', title: 'Most Sixes' }, { key: 'wickets', title: 'Most Wickets' },
+                  { key: 'maidens', title: 'Most Maidens' }, { key: 'dots', title: 'Most Dot Balls' },
+                  { key: 'strikeRate', title: 'Best Strike Rate' }, { key: 'economy', title: 'Best Economy' },
+                ] as const).map(category => {
+                  const leaders = tournamentPlayers.filter(player => category.key === 'economy' ? player.bowlingBalls >= 6 : category.key === 'strikeRate' ? player.balls >= 10 : player[category.key] > 0)
+                    .sort((left, right) => (right[category.key] - left[category.key]) * (category.key === 'economy' ? -1 : 1) || left.playerName.localeCompare(right.playerName)).slice(0, 5);
+                  return <section className="public-scoreboard__leaderboard" key={category.key}>
+                    <h3>{category.title}</h3>
+                    {leaders.map(player => <div className="public-scoreboard__leader" key={`${player.teamId}:${player.playerId}`}>
+                      <PlayerImage imageUrl={playerImages[player.playerId]} playerName={player.playerName} size="sm" />
+                      <span><strong>{player.playerName}</strong><small>{player.teamName} · {player.matches} matches</small></span>
+                      <b>{category.key === 'economy' || category.key === 'strikeRate' ? player[category.key].toFixed(2) : player[category.key]}</b>
+                    </div>)}
+                    {!leaders.length && <p>No figures recorded yet.</p>}
+                  </section>;
+                })}
+              </div>
+            </section>}
+          </section>
+        : !match ? <div className="public-scoreboard__empty">Loading match…</div>
         : (
         <>
+          <div className="public-scoreboard__back"><button type="button" onClick={() => handleMatchFilterChange(matchFilter)}>Back to matches</button></div>
           <section className="public-scoreboard__hero">
             <div className="public-scoreboard__eyebrow"><span className={`public-scoreboard__live-indicator ${match.status === 'live' ? 'is-live' : ''}`} />{match.status === 'live' ? 'LIVE MATCH' : match.status.toUpperCase()}</div>
             <h1>{match.teamA.name}<span>vs</span>{match.teamB.name}</h1>
             <p>{match.venue || 'Venue TBC'} · {new Date(match.date).toLocaleString()}</p>
             <strong className="public-scoreboard__result">{resultText}</strong>
+            {match.interruption && <p role="status">{publicMatchResult(match, finalScore || undefined)}</p>}
+            <div className="public-scoreboard__match-totals">
+              <span>Total fours <strong>{innings.reduce((total, entry) => total + (entry.batsmen || []).reduce((sum, player) => sum + (player.fours || 0), 0), 0)}</strong></span>
+              <span>Total sixes <strong>{innings.reduce((total, entry) => total + (entry.batsmen || []).reduce((sum, player) => sum + (player.sixes || 0), 0), 0)}</strong></span>
+              <span>Total maidens <strong>{innings.reduce((total, entry) => total + (entry.bowlers || []).reduce((sum, player) => sum + (player.maidens || 0), 0), 0)}</strong></span>
+              <span>Total wickets <strong>{innings.reduce((total, entry) => total + entry.totalWickets, 0)}</strong></span>
+            </div>
             <div className="public-scoreboard__scoreline">
               {innings.map(inningsScore => {
                 const team = inningsTeam(inningsScore);

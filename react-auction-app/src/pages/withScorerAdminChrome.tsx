@@ -48,6 +48,9 @@ export function withScorerAdminChrome<P extends object>(
         </header>
 
         <div className="scorer-chrome__quick-actions">
+          {gameType === 'cricket' && <button className="scorer-chrome__quick-btn" onClick={() => openQuickTab('/cricket/scoreboard')}>
+            <IoDesktop size={14} /> Public Scorecard
+          </button>}
           <button className="scorer-chrome__quick-btn" onClick={() => openQuickTab(`/${gameType}/scorer/update`)}>
             <IoPencil size={14} /> Update Scorecard
           </button>

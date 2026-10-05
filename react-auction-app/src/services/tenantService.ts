@@ -5,7 +5,7 @@
 // `tenants/{tenantId}/...`.
 // ============================================================================
 
-import { get, ref, set, update } from 'firebase/database';
+import { get, onValue, ref, set, update } from 'firebase/database';
 import { realtimeSync } from './realtimeSync';
 import { DEFAULT_TENANT_ID, platformPath } from './tenantPath';
 import type { FootballRulesConfig } from '../types/football';
@@ -82,6 +82,14 @@ class TenantService {
     if (!db) return null;
     const snap = await get(ref(db, `${TENANT_REGISTRY_PATH()}/${id}`));
     return snap.exists() ? (snap.val() as TenantRecord) : null;
+  }
+
+  async watchTenant(id: string, callback: (tenant: TenantRecord | null) => void, onError: (error: Error) => void): Promise<() => void> {
+    const db = await this.getDb();
+    if (!db) throw new Error('Database not initialized');
+    return onValue(ref(db, `${TENANT_REGISTRY_PATH()}/${id}`), (snapshot) => {
+      callback(snapshot.exists() ? snapshot.val() as TenantRecord : null);
+    }, onError);
   }
 
   /** Create a tenant. Idempotent — does NOT overwrite an existing record. */

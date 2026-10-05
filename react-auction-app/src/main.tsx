@@ -1,6 +1,6 @@
 import { Component, StrictMode, type ReactNode } from 'react'
 import { createRoot } from 'react-dom/client'
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { setupDebugConsole } from './utils/logger'
 
@@ -26,6 +26,7 @@ import PublicCricketScoreboardPage from './pages/PublicCricketScoreboardPage'
 import TenantScoringRouterPage from './pages/TenantScoringRouterPage'
 import GameScorerPage from './pages/GameScorerPage'
 import PlayerRegistrationPage from './pages/PlayerRegistrationPage'
+import GuidesPage from './pages/GuidesPage'
 import { TenantGate } from './components/TenantGate/TenantGate'
 import './index.css'
 
@@ -74,6 +75,7 @@ createRoot(document.getElementById('root')!).render(
         <BrowserRouter>
           <Routes>
             {/* Legacy top-level routes — all fall back to the default tenant (epl_2026) */}
+            <Route element={<TenantGate><Outlet /></TenantGate>}>
             <Route path="/" element={<App />} />
             <Route path="/connect-bididng" element={<MobileBiddingLivePage />} />
             <Route path="/connect-bidding" element={<MobileBiddingLivePage />} />
@@ -103,6 +105,8 @@ createRoot(document.getElementById('root')!).render(
             <Route path="/match/score/update" element={<ScoreUpdatePage />} />
             <Route path="/score/obs-overlay" element={<ScoreOBSOverlayPage />} />
             <Route path="/score/obs-dock" element={<ScoreOBSControlDock />} />
+            </Route>
+            <Route path="/help" element={<GuidesPage />} />
             {/* Super-admin portal — manage tournaments (tenants) */}
             <Route path="/platform-admin" element={<PlatformAdminPage />} />
 
@@ -117,12 +121,12 @@ createRoot(document.getElementById('root')!).render(
             <Route path="/:tenantSlug/live" element={<TenantGate><LivePage /></TenantGate>} />
             <Route path="/:tenantSlug/live-admin" element={<TenantGate><LiveAdminPage /></TenantGate>} />
             <Route path="/:tenantSlug/cricket/scoreboard" element={<TenantGate><PublicCricketScoreboardPage /></TenantGate>} />
-            <Route path="/:tenantSlug/cricket/scoreboard" element={<TenantGate><PublicCricketScoreboardPage /></TenantGate>} />
             <Route path="/:tenantSlug/obs-overlay" element={<TenantGate><OBSOverlayRouterPage /></TenantGate>} />
             <Route path="/:tenantSlug/obs-dock" element={<TenantGate><OBSDockPage /></TenantGate>} />
             <Route path="/:tenantSlug/mirror" element={<TenantGate><MirrorPage /></TenantGate>} />
             <Route path="/:tenantSlug/connect-bidding-admin" element={<TenantGate><ConnectBiddingAdminPage /></TenantGate>} />
             <Route path="/:tenantSlug/register" element={<TenantGate><PlayerRegistrationPage /></TenantGate>} />
+            <Route path="/:tenantSlug/help" element={<TenantGate><GuidesPage /></TenantGate>} />
             {/* Game-type scorer (tenant-scoped) — dispatches per :gameType, restricted to sports enabled in Platform Admin */}
             <Route path="/:tenantSlug/:gameType/scorer/admin" element={<TenantGate><GameScorerPage route="admin" /></TenantGate>} />
             <Route path="/:tenantSlug/:gameType/scorer/update" element={<TenantGate><GameScorerPage route="update" /></TenantGate>} />

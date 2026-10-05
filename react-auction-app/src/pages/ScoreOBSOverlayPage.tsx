@@ -1086,7 +1086,7 @@ export default function ScoreOBSOverlayPage() {
       </AnimatePresence>
 
       {/* ── Score Ticker (always visible when live) ──────────────── */}
-      {live && match && (
+      {live && match && _overlay?.scoreboardVisible !== false && (
         <TickerWithIntro
           live={live}
           match={match}
@@ -1101,7 +1101,7 @@ export default function ScoreOBSOverlayPage() {
       )}
 
       {/* ── Title Sponsor Strip ────────────────────────────────────── */}
-      {config.titleSponsorLogo && tickerVisible && (
+      {config.titleSponsorLogo && tickerVisible && _overlay?.scoreboardVisible !== false && (
         <div className="score-obs__sponsor-strip">
           <img src={config.titleSponsorLogo} alt="" className="score-obs__sponsor-logo" />
           {config.titleSponsorName && <span className="score-obs__sponsor-name">{config.titleSponsorName}</span>}
@@ -1109,6 +1109,9 @@ export default function ScoreOBSOverlayPage() {
       )}
 
       {/* ── L-Banner Ad ────────────────────────────────────────────── */}
+      {match?.interruption && <div className="score-obs__match-interruption" role="status">
+        <span>Match {match.interruption.kind} due to {match.interruption.reason}</span>
+      </div>}
       <AnimatePresence>
         {showAd && currentAd && (
           <motion.div
@@ -2843,7 +2846,7 @@ export function ScorecardTicker({ live, match, battingTeam, bowlingTeam, config,
     ? ticker.projectionRpos
     : [9, 12, 14]).filter(v => Number.isFinite(v) && v > 0).slice(0, 6);
 
-  const configuredWidgetModes = (ticker?.widgetModes && ticker.widgetModes.length > 0)
+  const configuredWidgetModes = ticker?.widgetsEnabled === false ? [] : ticker?.widgetModes
     ? ticker.widgetModes
     : (resolvedInfoMode === 'target'
       ? ['chase'] as TickerStatWidget[]

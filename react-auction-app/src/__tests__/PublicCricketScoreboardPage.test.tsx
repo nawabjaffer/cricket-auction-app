@@ -114,20 +114,35 @@ describe('public cricket scoreboard editing workflow', () => {
   });
   afterEach(cleanup);
 
+  it('shows tournament stats on All and keeps match details closed until selected', async () => {
+    renderPage();
+    expect(await screen.findByRole('heading', { name: 'Tournament Stats' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Most Maidens' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Scorecards' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Completed' }));
+    expect(screen.queryByRole('heading', { name: 'Tournament Stats' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'View Team A vs Team B' }));
+    expect(await screen.findByText('Total fours')).toBeInTheDocument();
+    expect(screen.getByText('Total maidens')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Back to matches' }));
+    expect(screen.getByRole('button', { name: 'View Team A vs Team B' })).toBeInTheDocument();
+  });
+
   it('separates upcoming and completed matches and places Points Table in the top bar', async () => {
     renderPage();
-    await waitFor(() => expect(screen.getByLabelText('Match')).toHaveValue(liveMatch.id));
+    await screen.findByRole('button', { name: 'View Team A vs Team C' });
+    expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Upcoming' }));
-    await waitFor(() => expect(screen.getByLabelText('Match')).toHaveValue(upcomingMatch.id));
+    expect(screen.getByRole('button', { name: 'View Team A vs Team C' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'View Team A vs Team B' })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Completed' }));
-    await waitFor(() => expect(screen.getByLabelText('Match')).toHaveValue(completedMatch.id));
+    fireEvent.click(await screen.findByRole('button', { name: 'View Team A vs Team B' }));
     expect(screen.getByRole('heading', { name: 'Batting & Bowling' })).toBeInTheDocument();
     for (let index = 0; index < 4; index += 1) {
       fireEvent.click(screen.getByRole('button', { name: 'Completed' }));
-      await waitFor(() => expect(screen.getByLabelText('Match')).toHaveValue(completedMatch.id));
+      fireEvent.click(await screen.findByRole('button', { name: 'View Team A vs Team B' }));
     }
     await new Promise(resolve => setTimeout(resolve, 75));
-    expect(screen.getByLabelText('Match')).toHaveValue(completedMatch.id);
     expect(screen.getByRole('button', { name: 'Scorecards' })).toHaveClass('is-active');
     fireEvent.click(screen.getByRole('button', { name: /Points Table/ }));
     expect(await screen.findByRole('heading', { name: 'Points Table' })).toBeInTheDocument();
@@ -136,6 +151,7 @@ describe('public cricket scoreboard editing workflow', () => {
   it('requires configured Super Admin credentials before editing a completed scorecard', async () => {
     renderPage();
     fireEvent.click(await screen.findByRole('button', { name: 'Completed' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'View Team A vs Team B' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Edit scorecard' }));
     const dialog = screen.getByRole('dialog', { name: 'Super Admin sign in' });
     fireEvent.change(within(dialog).getByLabelText('Username'), { target: { value: 'organizer' } });
@@ -165,7 +181,7 @@ describe('public cricket scoreboard editing workflow', () => {
   it('reconciles the live target when the first innings is corrected', async () => {
     renderPage();
     fireEvent.click(await screen.findByRole('button', { name: 'Live' }));
-    await waitFor(() => expect(screen.getByLabelText('Match')).toHaveValue(liveMatch.id));
+    fireEvent.click(await screen.findByRole('button', { name: 'View Team A vs Team B' }));
     fireEvent.click(screen.getByRole('button', { name: 'Super Admin Edit' }));
     const auth = screen.getByRole('dialog', { name: 'Super Admin sign in' });
     fireEvent.change(within(auth).getByLabelText('Username'), { target: { value: 'organizer' } });
@@ -192,9 +208,9 @@ describe('public cricket scoreboard editing workflow', () => {
     mocks.records = {};
     renderPage();
     fireEvent.click(await screen.findByRole('button', { name: 'Upcoming' }));
-    expect(await screen.findByText('No match found. Ask the tournament admin to schedule a fixture.')).toBeInTheDocument();
+    expect(await screen.findByText('No matches in this section.')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Completed' }));
-    expect(await screen.findByText('No match found. Ask the tournament admin to schedule a fixture.')).toBeInTheDocument();
+    expect(await screen.findByText('No matches in this section.')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /Points Table/ }));
     expect(await screen.findByRole('heading', { name: 'Points Table' })).toBeInTheDocument();
     expect(screen.getByText('Team A')).toBeInTheDocument();
@@ -204,6 +220,7 @@ describe('public cricket scoreboard editing workflow', () => {
     mocks.finalOnlyCompletedInnings = true;
     renderPage();
     fireEvent.click(await screen.findByRole('button', { name: 'Completed' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'View Team A vs Team B' }));
     expect(await screen.findByRole('heading', { name: 'Batting & Bowling' })).toBeInTheDocument();
     expect(screen.getByText('Batter One')).toBeInTheDocument();
   });

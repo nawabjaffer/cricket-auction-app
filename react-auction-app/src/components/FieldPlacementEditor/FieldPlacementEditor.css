@@ -62,7 +62,7 @@
   position: absolute;
   top: -6px;
   right: -6px;
-  background: #ef4444;
+  background: #b91c1c;
   color: #fff;
   font-size: 0.5rem;
   padding: 1px 4px;
@@ -91,7 +91,7 @@
   border-radius: 6px;
   border: none;
   background: #10b981;
-  color: #fff;
+  color: #052e16;
   font-size: 0.75rem;
   cursor: pointer;
   font-weight: 600;
@@ -239,7 +239,7 @@
   padding: 8px;
   border: none;
   border-radius: 6px;
-  background: #3b82f6;
+  background: #1d4ed8;
   color: #fff;
   font-weight: 600;
   font-size: 0.8rem;
@@ -252,7 +252,7 @@
   border: none;
   border-radius: 6px;
   background: #10b981;
-  color: #fff;
+  color: #052e16;
   font-weight: 600;
   font-size: 0.8rem;
   cursor: pointer;
@@ -263,7 +263,7 @@
   padding: 8px;
   border: none;
   border-radius: 6px;
-  background: #ef4444;
+  background: #b91c1c;
   color: #fff;
   font-weight: 600;
   font-size: 0.8rem;

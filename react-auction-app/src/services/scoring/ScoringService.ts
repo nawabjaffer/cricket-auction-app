@@ -4,7 +4,7 @@
 // convenience methods for match lifecycle.
 // ============================================================================
 
-import { ref, get, set, update, onValue, remove, type Database } from 'firebase/database';
+import { ref, get, set, update, onValue, remove, runTransaction, type Database } from 'firebase/database';
 import { MatchIndex } from '../matchIndex';
 import { ManualScoringAdapter } from './ManualScoringAdapter';
 import { CricHeroesAdapter } from './CricHeroesAdapter';
@@ -12,9 +12,10 @@ import type {
   IScoringAdapter, ScoringProvider, MatchSetup, MatchScoringConfig,
   LiveScore, PlayerMatchStats, PlayerCareerStats, MatchScore,
   ScoringOverlayConfig, ScoringAd, OverlayControlState, MatchLineup,
-  PreMatchState, Innings, QuickTeam,
+  PreMatchState, Innings, QuickTeam, MatchScheduleDefaults,
 } from '../../types/scoring';
 import { createEmptyCareerStats } from '../../types/scoring';
+import { getMatchNumbers } from '../../utils/publicScoreboard';
 
 export class ScoringService {
   private db: Database | null = null;
@@ -85,8 +86,28 @@ export class ScoringService {
   // ── Match Management ───────────────────────────────────────────────────────
 
   async createMatch(match: MatchSetup): Promise<string> {
-    await this.matchIndex.save(match.id, this.stripUndefinedDeep(match));
+    const existing = await this.getMatch(match.id);
+    let matchNumber = existing?.matchNumber || match.matchNumber;
+    if (!matchNumber) {
+      const matches = await this.getAllMatches();
+      const numbers = getMatchNumbers(matches);
+      const migration = Object.fromEntries(matches.filter(item => !item.matchNumber)
+        .map(item => [`matches/${item.id}/setup/matchNumber`, numbers.get(item.id)!]));
+      if (Object.keys(migration).length) await update(ref(this.ensureDb(), this.basePath), migration);
+      matchNumber = numbers.get(match.id);
+      if (!matchNumber) {
+        const maximum = Math.max(0, ...numbers.values());
+        const reservation = await runTransaction(ref(this.ensureDb(), `${this.basePath}/meta/lastMatchNumber`), current => Math.max(Number(current) || 0, maximum) + 1);
+        if (!reservation.committed) throw new Error('Could not allocate match number');
+        matchNumber = Number(reservation.snapshot.val());
+      }
+    }
+    await this.matchIndex.save(match.id, this.stripUndefinedDeep({ ...match, matchNumber }));
     return match.id;
+  }
+
+  async saveMatchScheduleDefaults(defaults: MatchScheduleDefaults): Promise<void> {
+    await set(ref(this.ensureDb(), `${this.basePath}/overlayConfig/matchScheduleDefaults`), this.stripUndefinedDeep(defaults));
   }
 
   async updateMatch(matchId: string, updates: Partial<MatchSetup>): Promise<void> {

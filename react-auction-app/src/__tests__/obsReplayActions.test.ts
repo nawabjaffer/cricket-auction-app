@@ -29,6 +29,9 @@ import {
   CRICKET_DRS_MEDIA_INPUT,
   CRICKET_REPLAY_SPEED_PERCENT,
   CRICKET_REPLAY_VLC_SCENE,
+  CRICKET_HIGHLIGHTS_SCENE,
+  CRICKET_HIGHLIGHTS_INPUT,
+  CRICKET_SUPER_MOVEMENTS_CONTROL,
   inferDesktopReplayDirectory,
   obsStreamingPresetService,
 } from '../services/obsStreamingPresetService';
@@ -156,6 +159,21 @@ describe('OBS replay actions', () => {
       expect.objectContaining({ id: commandId, matchId: 'match-42', buttonId: 'cricket-preset-instant-replay', status: 'pending' }),
     );
   });
+
+  it('returns to live when a replay series is cancelled while on replay', async () => {
+    const controller = new AbortController();
+    obs.request.mockImplementation(async (type: string) => type === 'GetCurrentProgramScene'
+      ? { currentProgramSceneName: 'Replay' } : {});
+    const result = await obsReplaySourceService.executeButton({
+      id: 'replay', label: 'Replay', icon: 'R', color: '#000', action: 'series', returnToLiveSceneName: 'Live', order: 0, enabled: true,
+      series: [
+        { id: 'replay', action: 'scene_switch', sceneName: 'Replay', delayMs: 0 },
+        { id: 'live', action: 'scene_switch', sceneName: 'Live', delayMs: 10_000 },
+      ],
+    }, { signal: controller.signal, onProgress: progress => { if (progress.status === 'waiting') controller.abort(); } });
+    expect(result.cancelled).toBe(true);
+    expect(obs.request).toHaveBeenLastCalledWith('SetCurrentProgramScene', { sceneName: 'Live' });
+  });
 });
 
 describe('OBS Cricket Match Setup', () => {
@@ -174,6 +192,56 @@ describe('OBS Cricket Match Setup', () => {
       if (type === 'GetSceneItemList') return { sceneItems: [] };
       return {};
     });
+  });
+
+  it('adds an opt-in highlights VLC scene and a Super Movements replay sequence', async () => {
+    await obsStreamingPresetService.createCricketMatchSetup({
+      cameraCount: 1, mobileCameraCount: 0, microphoneCount: 0, includeDesktopAudio: false,
+      replayDurationSeconds: 20, matchHighlightsEnabled: true, saveSuperMovements: true,
+    });
+    expect(obs.request).toHaveBeenCalledWith('CreateScene', { sceneName: CRICKET_HIGHLIGHTS_SCENE });
+    expect(obs.request).toHaveBeenCalledWith('CreateInput', expect.objectContaining({ sceneName: CRICKET_HIGHLIGHTS_SCENE, inputName: CRICKET_HIGHLIGHTS_INPUT, inputKind: 'vlc_source' }));
+    const config = { buttons: [], saveSuperMovements: true, matchHighlightsEnabled: true };
+    const buttons = obsStreamingPresetService.getPresetReplayButtons(20, config);
+    expect(buttons.find(button => button.id === 'cricket-preset-super-movement')?.series?.[0].action).toBe('super_movement_save');
+    expect(buttons.find(button => button.id === 'cricket-preset-match-highlights')?.enabled).toBe(true);
+    expect(getDockReplayButtons({ ...config, saveSuperMovements: false, buttons }, 'main').some(button => button.id === 'cricket-preset-super-movement')).toBe(false);
+    obsStreamingPresetService.dispose();
+  });
+
+  it('requires the local script and verifies its acknowledgement for Super Movements', async () => {
+    const requestId = 'a6e4c001-b9d3-44ec-9820-bf188fcb701e';
+    vi.spyOn(crypto, 'randomUUID').mockReturnValueOnce(requestId);
+    let reads = 0;
+    obs.request.mockImplementation(async (type: string) => {
+      if (type === 'GetInputSettings') return { inputSettings: { text: JSON.stringify(++reads === 1
+        ? { saveEnabled: true, readyAt: Date.now() }
+        : { requestId, status: 'saved', savedPath: '/Super Movements/replay.mkv' }) } };
+      return {};
+    });
+    await obsStreamingPresetService.saveSuperMovement();
+    expect(obs.request).toHaveBeenCalledWith('SaveReplayBuffer');
+    expect(obs.request).toHaveBeenCalledWith('SetInputSettings', expect.objectContaining({ inputName: CRICKET_SUPER_MOVEMENTS_CONTROL }));
+    obs.request.mockResolvedValue({ inputSettings: { text: JSON.stringify({ saveEnabled: true, readyAt: 0 }) } });
+    await expect(obsStreamingPresetService.saveSuperMovement()).rejects.toThrow('Load the Super Movements Python script');
+    vi.restoreAllMocks();
+  });
+
+  it('recovers only managed replay scenes after the fallback timeout', async () => {
+    vi.useFakeTimers();
+    let notify: ((event: string, data: unknown) => void) | undefined;
+    obs.onEvent.mockImplementation(callback => { notify = callback; return vi.fn(); });
+    obs.request.mockResolvedValue({ currentProgramSceneName: CRICKET_REPLAY_SCENE });
+    obsStreamingPresetService.configureLatestReplaySource(CRICKET_REPLAY_MEDIA_INPUT, 10, { liveSceneName: 'Live Camera' });
+    notify?.('CurrentProgramSceneChanged', { sceneName: CRICKET_REPLAY_SCENE });
+    await vi.advanceTimersByTimeAsync(22_000);
+    expect(obs.request).toHaveBeenCalledWith('SetCurrentProgramScene', { sceneName: 'Live Camera' });
+    obs.request.mockClear();
+    notify?.('CurrentProgramSceneChanged', { sceneName: CRICKET_HIGHLIGHTS_SCENE });
+    await vi.advanceTimersByTimeAsync(22_000);
+    expect(obs.request).not.toHaveBeenCalled();
+    obsStreamingPresetService.dispose();
+    vi.useRealTimers();
   });
 
   it('pauses before stepping X frames at the configured frame rate', async () => {

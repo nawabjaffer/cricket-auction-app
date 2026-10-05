@@ -16,6 +16,7 @@ const obs = vi.hoisted(() => ({
 vi.mock('firebase/database', () => firebase);
 vi.mock('../services/scoring/obsReplaySourceService', () => ({ obsReplaySourceService: replay }));
 vi.mock('../services/obsService', () => ({ obsService: obs }));
+vi.mock('../services/obsStreamingPresetService', () => ({ obsStreamingPresetService: { configureLatestReplaySource: vi.fn(), dispose: vi.fn() } }));
 
 import { obsConnectionBridgeService } from '../services/obsConnectionBridgeService';
 import type { OBSReplayConfig } from '../types/scoring';

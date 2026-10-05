@@ -1,3 +1,5 @@
+.scoring-admin.scoring-admin--configuration { min-height: auto; background: transparent; }
+.scoring-admin--configuration > .scoring-admin__bg { display: none; }
 /* ============================================================================
    SCORING ADMIN PAGE — Dark theme matching existing admin panels
    ============================================================================ */

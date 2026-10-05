@@ -186,6 +186,10 @@ The system enforces 9 validation rules:
 3. Make your changes
 4. Submit a pull request
 
+## App User Guides
+
+Operator instructions are available in the app through **Help → Read all guides** and as separate section READMEs in [docs/guides](./docs/guides/README.md).
+
 ## 📄 License
 
 MIT License - see LICENSE file for details.

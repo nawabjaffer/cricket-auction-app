@@ -118,7 +118,7 @@
   cursor: not-allowed;
 }
 .obs-dock__btn--connect {
-  background: #3b82f6;
+  background: #1d4ed8;
   color: #fff;
   margin-top: 8px;
 }
@@ -141,13 +141,14 @@
 }
 .obs-dock__btn--stream {
   background: #22c55e;
-  color: #fff;
+  color: #052e16;
 }
 .obs-dock__btn--stream:hover {
   background: #16a34a;
 }
 .obs-dock__btn--stream.live {
-  background: #ef4444;
+  background: #b91c1c;
+  color: #fff;
 }
 .obs-dock__btn--stream.live:hover {
   background: #dc2626;
@@ -179,9 +180,9 @@
   color: #e4e4e7;
 }
 .obs-dock__scene-btn.active {
-  background: #3b82f6;
+  background: #1d4ed8;
   color: #fff;
-  border-color: #3b82f6;
+  border-color: #1d4ed8;
 }
 
 /* ── Scene Mapping ── */

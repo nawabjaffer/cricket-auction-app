@@ -2680,7 +2680,7 @@
 .cb-contact-btn:active { transform: scale(0.9); }
 .cb-contact-btn.whatsapp {
   background: #25d366;
-  color: #fff;
+  color: #052e16;
 }
 .cb-contact-btn.call {
   background: rgba(255,255,255,0.15);
@@ -2967,7 +2967,7 @@
   padding: 0.9rem;
   border-radius: 12px;
   border: none;
-  background: #ef4444;
+  background: #b91c1c;
   color: #fff;
   font-weight: 700;
   font-size: 0.95rem;

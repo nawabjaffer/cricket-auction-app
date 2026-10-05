@@ -31,6 +31,8 @@ export const MATCH_STAGE_LABELS: Record<MatchStage, string> = {
 
 export interface MatchSetup {
   id: string;
+  matchNumber?: number;
+  interruption?: { kind: 'delayed' | 'postponed' | 'abandoned'; reason: string; updatedAt: number } | null;
   teamA: { id: string; name: string; logoUrl?: string; brandLogoUrl?: string; primaryColor?: string };
   teamB: { id: string; name: string; logoUrl?: string; brandLogoUrl?: string; primaryColor?: string };
   venue: string;
@@ -56,6 +58,17 @@ export interface MatchScoringConfig {
   apiKey?: string;
   webhookUrl?: string;
   pollIntervalMs?: number;   // default 30000
+}
+
+export interface MatchScheduleDefaults {
+  venue: string;
+  date: string;
+  maxOvers: number;
+  powerplayOvers: number;
+  powerplayEnabled: boolean;
+  powerplayOversSelected: string;
+  stage: MatchStage;
+  gapMinutes: number;
 }
 
 // ── Ball-by-ball ──
@@ -410,6 +423,7 @@ export const DEFAULT_LIVE_COMMENT_SETTINGS: LiveCommentSettings = {
 
 export interface OverlayControlState {
   activeOverlay: OverlayType;
+  scoreboardVisible?: boolean;
   activeOverlayData?: Record<string, unknown>;
   liveQuestion?: LiveQuestion;
   lastUpdated: number;
@@ -508,6 +522,7 @@ export interface ScoringOverlayConfig {
   // (default), each match keeps its own per-match links — existing behavior is unchanged.
   singleOverlayMode?: boolean;
   pointsTablePools?: TournamentPoolSettings;
+  matchScheduleDefaults?: MatchScheduleDefaults;
   // MVP point weights (customizable)
   mvpWeights?: MVPWeights;
   // Minimum balls for strike rate eligibility
@@ -825,6 +840,7 @@ export interface TickerConfig {
   dotBallSymbol?: string;      // custom emoji/symbol for dot balls (default '0')
   infoMode?: TickerInfoMode;   // batsmen | target | projection
   widgetModes?: TickerStatWidget[]; // scorer-controlled dynamic widgets for score row
+  widgetsEnabled?: boolean;
   projectionRpos?: number[];   // custom run-rate options, e.g. [9, 12, 14]
   // HTML/CSS mode
   customHTML?: string;
@@ -864,6 +880,7 @@ export type OBSButtonAction =
   | 'media_input_seek'  // Seek a media input by a relative cursor offset
   | 'drs_review'
   | 'replay_buffer_save'  // SaveReplayBuffer (built-in replay buffer)
+  | 'super_movement_save'
   | 'replay_buffer_start' // StartReplayBuffer
   | 'replay_buffer_stop'  // StopReplayBuffer
   | 'media_input_action'  // Control a configured OBS media source
@@ -915,6 +932,7 @@ export interface OBSReplayButton {
   mediaFrameOffset?: number;
   mediaFramesPerSecond?: number;
   drsDurationSeconds?: number;
+  returnToLiveSceneName?: string;
   showInDock?: boolean;
   dockView?: 'main' | 'drs';
   series?: OBSButtonSeriesStep[];     // for action = 'series'
@@ -934,6 +952,9 @@ export interface OBSReplayConfig {
   inningsBreakSceneName?: string;
   inningsBreakReturnSceneName?: string;
   replayDirectory?: string;
+  matchHighlightsEnabled?: boolean;
+  saveSuperMovements?: boolean;
+  replayDurationSeconds?: number;
   instantReplaySourceName?: string;
   instantReplaySourceNames?: string[];
   buttons: OBSReplayButton[];

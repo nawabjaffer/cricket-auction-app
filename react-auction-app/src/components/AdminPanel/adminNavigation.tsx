@@ -9,7 +9,7 @@ import { FEATURE_CATEGORIES } from '../../config/featureCategories';
 
 export type AdminTab =
   | 'theme' | 'teams' | 'purse' | 'sponsors' | 'players' | 'registration'
-  | 'export' | 'features' | 'streaming' | 'storage' | 'reset';
+  | 'export' | 'features' | 'streaming' | 'match-type' | 'storage' | 'reset';
 
 export interface AdminSubsection {
   key: string;
@@ -49,6 +49,7 @@ export const ADMIN_NAV: AdminNavGroup[] = [
         ],
       },
       { tab: 'teams', label: 'Teams', description: 'Create and edit the teams taking part.', icon: <IoPeopleOutline size={18} /> },
+      { tab: 'match-type', label: 'Match Type', description: 'Match rules, pools, broadcast schedules and scoring configuration.', icon: <IoDocumentTextOutline size={18} /> },
       { tab: 'purse', label: 'Purse control', description: 'Adjust team budgets and remaining purse.', icon: <IoWalletOutline size={18} /> },
     ],
   },

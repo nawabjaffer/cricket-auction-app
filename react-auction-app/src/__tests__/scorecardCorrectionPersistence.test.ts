@@ -7,6 +7,7 @@ const firebase = vi.hoisted(() => ({
   set: vi.fn(),
   onValue: vi.fn(),
   remove: vi.fn(),
+  runTransaction: vi.fn(),
 }));
 
 vi.mock('firebase/database', () => firebase);

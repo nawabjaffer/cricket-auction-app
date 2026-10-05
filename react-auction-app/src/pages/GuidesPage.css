@@ -1,0 +1,77 @@
+.guides-page {
+  --guide-ink: #1b2928;
+  --guide-muted: #667572;
+  --guide-line: #d8e1dc;
+  --guide-paper: #f7f8f3;
+  --guide-accent: #126653;
+  min-height: 100vh;
+  color: var(--guide-ink);
+  background: var(--guide-paper);
+  font-family: 'Avenir Next', Avenir, 'Segoe UI', sans-serif;
+}
+
+.guides-page__header {
+  height: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 30px;
+  border-bottom: 1px solid var(--guide-line);
+  background: #fff;
+}
+
+.guides-page__brand,
+.guides-page__back { display: inline-flex; align-items: center; gap: 10px; }
+.guides-page__brand { color: var(--guide-accent); font-size: 14px; font-weight: 750; }
+.guides-page__brand svg { font-size: 20px; }
+.guides-page__back { border: 0; background: transparent; color: var(--guide-ink); cursor: pointer; font-size: 13px; font-weight: 650; }
+.guides-page__back:hover { color: var(--guide-accent); }
+
+.guides-page__layout {
+  display: grid;
+  grid-template-columns: minmax(235px, 300px) minmax(0, 820px);
+  justify-content: center;
+  gap: 48px;
+  padding: 44px 28px 72px;
+}
+
+.guides-page__sidebar { align-self: start; position: sticky; top: 28px; }
+.guides-page__sidebar h1 { margin: 0 0 18px; font-size: 27px; line-height: 1.2; }
+.guides-page__search { display: flex; align-items: center; gap: 9px; padding: 10px 12px; border: 1px solid var(--guide-line); border-radius: 6px; background: #fff; color: var(--guide-muted); }
+.guides-page__search input { width: 100%; min-width: 0; border: 0; outline: 0; color: var(--guide-ink); background: transparent; font: inherit; font-size: 13px; }
+.guides-page__nav { display: grid; gap: 5px; margin-top: 16px; }
+.guides-page__nav button { display: grid; gap: 4px; width: 100%; padding: 11px 12px; border: 0; border-left: 3px solid transparent; background: transparent; text-align: left; cursor: pointer; }
+.guides-page__nav button:hover { background: #eaf0eb; }
+.guides-page__nav button.is-active { border-left-color: var(--guide-accent); background: #e6efea; }
+.guides-page__nav strong { color: var(--guide-ink); font-size: 13px; }
+.guides-page__nav span { color: var(--guide-muted); font-size: 11px; line-height: 1.45; }
+.guides-page__empty { color: var(--guide-muted); font-size: 13px; }
+
+.guides-page__article { min-width: 0; padding: 38px 46px; border: 1px solid var(--guide-line); border-radius: 7px; background: #fff; }
+.guides-page__eyebrow { margin: 0 0 14px; color: var(--guide-accent); font-size: 10px; font-weight: 750; letter-spacing: .08em; }
+.guides-page__article h1 { margin: 0 0 18px; font-size: 34px; line-height: 1.16; }
+.guides-page__article h2 { margin: 34px 0 10px; padding-top: 8px; border-top: 1px solid #edf1ee; font-size: 20px; }
+.guides-page__article h3 { margin: 24px 0 8px; font-size: 16px; }
+.guides-page__article p,
+.guides-page__article li { color: #40504c; font-size: 14px; line-height: 1.75; }
+.guides-page__article ul,
+.guides-page__article ol { padding-left: 22px; }
+.guides-page__article li + li { margin-top: 4px; }
+.guides-page__article a { color: var(--guide-accent); text-decoration: underline; text-underline-offset: 3px; }
+.guides-page__article code { padding: 2px 5px; border-radius: 3px; background: #edf2ee; color: #25443b; font-size: .9em; }
+.guides-page__article pre { overflow-x: auto; padding: 14px; border-radius: 5px; background: #172724; color: #edf6f0; }
+.guides-page__article pre code { padding: 0; background: transparent; color: inherit; }
+.guides-page__article blockquote { margin: 18px 0; padding: 2px 16px; border-left: 3px solid #d89438; background: #fff8e9; }
+
+@media (max-width: 760px) {
+  .guides-page__header { height: 56px; padding: 0 16px; }
+  .guides-page__layout { display: block; padding: 24px 14px 42px; }
+  .guides-page__sidebar { position: static; }
+  .guides-page__nav { display: flex; overflow-x: auto; gap: 6px; padding-bottom: 8px; }
+  .guides-page__nav { scrollbar-width: none; }
+  .guides-page__nav::-webkit-scrollbar { display: none; }
+  .guides-page__nav button { flex: 0 0 190px; border-left: 0; border-bottom: 3px solid transparent; }
+  .guides-page__nav button.is-active { border-bottom-color: var(--guide-accent); }
+  .guides-page__article { margin-top: 18px; padding: 26px 21px; }
+  .guides-page__article h1 { font-size: 28px; }
+}

@@ -3,6 +3,7 @@ import type { OBSReplayConfig } from '../types/scoring';
 import { obsReplaySourceService } from './scoring/obsReplaySourceService';
 import { obsService } from './obsService';
 import { tenantPath } from './tenantPath';
+import { obsStreamingPresetService } from './obsStreamingPresetService';
 
 export interface OBSConnectionBridgePresence {
   ownerId: string;
@@ -45,6 +46,7 @@ class OBSConnectionBridgeService {
 
   updateReplayConfig(config: OBSReplayConfig): void {
     this.replayConfig = config;
+    this.configureReplayRecovery();
     if (obsService.isConnected() && this.ownerType === 'admin') obsReplaySourceService.watchRelayCommands(null, this.replayConfig);
   }
 
@@ -83,10 +85,19 @@ class OBSConnectionBridgeService {
 
   private activate(): void {
     if (!this.db || !this.path) return;
+    this.configureReplayRecovery();
     if (this.ownerType === 'admin') obsReplaySourceService.watchRelayCommands(null, this.replayConfig);
     void this.publishPresence();
     if (this.heartbeat) clearInterval(this.heartbeat);
     this.heartbeat = setInterval(() => { void this.publishPresence(); }, HEARTBEAT_MS);
+  }
+
+  private configureReplayRecovery(): void {
+    if (this.ownerType !== 'admin' || !obsService.isConnected()) return;
+    obsStreamingPresetService.configureLatestReplaySource(
+      this.replayConfig.instantReplaySourceNames || this.replayConfig.instantReplaySourceName,
+      undefined, this.replayConfig,
+    );
   }
 
   private async publishPresence(): Promise<void> {
@@ -121,6 +132,7 @@ class OBSConnectionBridgeService {
   private deactivate(): void {
     if (this.heartbeat) clearInterval(this.heartbeat);
     this.heartbeat = null;
+    if (this.ownerType === 'admin') obsStreamingPresetService.dispose();
     obsReplaySourceService.stopRelayWatch();
     if (!this.db || !this.path) return;
     const presenceRef = ref(this.db, this.path);

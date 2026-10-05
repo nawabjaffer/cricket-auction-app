@@ -10,6 +10,18 @@ The adapter pattern decouples the app from any specific scoring provider, allowi
 
 ## 2. Architecture
 
+### Match Operations and OBS Highlights
+
+- Auction Admin > Match Type owns points-table pools, shared schedule defaults, broadcast schedules (including kickoff minus 10 minutes), and scoring presentation settings. Scorer Admin focuses on match operations; matches can be sorted by persistent match number or scheduled time.
+- Deactivated tournaments are blocked at the tenant gate, including legacy default-tenant URLs and already-open pages. Registry access failures fail closed. The current publicly writable database rules are not server-side authorization; authenticated tenant isolation requires an authentication/rules migration.
+- Delay, postpone, and abandonment actions require a reason. Scoring pauses during an interruption and OBS shows a normal-speed status marquee. Resume clears a delay/postponement without resetting the innings.
+- Replay presets return to the configured Live scene, recover after cancellation/failure, and have a timeout guard limited to managed replay scenes. Go Live cancels an active replay. DRS and Match Highlights are deliberately not auto-dismissed.
+- Enable **Match Highlights (VLC playlist)** and/or **Save Super Movements Replay Folder** under Cricket Match Setup, then run Match Setup. This creates the `Match Highlights` scene, VLC playlist source, and a hidden script control source when required.
+- Exact local copies require `/assets/obs-super-movements.py` on the OBS computer. Download it from the OBS-WS guide, configure a Python version compatible with the installed OBS release in Tools > Scripts > Python Settings, and load it in Tools > Scripts. WebSocket cannot install scripts or copy local files by itself.
+- Super Movements runs the instant replay sequence and copies that same replay file into `Super Movements` beside `Cricket Replays`. Files retain their original normal speed; only broadcast replay playback is slowed. The script uses background copying and atomic rename, reports file/permission/disk failures, and refreshes the non-looping Match Highlights VLC playlist. Restarting OBS reloads the playlist from that folder when the script is installed.
+- Keep a directly connected OBS admin page or Control Dock open. Replay Buffer must be enabled and filled, the output folder must be writable, and VLC must be installed. Test Super Movements, verify the copied file and playlist, then test Go Live before broadcasting. Do not delete the hidden `Cricket Super Movements Control` source.
+- Public Scoreboard uses Live/All/Upcoming/Completed match lists. Selection opens scorecards, commentary, summary and boundary/maiden totals. All includes tournament leaderboards with photos and teams; strike-rate ranking requires 10 balls and economy ranking requires one over.
+
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                        APP LAYER                                  │

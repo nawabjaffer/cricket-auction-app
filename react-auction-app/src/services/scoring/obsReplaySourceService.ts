@@ -150,6 +150,7 @@ class OBSReplaySourceService {
   private db: Database | null = null;
   private basePath = '';
   private relayUnsub: (() => void) | null = null;
+  private activeSeriesAbort: AbortController | null = null;
 
   initialize(db: Database, basePath: string): void {
     this.db = db;
@@ -159,8 +160,38 @@ class OBSReplaySourceService {
   // ── Direct action execution (when the dock is on the OBS machine) ──────────
 
   async executeButton(button: OBSReplayButton, options: OBSButtonExecutionOptions = {}): Promise<OBSButtonExecutionResult> {
+    if (!button.enabled) return { success: false, completedSteps: 0, totalSteps: 0, errors: ['This OBS button is disabled.'] };
+    if (button.id === 'cricket-preset-go-live' || button.id === 'cricket-preset-drs-live') this.activeSeriesAbort?.abort();
     if (button.action === 'series') {
-      return this.executeSeries(button, options);
+      if (this.activeSeriesAbort) return { success: false, completedSteps: 0, totalSteps: button.series?.length || 0, errors: ['A replay series is already running. Use Go Live to cancel it.'] };
+      const controller = new AbortController();
+      this.activeSeriesAbort = controller;
+      const abort = () => controller.abort();
+      options.signal?.addEventListener('abort', abort, { once: true });
+      if (options.signal?.aborted) controller.abort();
+      let result: OBSButtonExecutionResult;
+      try {
+        result = await this.executeSeries(button, { ...options, signal: controller.signal });
+      } finally {
+        options.signal?.removeEventListener('abort', abort);
+        if (this.activeSeriesAbort === controller) this.activeSeriesAbort = null;
+      }
+      if (!result.success) {
+        const sceneSteps = (button.series || []).filter(step => step.action === 'scene_switch' && step.sceneName);
+        const returnScene = button.returnToLiveSceneName;
+        const replayScenes = sceneSteps.filter(step => step.sceneName !== returnScene).map(step => step.sceneName);
+        if (returnScene && replayScenes.length > 0 && obsService.isConnected()) {
+          try {
+            const current = await obsService.request<{ currentProgramSceneName: string }>('GetCurrentProgramScene');
+            if (replayScenes.includes(current.currentProgramSceneName)) {
+              await obsService.request('SetCurrentProgramScene', { sceneName: returnScene });
+            }
+          } catch (error) {
+            result.errors.push(`Could not recover live scene: ${error instanceof Error ? error.message : String(error)}`);
+          }
+        }
+      }
+      return result;
     }
     const error = await this.executeAction(button, options.signal);
     return { success: !error, completedSteps: error ? 0 : 1, totalSteps: 1, errors: error ? [error] : [] };
@@ -249,6 +280,10 @@ class OBSReplaySourceService {
 
         case 'replay_buffer_save':
           await obsService.request('SaveReplayBuffer');
+          return null;
+
+        case 'super_movement_save':
+          await obsStreamingPresetService.saveSuperMovement(signal);
           return null;
 
         case 'replay_buffer_start':

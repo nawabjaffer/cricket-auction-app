@@ -84,7 +84,7 @@
   padding: 10px 16px; border: none; border-radius: 10px;
   font-weight: 700; font-size: 0.85rem; cursor: pointer; color: #fff;
 }
-.fbu__timer-btn--play { background: #22c55e; }
+.fbu__timer-btn--play { background: #22c55e; color: #052e16; }
 .fbu__timer-btn--pause { background: #f59e0b; color: #0a0a0a; }
 .fbu__timer-btn--next { background: #27272a; border: 1px solid #3f3f46; }
 .fbu__timer-btn--next:hover { border-color: #facc15; }

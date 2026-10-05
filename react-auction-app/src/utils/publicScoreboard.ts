@@ -1,4 +1,5 @@
-import type { Innings, MatchScore, MatchSetup } from '../types/scoring';
+import type { Innings, LiveScore, MatchScore, MatchSetup } from '../types/scoring';
+import type { PointsTableMatch } from './pointsTable';
 
 export type PublicMatchFilter = 'all' | 'live' | 'upcoming' | 'completed';
 
@@ -22,6 +23,7 @@ export function verifySuperAdminMobileCredentials(
 export function filterPublicMatches(matches: MatchSetup[], filter: PublicMatchFilter): MatchSetup[] {
   const filtered = filter === 'all' ? matches : matches.filter(match => {
     if (filter === 'upcoming') return match.status === 'scheduled';
+    if (filter === 'completed') return match.status === 'completed' || match.status === 'abandoned';
     return match.status === filter;
   });
   return [...filtered].sort((left, right) => {
@@ -34,6 +36,101 @@ export function filterPublicMatches(matches: MatchSetup[], filter: PublicMatchFi
     }
     return filter === 'completed' ? rightDate - leftDate : leftDate - rightDate;
   });
+}
+
+export function publicMatchResult(match: MatchSetup, final?: MatchScore): string {
+  if (match.interruption) return `Match ${match.interruption.kind}: ${match.interruption.reason}`;
+  const result = final?.result;
+  if (result?.winner) {
+    const winner = [match.teamA, match.teamB].find(team => team.id === result.winner)?.name || result.winner;
+    return `${winner} won by ${result.margin}${result.method ? ` (${result.method})` : ''}`;
+  }
+  if (result?.margin) return result.margin;
+  return match.status === 'live' ? 'Match in progress' : match.status === 'completed' ? 'Match completed'
+    : match.status === 'abandoned' ? 'Match abandoned' : 'Upcoming';
+}
+
+export function getMatchNumbers(matches: MatchSetup[]): Map<string, number> {
+  const used = new Set(matches.flatMap(match => match.matchNumber ? [match.matchNumber] : []));
+  const numbers = new Map<string, number>();
+  let next = 1;
+  for (const match of [...matches].sort((left, right) => left.createdAt - right.createdAt || left.id.localeCompare(right.id))) {
+    while (used.has(next)) next++;
+    const number = match.matchNumber || next++;
+    used.add(number);
+    numbers.set(match.id, number);
+  }
+  return numbers;
+}
+
+export interface PublicTournamentPlayer {
+  playerId: string;
+  playerName: string;
+  teamId: string;
+  teamName: string;
+  matches: number;
+  runs: number;
+  balls: number;
+  fours: number;
+  sixes: number;
+  wickets: number;
+  maidens: number;
+  dots: number;
+  bowlingBalls: number;
+  conceded: number;
+  strikeRate: number;
+  economy: number;
+}
+
+export function buildPublicTournamentPlayers(records: (PointsTableMatch & { live?: LiveScore })[]): PublicTournamentPlayer[] {
+  const players = new Map<string, PublicTournamentPlayer>();
+  const played = new Map<string, Set<string>>();
+  for (const record of records) {
+    const scores = new Map((record.final?.innings || []).map(innings => [innings.number, innings]));
+    for (const innings of Object.values(record.innings || {})) if (innings) scores.set(innings.number, innings);
+    const live = record.live;
+    if (live && record.setup.status === 'live') {
+      const existing = scores.get(live.currentInnings as 1 | 2);
+      scores.set(live.currentInnings as 1 | 2, {
+        ...existing,
+        number: live.currentInnings,
+        battingTeamId: live.battingTeamId,
+        bowlingTeamId: live.bowlingTeamId,
+        batsmen: live.allBatsmen?.length ? live.allBatsmen : existing?.batsmen || [],
+        bowlers: live.allBowlers?.length ? live.allBowlers : existing?.bowlers || [],
+      } as Innings);
+    }
+    const entry = (playerId: string, playerName: string, teamId: string) => {
+      const key = `${teamId}:${playerId}`;
+      if (!players.has(key)) players.set(key, {
+        playerId, playerName, teamId, teamName: [record.setup.teamA, record.setup.teamB].find(team => team.id === teamId)?.name || teamId,
+        matches: 0, runs: 0, balls: 0, fours: 0, sixes: 0, wickets: 0, maidens: 0, dots: 0, bowlingBalls: 0, conceded: 0, strikeRate: 0, economy: 0,
+      });
+      const player = players.get(key)!;
+      const appearances = played.get(key) || new Set<string>();
+      appearances.add(record.setup.id);
+      played.set(key, appearances);
+      player.matches = appearances.size;
+      return player;
+    };
+    for (const innings of scores.values()) {
+      for (const batter of innings.batsmen || []) {
+        const player = entry(batter.playerId, batter.playerName, innings.battingTeamId);
+        player.runs += batter.runs || 0; player.balls += batter.balls || 0;
+        player.fours += batter.fours || 0; player.sixes += batter.sixes || 0;
+      }
+      for (const bowler of innings.bowlers || []) {
+        const player = entry(bowler.playerId, bowler.playerName, innings.bowlingTeamId);
+        player.wickets += bowler.wickets || 0; player.maidens += bowler.maidens || 0;
+        player.dots += bowler.dots || 0; player.conceded += bowler.runs || 0;
+        player.bowlingBalls += Math.floor(bowler.overs || 0) * 6 + Math.round(((bowler.overs || 0) % 1) * 10);
+      }
+    }
+  }
+  return [...players.values()].map(player => ({ ...player,
+    strikeRate: player.balls ? player.runs / player.balls * 100 : 0,
+    economy: player.bowlingBalls ? player.conceded / player.bowlingBalls * 6 : 0,
+  }));
 }
 
 function asScoreNumber(value: number | undefined): number {

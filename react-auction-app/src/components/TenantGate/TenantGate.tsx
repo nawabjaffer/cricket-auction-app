@@ -20,52 +20,57 @@ export function TenantGate({ children }: Props) {
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [tenant, setTenant] = useState<TenantRecord | null>(null);
+  const [resolvedSlug, setResolvedSlug] = useState<string | undefined>();
 
   useEffect(() => {
-    const slug = (tenantSlug ?? '').trim();
+    const slug = (tenantSlug ?? DEFAULT_TENANT_ID).trim();
     setReady(false);
     setError(null);
-
-    // Fast-path: slug matches the default id/slug — no network.
-    if (!slug || slug === DEFAULT_TENANT_ID || slug === DEFAULT_TENANT_ID.replace(/_/g, '-')) {
-      setActiveTenant(DEFAULT_TENANT_ID);
-      setTenant({
-        id: DEFAULT_TENANT_ID,
-        slug: DEFAULT_TENANT_ID.replace(/_/g, '-'),
-        name: 'EPL 2026',
-        plan: 'pro',
-        isActive: true,
-        createdAt: 0,
-      });
-      setReady(true);
-      return;
-    }
+    setTenant(null);
 
     let cancelled = false;
+    let unsubscribe: (() => void) | undefined;
     (async () => {
       try {
         const found = await tenantService.resolveBySlug(slug);
         if (cancelled) return;
         if (!found) {
-          console.warn('[TenantGate] Tenant not found for slug:', slug);
           setError(`Tournament "${slug}" not found.`);
-          setActiveTenant(DEFAULT_TENANT_ID);
         } else {
-          setActiveTenant(found.id);
-          setTenant(found);
+          unsubscribe = await tenantService.watchTenant(found.id, (record) => {
+            if (cancelled) return;
+            setTenant(record);
+            setResolvedSlug(tenantSlug);
+            if (!record) setError('Tournament no longer exists.');
+            else if (!record.isActive) setError('This tournament is deactivated. Please contact the administrators to reactivate it.');
+            else {
+              setError(null);
+              setActiveTenant(record.id);
+            }
+            setReady(true);
+          }, () => {
+            if (cancelled) return;
+            setError('Unable to verify tournament access. Please try again.');
+            setResolvedSlug(tenantSlug);
+            setReady(true);
+          });
+          if (cancelled) unsubscribe();
+          return;
         }
       } catch (err) {
         if (cancelled) return;
         console.error('[TenantGate] Failed to resolve tenant:', err);
         setError('Failed to load tournament.');
-        setActiveTenant(DEFAULT_TENANT_ID);
       }
-      if (!cancelled) setReady(true);
+      if (!cancelled) {
+        setResolvedSlug(tenantSlug);
+        setReady(true);
+      }
     })();
-    return () => { cancelled = true; };
+    return () => { cancelled = true; unsubscribe?.(); };
   }, [tenantSlug]);
 
-  if (!ready) {
+  if (!ready || resolvedSlug !== tenantSlug) {
     return (
       <div style={{
         minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -78,7 +83,7 @@ export function TenantGate({ children }: Props) {
     );
   }
 
-  if (error && !tenant) {
+  if (error || !tenant?.isActive) {
     return (
       <div style={{
         minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center',

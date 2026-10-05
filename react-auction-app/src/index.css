@@ -45,6 +45,11 @@
 }
 
 [data-theme="light"] {
+  --theme-background: #f8fafc;
+  --theme-surface: #ffffff;
+  --theme-text: #0f172a;
+  --theme-text-primary: #0f172a;
+  --theme-text-secondary: #334155;
   --app-bg: #f8fafc;
   --app-surface: #ffffff;
   --app-surface-alt: #f1f5f9;

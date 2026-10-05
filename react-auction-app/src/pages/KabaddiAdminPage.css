@@ -364,7 +364,7 @@
   cursor: pointer;
 }
 
-.kba__anim-toggle.is-on { background: #16a34a; border-color: transparent; color: #fff; }
+.kba__anim-toggle.is-on { background: #16a34a; border-color: transparent; color: #052e16; }
 
 /* ── Misc ── */
 

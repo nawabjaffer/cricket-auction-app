@@ -614,7 +614,7 @@
   cursor: pointer;
 }
 
-.kbu__bonus.is-on { background: #16a34a; color: #fff; border-color: transparent; }
+.kbu__bonus.is-on { background: #16a34a; color: #052e16; border-color: transparent; }
 .kbu__bonus:disabled { opacity: 0.35; cursor: not-allowed; }
 
 /* ── Buttons ── */

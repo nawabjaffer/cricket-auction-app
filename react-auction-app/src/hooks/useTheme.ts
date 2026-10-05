@@ -27,7 +27,10 @@ export function useTheme() {
     root.style.setProperty('--theme-warning', colors.warning);
     root.style.setProperty('--theme-danger', colors.danger);
     root.style.setProperty('--theme-text', colors.text);
+    root.style.setProperty('--theme-text-primary', colors.text);
     root.style.setProperty('--theme-text-secondary', colors.textSecondary);
+    root.style.setProperty('--app-text-primary', colors.text);
+    root.style.setProperty('--app-text-secondary', colors.textSecondary);
 
     // Set background
     if (theme.background) {

@@ -43,6 +43,7 @@ import { PlayerImageEditor } from './PlayerImageEditor';
 import { RegistrationFormSettings } from './RegistrationFormSettings';
 import { normalizePlayerName } from '../../utils/playerName';
 import { SortableColumnHeader, useSortableRows } from '../SortableTable';
+import { MatchTypeAdminSection } from '../../pages/ScoringAdminPage';
 
 type SoldExportSortColumn = 'name' | 'role' | 'age' | 'teamName' | 'soldAmount' | 'basePrice';
 type UnsoldExportSortColumn = 'name' | 'role' | 'age' | 'basePrice' | 'round';
@@ -5000,6 +5001,7 @@ export function AdminPanel({ isOpen, onClose, onSettingsSaved, mode = 'drawer' }
               )}
 
               {/* Streaming Tab - V3 Premium */}
+              {activeTab === 'match-type' && <MatchTypeAdminSection />}
               {activeTab === 'streaming' && (
                 <StreamingTab onClose={onClose} section={(activeSub || 'obs') as StreamingSection} />
               )}

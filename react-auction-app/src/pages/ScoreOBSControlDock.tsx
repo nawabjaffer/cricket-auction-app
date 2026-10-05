@@ -291,7 +291,7 @@ export default function ScoreOBSControlDock() {
         }
         if (cfg?.obsReplayConfig) {
           setReplayConfig(cfg.obsReplayConfig);
-          obsStreamingPresetService.configureLatestReplaySource(cfg.obsReplayConfig.instantReplaySourceNames ?? cfg.obsReplayConfig.instantReplaySourceName, cfg.obsWebSocketConfig?.replayDurationSeconds);
+          obsStreamingPresetService.configureLatestReplaySource(cfg.obsReplayConfig.instantReplaySourceNames ?? cfg.obsReplayConfig.instantReplaySourceName, cfg.obsWebSocketConfig?.replayDurationSeconds, cfg.obsReplayConfig);
         }
 
         // Keep following Single Overlay Mode + the active match reactively after load
@@ -300,7 +300,7 @@ export default function ScoreOBSControlDock() {
           setAnimationSettings(liveCfg);
           if (liveCfg.obsReplayConfig) {
             setReplayConfig(liveCfg.obsReplayConfig);
-            obsStreamingPresetService.configureLatestReplaySource(liveCfg.obsReplayConfig.instantReplaySourceNames ?? liveCfg.obsReplayConfig.instantReplaySourceName, liveCfg.obsWebSocketConfig?.replayDurationSeconds);
+            obsStreamingPresetService.configureLatestReplaySource(liveCfg.obsReplayConfig.instantReplaySourceNames ?? liveCfg.obsReplayConfig.instantReplaySourceName, liveCfg.obsWebSocketConfig?.replayDurationSeconds, liveCfg.obsReplayConfig);
           }
         }));
         dockCleanupRef.current.push(liveCommentService.subscribeSettings(setLiveCommentSettings));
@@ -616,11 +616,11 @@ export default function ScoreOBSControlDock() {
       showFeedback(`${button.label} is already running or was just triggered.`);
       return Promise.resolve();
     }
-    if (opensDRS) {
+    if (opensDRS || button.id === 'cricket-preset-go-live' || button.id === 'cricket-preset-drs-live') {
       activeSeriesAbortRef.current?.abort();
       actionGeneration.current++;
-      drsReviewRef.current = true;
-      setDrsReviewOpen(true);
+      drsReviewRef.current = opensDRS;
+      setDrsReviewOpen(opensDRS);
     }
     const generation = actionGeneration.current;
     queuedReplayButtonIdsRef.current.add(button.id);

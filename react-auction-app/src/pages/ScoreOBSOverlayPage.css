@@ -1,3 +1,7 @@
+.score-obs__match-interruption { position: fixed; left: 0; right: 0; top: 64px; overflow: hidden; background: #221e15; color: #fcd34d; padding: 12px 0; z-index: 150; }
+.score-obs__match-interruption span { display: inline-block; white-space: nowrap; padding-left: 100%; animation: match-interruption-scroll 24s linear infinite; }
+@keyframes match-interruption-scroll { from { transform: translateX(0); } to { transform: translateX(-100%); } }
+@media (prefers-reduced-motion: reduce) { .score-obs__match-interruption span { animation: none; padding-left: 1rem; white-space: normal; } }
 /* ============================================================================
    SCORE OBS OVERLAY — Transparent background for OBS Studio browser source
    Designed for 1920×1080 canvas. All elements positioned absolutely.
@@ -2801,7 +2805,7 @@ body.obs-overlay-host #root {
   width: 24px;
   height: 24px;
   border-radius: 50%;
-  background: #ef4444;
+  background: #b91c1c;
   color: #fff;
   font-size: 11px;
   font-weight: 900;

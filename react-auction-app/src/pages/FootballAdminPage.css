@@ -203,7 +203,7 @@
 }
 .fb-player-card__pos[data-pos="GK"] { background: #facc15; color: #0a0a0a; }
 .fb-player-card__pos[data-pos="DEF"] { background: #3b82f6; }
-.fb-player-card__pos[data-pos="MID"] { background: #22c55e; }
+.fb-player-card__pos[data-pos="MID"] { background: #22c55e; color: #052e16; }
 .fb-player-card__pos[data-pos="FWD"] { background: #e11d1d; }
 .fb-player-card__info { flex: 1; min-width: 0; }
 .fb-player-card__name { font-weight: 700; font-size: 0.9rem; display: flex; align-items: center; gap: 6px; }
@@ -333,7 +333,7 @@
 .fb-status { padding: 3px 9px; border-radius: 999px; font-size: 0.7rem; font-weight: 800; text-transform: uppercase; }
 .fb-status--scheduled { background: #27272a; color: #a1a1aa; }
 .fb-status--live { background: #e11d1d; color: #fff; }
-.fb-status--completed { background: #16a34a; color: #fff; }
+.fb-status--completed { background: #16a34a; color: #052e16; }
 .fb-status--abandoned { background: #52525b; color: #e4e4e7; }
 
 /* ── Overlay tab ──────────────────────────────────────────────────────────── */

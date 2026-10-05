@@ -3,6 +3,8 @@
 // Match setup, provider config, ads, overlay branding, animation triggers
 // ============================================================================
 
+/* eslint-disable react-refresh/only-export-components -- exports the admin configuration section used by AdminPanel */
+
 import { Fragment, useState, useEffect, useCallback, useMemo, useRef, useId } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { get, onValue, ref, set as fbSet } from 'firebase/database';
@@ -41,6 +43,8 @@ import { EMPTY_CRICHEROES_MAPPINGS, normalizeCricHeroesAliasName, normalizeCricH
 import type { CricHeroesNameMappings } from '../utils/cricHeroesMappings';
 import { DEFAULT_PLAYER_STATS_SEQUENCE_CONFIG, normalizePlayerStatsSequenceConfig } from '../utils/playerStatsSequence';
 import { buildPoolAssignments } from '../utils/pointsTable';
+import { getMatchNumbers } from '../utils/publicScoreboard';
+import type { MatchScheduleDefaults } from '../types/scoring';
 
 const EMPTY_OBS_REPLAY_CONFIG: OBSReplayConfig = { buttons: [] };
 const DEFAULT_OBS_WEBSOCKET_CONFIG: OBSWebSocketConfig = {
@@ -109,7 +113,7 @@ const DEFAULT_OVERLAY_CONFIG: ScoringOverlayConfig = {
   liveQuestions: [],
 };
 
-function ScoringAdminPageContent() {
+function ScoringAdminPageContent({ configurationOnly = false }: { configurationOnly?: boolean }) {
   const navigate = useNavigate();
   const location = useLocation();
   const tenantSlug = getTenantSlugFromPath(location.pathname);
@@ -212,13 +216,13 @@ function ScoringAdminPageContent() {
   }
 
   return (
-    <div className="scoring-admin">
+    <div className={`scoring-admin${configurationOnly ? ' scoring-admin--configuration' : ''}`}>
       <div className="scoring-admin__bg" />
 
       {/* Tabs */}
       <nav className="scoring-admin__tabs">
         {([
-          { key: 'matches', icon: <IoTrophy size={16} />, label: 'Matches' },
+          { key: 'matches', icon: <IoTrophy size={16} />, label: configurationOnly ? 'Match Type' : 'Matches' },
           { key: 'provider', icon: <IoSettings size={16} />, label: 'Providers' },
           { key: 'ads', icon: <IoImage size={16} />, label: 'Ads' },
           { key: 'overlay', icon: <IoPlay size={16} />, label: 'Overlay' },
@@ -227,7 +231,7 @@ function ScoringAdminPageContent() {
           { key: 'ticker', icon: <IoDesktop size={16} />, label: 'Ticker' },
           { key: 'stats', icon: <IoTrophy size={16} />, label: 'Stats' },
           { key: 'obs', icon: <IoLink size={16} />, label: 'OBS WS' },
-        ] as { key: Tab; icon: React.ReactNode; label: string }[]).map(tab => (
+        ] as { key: Tab; icon: React.ReactNode; label: string }[]).filter(tab => configurationOnly || ['matches', 'provider', 'obs'].includes(tab.key)).map(tab => (
           <button
             key={tab.key}
             className={`scoring-admin__tab ${activeTab === tab.key ? 'active' : ''}`}
@@ -242,6 +246,7 @@ function ScoringAdminPageContent() {
       <div className="scoring-admin__content">
         {activeTab === 'matches' && (
           <MatchesTab
+            settingsOnly={configurationOnly}
             matches={matches}
             teams={allTeams}
             soldPlayers={soldPlayers}
@@ -338,6 +343,10 @@ function ScoringAdminPageContent() {
   );
 }
 
+export function MatchTypeAdminSection() {
+  return <ScoringAdminPageContent configurationOnly />;
+}
+
 export default withScorerAdminChrome(ScoringAdminPageContent, {
   gameType: 'cricket',
   subtitle: 'Match setup, overlays & live controls',
@@ -347,7 +356,8 @@ export default withScorerAdminChrome(ScoringAdminPageContent, {
 // MATCHES TAB
 // ═══════════════════════════════════════════════════════════════════════════════
 
-function MatchesTab({ matches, teams, soldPlayers, onFeedback, saving, setSaving, navigate, baseUrl, config, setConfig, sync, nameMappings, setNameMappings }: {
+function MatchesTab({ settingsOnly = false, matches, teams, soldPlayers, onFeedback, saving, setSaving, navigate, baseUrl, config, setConfig, sync, nameMappings, setNameMappings }: {
+  settingsOnly?: boolean;
   matches: MatchSetup[];
   teams: { id: string; name: string; logoUrl?: string; brandLogoUrl?: string; primaryColor?: string }[];
   soldPlayers: SoldPlayer[];
@@ -439,18 +449,7 @@ function MatchesTab({ matches, teams, soldPlayers, onFeedback, saving, setSaving
     return scheduledAt >= now - (30 * 60 * 1000) && scheduledAt <= now + (60 * 60 * 1000);
   };
 
-  type MatchScheduleDefaults = {
-    venue: string;
-    date: string;
-    maxOvers: number;
-    powerplayOvers: number;
-    powerplayEnabled: boolean;
-    powerplayOversSelected: string;
-    stage: MatchStage;
-    gapMinutes: number;
-  };
-
-  const scheduleDefaultsKey = 'cricket-scoring-admin-schedule-defaults';
+  const scheduleDefaultsKey = `cricket-scoring-admin-schedule-defaults:${getActiveTenant()}`;
   const defaultScheduleSettings: MatchScheduleDefaults = {
     venue: '',
     date: localNowInputValue(),
@@ -475,12 +474,16 @@ function MatchesTab({ matches, teams, soldPlayers, onFeedback, saving, setSaving
   };
 
   const [showForm, setShowForm] = useState(false);
-  const [showScheduleDefaults, setShowScheduleDefaults] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [squadMatchId, setSquadMatchId] = useState<string | null>(null);
   const [savedVenues, setSavedVenues] = useState<string[]>([]);
   const [matchListMode, setMatchListMode] = useState<MatchListMode>('time-default');
+  const [matchSort, setMatchSort] = useState<'time' | 'number-asc' | 'number-desc'>('number-asc');
+  const [interruptionMatch, setInterruptionMatch] = useState<MatchSetup | null>(null);
+  const [interruptionKind, setInterruptionKind] = useState<'delayed' | 'postponed' | 'abandoned'>('delayed');
+  const [interruptionReason, setInterruptionReason] = useState('Rain');
   const [scheduleDefaults, setScheduleDefaults] = useState<MatchScheduleDefaults>(() => {
+    if (config.matchScheduleDefaults) return config.matchScheduleDefaults;
     if (typeof window === 'undefined') return defaultScheduleSettings;
     try {
       const saved = window.localStorage.getItem(scheduleDefaultsKey);
@@ -490,6 +493,9 @@ function MatchesTab({ matches, teams, soldPlayers, onFeedback, saving, setSaving
       return defaultScheduleSettings;
     }
   });
+  useEffect(() => {
+    if (config.matchScheduleDefaults) setScheduleDefaults(config.matchScheduleDefaults);
+  }, [config.matchScheduleDefaults]);
   const [form, setForm] = useState(() => ({
     teamAId: '', teamBId: '',
     venue: scheduleDefaults.venue,
@@ -605,6 +611,7 @@ function MatchesTab({ matches, teams, soldPlayers, onFeedback, saving, setSaving
         stage: form.stage,
       };
       setScheduleDefaults(nextDefaults);
+      await scoringService.saveMatchScheduleDefaults(nextDefaults);
       setForm({
         teamAId: '',
         teamBId: '',
@@ -787,7 +794,7 @@ function MatchesTab({ matches, teams, soldPlayers, onFeedback, saving, setSaving
 
   const handleStartNext = async () => {
     const next = [...matches]
-      .filter(m => m.status === 'scheduled')
+      .filter(m => m.status === 'scheduled' && !m.interruption)
       .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())[0];
     if (!next) { onFeedback('No upcoming scheduled match to start'); return; }
     await handleStart(next.id);
@@ -802,7 +809,7 @@ function MatchesTab({ matches, teams, soldPlayers, onFeedback, saving, setSaving
     }
   };
 
-  const visibleMatches = useMemo(() => {
+  const filteredMatches = useMemo(() => {
     if (matchListMode === 'live') {
       return [...matches]
         .filter(match => match.status === 'live')
@@ -811,7 +818,7 @@ function MatchesTab({ matches, teams, soldPlayers, onFeedback, saving, setSaving
 
     if (matchListMode === 'completed') {
       return [...matches]
-        .filter(match => match.status === 'completed')
+        .filter(match => match.status === 'completed' || match.status === 'abandoned')
         .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
     }
 
@@ -823,7 +830,7 @@ function MatchesTab({ matches, teams, soldPlayers, onFeedback, saving, setSaving
 
     if (matchListMode === 'not-done') {
       return [...matches]
-        .filter(match => match.status !== 'completed')
+        .filter(match => match.status !== 'completed' && match.status !== 'abandoned')
         .sort((a, b) => {
           if (a.status === 'live' && b.status !== 'live') return -1;
           if (b.status === 'live' && a.status !== 'live') return 1;
@@ -839,6 +846,9 @@ function MatchesTab({ matches, teams, soldPlayers, onFeedback, saving, setSaving
         return getMatchTimeDistance(a.date) - getMatchTimeDistance(b.date);
       });
   }, [matchListMode, matches]);
+  const matchNumbers = getMatchNumbers(matches);
+  const visibleMatches = matchSort === 'time' ? filteredMatches : [...filteredMatches].sort((left, right) =>
+    ((matchNumbers.get(left.id) ?? 0) - (matchNumbers.get(right.id) ?? 0)) * (matchSort === 'number-desc' ? -1 : 1));
     const syncMatch = matches.find(match => match.id === syncMatchId);
   const [syncProvider, setSyncProvider] = useState<MatchScoringConfig['provider'] | null>(null);
   useEffect(() => {
@@ -855,6 +865,7 @@ function MatchesTab({ matches, teams, soldPlayers, onFeedback, saving, setSaving
 
   return (
     <div className="scoring-admin__section scoring-admin__section--prematch">
+      {!settingsOnly && <>
       <div className="scoring-admin__section-header">
         <h2>Matches</h2>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem', alignItems: 'center', marginLeft: 'auto' }}>
@@ -870,10 +881,14 @@ function MatchesTab({ matches, teams, soldPlayers, onFeedback, saving, setSaving
             <option value="live">Live</option>
             <option value="completed">Completed</option>
           </select>
+          <select className="scoring-admin__select" aria-label="Sort matches" value={matchSort} onChange={event => setMatchSort(event.target.value as typeof matchSort)}>
+            <option value="number-asc">Match number: ascending</option>
+            <option value="number-desc">Match number: descending</option>
+            <option value="time">Scheduled time</option>
+          </select>
           <button className="scoring-admin__btn scoring-admin__btn--primary" onClick={() => setShowForm(!showForm)}>
             <IoAdd size={16} /> {showForm ? 'Cancel' : 'New Match'}
           </button>
-          <BroadcastScheduleManager compact />
         </div>
       </div>
 
@@ -895,7 +910,11 @@ function MatchesTab({ matches, teams, soldPlayers, onFeedback, saving, setSaving
           )}
         </div>
       )}
+      </>}
 
+      {settingsOnly && <>
+      <h2>Match Type</h2>
+      <BroadcastScheduleManager />
       <div className="scoring-admin__form-card" style={{ marginBottom: '1rem' }}>
         <div className="scoring-admin__section-header" style={{ marginBottom: '0.75rem' }}>
           <h3>Points Table Pools</h3>
@@ -981,21 +1000,13 @@ function MatchesTab({ matches, teams, soldPlayers, onFeedback, saving, setSaving
         )}
       </div>
 
-      {showForm && (
+      {settingsOnly && (
         <div className="scoring-admin__form-card" style={{ marginBottom: '1rem' }}>
           <div className="scoring-admin__section-header" style={{ marginBottom: '0.75rem' }}>
-            <button
-              type="button"
-              className="scoring-admin__btn scoring-admin__btn--sm scoring-admin__btn--secondary"
-              onClick={() => setShowScheduleDefaults(v => !v)}
-              style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginLeft: 'auto' }}
-            >
-              <span>{showScheduleDefaults ? '▾' : '▸'}</span>
-              <span>{showScheduleDefaults ? 'Hide defaults' : 'Global Match Schedule Defaults'}</span>
-            </button>
+            <h3>Match Schedule Defaults</h3>
           </div>
 
-          {showScheduleDefaults && (
+          {settingsOnly && (
             <>
               <div className="scoring-admin__form-grid">
                 <div className="scoring-admin__field">
@@ -1084,33 +1095,33 @@ function MatchesTab({ matches, teams, soldPlayers, onFeedback, saving, setSaving
                   onClick={() => {
                     const nextDate = getNextScheduledDate(scheduleDefaults.date, scheduleDefaults.maxOvers, scheduleDefaults.gapMinutes);
                     setScheduleDefaults(f => ({ ...f, date: nextDate }));
-                    setForm(f => ({ ...f, venue: scheduleDefaults.venue, date: nextDate, maxOvers: scheduleDefaults.maxOvers, powerplayOvers: scheduleDefaults.powerplayOvers, powerplayEnabled: true, powerplayOversSelected: `1-${scheduleDefaults.powerplayOvers}`, stage: scheduleDefaults.stage }));
                   }}
                 >
                   Use Next Slot
                 </button>
                 <button
                   className="scoring-admin__btn scoring-admin__btn--secondary"
-                  onClick={() => setForm(f => ({
-                    ...f,
-                    venue: scheduleDefaults.venue,
-                    date: getNextScheduledDate(scheduleDefaults.date, scheduleDefaults.maxOvers, scheduleDefaults.gapMinutes),
-                    maxOvers: scheduleDefaults.maxOvers,
-                    powerplayOvers: scheduleDefaults.powerplayOvers,
-                    powerplayEnabled: true,
-                    powerplayOversSelected: `1-${scheduleDefaults.powerplayOvers}`,
-                    stage: scheduleDefaults.stage,
-                  }))}
+                  disabled={saving}
+                  onClick={async () => {
+                    setSaving(true);
+                    try {
+                      await scoringService.saveMatchScheduleDefaults(scheduleDefaults);
+                      setConfig({ ...config, matchScheduleDefaults: scheduleDefaults });
+                      onFeedback('Match defaults saved');
+                    } catch { onFeedback('Failed to save match defaults'); }
+                    finally { setSaving(false); }
+                  }}
                 >
-                  Apply to New Match
+                  Save Match Defaults
                 </button>
               </div>
             </>
           )}
         </div>
       )}
+      </>}
 
-      {showForm && (
+      {!settingsOnly && showForm && (
         <motion.div className="scoring-admin__form-card" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0 }}>
           <div className="scoring-admin__form-grid">
             <div className="scoring-admin__field" style={{ gridColumn: '1 / -1' }}>
@@ -1240,6 +1251,7 @@ function MatchesTab({ matches, teams, soldPlayers, onFeedback, saving, setSaving
       )}
 
       {/* Match list */}
+      {!settingsOnly && <>
       <div className="scoring-admin__match-list">
         {visibleMatches.length === 0 && (
           <div className="scoring-admin__empty">
@@ -1257,6 +1269,7 @@ function MatchesTab({ matches, teams, soldPlayers, onFeedback, saving, setSaving
               <span className="scoring-admin__team-name">{match.teamB.name}</span>
             </div>
             <div className="scoring-admin__match-meta">
+              <strong>Match {matchNumbers.get(match.id)}</strong>
               <span>{match.venue}</span>
               <span>{formatMatchDateTime(match.date)}</span>
               <span>{match.maxOvers} overs</span>
@@ -1264,6 +1277,7 @@ function MatchesTab({ matches, teams, soldPlayers, onFeedback, saving, setSaving
                 {MATCH_STAGE_LABELS[match.stage || 'league']}
               </span>
               <span className={`scoring-admin__status scoring-admin__status--${match.status}`}>{match.status}</span>
+              {match.interruption && <span role="status">{match.interruption.kind}: {match.interruption.reason}</span>}
               {singleOverlayMode && match.id === activeMatchId && (
                 <span className="scoring-admin__status scoring-admin__status--live">🔗 ACTIVE OVERLAY</span>
               )}
@@ -1315,7 +1329,7 @@ function MatchesTab({ matches, teams, soldPlayers, onFeedback, saving, setSaving
               <button className="scoring-admin__btn scoring-admin__btn--sm scoring-admin__btn--primary" onClick={() => setSquadMatchId(match.id)}>
                 <IoPeople size={14} /> Squad
               </button>
-              {match.status === 'scheduled' && (
+              {match.status === 'scheduled' && !match.interruption && (
                 <button className="scoring-admin__btn scoring-admin__btn--sm scoring-admin__btn--success" onClick={() => handleStart(match.id)}>
                   <IoPlay size={14} /> Start
                 </button>
@@ -1325,6 +1339,17 @@ function MatchesTab({ matches, teams, soldPlayers, onFeedback, saving, setSaving
                   <IoStop size={14} /> End
                 </button>
               )}
+              {match.status !== 'completed' && match.status !== 'abandoned' && <button
+                className="scoring-admin__btn scoring-admin__btn--sm scoring-admin__btn--warning"
+                onClick={() => { setInterruptionMatch(match); setInterruptionKind('delayed'); setInterruptionReason('Rain'); }}
+              >Delay / Postpone / Abandon</button>}
+              {match.interruption && match.status !== 'abandoned' && <button
+                className="scoring-admin__btn scoring-admin__btn--sm scoring-admin__btn--success"
+                onClick={async () => {
+                  try { await scoringService.updateMatch(match.id, { interruption: null }); onFeedback('Match interruption cleared'); }
+                  catch { onFeedback('Failed to resume match'); }
+                }}
+              >Resume</button>}
               {singleOverlayMode && match.status === 'completed' && match.id === activeMatchId && (
                 <button className="scoring-admin__btn scoring-admin__btn--sm scoring-admin__btn--success" onClick={handleStartNext}>
                   <IoPlay size={14} /> Start Next Match
@@ -1391,6 +1416,33 @@ function MatchesTab({ matches, teams, soldPlayers, onFeedback, saving, setSaving
           );
         })()}
       </AnimatePresence>
+      {interruptionMatch && <div className="score-update__modal-overlay">
+        <div className="score-update__modal" role="dialog" aria-modal="true" aria-label="Match interruption">
+          <h3>Match {matchNumbers.get(interruptionMatch.id)} interruption</h3>
+          <label>Match status<select className="scoring-admin__select" value={interruptionKind} onChange={event => setInterruptionKind(event.target.value as typeof interruptionKind)}>
+            <option value="delayed">Delayed</option><option value="postponed">Postponed</option><option value="abandoned">Abandoned</option>
+          </select></label>
+          <label>Reason<input className="scoring-admin__input" value={interruptionReason} maxLength={180} onChange={event => setInterruptionReason(event.target.value)} /></label>
+          <div className="score-update__modal-actions">
+            <button className="scoring-admin__btn" onClick={() => setInterruptionMatch(null)} disabled={saving}>Cancel</button>
+            <button className="scoring-admin__btn scoring-admin__btn--warning" disabled={saving || !interruptionReason.trim()} onClick={async () => {
+              if (interruptionKind === 'abandoned' && !confirm('Abandon this match? This marks it as no longer playable.')) return;
+              setSaving(true);
+              try {
+                cancelPreMatchSequence(interruptionMatch.id);
+                await scoringService.updateMatch(interruptionMatch.id, {
+                  ...(interruptionKind === 'abandoned' ? { status: 'abandoned' as const } : {}),
+                  interruption: { kind: interruptionKind, reason: interruptionReason.trim(), updatedAt: Date.now() },
+                });
+                onFeedback(`Match ${interruptionKind}`);
+                setInterruptionMatch(null);
+              } catch { onFeedback('Failed to update match interruption'); }
+              finally { setSaving(false); }
+            }}>Confirm</button>
+          </div>
+        </div>
+      </div>}
+      </>}
     </div>
   );
 }
@@ -3854,9 +3906,8 @@ function TickerTab({ config, setConfig, onFeedback }: {
     projectionRpos: [9, 12, 14],
   };
 
-  const activeWidgetModes = ticker.widgetModes && ticker.widgetModes.length > 0
-    ? ticker.widgetModes
-    : (ticker.infoMode === 'target' ? ['chase'] : ticker.infoMode === 'projection' ? ['projection'] : ['run_rate']);
+  const activeWidgetModes = ticker.widgetsEnabled === false ? [] : ticker.widgetModes
+    || (ticker.infoMode === 'target' ? ['chase'] : ticker.infoMode === 'projection' ? ['projection'] : ['run_rate']);
 
   const projectionRatesText = (ticker.projectionRpos && ticker.projectionRpos.length > 0
     ? ticker.projectionRpos
@@ -3972,7 +4023,7 @@ function TickerTab({ config, setConfig, onFeedback }: {
         </div>
 
         <div className="scoring-admin__field" style={{ gridColumn: '1 / -1' }}>
-          <label>Score Row Widgets (can enable one or multiple)</label>
+          <label><input type="checkbox" checked={ticker.widgetsEnabled !== false} onChange={event => updateTicker({ widgetsEnabled: event.target.checked })} /> Score Row Widgets</label>
           <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', marginTop: '0.4rem' }}>
             {([
               { key: 'run_rate', label: 'Run Rate (CRR / RRR)' },
@@ -3988,7 +4039,7 @@ function TickerTab({ config, setConfig, onFeedback }: {
                     if (e.target.checked) nextSet.add(widget.key);
                     else nextSet.delete(widget.key);
                     const next = Array.from(nextSet) as TickerStatWidget[];
-                    updateTicker({ widgetModes: next.length > 0 ? next : ['run_rate'] });
+                    updateTicker({ widgetModes: next, widgetsEnabled: true });
                   }}
                 />
                 {widget.label}
@@ -4747,6 +4798,8 @@ function OBSWebSocketTab({ config, setConfig, onFeedback, baseUrl }: {
         drsDurationSeconds: replayConfig.drsDurationSeconds || 40,
         overlayUrl: `${baseUrl}/cricket/scorer/obs-overlay`,
         replayDirectory: replayConfig.replayDirectory,
+        matchHighlightsEnabled: replayConfig.matchHighlightsEnabled,
+        saveSuperMovements: replayConfig.saveSuperMovements,
       });
       if (result.replayDirectory) setCurrentReplayDirectory(result.replayDirectory);
       const setupWarnings = [...result.warnings];
@@ -4784,6 +4837,7 @@ function OBSWebSocketTab({ config, setConfig, onFeedback, baseUrl }: {
         replayDirectory: replayConfig.replayDirectory || result.replayDirectory,
         instantReplaySourceName: result.replaySourceName,
         instantReplaySourceNames: result.replaySourceNames,
+        replayDurationSeconds: result.replayDurationSeconds,
         buttons,
       };
       const nextConfig: ScoringOverlayConfig = {
@@ -5138,6 +5192,12 @@ function OBSWebSocketTab({ config, setConfig, onFeedback, baseUrl }: {
           <div className="scoring-admin__field scoring-admin__field--checkbox">
             <label><input type="checkbox" checked={presetDesktopAudio} onChange={event => setPresetDesktopAudio(event.target.checked)} /> Include desktop audio</label>
           </div>
+          <div className="scoring-admin__field scoring-admin__field--checkbox">
+            <label><input type="checkbox" checked={!!replayConfig.matchHighlightsEnabled} onChange={event => updateReplayConfig({ matchHighlightsEnabled: event.target.checked })} />Match Highlights (VLC playlist)</label>
+          </div>
+          <div className="scoring-admin__field scoring-admin__field--checkbox">
+            <label><input type="checkbox" checked={!!replayConfig.saveSuperMovements} onChange={event => updateReplayConfig({ saveSuperMovements: event.target.checked })} />Save Super Movements Replay Folder</label>
+          </div>
         </div>
         <p className="scoring-admin__hint obs-ws-setup-panel__summary">
           OBS will create capture sources with default device settings. Choose the camera, microphone and Starting Soon window targets in each source's Properties. Every generated output scene includes the shared Audio scene. Mobile scenes are added only when the DroidCam OBS source is installed. Starting Soon includes a looping Media Source; choose its clip in Properties. The Replay scene contains the Camera 1 Replay scene with a non-looping 60% Media Source; VLC is isolated in a fallback scene.
@@ -5152,6 +5212,9 @@ function OBSWebSocketTab({ config, setConfig, onFeedback, baseUrl }: {
             {presetMobileCameraCount > 0 && <li><strong>Mobile cameras selected:</strong> Install and enable the DroidCam OBS plugin before setup. The mobile capture sources are created only when OBS advertises the plugin.</li>}
             <li><strong>Replay video:</strong> Install VLC and enable OBS's VLC Video Source for the best replay-source compatibility. The preset also adds a standard Media Source fallback.</li>
             <li><strong>Device assignment:</strong> After setup, choose the physical camera, microphone, Starting Soon window, and media clip in each source's OBS Properties.</li>
+            {(replayConfig.saveSuperMovements || replayConfig.matchHighlightsEnabled) && <li>
+              <strong>Super Movements and Match Highlights:</strong> <a href="/assets/obs-super-movements.py" download>Download the OBS Python script</a>, configure a compatible Python installation in OBS Tools → Scripts → Python Settings, then add the script in Tools → Scripts. Run Match Setup with the flags selected. Super Movements copies the exact replay file at its original normal speed into a sibling Super Movements folder beside Cricket Replays. The script creates that folder and refreshes the Match Highlights VLC playlist. Keep an OBS-connected admin page or dock open for replay control. Use Go Live to leave highlights.
+            </li>}
           </ul>
         </div>
         <details className="obs-match-guide" open>
@@ -5471,6 +5534,7 @@ function OBSWebSocketTab({ config, setConfig, onFeedback, baseUrl }: {
                       <option value="scene_switch">Switch Scene</option>
                       <option value="drs_review">Capture DRS Review</option>
                       <option value="replay_buffer_save">Save Replay Buffer</option>
+                      <option value="super_movement_save">Save Super Movement</option>
                       <option value="replay_buffer_start">Start Replay Buffer</option>
                       <option value="replay_buffer_stop">Stop Replay Buffer</option>
                       <option value="media_input_action">Control Media Source</option>
@@ -5574,6 +5638,7 @@ function OBSWebSocketTab({ config, setConfig, onFeedback, baseUrl }: {
                             <option value="hotkey_sequence">Key Sequence</option>
                             <option value="scene_switch">Switch Scene</option>
                             <option value="replay_buffer_save">Save Replay Buffer</option>
+                            <option value="super_movement_save">Save Super Movement</option>
                             <option value="replay_buffer_start">Start Replay Buffer</option>
                             <option value="replay_buffer_stop">Stop Replay Buffer</option>
                             <option value="media_input_action">Control Media Source</option>

@@ -1,6 +1,9 @@
 import type { OBSReplayButton, OBSReplayConfig } from '../types/scoring';
 
 export function resolveReplayButton(button: OBSReplayButton, config: OBSReplayConfig): OBSReplayButton {
+  if (button.id === 'cricket-preset-go-live') return { ...button, sceneName: config.liveSceneName || button.sceneName };
+  if (button.id === 'cricket-preset-super-movement' && !config.saveSuperMovements) return { ...button, enabled: false };
+  if (button.id === 'cricket-preset-match-highlights' && !config.matchHighlightsEnabled) return { ...button, enabled: false };
   const isDRS = button.dockView ? button.dockView === 'drs' : button.id.startsWith('cricket-preset-drs-');
   if (button.action === 'drs_review') return {
     ...button, inputName: config.drsMediaInputName || button.inputName,
@@ -23,8 +26,8 @@ export function resolveReplayButton(button: OBSReplayButton, config: OBSReplayCo
 
 export function getDockReplayButtons(config: OBSReplayConfig, view: 'main' | 'drs'): OBSReplayButton[] {
   return (config.buttons || [])
+    .map(button => resolveReplayButton(button, config))
     .filter(button => button.enabled && button.showInDock !== false
       && ((button.dockView ? button.dockView === 'drs' : button.id.startsWith('cricket-preset-drs-')) === (view === 'drs')))
-    .map(button => resolveReplayButton(button, config))
     .sort((left, right) => left.order - right.order);
 }
