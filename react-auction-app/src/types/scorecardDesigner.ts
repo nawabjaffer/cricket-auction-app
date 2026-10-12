@@ -43,6 +43,11 @@ export type WidgetKind =
   | 'kabaddi_team_a_players' | 'kabaddi_team_b_players'
   | 'kabaddi_raider_name' | 'kabaddi_do_or_die_flag' | 'kabaddi_super_raid_flag'
   | 'kabaddi_super_tackle_flag' | 'kabaddi_all_out_flag' | 'kabaddi_bonus_point_flag'
+  // Carrom
+  | 'carrom_board_score' | 'carrom_games_won' | 'carrom_team_a_games' | 'carrom_team_b_games'
+  | 'carrom_game_label' | 'carrom_board_label' | 'carrom_turn' | 'carrom_stroke_clock'
+  | 'carrom_team_a_coins' | 'carrom_team_b_coins' | 'carrom_queen_status' | 'carrom_last_board'
+  | 'carrom_board_history' | 'carrom_queen_flag' | 'carrom_board_won_flag'
   // Team Squad surface (universal)
   | 'squad_team_a_players' | 'squad_team_b_players' | 'squad_toss_result'
   // Match Stats surface — cricket
@@ -303,6 +308,24 @@ const KABADDI_WIDGETS: WidgetCatalogEntry[] = [
   { kind: 'kabaddi_bonus_point_flag', label: 'Bonus Point Overlay', icon: '⭐', defaultW: 24, defaultH: 14, category: 'flag', description: 'Bonus point celebration media/text' },
 ];
 
+const CARROM_WIDGETS: WidgetCatalogEntry[] = [
+  { kind: 'carrom_board_score', label: 'Game Score', icon: '🎯', defaultW: 14, defaultH: 8, category: 'score', description: 'Current game points A - B' },
+  { kind: 'carrom_games_won', label: 'Games Won', icon: '🏅', defaultW: 10, defaultH: 5, category: 'score', description: 'Match games won A - B' },
+  { kind: 'carrom_team_a_games', label: 'Team A Games', icon: '🔵', defaultW: 6, defaultH: 5, category: 'score', description: 'Games won by side A' },
+  { kind: 'carrom_team_b_games', label: 'Team B Games', icon: '🔴', defaultW: 6, defaultH: 5, category: 'score', description: 'Games won by side B' },
+  { kind: 'carrom_game_label', label: 'Game Label', icon: '🎲', defaultW: 10, defaultH: 5, category: 'timer', description: 'Game 1 / 2 / 3, break, full time' },
+  { kind: 'carrom_board_label', label: 'Board Number', icon: '🟫', defaultW: 10, defaultH: 5, category: 'timer', description: 'Current board within the game' },
+  { kind: 'carrom_turn', label: 'On Strike', icon: '👆', defaultW: 18, defaultH: 5, category: 'player', description: 'Player/pair to strike and coin colour' },
+  { kind: 'carrom_stroke_clock', label: 'Stroke Clock', icon: '⏱️', defaultW: 8, defaultH: 6, category: 'timer', description: '15-second stroke countdown' },
+  { kind: 'carrom_team_a_coins', label: 'Team A Carrommen', icon: '⚪', defaultW: 22, defaultH: 6, category: 'score', description: 'Side A carrommen left on the board' },
+  { kind: 'carrom_team_b_coins', label: 'Team B Carrommen', icon: '⚫', defaultW: 22, defaultH: 6, category: 'score', description: 'Side B carrommen left on the board' },
+  { kind: 'carrom_queen_status', label: 'Queen Status', icon: '👑', defaultW: 16, defaultH: 5, category: 'flag', description: 'Queen on board / awaiting cover / covered' },
+  { kind: 'carrom_last_board', label: 'Last Board', icon: '📋', defaultW: 22, defaultH: 5, category: 'score', description: 'Result of the previous board' },
+  { kind: 'carrom_board_history', label: 'Board History', icon: '🧾', defaultW: 26, defaultH: 22, category: 'score', description: 'Board-by-board points of this game' },
+  { kind: 'carrom_queen_flag', label: 'Queen Covered Overlay', icon: '👑', defaultW: 24, defaultH: 14, category: 'flag', description: 'Queen covered celebration media/text' },
+  { kind: 'carrom_board_won_flag', label: 'Board Won Overlay', icon: '🏆', defaultW: 24, defaultH: 14, category: 'flag', description: 'Board / game / match won celebration' },
+];
+
 const SQUAD_WIDGETS: WidgetCatalogEntry[] = [
   { kind: 'squad_team_a_players', label: 'Team A Squad List', icon: '📋', defaultW: 36, defaultH: 70, category: 'squad', description: 'Full player roster grid for Team A' },
   { kind: 'squad_team_b_players', label: 'Team B Squad List', icon: '📋', defaultW: 36, defaultH: 70, category: 'squad', description: 'Full player roster grid for Team B' },
@@ -327,17 +350,23 @@ const KABADDI_STATS_WIDGETS: WidgetCatalogEntry[] = [
   { kind: 'stats_top_defender', label: 'Top Defender', icon: '🛡️', defaultW: 28, defaultH: 10, category: 'stats', description: 'Leading tackle point scorer' },
 ];
 
+const CARROM_STATS_WIDGETS: WidgetCatalogEntry[] = [
+  { kind: 'carrom_board_history', label: 'Board History', icon: '🧾', defaultW: 34, defaultH: 40, category: 'stats', description: 'Board-by-board points of this game' },
+  { kind: 'carrom_games_won', label: 'Games Won', icon: '🏅', defaultW: 20, defaultH: 8, category: 'stats', description: 'Match games won A - B' },
+];
+
 /** Only widgets relevant to a given sport are ever shown in that sport's palette. */
-export const SPORT_WIDGET_CATALOG: Record<Extract<SportKey, 'cricket' | 'football' | 'kabaddi'>, WidgetCatalogEntry[]> = {
+export const SPORT_WIDGET_CATALOG: Record<SportKey, WidgetCatalogEntry[]> = {
   cricket: [...UNIVERSAL_WIDGETS, ...CRICKET_WIDGETS],
   football: [...UNIVERSAL_WIDGETS, ...FOOTBALL_WIDGETS],
   kabaddi: [...UNIVERSAL_WIDGETS, ...KABADDI_WIDGETS],
+  carrom: [...UNIVERSAL_WIDGETS, ...CARROM_WIDGETS],
 };
 
 const BRANDING_ONLY_WIDGETS = UNIVERSAL_WIDGETS.filter(w => w.kind !== 'live_badge' && w.kind !== 'match_clock');
 
 /** Per-sport, per-surface widget palette — Team Squad and Match Stats get their own relevant widgets. */
-export const SPORT_SURFACE_WIDGET_CATALOG: Record<Extract<SportKey, 'cricket' | 'football' | 'kabaddi'>, Record<ScorecardSurface, WidgetCatalogEntry[]>> = {
+export const SPORT_SURFACE_WIDGET_CATALOG: Record<SportKey, Record<ScorecardSurface, WidgetCatalogEntry[]>> = {
   cricket: {
     scoreboard: SPORT_WIDGET_CATALOG.cricket,
     team_squad: [...BRANDING_ONLY_WIDGETS, ...SQUAD_WIDGETS],
@@ -353,9 +382,14 @@ export const SPORT_SURFACE_WIDGET_CATALOG: Record<Extract<SportKey, 'cricket' | 
     team_squad: [...BRANDING_ONLY_WIDGETS, ...SQUAD_WIDGETS],
     match_stats: [...BRANDING_ONLY_WIDGETS, ...KABADDI_STATS_WIDGETS],
   },
+  carrom: {
+    scoreboard: SPORT_WIDGET_CATALOG.carrom,
+    team_squad: [...BRANDING_ONLY_WIDGETS, ...SQUAD_WIDGETS],
+    match_stats: [...BRANDING_ONLY_WIDGETS, ...CARROM_STATS_WIDGETS],
+  },
 };
 
-export function getWidgetCatalog(sport: Extract<SportKey, 'cricket' | 'football' | 'kabaddi'>, surface: ScorecardSurface): WidgetCatalogEntry[] {
+export function getWidgetCatalog(sport: SportKey, surface: ScorecardSurface): WidgetCatalogEntry[] {
   return SPORT_SURFACE_WIDGET_CATALOG[sport][surface];
 }
 
@@ -389,4 +423,77 @@ export function createEmptyLayout(sport: SportKey, surface: ScorecardSurface = '
     createdAt: now,
     updatedAt: now,
   };
+}
+
+// ── Carrom default scoreboard ("Walnut & Gold") ─────────────────────────────
+
+const CARROM_WOOD = 'rgba(28, 18, 11, 0.94)';
+const CARROM_FELT = '#7c2d12';
+const CARROM_GOLD = '#f5c26b';
+const CARROM_IVORY = '#fff7ed';
+
+function carromWidget(
+  kind: WidgetKind,
+  label: string,
+  geometry: Omit<WidgetGeometry, 'rotationDeg'>,
+  style: WidgetStyle = {},
+  extra: Partial<ScorecardWidgetInstance> = {},
+): ScorecardWidgetInstance {
+  return {
+    id: `carrom_${kind}_${geometry.zIndex}`,
+    kind,
+    label,
+    geometry: { ...geometry, rotationDeg: 0 },
+    style: {
+      ...DEFAULT_WIDGET_STYLE,
+      fontFamily: 'Oswald, Inter, system-ui, sans-serif',
+      color: CARROM_IVORY,
+      textShadowColor: 'rgba(0,0,0,0.55)',
+      textShadowBlur: 4,
+      entranceAnimation: 'slide-up',
+      ...style,
+    },
+    visible: true,
+    locked: false,
+    ...extra,
+  };
+}
+
+/**
+ * Built-in carrom scoreboard: a walnut frame with gold trim around a red
+ * felt "pocket" score plate — mirrors a tournament carrom board so it reads
+ * instantly on stream. Every element stays editable in the designer.
+ */
+export function createDefaultCarromScoreboardLayout(): ScorecardLayout {
+  const layout = createEmptyLayout('carrom', 'scoreboard', 'Carrom · Walnut & Gold');
+  const panel: WidgetStyle = { backgroundColor: CARROM_WOOD, borderWidth: 3, borderColor: CARROM_GOLD, borderRadius: 26, boxShadowEnabled: true, boxShadowColor: 'rgba(0,0,0,0.55)', boxShadowBlur: 28, entranceAnimation: 'fade' };
+  const pill: WidgetStyle = { borderRadius: 999, fontSize: 18, fontWeight: 800, letterSpacing: 2, textTransform: 'uppercase', padding: 4, textShadowEnabled: false };
+  layout.widgets = [
+    carromWidget('custom_text', 'Board Frame', { xPct: 12, yPct: 79, wPct: 76, hPct: 17, zIndex: 1 }, panel, { staticText: ' ' }),
+    carromWidget('custom_text', 'Felt Plate', { xPct: 41, yPct: 80.2, wPct: 18, hPct: 14.6, zIndex: 2 }, { backgroundColor: CARROM_FELT, borderWidth: 2, borderColor: CARROM_GOLD, borderRadius: 18, entranceAnimation: 'zoom-in' }, { staticText: ' ' }),
+    carromWidget('team_a_logo', 'Team A Logo', { xPct: 13.2, yPct: 80.4, wPct: 5.8, hPct: 14.2, zIndex: 3 }, { padding: 4, textShadowEnabled: false }),
+    carromWidget('team_b_logo', 'Team B Logo', { xPct: 81, yPct: 80.4, wPct: 5.8, hPct: 14.2, zIndex: 3 }, { padding: 4, textShadowEnabled: false }),
+    carromWidget('team_a_name', 'Team A Name', { xPct: 19.6, yPct: 80.6, wPct: 20.8, hPct: 6.2, zIndex: 3 }, { fontSize: 36, fontWeight: 800, textAlign: 'left', textTransform: 'uppercase', letterSpacing: 1 }),
+    carromWidget('team_b_name', 'Team B Name', { xPct: 59.6, yPct: 80.6, wPct: 20.8, hPct: 6.2, zIndex: 3 }, { fontSize: 36, fontWeight: 800, textAlign: 'right', textTransform: 'uppercase', letterSpacing: 1 }),
+    carromWidget('carrom_team_a_coins', 'Team A Carrommen', { xPct: 19.6, yPct: 86.8, wPct: 20.8, hPct: 4.6, zIndex: 3 }, { fontSize: 24, fontWeight: 700, textAlign: 'left', color: CARROM_GOLD, letterSpacing: 2 }),
+    carromWidget('carrom_team_b_coins', 'Team B Carrommen', { xPct: 59.6, yPct: 86.8, wPct: 20.8, hPct: 4.6, zIndex: 3 }, { fontSize: 24, fontWeight: 700, textAlign: 'right', color: CARROM_GOLD, letterSpacing: 2 }),
+    carromWidget('carrom_turn', 'On Strike', { xPct: 19.6, yPct: 91.3, wPct: 20.8, hPct: 3.8, zIndex: 3 }, { fontSize: 18, fontWeight: 600, textAlign: 'left', color: '#fde68a', textTransform: 'uppercase', letterSpacing: 1 }),
+    carromWidget('carrom_queen_status', 'Queen Status', { xPct: 59.6, yPct: 91.3, wPct: 20.8, hPct: 3.8, zIndex: 3 }, { fontSize: 18, fontWeight: 600, textAlign: 'right', color: '#fda4af', textTransform: 'uppercase', letterSpacing: 1 }),
+    carromWidget('carrom_board_score', 'Game Score', { xPct: 41, yPct: 80.6, wPct: 18, hPct: 8.6, zIndex: 4 }, { fontSize: 68, fontWeight: 900, letterSpacing: 3, entranceAnimation: 'zoom-in' }),
+    carromWidget('carrom_game_label', 'Game Label', { xPct: 41.4, yPct: 89.4, wPct: 8.6, hPct: 4.4, zIndex: 4 }, { ...pill, color: CARROM_GOLD, fontSize: 17 }),
+    carromWidget('carrom_board_label', 'Board Number', { xPct: 50, yPct: 89.4, wPct: 8.6, hPct: 4.4, zIndex: 4 }, { ...pill, color: CARROM_GOLD, fontSize: 17 }),
+    carromWidget('live_badge', 'LIVE Badge', { xPct: 13.2, yPct: 74.6, wPct: 5.6, hPct: 3.8, zIndex: 5 }, { ...pill, backgroundColor: '#dc2626', color: '#ffffff' }),
+    carromWidget('carrom_games_won', 'Games Won', { xPct: 43, yPct: 74.6, wPct: 14, hPct: 3.8, zIndex: 5 }, { ...pill, backgroundColor: CARROM_GOLD, color: '#1c120b' }),
+    carromWidget('carrom_stroke_clock', 'Stroke Clock', { xPct: 81.2, yPct: 74.6, wPct: 5.6, hPct: 3.8, zIndex: 5 }, { ...pill, backgroundColor: '#0b0704', color: CARROM_GOLD, borderWidth: 1, borderColor: CARROM_GOLD }),
+    carromWidget('tournament_logo', 'Tournament Logo', { xPct: 89, yPct: 3, wPct: 8, hPct: 13, zIndex: 5 }, { textShadowEnabled: false, entranceAnimation: 'fade' }),
+    carromWidget('carrom_queen_flag', 'Queen Covered Overlay', { xPct: 36, yPct: 32, wPct: 28, hPct: 16, zIndex: 8 }, { backgroundColor: 'rgba(124, 45, 18, 0.92)', borderWidth: 3, borderColor: CARROM_GOLD, borderRadius: 24, fontSize: 72, fontWeight: 900, color: CARROM_GOLD, letterSpacing: 4, entranceAnimation: 'bounce' }),
+    carromWidget('carrom_board_won_flag', 'Board Won Overlay', { xPct: 30, yPct: 32, wPct: 40, hPct: 16, zIndex: 8 }, { backgroundColor: CARROM_WOOD, borderWidth: 3, borderColor: CARROM_GOLD, borderRadius: 24, fontSize: 56, fontWeight: 900, color: CARROM_IVORY, letterSpacing: 2, textTransform: 'uppercase', entranceAnimation: 'zoom-in' }),
+  ];
+  return layout;
+}
+
+/** Starting canvas for a sport/surface — carrom ships with a ready-made scoreboard. */
+export function createStarterLayout(sport: SportKey, surface: ScorecardSurface = 'scoreboard'): ScorecardLayout {
+  if (sport === 'carrom' && surface === 'scoreboard') return createDefaultCarromScoreboardLayout();
+  return createEmptyLayout(sport, surface);
 }

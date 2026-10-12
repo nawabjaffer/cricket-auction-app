@@ -17,22 +17,25 @@ import {
   KABADDI_FORMATS, KABADDI_FORMAT_PRESETS, DEFAULT_KABADDI_RULES,
 } from '../types/kabaddi';
 import type { KabaddiFormat, KabaddiRulesConfig } from '../types/kabaddi';
+import { CARROM_FORMATS, CARROM_FORMAT_PRESETS, DEFAULT_CARROM_RULES } from '../types/carrom';
+import type { CarromFormat, CarromRulesConfig } from '../types/carrom';
 
 const PLAN_OPTIONS: TenantPlan[] = ['free', 'basic', 'pro', 'enterprise'];
 
-const SPORT_ICON: Record<SportKey, string> = { cricket: '🏏', football: '⚽', kabaddi: '🤼' };
-const SPORT_COLOR: Record<SportKey, string> = { cricket: '#2563eb', football: '#e11d1d', kabaddi: '#7c3aed' };
+const SPORT_ICON: Record<SportKey, string> = { cricket: '🏏', football: '⚽', kabaddi: '🤼', carrom: '🎯' };
+const SPORT_COLOR: Record<SportKey, string> = { cricket: '#2563eb', football: '#e11d1d', kabaddi: '#7c3aed', carrom: '#b45309' };
 
 export default function PlatformAdminPage() {
   const [tenants, setTenants] = useState<TenantRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
-  const [draft, setDraft] = useState({ id: '', slug: '', name: '', plan: 'pro' as TenantPlan });
+  const [draft, setDraft] = useState({ id: '', slug: '', name: '', plan: 'pro' as TenantPlan, sport: 'cricket' as SportKey });
   const [creating, setCreating] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [rulesFor, setRulesFor] = useState<TenantRecord | null>(null);
   const [kabaddiRulesFor, setKabaddiRulesFor] = useState<TenantRecord | null>(null);
+  const [carromRulesFor, setCarromRulesFor] = useState<TenantRecord | null>(null);
   const [deleteFor, setDeleteFor] = useState<TenantRecord | null>(null);
   const [clearSessionsFor, setClearSessionsFor] = useState<TenantRecord | null>(null);
   const [clearSessionsConfirmation, setClearSessionsConfirmation] = useState('');
@@ -62,8 +65,9 @@ export default function PlatformAdminPage() {
     if (!name) { setError('Tournament name required'); return; }
     setCreating(true); setError(null);
     try {
-      await tenantService.createTenant({ id, slug, name, plan: draft.plan });
-      setDraft({ id: '', slug: '', name: '', plan: 'pro' });
+      await tenantService.createTenant({ id, slug, name, plan: draft.plan, sports: [draft.sport], primarySport: draft.sport });
+      if (draft.sport === 'carrom') await tenantService.setCarromRules(id, DEFAULT_CARROM_RULES);
+      setDraft({ id: '', slug: '', name: '', plan: 'pro', sport: 'cricket' });
       setSuccessMsg(`Tenant "${name}" created successfully.`);
       setTimeout(() => setSuccessMsg(null), 3000);
       await refresh();
@@ -158,7 +162,7 @@ export default function PlatformAdminPage() {
 
         <section style={{ marginTop: 24, background: '#111827', border: '1px solid #1f2937', borderRadius: 12, padding: 20 }}>
           <h2 style={{ margin: 0, fontSize: 16 }}>Create Tournament</h2>
-          <form onSubmit={submit} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 160px 120px', gap: 10, marginTop: 14 }}>
+          <form onSubmit={submit} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 130px 130px 110px', gap: 10, marginTop: 14 }}>
             <input placeholder="tenant id (e.g. tpl_2026)" value={draft.id}
               onChange={(e) => setDraft({ ...draft, id: e.target.value })}
               style={inp} />
@@ -170,6 +174,9 @@ export default function PlatformAdminPage() {
               style={inp} />
             <select value={draft.plan} onChange={(e) => setDraft({ ...draft, plan: e.target.value as TenantPlan })} style={inp}>
               {PLAN_OPTIONS.map((p) => <option key={p} value={p}>{p}</option>)}
+            </select>
+            <select aria-label="Primary sport" value={draft.sport} onChange={(e) => setDraft({ ...draft, sport: e.target.value as SportKey })} style={inp}>
+              {ALL_SPORTS.map((sp) => <option key={sp.key} value={sp.key}>{SPORT_ICON[sp.key]} {sp.label}</option>)}
             </select>
             <button type="submit" disabled={creating} style={btnPrimary}>
               {creating ? 'Creating…' : 'Create'}
@@ -249,6 +256,14 @@ export default function PlatformAdminPage() {
                           </button>
                         </>
                       )}
+                      {sports.includes('carrom') && (
+                        <>
+                          <a href={`/${t.slug}/carrom/scorer/admin`} style={{ ...sportLink, color: '#fcd34d' }}>🎯 Carrom Scorer →</a>
+                          <button onClick={() => setCarromRulesFor(t)} style={{ ...rulesBtn, color: '#fcd34d', background: 'rgba(180, 83, 9, 0.18)', borderColor: 'rgba(245, 158, 11, 0.4)' }} title="Configure carrom rules (ICF laws)">
+                            ⚙️ Carrom Rules{t.carromRules ? ` · ${t.carromRules.format} · ${t.carromRules.pointsToWinGame} pts` : ' · set up'}
+                          </button>
+                        </>
+                      )}
                     </div>
                   </div>
 
@@ -314,7 +329,7 @@ export default function PlatformAdminPage() {
             <div style={{ background: '#211b0d', border: '1px solid #854d0e', borderRadius: 8, padding: 12, margin: '12px 0', fontSize: 12, color: '#fde68a', lineHeight: 1.55 }}>
               <strong>This will:</strong>
               <ul style={{ margin: '6px 0 0 16px', padding: 0 }}>
-                <li>Mark matches currently live in Cricket, Football, or Kabaddi as abandoned.</li>
+                <li>Mark matches currently live in Cricket, Football, Kabaddi, or Carrom as abandoned.</li>
                 <li>Clear active match pointers, overlays, replay/pre-match triggers, auction broadcast queues, and camera WebRTC signalling.</li>
                 <li>Preserve completed results and all score/event history.</li>
                 <li>Close open scorer, auction, and OBS tabs first; connected tabs can recreate session state.</li>
@@ -387,6 +402,98 @@ export default function PlatformAdminPage() {
           }}
         />
       )}
+      {carromRulesFor && (
+        <CarromRulesModal
+          tenant={carromRulesFor}
+          onClose={() => setCarromRulesFor(null)}
+          onSaved={async (rules) => {
+            setTenants((prev) => prev.map((x) => (x.id === carromRulesFor.id ? { ...x, carromRules: rules } : x)));
+            try { await tenantService.setCarromRules(carromRulesFor.id, rules); }
+            catch (err) { setError(err instanceof Error ? err.message : String(err)); }
+            setCarromRulesFor(null);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+// ── Carrom rules configuration modal (ICF / AICF laws) ─────────────────
+
+function CarromRulesModal({ tenant, onClose, onSaved }: Readonly<{
+  tenant: TenantRecord;
+  onClose: () => void;
+  onSaved: (rules: CarromRulesConfig) => void;
+}>) {
+  const [rules, setRules] = useState<CarromRulesConfig>(tenant.carromRules ?? DEFAULT_CARROM_RULES);
+  const applyPreset = (format: CarromFormat) => setRules((r) => ({ ...CARROM_FORMAT_PRESETS[format], notes: r.notes }));
+  const set = <K extends keyof CarromRulesConfig>(k: K, v: CarromRulesConfig[K]) => setRules((r) => ({ ...r, [k]: v }));
+
+  return (
+    <div style={modalOverlay} onClick={onClose}>
+      <div style={modalCard} onClick={(e) => e.stopPropagation()}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+          <h2 style={{ margin: 0, fontSize: 18 }}>🎯 Carrom Rules · {tenant.name}</h2>
+          <button onClick={onClose} style={{ ...btnGhost, padding: '6px 10px' }}>✕</button>
+        </div>
+        <p style={{ marginTop: 4, fontSize: 12, opacity: 0.7 }}>
+          ICF laws: a board winner scores the opponent's remaining carrommen plus the Queen (only while their score is ≤ {rules.queenCutoffScore}). A game is {rules.pointsToWinGame} points or {rules.boardsPerGame} boards; matches are best of {rules.gamesPerMatch}.
+        </p>
+
+        <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
+          {CARROM_FORMATS.map((f) => (
+            <button key={f.value} onClick={() => applyPreset(f.value)}
+              style={{
+                ...formatChip,
+                background: rules.format === f.value ? '#b45309' : 'transparent',
+                borderColor: rules.format === f.value ? 'transparent' : '#374151',
+                color: rules.format === f.value ? '#fff' : '#cbd5e1',
+              }}>
+              {f.label}
+            </button>
+          ))}
+        </div>
+
+        <fieldset style={fieldset}>
+          <legend style={legend}>🏁 Game & match</legend>
+          <div style={grid3}>
+            <NumField label="Points to win a game" value={rules.pointsToWinGame} onChange={(v) => set('pointsToWinGame', v)} />
+            <NumField label="Boards per game" value={rules.boardsPerGame} onChange={(v) => set('boardsPerGame', v)} />
+            <NumField label="Games per match (best of)" value={rules.gamesPerMatch} onChange={(v) => set('gamesPerMatch', v)} />
+          </div>
+          <div style={grid3}>
+            <ToggleField label="Extra board on tie" value={rules.extraBoardOnTie} onChange={(v) => set('extraBoardOnTie', v)} />
+          </div>
+        </fieldset>
+
+        <fieldset style={fieldset}>
+          <legend style={legend}>👑 Queen & board points</legend>
+          <div style={grid3}>
+            <NumField label="Queen value" value={rules.queenPoints} onChange={(v) => set('queenPoints', v)} />
+            <NumField label="Queen counts up to score" value={rules.queenCutoffScore} onChange={(v) => set('queenCutoffScore', v)} />
+            <NumField label="Max points per board" value={rules.maxBoardPoints} onChange={(v) => set('maxBoardPoints', v)} />
+          </div>
+        </fieldset>
+
+        <fieldset style={fieldset}>
+          <legend style={legend}>⏱ Timing & break</legend>
+          <div style={grid3}>
+            <NumField label="Seconds per stroke" value={rules.strokeTimeSec} onChange={(v) => set('strokeTimeSec', v)} />
+            <NumField label="Break attempts" value={rules.breakAttempts} onChange={(v) => set('breakAttempts', v)} />
+          </div>
+        </fieldset>
+
+        <label style={{ display: 'block', marginTop: 12 }}>
+          <span style={{ fontSize: 12, opacity: 0.7 }}>Notes for umpires (optional)</span>
+          <textarea value={rules.notes ?? ''} onChange={(e) => set('notes', e.target.value)}
+            style={{ ...inp, width: '100%', marginTop: 4, minHeight: 54, resize: 'vertical' }} placeholder="Any tournament-specific regulations…" />
+        </label>
+
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 16 }}>
+          <button onClick={onClose} style={btnGhost}>Cancel</button>
+          <button onClick={() => onSaved({ ...rules, notes: rules.notes?.trim() || undefined })} style={btnPrimary}>Save Rules</button>
+        </div>
+      </div>
     </div>
   );
 }

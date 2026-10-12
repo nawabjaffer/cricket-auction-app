@@ -62,12 +62,12 @@ export function withScorerAdminChrome<P extends object>(
           <button className="scorer-chrome__quick-btn" onClick={() => openQuickTab(`/${gameType}/scorer/obs-overlay`)}>
             <IoDesktop size={14} /> OBS Overlay
           </button>
-          <button className="scorer-chrome__quick-btn" onClick={() => openQuickTab(`/${gameType}/scorer/camera`)}>
+          {gameType !== 'carrom' && <button className="scorer-chrome__quick-btn" onClick={() => openQuickTab(`/${gameType}/scorer/camera`)}>
             <IoVideocam size={14} /> Camera Recorder
-          </button>
-          <button className="scorer-chrome__quick-btn" onClick={() => openQuickTab(`/${gameType}/scorer/obs-dock`)}>
+          </button>}
+          {gameType !== 'carrom' && <button className="scorer-chrome__quick-btn" onClick={() => openQuickTab(`/${gameType}/scorer/obs-dock`)}>
             <IoGameController size={14} /> OBS Control Dock
-          </button>
+          </button>}
           <button className="scorer-chrome__quick-btn" onClick={() => openQuickTab(`/${gameType}/scorer/designer`)}>
             <IoColorPalette size={14} /> Scorecard Designer
           </button>

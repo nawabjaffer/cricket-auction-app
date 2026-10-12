@@ -30,7 +30,7 @@ import PreMatchPreviewModal from '../components/PreMatchPreviewModal';
 import PremiumTickerDesigner, { type PreviewPlayerImage } from '../components/PremiumTickerDesigner/PremiumTickerDesigner';
 import { preferMigratedPlayerImageUrl } from '../utils/playerImage';
 import {
-  getWidgetCatalog, createWidgetInstance, createEmptyLayout, makeWidgetId,
+  getWidgetCatalog, createWidgetInstance, createEmptyLayout, createStarterLayout, makeWidgetId,
   DEFAULT_WIDGET_STYLE, SURFACE_LABELS, SURFACE_HINTS, ANIMATION_PRESETS,
 } from '../types/scorecardDesigner';
 import type {
@@ -48,6 +48,7 @@ import {
 } from '../types/matchSquadOverlay';
 import { normalizeMatchSquadOverlayDesign } from '../utils/matchSquadOverlayDesign';
 import type { SupportedGameType } from './scorerPages';
+import { DEFAULT_CARROM_RULES, startCarromMatch } from '../types/carrom';
 import type { Team } from '../types';
 import './ScorecardDesignerPage.css';
 
@@ -99,6 +100,41 @@ function widgetHasLiveBinding(kind: WidgetKind): boolean {
 
 function mockContextFor(sport: SupportedGameType): ScorecardDataContext {
   const now = Date.now();
+  if (sport === 'carrom') {
+    const live = startCarromMatch('mock', 'A', now);
+    const game = live.games[0];
+    return {
+      sport: 'carrom',
+      match: {
+        id: 'mock',
+        teamA: { id: 'a', name: 'Sample Player A', shortName: 'SPA', members: ['Sample Player A'] },
+        teamB: { id: 'b', name: 'Sample Player B', shortName: 'SPB', members: ['Sample Player B'] },
+        venue: 'Sample Hall', boardNumber: '1', stage: 'Final', date: new Date().toISOString(),
+        status: 'live', firstBreaker: 'A', createdAt: now, updatedAt: now,
+      },
+      live: {
+        ...live,
+        gamesWon: { A: 1, B: 0 },
+        currentGame: 2,
+        games: [
+          { number: 1, firstBreaker: 'A', score: { A: 25, B: 14 }, boards: [], winner: 'A' },
+          {
+            ...game, number: 2, firstBreaker: 'B', score: { A: 11, B: 9 },
+            boards: [
+              { game: 2, board: 1, winner: 'B', points: 9, queenCredited: true, breaker: 'B', reason: 'Cleared', at: now },
+              { game: 2, board: 2, winner: 'A', points: 11, queenCredited: true, breaker: 'A', reason: 'Cleared', at: now },
+            ],
+          },
+        ],
+        board: {
+          ...live.board!, number: 3, breaker: 'B', turn: 'A',
+          remaining: { A: 4, B: 6 }, queen: 'pending_cover', queenBy: 'A', broken: true,
+        },
+      },
+      rules: DEFAULT_CARROM_RULES,
+      branding: {},
+    };
+  }
   if (sport === 'football') {
     return {
       sport: 'football',
@@ -249,7 +285,7 @@ export default function ScorecardDesignerPage({ gameType = 'cricket' }: Readonly
   const [tenantTickerConfig, setTenantTickerConfig] = useState<TickerConfig | undefined>();
   const [squadDesign, setSquadDesign] = useState<MatchSquadOverlayDesign>(DEFAULT_MATCH_SQUAD_OVERLAY_DESIGN);
   const [surface, setSurface] = useState<ScorecardSurface>('scoreboard');
-  const [layout, setLayoutState] = useState<ScorecardLayout>(() => createEmptyLayout(sport, 'scoreboard'));
+  const [layout, setLayoutState] = useState<ScorecardLayout>(() => createStarterLayout(sport, 'scoreboard'));
   const [layouts, setLayouts] = useState<ScorecardLayout[]>([]);
   const [activeLayoutId, setActiveLayoutId] = useState<string | null>(null);
   const [customWidgets, setCustomWidgets] = useState<CustomWidgetDef[]>([]);
@@ -356,7 +392,7 @@ export default function ScorecardDesignerPage({ gameType = 'cricket' }: Readonly
   // Switching surfaces starts from a clean canvas for that surface — its own
   // saved templates load via the "Load saved layout" dropdown below.
   useEffect(() => {
-    setLayout(createEmptyLayout(sport, surface));
+    setLayout(createStarterLayout(sport, surface));
     setSelectedId(null);
   }, [sport, surface]);
 
@@ -383,7 +419,7 @@ export default function ScorecardDesignerPage({ gameType = 'cricket' }: Readonly
         const settings = raw as { organizerLogo?: string } | null;
         setTenantTournamentLogo(settings?.organizerLogo || undefined);
       });
-      const brandingPaths = ['scoring/overlayConfig', 'football/overlayConfig', 'kabaddi/overlayConfig'];
+      const brandingPaths = ['scoring/overlayConfig', 'football/overlayConfig', 'kabaddi/overlayConfig', 'carrom/overlayConfig'];
       brandingPaths.forEach(path => readOnce(path, raw => {
         const value = raw as { tournamentLogo?: string; broadcastPartnerLogo?: string; doOrDieAnimation?: { mediaUrl?: string }; superRaidAnimation?: { mediaUrl?: string }; superTackleAnimation?: { mediaUrl?: string }; allOutAnimation?: { mediaUrl?: string }; bonusAnimation?: { mediaUrl?: string } } | null;
         if (!value) return;

@@ -27,6 +27,10 @@ import KabaddiUpdatePage from './KabaddiUpdatePage';
 import KabaddiOBSOverlayPage from './KabaddiOBSOverlayPage';
 import KabaddiOBSDockPage from './KabaddiOBSDockPage';
 
+import CarromAdminPage from './CarromAdminPage';
+import CarromUpdatePage from './CarromUpdatePage';
+import CarromOBSOverlayPage from './CarromOBSOverlayPage';
+
 import ScorecardDesignerPage from './ScorecardDesignerPage';
 
 export type ScorerRouteKey =
@@ -34,9 +38,9 @@ export type ScorerRouteKey =
   | 'camera' | 'camera-admin' | 'camera-host' | 'live-question' | 'live-chat' | 'designer';
 
 /** Sports that currently have an implemented scorer workspace. */
-export type SupportedGameType = Extract<SportKey, 'cricket' | 'football' | 'kabaddi'>;
+export type SupportedGameType = Extract<SportKey, 'cricket' | 'football' | 'kabaddi' | 'carrom'>;
 
-export const SUPPORTED_GAME_TYPES: SupportedGameType[] = ['cricket', 'football', 'kabaddi'];
+export const SUPPORTED_GAME_TYPES: SupportedGameType[] = ['cricket', 'football', 'kabaddi', 'carrom'];
 
 export function isSupportedGameType(value: string | null | undefined): value is SupportedGameType {
   return SUPPORTED_GAME_TYPES.includes(value as SupportedGameType);
@@ -46,7 +50,7 @@ export function gameTypeLabel(gameType: SupportedGameType): string {
   return ALL_SPORTS.find(s => s.key === gameType)?.label ?? gameType;
 }
 
-const GAME_TYPE_ICON: Record<SupportedGameType, string> = { cricket: '🏏', football: '⚽', kabaddi: '🤼' };
+const GAME_TYPE_ICON: Record<SupportedGameType, string> = { cricket: '🏏', football: '⚽', kabaddi: '🤼', carrom: '🎯' };
 
 export function gameTypeIcon(gameType: SupportedGameType): string {
   return GAME_TYPE_ICON[gameType] ?? '🏆';
@@ -84,6 +88,12 @@ export function buildScorerPages(): Record<SupportedGameType, Partial<Record<Sco
       'camera-host': <ScoreCameraHostPage key="kabaddi-camera-host" gameType="kabaddi" />,
       'obs-dock': <KabaddiOBSDockPage />,
       designer: <ScorecardDesignerPage key="kabaddi-designer" gameType="kabaddi" />,
+    },
+    carrom: {
+      admin: <CarromAdminPage />,
+      update: <CarromUpdatePage />,
+      overlay: <CarromOBSOverlayPage />,
+      designer: <ScorecardDesignerPage key="carrom-designer" gameType="carrom" />,
     },
   };
 }

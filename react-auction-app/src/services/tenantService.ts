@@ -10,16 +10,18 @@ import { realtimeSync } from './realtimeSync';
 import { DEFAULT_TENANT_ID, platformPath, tenantPathFor } from './tenantPath';
 import type { FootballRulesConfig } from '../types/football';
 import type { KabaddiRulesConfig } from '../types/kabaddi';
+import { normalizeCarromRules, type CarromRulesConfig } from '../types/carrom';
 
 export type TenantPlan = 'free' | 'basic' | 'pro' | 'enterprise';
 
 /** Sports a tenant (tournament) has enabled. */
-export type SportKey = 'cricket' | 'football' | 'kabaddi';
+export type SportKey = 'cricket' | 'football' | 'kabaddi' | 'carrom';
 
 export const ALL_SPORTS: { key: SportKey; label: string }[] = [
   { key: 'cricket', label: 'Cricket' },
   { key: 'football', label: 'Football' },
   { key: 'kabaddi', label: 'Kabaddi' },
+  { key: 'carrom', label: 'Carrom' },
 ];
 
 export interface TenantRecord {
@@ -41,6 +43,8 @@ export interface TenantRecord {
   footballRules?: FootballRulesConfig;
   // Kabaddi rules & regulations (format, halves, raid clock, bonus/all-out).
   kabaddiRules?: KabaddiRulesConfig;
+  // Carrom rules (ICF laws: 25 points / 8 boards, best of 3, queen cut-off).
+  carromRules?: CarromRulesConfig;
   // Franchise branding / contact
   franchiseName?: string;
   contactEmail?: string;
@@ -158,6 +162,25 @@ class TenantService {
   }
 
   /**
+   * Save carrom rules for a tournament. Written to the registry (Platform Admin
+   * view) and mirrored to `tenants/{id}/carrom/rules`, which the scorer and
+   * OBS overlay subscribe to.
+   */
+  async setCarromRules(id: string, rules: CarromRulesConfig): Promise<void> {
+    if (!/^[a-zA-Z0-9_-]+$/.test(id)) throw new Error('Invalid tenant id');
+    const db = await this.getDb();
+    if (!db) return;
+    const normalized = normalizeCarromRules(rules);
+    const clean = Object.fromEntries(
+      Object.entries(normalized).filter(([, v]) => v !== undefined),
+    ) as CarromRulesConfig;
+    await update(ref(db), {
+      [`${TENANT_REGISTRY_PATH()}/${id}/carromRules`]: clean,
+      [tenantPathFor(id, 'carrom/rules')]: clean,
+    });
+  }
+
+  /**
    * Delete a tenant completely and purge its entire database tree to reclaim Firebase space.
    * Clears `platform/tenants/{id}`, `tenants/{id}`, and `tenants/{slug}`.
    */
@@ -186,6 +209,7 @@ class TenantService {
       { key: 'scoring', hasActivePointer: true, cricket: true },
       { key: 'football', hasActivePointer: false, cricket: false },
       { key: 'kabaddi', hasActivePointer: true, cricket: false },
+      { key: 'carrom', hasActivePointer: true, cricket: false },
     ] as const;
     const matchSets = await Promise.all(sports.map(async sport => {
       const base = tenantPathFor(tenantId, sport.key);

@@ -9,6 +9,10 @@ import { computeMatchMinute, FOOTBALL_HALF_LABELS } from '../types/football';
 import type { FootballLiveState, FootballMatchSetup, FootballPlayer } from '../types/football';
 import { computeKabaddiClock, KABADDI_HALF_LABELS, raidSecondsRemaining, DEFAULT_KABADDI_RULES } from '../types/kabaddi';
 import type { KabaddiLiveState, KabaddiMatchSetup, KabaddiRulesConfig, KabaddiPlayer, KabaddiOverlayControl } from '../types/kabaddi';
+import {
+  CARROMMEN_PER_SIDE, CARROM_PHASE_LABELS, DEFAULT_CARROM_RULES, carromStrokeSecondsRemaining, coinColorFor, currentCarromGame,
+} from '../types/carrom';
+import type { CarromLiveState, CarromMatchSetup, CarromOverlayControl, CarromRulesConfig, CarromSide } from '../types/carrom';
 import type { LiveScore, MatchSetup, MatchLineup, MatchStatsSnapshot, TournamentStats } from '../types/scoring';
 import type { ScorecardWidgetInstance, WidgetKind } from '../types/scorecardDesigner';
 
@@ -41,6 +45,10 @@ export type ScorecardDataContext =
   | {
       sport: 'kabaddi'; match: KabaddiMatchSetup | null; live: KabaddiLiveState | null; rules?: KabaddiRulesConfig; branding?: ScorecardBranding;
       players?: KabaddiPlayer[]; overlay?: KabaddiOverlayControl | null;
+    }
+  | {
+      sport: 'carrom'; match: CarromMatchSetup | null; live: CarromLiveState | null; rules?: CarromRulesConfig; branding?: ScorecardBranding;
+      overlay?: CarromOverlayControl | null;
     };
 
 export interface ResolvedWidgetContent {
@@ -115,7 +123,87 @@ export function resolveWidgetKind(kind: WidgetKind, ctx: ScorecardDataContext): 
   if (ctx.sport === 'cricket') return resolveCricket(kind, ctx.live, ctx.matchStats, ctx.tournamentStats);
   if (ctx.sport === 'football') return resolveFootball(kind, ctx.live, ctx.players);
   if (ctx.sport === 'kabaddi') return resolveKabaddi(kind, ctx.live, ctx.rules ?? DEFAULT_KABADDI_RULES, ctx.players);
+  if (ctx.sport === 'carrom') return resolveCarrom(kind, ctx.match, ctx.live, ctx.rules ?? DEFAULT_CARROM_RULES, ctx.overlay ?? null);
   return EMPTY;
+}
+
+function carromName(match: CarromMatchSetup | null, side: CarromSide): string {
+  if (!match) return side === 'A' ? 'Team A' : 'Team B';
+  const team = side === 'A' ? match.teamA : match.teamB;
+  return team.shortName || team.name;
+}
+
+function carromCoins(remaining: number): string {
+  const left = Math.max(0, Math.min(CARROMMEN_PER_SIDE, remaining));
+  return `${'●'.repeat(left)}${'○'.repeat(CARROMMEN_PER_SIDE - left)}`;
+}
+
+function resolveCarrom(
+  kind: WidgetKind, match: CarromMatchSetup | null, live: CarromLiveState | null,
+  rules: CarromRulesConfig, overlay: CarromOverlayControl | null,
+): ResolvedWidgetContent {
+  const game = currentCarromGame(live);
+  const board = live?.board ?? null;
+  switch (kind) {
+    case 'carrom_board_score':
+      return { text: `${game?.score.A ?? 0} - ${game?.score.B ?? 0}` };
+    case 'carrom_games_won':
+      return { text: `Games ${live?.gamesWon.A ?? 0} - ${live?.gamesWon.B ?? 0}` };
+    case 'carrom_team_a_games':
+      return { text: String(live?.gamesWon.A ?? 0) };
+    case 'carrom_team_b_games':
+      return { text: String(live?.gamesWon.B ?? 0) };
+    case 'carrom_game_label':
+      if (!live || live.phase === 'not_started') return { text: 'Pre-match' };
+      if (live.phase === 'completed') return { text: CARROM_PHASE_LABELS.completed };
+      if (live.phase === 'game_break') return { text: 'Game break' };
+      return { text: `Game ${live.currentGame}` };
+    case 'carrom_board_label':
+      return board ? { text: board.number > rules.boardsPerGame ? `Extra board` : `Board ${board.number}/${rules.boardsPerGame}` } : EMPTY;
+    case 'carrom_turn': {
+      if (!board || live?.phase !== 'in_progress') return EMPTY;
+      const colour = coinColorFor(board, board.turn);
+      return { text: `${colour === 'white' ? '⚪' : '⚫'} ${carromName(match, board.turn)} to strike` };
+    }
+    case 'carrom_stroke_clock': {
+      const secs = carromStrokeSecondsRemaining(live, rules);
+      return secs === null ? EMPTY : { text: `${secs}s`, urgent: secs <= 5 };
+    }
+    case 'carrom_team_a_coins':
+    case 'carrom_team_b_coins': {
+      if (!board) return EMPTY;
+      const side: CarromSide = kind === 'carrom_team_a_coins' ? 'A' : 'B';
+      const colour = coinColorFor(board, side);
+      return { text: `${carromCoins(board.remaining[side])} ${board.remaining[side]} ${colour}` };
+    }
+    case 'carrom_queen_status': {
+      if (!board) return EMPTY;
+      if (board.queen === 'covered') return { text: `👑 Covered · ${carromName(match, board.queenBy ?? 'A')}` };
+      if (board.queen === 'pending_cover') return { text: `👑 Cover pending · ${carromName(match, board.queenBy ?? 'A')}`, urgent: true };
+      return { text: '👑 Queen on board' };
+    }
+    case 'carrom_last_board': {
+      const last = game?.boards.at(-1) ?? live?.games.at(-1)?.boards.at(-1);
+      return last ? { text: `B${last.board}: ${carromName(match, last.winner)} +${last.points}${last.queenCredited ? ' 👑' : ''}` } : EMPTY;
+    }
+    case 'carrom_board_history': {
+      const boards = game?.boards ?? [];
+      return boards.length ? { items: boards.map(b => ({ text: `Board ${b.board} · ${carromName(match, b.winner)} +${b.points}${b.queenCredited ? ' 👑' : ''}` })) } : EMPTY;
+    }
+    case 'carrom_queen_flag':
+      return overlay?.activeOverlay === 'queen_covered' ? { text: '👑 QUEEN COVERED' } : EMPTY;
+    case 'carrom_board_won_flag': {
+      const type = overlay?.activeOverlay;
+      if (type !== 'board_won' && type !== 'game_won' && type !== 'match_won') return EMPTY;
+      const side = overlay?.activeEvent?.side;
+      const who = side ? carromName(match, side) : '';
+      if (type === 'match_won') return { text: `${who} wins the match!` };
+      if (type === 'game_won') return { text: `Game to ${who}` };
+      return { text: `Board to ${who}${overlay?.activeEvent?.points ? ` +${overlay.activeEvent.points}` : ''}` };
+    }
+    default:
+      return EMPTY;
+  }
 }
 
 function resolveKabaddiOverlay(type: NonNullable<KabaddiOverlayControl>['activeOverlay'], ctx: ScorecardDataContext, text: string, imageUrl?: string): ResolvedWidgetContent {
@@ -146,6 +234,11 @@ function resolveSquadList(kind: 'squad_team_a_players' | 'squad_team_b_players',
     return { items: players.map(p => ({ text: p.playerName, imageUrl: p.imageUrl })) };
   }
   if (!ctx.match) return EMPTY;
+  if (ctx.sport === 'carrom') {
+    const team = side === 'teamA' ? ctx.match.teamA : ctx.match.teamB;
+    const members = team.members?.length ? team.members : [team.name];
+    return { items: members.map(name => ({ text: name, imageUrl: team.photoUrl })) };
+  }
   const teamId = side === 'teamA' ? ctx.match.teamA.id : ctx.match.teamB.id;
   const players = (ctx.players ?? []).filter(p => p.teamId === teamId);
   if (!players.length) return EMPTY;
@@ -154,6 +247,12 @@ function resolveSquadList(kind: 'squad_team_a_players' | 'squad_team_b_players',
 
 function resolveTossResult(ctx: ScorecardDataContext): ResolvedWidgetContent {
   if (ctx.sport === 'football' || !ctx.match) return EMPTY;
+  if (ctx.sport === 'carrom') {
+    const breaker = ctx.match.firstBreaker ?? ctx.live?.firstBreaker;
+    if (!breaker) return EMPTY;
+    const team = breaker === 'A' ? ctx.match.teamA : ctx.match.teamB;
+    return { text: `${team.name} won the toss and breaks first (white)` };
+  }
   const { tossWonBy, tossElected } = ctx.match;
   if (!tossWonBy || !tossElected) return EMPTY;
   const winner = tossWonBy === ctx.match.teamA.id ? ctx.match.teamA.name : ctx.match.teamB.name;
@@ -173,12 +272,20 @@ function resolveClock(ctx: ScorecardDataContext): ResolvedWidgetContent {
   if (ctx.sport === 'cricket' && ctx.live) {
     return { text: `${ctx.live.overs.toFixed(1)} ov` };
   }
+  if (ctx.sport === 'carrom') {
+    const secs = carromStrokeSecondsRemaining(ctx.live, ctx.rules ?? DEFAULT_CARROM_RULES);
+    return { text: secs === null ? '00:00' : `00:${String(secs).padStart(2, '0')}` };
+  }
   return { text: '00:00' };
 }
 
 function resolveTeamScore(side: 'a' | 'b', ctx: ScorecardDataContext): ResolvedWidgetContent {
   if (ctx.sport === 'football') return { text: String(side === 'a' ? ctx.live?.homeScore ?? 0 : ctx.live?.awayScore ?? 0) };
   if (ctx.sport === 'kabaddi') return { text: String(side === 'a' ? ctx.live?.teamA.score ?? 0 : ctx.live?.teamB.score ?? 0) };
+  if (ctx.sport === 'carrom') {
+    const game = currentCarromGame(ctx.live);
+    return { text: String(game?.score[side === 'a' ? 'A' : 'B'] ?? 0) };
+  }
   if (ctx.sport === 'cricket' && ctx.live && ctx.match) {
     return { text: ctx.live.battingTeamId === ctx.match.teamA.id && side === 'a' || ctx.live.battingTeamId === ctx.match.teamB.id && side === 'b' ? `${ctx.live.runs}/${ctx.live.wickets}` : '0/0' };
   }

@@ -88,12 +88,14 @@ export default function StreamingTab({ onClose, section }: StreamingTabProps) {
     cricket: { label: 'Cricket', icon: <GiCricketBat size={17} />, color: '#2563eb' },
     football: { label: 'Football', icon: <span aria-hidden="true">⚽</span>, color: '#dc2626' },
     kabaddi: { label: 'Kabaddi', icon: <span aria-hidden="true">🤼</span>, color: '#7c3aed' },
+    carrom: { label: 'Carrom', icon: <span aria-hidden="true">🎯</span>, color: '#b45309' },
   };
 
   const sportRoutes: Record<SportKey, { admin: string; scorer: string; overlay: string; dock: string }> = {
     cricket: { admin: '/cricket/scorer/admin', scorer: '/cricket/scorer/update', overlay: '/cricket/scorer/obs-overlay', dock: '/cricket/scorer/obs-dock' },
     football: { admin: '/football/scorer/admin', scorer: '/football/scorer/update', overlay: '/football/scorer/obs-overlay', dock: '/football/scorer/obs-dock' },
     kabaddi: { admin: '/kabaddi/scorer/admin', scorer: '/kabaddi/scorer/update', overlay: '/kabaddi/scorer/obs-overlay', dock: '/kabaddi/scorer/obs-dock' },
+    carrom: { admin: '/carrom/scorer/admin', scorer: '/carrom/scorer/update', overlay: '/carrom/scorer/obs-overlay', dock: '/carrom/scorer/update' },
   };
 
   const obsLocked = !premiumService.canUseOBS() && currentTier !== 'pro' && currentTier !== 'enterprise';

@@ -14,6 +14,7 @@ const GUIDE_META: Record<string, { title: string; summary: string }> = {
   broadcast: { title: 'Broadcast & OBS', summary: 'Connect overlays, replay, and highlights to OBS.' },
   football: { title: 'Football', summary: 'Configure teams and operate the football scorer.' },
   kabaddi: { title: 'Kabaddi', summary: 'Configure teams and operate the kabaddi scorer.' },
+  carrom: { title: 'Carrom', summary: 'Run ICF-rules carrom fixtures, scoring and the OBS scoreboard.' },
 };
 
 const guideFiles = import.meta.glob('/docs/guides/*/README.md', {
