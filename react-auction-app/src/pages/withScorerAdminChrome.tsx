@@ -8,7 +8,7 @@
 
 import type { ComponentType } from 'react';
 import { useLocation } from 'react-router-dom';
-import { IoClose, IoPencil, IoDesktop, IoVideocam, IoGameController, IoSettings, IoColorPalette, IoHelpCircleOutline } from 'react-icons/io5';
+import { IoClose, IoPencil, IoDesktop, IoVideocam, IoGameController, IoSettings, IoColorPalette, IoHelpCircleOutline, IoLogoAndroid } from 'react-icons/io5';
 import { useTenantNavigate as useNavigate, getTenantSlugFromPath } from '../hooks/useTenantNavigate';
 import { gameTypeIcon, gameTypeLabel, type SupportedGameType } from './scorerPages';
 import './withScorerAdminChrome.css';
@@ -62,14 +62,21 @@ export function withScorerAdminChrome<P extends object>(
           <button className="scorer-chrome__quick-btn" onClick={() => openQuickTab(`/${gameType}/scorer/obs-overlay`)}>
             <IoDesktop size={14} /> OBS Overlay
           </button>
-          {gameType !== 'carrom' && <button className="scorer-chrome__quick-btn" onClick={() => openQuickTab(`/${gameType}/scorer/camera`)}>
+          <button className="scorer-chrome__quick-btn" onClick={() => openQuickTab(`/${gameType}/scorer/camera`)}>
             <IoVideocam size={14} /> Camera Recorder
-          </button>}
-          {gameType !== 'carrom' && <button className="scorer-chrome__quick-btn" onClick={() => openQuickTab(`/${gameType}/scorer/obs-dock`)}>
+          </button>
+          <button className="scorer-chrome__quick-btn" onClick={() => openQuickTab(`/${gameType}/scorer/obs-dock`)}>
             <IoGameController size={14} /> OBS Control Dock
-          </button>}
+          </button>
           <button className="scorer-chrome__quick-btn" onClick={() => openQuickTab(`/${gameType}/scorer/designer`)}>
             <IoColorPalette size={14} /> Scorecard Designer
+          </button>
+          <button
+            className="scorer-chrome__quick-btn scorer-chrome__quick-btn--android"
+            onClick={() => openQuickTab(`/${gameType}/scorer/mobile-app?download=1`)}
+            title="Download the NJS Live Studio Android app (APK) and pair your phone"
+          >
+            <IoLogoAndroid size={14} /> Android Live Studio
           </button>
           <button className="scorer-chrome__quick-btn" onClick={() => openQuickTab('/admin')}>
             <IoSettings size={14} /> Auction Admin

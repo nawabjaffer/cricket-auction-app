@@ -1,0 +1,179 @@
+/* ============================================================================
+   CARROM OBS DOCK — live strip, game summary and celebration triggers.
+   Transparent page background for OBS; "Walnut & Gold" theme variables are
+   injected from the tenant's carrom overlay config.
+   ============================================================================ */
+
+.cbd {
+  --cbd-frame: #1c120b;
+  --cbd-felt: #7c2d12;
+  --cbd-trim: #f5c26b;
+  --cbd-text: #fff7ed;
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: flex-end;
+  padding: 32px;
+  background: transparent;
+  color: var(--cbd-text);
+  font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+}
+
+.cbd__panel {
+  width: 420px;
+  max-width: 100%;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--cbd-trim) 45%, transparent);
+  border-radius: 16px;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--cbd-frame) 92%, #000), var(--cbd-frame));
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.55);
+}
+
+.cbd__header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 18px;
+  background: linear-gradient(120deg, var(--cbd-felt), color-mix(in srgb, var(--cbd-felt) 55%, #000));
+}
+
+.cbd__logo { width: auto; height: 40px; object-fit: contain; }
+.cbd__title-wrap { flex: 1; min-width: 0; }
+
+.cbd__title {
+  margin: 0;
+  font-size: 1.35rem;
+  font-weight: 900;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.cbd__subtitle { margin-top: 2px; font-size: 0.78rem; color: rgba(255, 255, 255, 0.8); }
+
+.cbd__on-air {
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: #dc2626;
+  color: #fff;
+  font-size: 0.66rem;
+  font-weight: 800;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  animation: cbd-pulse 1.2s ease-in-out infinite;
+}
+
+.cbd__empty { padding: 28px 20px; text-align: center; font-size: 0.85rem; color: rgba(255, 255, 255, 0.55); }
+
+.cbd__live-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.4);
+  font-size: 0.82rem;
+}
+
+.cbd__teams { display: flex; align-items: center; gap: 8px; font-weight: 700; }
+.cbd__teams strong { font-size: 1.2rem; font-weight: 900; color: var(--cbd-trim); }
+.cbd__teams i { font-style: normal; opacity: 0.6; }
+
+.cbd__badge {
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  font-size: 0.66rem;
+  font-weight: 800;
+  letter-spacing: 0.6px;
+  white-space: nowrap;
+}
+
+.cbd__badge--in_progress { background: #dc2626; color: #fff; }
+
+.cbd__games { display: grid; gap: 6px; margin: 0; padding: 12px 14px 4px; list-style: none; }
+
+.cbd__games li {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+  font-size: 0.85rem;
+}
+
+.cbd__games li.is-current { border-color: var(--cbd-trim); background: color-mix(in srgb, var(--cbd-trim) 12%, transparent); }
+.cbd__games strong { font-size: 1rem; font-weight: 900; color: var(--cbd-trim); }
+.cbd__games em { min-width: 48px; font-size: 0.72rem; font-style: normal; text-align: right; opacity: 0.7; }
+.cbd__games-empty { grid-template-columns: 1fr !important; text-align: center; color: rgba(255, 255, 255, 0.5); }
+
+.cbd__boards { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 14px 4px; }
+
+.cbd__chip {
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.06);
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+.cbd__chip--A { border-color: color-mix(in srgb, var(--cbd-trim) 70%, transparent); }
+.cbd__chip--B { border-color: color-mix(in srgb, var(--cbd-felt) 80%, #fff); }
+
+.cbd__tools { display: grid; gap: 10px; padding: 12px 14px 16px; }
+
+.cbd__side {
+  display: inline-flex;
+  justify-self: start;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 999px;
+}
+
+.cbd__side button {
+  padding: 5px 12px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 0.74rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.cbd__side button.is-active { background: var(--cbd-trim); color: var(--cbd-frame); }
+
+.cbd__controls { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+
+.cbd__ctrl {
+  padding: 9px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.07);
+  color: inherit;
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+  transition: transform 0.12s ease, background 0.12s ease;
+}
+
+.cbd__ctrl:hover:not(:disabled) { background: color-mix(in srgb, var(--cbd-trim) 22%, transparent); transform: translateY(-1px); }
+.cbd__ctrl:disabled { opacity: 0.4; cursor: not-allowed; }
+.cbd__ctrl--match_won { border-color: var(--cbd-trim); }
+.cbd__ctrl--foul { border-color: rgba(248, 113, 113, 0.55); }
+.cbd__ctrl--clear { border-color: rgba(255, 255, 255, 0.3); }
+
+.cbd__note, .cbd__error { margin: 0; font-size: 0.74rem; }
+.cbd__note { color: rgba(255, 255, 255, 0.55); }
+.cbd__error { color: #fecaca; }
+
+@keyframes cbd-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
+}

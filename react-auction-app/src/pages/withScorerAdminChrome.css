@@ -55,6 +55,12 @@
   cursor: pointer;
 }
 .scorer-chrome__quick-btn:hover { background: rgba(255, 255, 255, 0.14); }
+.scorer-chrome__quick-btn--android {
+  border-color: rgba(61, 220, 132, 0.55);
+  background: rgba(61, 220, 132, 0.12);
+  color: #bbf7d0;
+}
+.scorer-chrome__quick-btn--android:hover { background: rgba(61, 220, 132, 0.24); }
 
 @media (max-width: 720px) {
   .scorer-chrome__header, .scorer-chrome__quick-actions { padding: 14px 16px; }

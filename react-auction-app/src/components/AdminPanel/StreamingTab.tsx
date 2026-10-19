@@ -95,7 +95,7 @@ export default function StreamingTab({ onClose, section }: StreamingTabProps) {
     cricket: { admin: '/cricket/scorer/admin', scorer: '/cricket/scorer/update', overlay: '/cricket/scorer/obs-overlay', dock: '/cricket/scorer/obs-dock' },
     football: { admin: '/football/scorer/admin', scorer: '/football/scorer/update', overlay: '/football/scorer/obs-overlay', dock: '/football/scorer/obs-dock' },
     kabaddi: { admin: '/kabaddi/scorer/admin', scorer: '/kabaddi/scorer/update', overlay: '/kabaddi/scorer/obs-overlay', dock: '/kabaddi/scorer/obs-dock' },
-    carrom: { admin: '/carrom/scorer/admin', scorer: '/carrom/scorer/update', overlay: '/carrom/scorer/obs-overlay', dock: '/carrom/scorer/update' },
+    carrom: { admin: '/carrom/scorer/admin', scorer: '/carrom/scorer/update', overlay: '/carrom/scorer/obs-overlay', dock: '/carrom/scorer/obs-dock' },
   };
 
   const obsLocked = !premiumService.canUseOBS() && currentTier !== 'pro' && currentTier !== 'enterprise';

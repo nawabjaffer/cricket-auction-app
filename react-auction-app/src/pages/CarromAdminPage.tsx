@@ -5,7 +5,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useLocation } from 'react-router-dom';
-import { IoAdd, IoTrash, IoPlay, IoRadio, IoCopyOutline, IoSave } from 'react-icons/io5';
+import { IoAdd, IoTrash, IoPlay, IoRadio, IoCopyOutline, IoSave, IoVideocam, IoStatsChart } from 'react-icons/io5';
 import { useTenantNavigate as useNavigate, getTenantSlugFromPath } from '../hooks/useTenantNavigate';
 import { realtimeSync } from '../services/realtimeSync';
 import { tenantPath } from '../services/tenantPath';
@@ -195,6 +195,7 @@ function CarromAdminPageContent() {
     setConfig(current => ({ ...current, [key]: value }));
 
   const overlayUrl = `${baseUrl}/carrom/scorer/obs-overlay`;
+  const dockUrl = `${baseUrl}/carrom/scorer/obs-dock`;
 
   return (
     <div className="carrom-admin">
@@ -315,6 +316,8 @@ function CarromAdminPageContent() {
                     {match.status !== 'completed' && match.status !== 'abandoned' && (
                       <button className="carrom-admin__btn carrom-admin__btn--primary" onClick={() => navigate(`/carrom/scorer/update?matchId=${encodeURIComponent(match.id)}&pin=1`)}><IoPlay /> Score</button>
                     )}
+                    <button className="carrom-admin__btn" onClick={() => window.open(`${baseUrl}/carrom/scorer/camera?matchId=${encodeURIComponent(match.id)}`, '_blank', 'noopener,noreferrer')} title="Camera recorder with the live scoreboard burned in"><IoVideocam /> Camera</button>
+                    <button className="carrom-admin__btn" onClick={() => window.open(`${baseUrl}/carrom/scorer/obs-dock?matchId=${encodeURIComponent(match.id)}&pin=1`, '_blank', 'noopener,noreferrer')} title="OBS control dock for this fixture"><IoStatsChart /> Dock</button>
                     <button className="carrom-admin__icon-btn" disabled={busy} onClick={() => void deleteMatch(match)} aria-label="Delete fixture"><IoTrash /></button>
                   </div>
                 </li>
@@ -337,6 +340,14 @@ function CarromAdminPageContent() {
               <input type="checkbox" checked={!!config.singleOverlayMode} onChange={e => setConfigField('singleOverlayMode', e.target.checked)} />
               Single overlay mode — always follow the on-air fixture
             </label>
+          </div>
+          <div className="carrom-admin__card">
+            <h2>OBS control dock</h2>
+            <p className="carrom-admin__muted">Paste into OBS under View › Docks › Custom Browser Docks. Trigger queen, board, game, match and foul celebrations on the overlay with one tap.</p>
+            <div className="carrom-admin__url">
+              <code>{dockUrl}</code>
+              <button className="carrom-admin__icon-btn" onClick={() => void copy(dockUrl)} aria-label="Copy dock URL"><IoCopyOutline /></button>
+            </div>
           </div>
           <div className="carrom-admin__card">
             <h2>Branding</h2>

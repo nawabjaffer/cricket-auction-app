@@ -1,0 +1,118 @@
+import groovy.json.JsonSlurper
+
+apply plugin: "com.android.application"
+apply plugin: "org.jetbrains.kotlin.android"
+apply plugin: "com.facebook.react"
+
+react {
+    autolinkLibrariesWithApp()
+}
+
+// ── Version: package.json is the single source of truth ──────────────────────
+def appPackage = new JsonSlurper().parseText(file("../../package.json").text)
+def versionParts = ((appPackage.version as String).split(/[.\-+]/) as List).take(3).collect { it.isInteger() ? it.toInteger() : 0 }
+while (versionParts.size() < 3) versionParts << 0
+def computedVersionCode = versionParts[0] * 1000000 + versionParts[1] * 1000 + versionParts[2]
+
+// ── Release signing ──────────────────────────────────────────────────────────
+// Credentials come from android/keystore.properties (git-ignored) or NJS_* environment variables.
+// A release build without them fails unless -PallowDebugSigning=true is passed (CI smoke tests only).
+def keystoreProps = new Properties()
+def keystorePropsFile = rootProject.file("keystore.properties")
+if (keystorePropsFile.exists()) keystorePropsFile.withInputStream { keystoreProps.load(it) }
+def signingValue = { String prop, String env -> keystoreProps.getProperty(prop) ?: System.getenv(env) }
+def releaseStoreFile = signingValue("storeFile", "NJS_KEYSTORE_FILE")
+def releaseStorePassword = signingValue("storePassword", "NJS_KEYSTORE_PASSWORD")
+def releaseKeyAlias = signingValue("keyAlias", "NJS_KEY_ALIAS")
+def releaseKeyPassword = signingValue("keyPassword", "NJS_KEY_PASSWORD")
+def hasReleaseSigning = releaseStoreFile && releaseStorePassword && releaseKeyAlias && releaseKeyPassword && rootProject.file(releaseStoreFile).exists()
+def allowDebugSigning = (findProperty("allowDebugSigning") ?: "false").toString().toBoolean()
+def resolvedVersionCode = (findProperty("versionCodeOverride") ?: computedVersionCode).toString().toInteger()
+
+android {
+    ndkVersion rootProject.ext.ndkVersion
+    buildToolsVersion rootProject.ext.buildToolsVersion
+    compileSdk rootProject.ext.compileSdkVersion
+
+    namespace "com.njsstore.livestudio"
+    defaultConfig {
+        applicationId "com.njsstore.livestudio"
+        minSdkVersion rootProject.ext.minSdkVersion
+        targetSdkVersion rootProject.ext.targetSdkVersion
+        versionCode resolvedVersionCode
+        versionName appPackage.version
+    }
+
+    signingConfigs {
+        debug {
+            storeFile file('debug.keystore')
+            storePassword 'android'
+            keyAlias 'androiddebugkey'
+            keyPassword 'android'
+        }
+        if (hasReleaseSigning) {
+            release {
+                storeFile rootProject.file(releaseStoreFile)
+                storePassword releaseStorePassword
+                keyAlias releaseKeyAlias
+                keyPassword releaseKeyPassword
+            }
+        }
+    }
+
+    buildTypes {
+        debug {
+            signingConfig signingConfigs.debug
+        }
+        release {
+            signingConfig hasReleaseSigning ? signingConfigs.release : (allowDebugSigning ? signingConfigs.debug : null)
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
+        }
+    }
+
+    packaging {
+        resources {
+            excludes += ["META-INF/AL2.0", "META-INF/LGPL2.1", "META-INF/DEPENDENCIES", "META-INF/INDEX.LIST", "META-INF/io.netty.versions.properties"]
+        }
+    }
+}
+
+gradle.taskGraph.whenReady { graph ->
+    def releasePackaging = graph.allTasks.any { it.path == ":app:packageRelease" || it.path == ":app:signReleaseBundle" }
+    if (releasePackaging && !hasReleaseSigning && !allowDebugSigning) {
+        throw new GradleException(
+            "Release signing is not configured. Create android/keystore.properties (storeFile, storePassword, keyAlias, keyPassword) " +
+            "or set NJS_KEYSTORE_FILE / NJS_KEYSTORE_PASSWORD / NJS_KEY_ALIAS / NJS_KEY_PASSWORD. See mobile/README.md."
+        )
+    }
+}
+
+// RTSP-Server and RootEncoder must resolve to the same (Kotlin 2.2-compatible) RootEncoder release.
+configurations.configureEach {
+    resolutionStrategy.eachDependency { details ->
+        if (details.requested.group == "com.github.pedroSG94.RootEncoder") {
+            details.useVersion("2.8.0")
+        }
+    }
+}
+
+dependencies {
+    implementation("com.facebook.react:react-android")
+    implementation("com.facebook.react:hermes-android")
+
+    implementation("androidx.core:core-ktx:1.16.0")
+
+    // Encoder / streaming engine
+    implementation("com.github.pedroSG94.RootEncoder:library:2.8.0")
+    implementation("com.github.pedroSG94:RTSP-Server:1.4.2")
+
+    // LAN camera preview and the "program" source (RTSP from another phone)
+    implementation("androidx.media3:media3-exoplayer:1.11.1")
+    implementation("androidx.media3:media3-exoplayer-rtsp:1.11.1")
+
+    // QR scanning (no in-app camera permission) and Google authorization for the YouTube API
+    implementation("com.google.android.gms:play-services-code-scanner:16.1.0")
+    implementation("com.google.android.gms:play-services-auth:22.0.0")
+}

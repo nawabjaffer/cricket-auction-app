@@ -23,12 +23,26 @@ import {
   ref, set, get, push, remove, onValue, onDisconnect, off, type Database,
 } from 'firebase/database';
 
+export type CameraTransport = 'webrtc' | 'rtsp';
+
 export interface CameraSource {
   id: string;
   name: string;
   facing?: 'environment' | 'user';
   joinedAt: number;
   lastSeen: number;
+  /** Defaults to 'webrtc'. Android Live Studio cameras publish 'rtsp' and are pulled over the LAN by the studio host. */
+  transport?: CameraTransport;
+  /** LAN pull URL for 'rtsp' sources, e.g. rtsp://192.168.1.20:8554/ */
+  lanUrl?: string;
+  /** Human readable stream description, e.g. "1920x1080 · 30 fps · H.264". */
+  streamInfo?: string;
+  platform?: 'web' | 'android';
+}
+
+/** Web hosts can only decode WebRTC feeds; RTSP cameras are for the Android studio / OBS. */
+export function isWebRtcSource(source: Pick<CameraSource, 'transport'>): boolean {
+  return (source.transport ?? 'webrtc') === 'webrtc';
 }
 
 export interface ProgramState {

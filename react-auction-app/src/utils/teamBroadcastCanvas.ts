@@ -7,7 +7,7 @@ export function drawTeamScoreTicker(
 ) {
   const board = teamScoreboard(state);
   if (!board) return;
-  const config = state.config;
+  const { colors } = board;
   const scale = Math.min(width / 1000, height / 560);
   const panelWidth = Math.min(900 * scale, width * 0.94);
   const panelHeight = 120 * scale;
@@ -17,11 +17,11 @@ export function drawTeamScoreTicker(
   ctx.translate(left, top);
   ctx.scale(scale, scale);
   const logicalWidth = panelWidth / scale;
-  ctx.fillStyle = config.primaryColor;
+  ctx.fillStyle = colors.primary;
   ctx.fillRect(0, 0, logicalWidth, 120);
-  ctx.fillStyle = config.secondaryColor;
+  ctx.fillStyle = colors.secondary;
   ctx.fillRect(0, 0, logicalWidth, 5);
-  ctx.fillStyle = config.textColor;
+  ctx.fillStyle = colors.text;
   ctx.textBaseline = 'middle';
   ctx.textAlign = 'center';
   ctx.font = 'bold 34px sans-serif';
@@ -37,12 +37,12 @@ export function drawTeamScoreTicker(
     ctx.font = 'bold 25px sans-serif';
     ctx.fillText(team.shortName || team.name, start + teamWidth / 2 + 16, 48, teamWidth - 80);
   }
-  ctx.fillStyle = config.accentColor;
+  ctx.fillStyle = colors.accent;
   ctx.font = 'bold 16px sans-serif';
-  const status = [config.showLiveBadge && board.isLive ? 'LIVE' : '', board.phase, config.showTimer ? board.clock : ''].filter(Boolean);
+  const status = [board.showLiveBadge && board.isLive ? 'LIVE' : '', board.phase, board.showClock ? board.clock : ''].filter(Boolean);
   ctx.fillText(status.join(' | '), logicalWidth / 2, 84, logicalWidth - 32);
-  ctx.fillStyle = config.textColor;
+  ctx.fillStyle = colors.text;
   ctx.font = '14px sans-serif';
-  ctx.fillText(board.details || config.tournamentName || state.match?.competition || '', logicalWidth / 2, 106, logicalWidth - 32);
+  ctx.fillText(board.details || board.caption, logicalWidth / 2, 106, logicalWidth - 32);
   ctx.restore();
 }

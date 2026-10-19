@@ -19,9 +19,10 @@ import {
 import { tenantPath } from '../services/tenantPath';
 import { useTenantNavigate as useNavigate, getTenantSlugFromPath } from '../hooks/useTenantNavigate';
 import { broadcastDb } from '../services/camera/broadcastDb';
-import { multiCamService, SOURCE_STALE_MS, type CameraSource } from '../services/camera/multiCamService';
+import { multiCamService, SOURCE_STALE_MS, isWebRtcSource, type CameraSource } from '../services/camera/multiCamService';
 import { drawScoreTicker, drawCelebration, resolveCeleb, getImg, type CelebType, type TickerPosition } from '../utils/broadcastCanvas';
 import { drawTeamScoreTicker } from '../utils/teamBroadcastCanvas';
+import { createTeamBroadcastState, isTeamSport, subscribeTeamBroadcast, teamLayoutContext } from '../utils/teamBroadcastSource';
 import { drawScorecardLayout, preloadScorecardLayoutImages } from '../utils/customScorecardCanvas';
 import { scorecardLayoutService } from '../services/scorecardLayoutService';
 import type { ScorecardLayout } from '../types/scorecardDesigner';
@@ -31,8 +32,6 @@ import type {
   LiveScore, MatchSetup, ScoringOverlayConfig, OverlayControlState, MatchLineup, TickerDesign,
 } from '../types/scoring';
 import type { SportKey } from '../services/tenantService';
-import { DEFAULT_FOOTBALL_OVERLAY_CONFIG } from '../types/football';
-import { DEFAULT_KABADDI_OVERLAY_CONFIG, DEFAULT_KABADDI_RULES } from '../types/kabaddi';
 import './ScoreCameraHostPage.css';
 
 type CanvasWithCapture = HTMLCanvasElement & { captureStream?: (fps?: number) => MediaStream };
@@ -110,23 +109,11 @@ export default function ScoreCameraHostPage({ gameType = 'cricket' }: Readonly<{
   // ── Live score + branding (same sources as the OBS overlay) ──
   useEffect(() => {
     if (!matchId) return;
-    if (gameType !== 'cricket') {
-      const state: TeamBroadcastState = gameType === 'football'
-        ? { sport: 'football', match: null, live: null, config: DEFAULT_FOOTBALL_OVERLAY_CONFIG }
-        : { sport: 'kabaddi', match: null, live: null, config: DEFAULT_KABADDI_OVERLAY_CONFIG, rules: DEFAULT_KABADDI_RULES };
+    if (isTeamSport(gameType)) {
+      const state = createTeamBroadcastState(gameType);
       teamBroadcastRef.current = state;
-      const base = tenantPath(namespace);
-      const unsubs = [
-        onValue(ref(broadcastDb, `${base}/matches/${matchId}/setup`), s => { state.match = s.exists() ? s.val() : null; }),
-        onValue(ref(broadcastDb, `${base}/matches/${matchId}/live`), s => { state.live = s.exists() ? s.val() : null; }),
-        onValue(ref(broadcastDb, `${base}/overlayConfig`), s => {
-          state.config = { ...(state.sport === 'football' ? DEFAULT_FOOTBALL_OVERLAY_CONFIG : DEFAULT_KABADDI_OVERLAY_CONFIG), ...s.val() };
-        }),
-      ];
-      if (state.sport === 'kabaddi') {
-        unsubs.push(onValue(ref(broadcastDb, `${base}/rules`), s => { state.rules = { ...DEFAULT_KABADDI_RULES, ...s.val() }; }));
-      }
-      return () => { unsubs.forEach(u => u()); teamBroadcastRef.current = null; };
+      const unsubscribe = subscribeTeamBroadcast(broadcastDb, tenantPath(namespace), matchId, state);
+      return () => { unsubscribe(); teamBroadcastRef.current = null; };
     }
     const base = tenantPath('scoring');
     const unsubs: Array<() => void> = [];
@@ -193,9 +180,10 @@ export default function ScoreCameraHostPage({ gameType = 'cricket' }: Readonly<{
   // Attach to any source we are not yet connected to; detach ones that left.
   useEffect(() => {
     if (!matchId) return;
-    const ids = new Set(sources.map(s => s.id));
+    const webrtcSources = sources.filter(isWebRtcSource);
+    const ids = new Set(webrtcSources.map(s => s.id));
 
-    for (const s of sources) {
+    for (const s of webrtcSources) {
       if (detachRefs.current[s.id]) continue;
       detachRefs.current[s.id] = () => { /* placeholder while connecting */ };
       multiCamService
@@ -220,10 +208,11 @@ export default function ScoreCameraHostPage({ gameType = 'cricket' }: Readonly<{
     }
   }, [sources, matchId]);
 
-  // Auto-select the first angle when nothing is on air.
+  // Auto-select the first decodable angle when nothing is on air.
   useEffect(() => {
-    if (!matchId || activeId || sources.length === 0) return;
-    void multiCamService.setProgram(matchId, sources[0].id);
+    if (!matchId || activeId) return;
+    const first = sources.find(isWebRtcSource);
+    if (first) void multiCamService.setProgram(matchId, first.id);
   }, [sources, activeId, matchId]);
 
   // Bind incoming streams to their video elements.
@@ -261,14 +250,9 @@ export default function ScoreCameraHostPage({ gameType = 'cricket' }: Readonly<{
         if (showTickerRef.current && customLayoutRef.current && customLayoutRef.current.widgets.length > 0) {
           const layout = customLayoutRef.current;
           const broadcast = teamBroadcastRef.current;
-          let dataCtx: ScorecardDataContext;
-          if (broadcast?.sport === 'football') {
-            dataCtx = { sport: 'football', match: broadcast.match, live: broadcast.live, branding: { tournamentLogo: broadcast.config.tournamentLogo, partnerLogo: broadcast.config.broadcastPartnerLogo } };
-          } else if (broadcast?.sport === 'kabaddi') {
-            dataCtx = { sport: 'kabaddi', match: broadcast.match, live: broadcast.live, rules: broadcast.rules, branding: { tournamentLogo: broadcast.config.tournamentLogo, partnerLogo: broadcast.config.broadcastPartnerLogo } };
-          } else {
-            dataCtx = { sport: 'cricket', match: matchRef.current, live: liveRef.current, branding: { tournamentLogo: configRef.current?.tournamentLogo, partnerLogo: configRef.current?.broadcastPartnerLogo } };
-          }
+          const dataCtx: ScorecardDataContext = broadcast
+            ? teamLayoutContext(broadcast)
+            : { sport: 'cricket', match: matchRef.current, live: liveRef.current, branding: { tournamentLogo: configRef.current?.tournamentLogo, partnerLogo: configRef.current?.broadcastPartnerLogo } };
           preloadScorecardLayoutImages(layout, dataCtx);
           drawScorecardLayout(ctx, W, H, layout, dataCtx);
         } else if (showTickerRef.current && teamBroadcastRef.current) {
@@ -445,7 +429,7 @@ export default function ScoreCameraHostPage({ gameType = 'cricket' }: Readonly<{
           )}
 
           <div className="cam-host__grid">
-            {sources.map(s => (
+            {sources.map(s => (isWebRtcSource(s) ? (
               <button
                 key={s.id}
                 className={`cam-host__tile ${activeId === s.id ? 'is-live' : ''}`}
@@ -462,7 +446,27 @@ export default function ScoreCameraHostPage({ gameType = 'cricket' }: Readonly<{
                 <span className="cam-host__tile-name">{s.name}</span>
                 {activeId === s.id && <span className="cam-host__tile-live">LIVE</span>}
               </button>
-            ))}
+            ) : (
+              <div
+                key={s.id}
+                className={`cam-host__tile cam-host__tile--native ${activeId === s.id ? 'is-live' : ''}`}
+                title="Pulled over the LAN by the Android Live Studio host"
+              >
+                <span className="cam-host__tile-name">{s.name}</span>
+                <small className="cam-host__tile-meta">Android · {s.streamInfo || 'LAN stream'}</small>
+                {s.lanUrl && (
+                  <button
+                    type="button"
+                    className="cam-host__chip"
+                    onClick={() => { void navigator.clipboard?.writeText(s.lanUrl ?? '').catch(() => undefined); }}
+                    title="Copy the RTSP URL to use as an OBS / VLC media source"
+                  >
+                    <IoCopyOutline size={14} /> RTSP URL
+                  </button>
+                )}
+                {activeId === s.id && <span className="cam-host__tile-live">LIVE</span>}
+              </div>
+            )))}
           </div>
         </aside>
       </div>

@@ -31,3 +31,7 @@ database-debug.log
 .emulator-sync-state.json
 .emulator-data.*
 public/cricheroes-live-sync.zip
+
+# Android app release artifacts are produced by `npm run mobile:publish` (never commit APKs or signing keys)
+public/downloads/android/*
+!public/downloads/android/.gitkeep

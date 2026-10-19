@@ -32,12 +32,11 @@ import { multiCamService } from '../services/camera/multiCamService';
 import type { SportKey } from '../services/tenantService';
 import type { TeamBroadcastState } from '../utils/teamScoreboard';
 import { drawTeamScoreTicker } from '../utils/teamBroadcastCanvas';
+import { createTeamBroadcastState, isTeamSport, subscribeTeamBroadcast, teamLayoutContext } from '../utils/teamBroadcastSource';
 import { drawScorecardLayout, preloadScorecardLayoutImages } from '../utils/customScorecardCanvas';
 import { scorecardLayoutService } from '../services/scorecardLayoutService';
 import type { ScorecardLayout } from '../types/scorecardDesigner';
 import type { ScorecardDataContext } from '../utils/scorecardDataBinding';
-import { DEFAULT_FOOTBALL_OVERLAY_CONFIG } from '../types/football';
-import { DEFAULT_KABADDI_OVERLAY_CONFIG, DEFAULT_KABADDI_RULES } from '../types/kabaddi';
 import type { LiveScore, MatchSetup, ScoringOverlayConfig, OverlayControlState, MatchLineup, TickerDesign } from '../types/scoring';
 import {
   drawScoreTicker, drawCelebration, resolveCeleb, getImg,
@@ -199,31 +198,14 @@ export default function ScoreCameraPage({ gameType = 'cricket' }: Readonly<{ gam
   // Subscribe to Firebase live score + match setup
   useEffect(() => {
     if (!matchId) return;
-    if (gameType !== 'cricket') {
-      const state: TeamBroadcastState = gameType === 'football'
-        ? { sport: 'football', match: null, live: null, config: DEFAULT_FOOTBALL_OVERLAY_CONFIG }
-        : { sport: 'kabaddi', match: null, live: null, config: DEFAULT_KABADDI_OVERLAY_CONFIG, rules: DEFAULT_KABADDI_RULES };
+    if (isTeamSport(gameType)) {
+      const state = createTeamBroadcastState(gameType);
       teamBroadcastRef.current = state;
-      const base = tenantPath(namespace);
-      const onError = () => setError('Cannot load match broadcast data. Check your connection and access.');
-      const unsubs = [
-        onValue(ref(camDb, `${base}/matches/${matchId}/setup`), snap => {
-          state.match = snap.exists() ? snap.val() : null;
-          setTeamTitle(state.match ? `${state.match.teamA.name} vs ${state.match.teamB.name}` : 'Match Camera');
-        }, onError),
-        onValue(ref(camDb, `${base}/matches/${matchId}/live`), snap => {
-          state.live = snap.exists() ? snap.val() : null;
-        }, onError),
-        onValue(ref(camDb, `${base}/overlayConfig`), snap => {
-          state.config = { ...(state.sport === 'football' ? DEFAULT_FOOTBALL_OVERLAY_CONFIG : DEFAULT_KABADDI_OVERLAY_CONFIG), ...snap.val() };
-        }, onError),
-      ];
-      if (state.sport === 'kabaddi') {
-        unsubs.push(onValue(ref(camDb, `${base}/rules`), snap => {
-          state.rules = { ...DEFAULT_KABADDI_RULES, ...snap.val() };
-        }, onError));
-      }
-      return () => { unsubs.forEach(unsub => unsub()); teamBroadcastRef.current = null; };
+      const unsubscribe = subscribeTeamBroadcast(camDb, tenantPath(namespace), matchId, state, {
+        onMatch: teamMatch => setTeamTitle(teamMatch ? `${teamMatch.teamA.name} vs ${teamMatch.teamB.name}` : 'Match Camera'),
+        onError: () => setError('Cannot load match broadcast data. Check your connection and access.'),
+      });
+      return () => { unsubscribe(); teamBroadcastRef.current = null; };
     }
     const base = tenantPath('scoring');
     const unsubs: Array<() => void> = [];
@@ -308,14 +290,9 @@ export default function ScoreCameraPage({ gameType = 'cricket' }: Readonly<{ gam
         if (showTickerRef.current && customLayoutRef.current && customLayoutRef.current.widgets.length > 0) {
           const layout = customLayoutRef.current;
           const broadcast = teamBroadcastRef.current;
-          let dataCtx: ScorecardDataContext;
-          if (broadcast?.sport === 'football') {
-            dataCtx = { sport: 'football', match: broadcast.match, live: broadcast.live, branding: { tournamentLogo: broadcast.config.tournamentLogo, partnerLogo: broadcast.config.broadcastPartnerLogo } };
-          } else if (broadcast?.sport === 'kabaddi') {
-            dataCtx = { sport: 'kabaddi', match: broadcast.match, live: broadcast.live, rules: broadcast.rules, branding: { tournamentLogo: broadcast.config.tournamentLogo, partnerLogo: broadcast.config.broadcastPartnerLogo } };
-          } else {
-            dataCtx = { sport: 'cricket', match: matchRef.current, live: liveRef.current, branding: { tournamentLogo: overlayConfigRef.current?.tournamentLogo, partnerLogo: overlayConfigRef.current?.broadcastPartnerLogo } };
-          }
+          const dataCtx: ScorecardDataContext = broadcast
+            ? teamLayoutContext(broadcast)
+            : { sport: 'cricket', match: matchRef.current, live: liveRef.current, branding: { tournamentLogo: overlayConfigRef.current?.tournamentLogo, partnerLogo: overlayConfigRef.current?.broadcastPartnerLogo } };
           preloadScorecardLayoutImages(layout, dataCtx);
           drawScorecardLayout(ctx, W, H, layout, dataCtx);
         } else if (showTickerRef.current && teamBroadcastRef.current) {

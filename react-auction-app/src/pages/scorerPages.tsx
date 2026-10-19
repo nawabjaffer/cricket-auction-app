@@ -30,12 +30,14 @@ import KabaddiOBSDockPage from './KabaddiOBSDockPage';
 import CarromAdminPage from './CarromAdminPage';
 import CarromUpdatePage from './CarromUpdatePage';
 import CarromOBSOverlayPage from './CarromOBSOverlayPage';
+import CarromOBSDockPage from './CarromOBSDockPage';
 
 import ScorecardDesignerPage from './ScorecardDesignerPage';
+import MobileStudioPage from './MobileStudioPage';
 
 export type ScorerRouteKey =
   | 'admin' | 'update' | 'overlay' | 'obs-dock'
-  | 'camera' | 'camera-admin' | 'camera-host' | 'live-question' | 'live-chat' | 'designer';
+  | 'camera' | 'camera-admin' | 'camera-host' | 'live-question' | 'live-chat' | 'designer' | 'mobile-app';
 
 /** Sports that currently have an implemented scorer workspace. */
 export type SupportedGameType = Extract<SportKey, 'cricket' | 'football' | 'kabaddi' | 'carrom'>;
@@ -70,6 +72,7 @@ export function buildScorerPages(): Record<SupportedGameType, Partial<Record<Sco
       'live-question': <LiveQuestionPage />,
       'live-chat': <LiveCommentsPage />,
       designer: <ScorecardDesignerPage gameType="cricket" />,
+      'mobile-app': <MobileStudioPage key="cricket-mobile-app" gameType="cricket" />,
     },
     football: {
       admin: <FootballAdminPage />,
@@ -79,6 +82,7 @@ export function buildScorerPages(): Record<SupportedGameType, Partial<Record<Sco
       'camera-host': <ScoreCameraHostPage key="football-camera-host" gameType="football" />,
       'obs-dock': <FootballOBSDockPage />,
       designer: <ScorecardDesignerPage key="football-designer" gameType="football" />,
+      'mobile-app': <MobileStudioPage key="football-mobile-app" gameType="football" />,
     },
     kabaddi: {
       admin: <KabaddiAdminPage />,
@@ -88,12 +92,17 @@ export function buildScorerPages(): Record<SupportedGameType, Partial<Record<Sco
       'camera-host': <ScoreCameraHostPage key="kabaddi-camera-host" gameType="kabaddi" />,
       'obs-dock': <KabaddiOBSDockPage />,
       designer: <ScorecardDesignerPage key="kabaddi-designer" gameType="kabaddi" />,
+      'mobile-app': <MobileStudioPage key="kabaddi-mobile-app" gameType="kabaddi" />,
     },
     carrom: {
       admin: <CarromAdminPage />,
       update: <CarromUpdatePage />,
       overlay: <CarromOBSOverlayPage />,
+      camera: <ScoreCameraPage key="carrom-camera" gameType="carrom" />,
+      'camera-host': <ScoreCameraHostPage key="carrom-camera-host" gameType="carrom" />,
+      'obs-dock': <CarromOBSDockPage />,
       designer: <ScorecardDesignerPage key="carrom-designer" gameType="carrom" />,
+      'mobile-app': <MobileStudioPage key="carrom-mobile-app" gameType="carrom" />,
     },
   };
 }
