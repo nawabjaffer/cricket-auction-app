@@ -12,12 +12,13 @@ const GUIDE_META: Record<string, { title: string; summary: string }> = {
   cricket: { title: 'Cricket Scoring', summary: 'Set up matches and record a live cricket score.' },
   scoreboard: { title: 'Public Scoreboard', summary: 'Share match results and tournament statistics.' },
   broadcast: { title: 'Broadcast & OBS', summary: 'Connect overlays, replay, and highlights to OBS.' },
+  mobile: { title: 'Android Live Studio', summary: 'Install and pair Android phones, stream and share LAN cameras.' },
   football: { title: 'Football', summary: 'Configure teams and operate the football scorer.' },
   kabaddi: { title: 'Kabaddi', summary: 'Configure teams and operate the kabaddi scorer.' },
   carrom: { title: 'Carrom', summary: 'Run ICF-rules carrom fixtures, scoring and the OBS scoreboard.' },
 };
 
-const guideFiles = import.meta.glob('/docs/guides/*/README.md', {
+const guideFiles = import.meta.glob(['/docs/guides/*/README.md', '/mobile/README.md'], {
   query: '?raw',
   import: 'default',
   eager: true,
@@ -44,10 +45,10 @@ export default function GuidesPage() {
   const [query, setQuery] = useState('');
   const activeGuide = GUIDE_SECTIONS.find(section => section.id === activeId) ?? GUIDE_SECTIONS[0];
   const visibleGuides = useMemo(() => {
-    const normalizedQuery = query.trim().toLowerCase();
+    const normalizedQuery = query.trim().toLowerCase().replace(/\s+/g, ' ');
     if (!normalizedQuery) return GUIDE_SECTIONS;
     return GUIDE_SECTIONS.filter(section =>
-      `${section.title} ${section.summary} ${section.content}`.toLowerCase().includes(normalizedQuery),
+      `${section.title} ${section.summary} ${section.content}`.toLowerCase().replace(/\s+/g, ' ').includes(normalizedQuery),
     );
   }, [query]);
 

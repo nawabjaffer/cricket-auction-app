@@ -65,3 +65,26 @@ To fix mistakes, use **Undo / Redo** in the header. Under **Umpire corrections**
   - Pop-up celebrations when the Queen is covered or a board, game or match is won.
 - The colours, position and visible elements are set in **Carrom Admin › Broadcast**.
 - To design your own layout, open **Scorecard Designer**. The carrom canvas starts from the Walnut & Gold template, and every element is a carrom widget you can move or restyle. Click **Set Active** to use your layout in the overlay.
+
+## 5. Camera, host and OBS dock
+
+All URLs below use your active tournament's slug in place of `<tournament>`.
+
+- **Camera Recorder**: `/<tournament>/carrom/scorer/camera` opens the browser camera workflow with the carrom score ticker. Grant camera and microphone access and check the selected match before recording. Browser camera capture requires HTTPS or localhost.
+- **Camera Host**: `/<tournament>/carrom/scorer/camera-host` shows available camera sources and the program selection. Browser sources use WebRTC. An Android LAN camera is shown with its RTSP address, not a browser video preview; copy that URL into OBS, VLC or the Android studio host.
+- **OBS Control Dock**: add `/<tournament>/carrom/scorer/obs-dock` as an OBS custom browser dock. Select the correct match and use the dock for broadcast presentation and supported events; use the scorer to record actual strokes and results.
+- **OBS Overlay**: keep `/<tournament>/carrom/scorer/obs-overlay` as the browser source in the scene. A control dock is not a replacement for the overlay source.
+
+The ticker includes games, boards, points and the stroke clock. Check it against the scorer before taking the camera to air. Undo or correct scoring mistakes in the scorer rather than trying to repair the displayed score in OBS.
+
+## 6. Android Live Studio
+
+Open **Android Live Studio** in the admin Quick links, or visit `/<tournament>/carrom/scorer/mobile-app`. A download is only available after an APK has been published.
+
+1. Install the app and scan the page's pairing QR from **Tournament** on the phone.
+2. Choose the carrom fixture, or follow the on-air match. Confirm the final scoreboard in the Studio preview.
+3. Start with a supported 1080p/30 fps H.264 preset and a local test recording before using a private test stream.
+4. For additional angles, put the other phones on the same trusted Wi-Fi, start their **LAN camera**, then scan their camera QR from the studio phone and select **Take to air**.
+5. Monitor phone state, resolution, bitrate and battery under **Connected phones** on the web Mobile Studio page. Detailed app events remain in **Tournament > Diagnostics > Show log** on the phone.
+
+The full Android installation, monitoring, networking and release checklist is in the **Android Live Studio** section of the in-app guide center at `/<tournament>/help?section=mobile`. Bluetooth controls do not provide frame-accurate camera synchronization, and advertised quality depends on device and encoder support.

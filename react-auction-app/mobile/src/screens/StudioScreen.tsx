@@ -4,7 +4,8 @@
 // ============================================================================
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, Modal, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { Alert, Image, Modal, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { Battery, BatteryCharging, ChevronLeft, ChevronRight, Circle, CircleStop, FlipHorizontal2, Layers, Maximize, Mic, MicOff, PanelLeft, Plus, ScanLine, Settings2, SlidersHorizontal, Sparkles, Video, X, Zap, ZapOff } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StudioEngine, StudioSystem } from '../native';
 import { StudioPreview } from '../native/views';
@@ -18,8 +19,13 @@ import { log } from '../services/logger';
 import { useSettings } from '../store/settingsStore';
 import { isLiveState, useStudio } from '../store/studioStore';
 import { useNav } from '../store/navStore';
-import { Banner, Btn, Pill, Row, Slider } from '../ui/primitives';
+import { Banner, Btn, IconButton, Pill, Row, Slider } from '../ui/primitives';
 import { colors, radius, space } from '../ui/theme';
+import { SceneThumbnail } from '../ui/SceneThumbnail';
+import { activateScene, rememberSceneFrame, switchScene } from '../services/scenes';
+import { triggerSceneAnimation } from '../services/sceneAnimations';
+import { SCENE_ANIMATION_PRESETS } from '../shared/scenes';
+import { startPeerDiscovery } from '../services/peers';
 
 function useTick(intervalMs: number, active: boolean): number {
   const [now, setNow] = useState(() => Date.now());
@@ -132,6 +138,7 @@ export function StudioScreen() {
   const { width, height } = useWindowDimensions();
   const landscape = width > height;
   const openSetup = useNav(state => state.openSetup);
+  const setTab = useNav(state => state.setTab);
   const engineState = useStudio(state => state.engineState);
   const stats = useStudio(state => state.stats);
   const effective = useStudio(state => state.effective);
@@ -149,6 +156,11 @@ export function StudioScreen() {
   const profileKey = useStudio(state => JSON.stringify([state.profile?.video, state.profile?.audio]));
   const patchSettings = useSettings(state => state.patch);
   const patchStudio = useStudio(state => state.patch);
+  const scenes = useSettings(state => state.scenes);
+  const activeSceneId = useSettings(state => state.activeSceneId);
+  const pairing = useSettings(state => state.pairing);
+  const previewFill = useSettings(state => state.previewFill);
+  const activeScene = scenes.find(scene => scene.id === activeSceneId) ?? scenes[0];
 
   const [showPreflight, setShowPreflight] = useState(false);
   const [zoom, setZoom] = useState(1);
@@ -156,17 +168,40 @@ export function StudioScreen() {
   const [exposure, setExposure] = useState(0);
   const [exposureRange, setExposureRange] = useState({ min: 0, max: 0, step: 1 });
   const [showTuning, setShowTuning] = useState(false);
+  const [showTools, setShowTools] = useState(false);
+  const [showScenes, setShowScenes] = useState(false);
+  const [showAnimations, setShowAnimations] = useState(false);
+  const clean = useNav(state => state.studioClean);
+  const setClean = useNav(state => state.setStudioClean);
+  const [sceneBusy, setSceneBusy] = useState(false);
+  const [animationSide, setAnimationSide] = useState<'A' | 'B'>('A');
+  const [hudBottom, setHudBottom] = useState(insets.top + 54);
 
   const live = isLiveState(engineState);
   const now = useTick(1000, live);
 
   // Bring the camera up when the screen opens; hand it back when leaving unless streaming.
   useEffect(() => {
-    void prepareStudio();
+    void prepareStudio().then(ready => {
+      if (ready) return activateScene(useSettings.getState().activeSceneId);
+      return undefined;
+    }).catch(cause => patchStudio({ notice: cause instanceof Error ? cause.message : String(cause) }));
     return () => {
       if (!isLiveState(useStudio.getState().engineState)) void releaseEngine();
     };
-  }, []);
+  }, [patchStudio]);
+
+  useEffect(() => showScenes ? startPeerDiscovery() : undefined, [showScenes]);
+
+  useEffect(() => {
+    if (!showScenes || (engineState !== 'preview' && engineState !== 'live')) return undefined;
+    void rememberSceneFrame(activeSceneId);
+    const timer = setInterval(() => { void rememberSceneFrame(activeSceneId); }, 2500);
+    return () => clearInterval(timer);
+  }, [showScenes, activeSceneId, engineState]);
+
+  const sceneKey = JSON.stringify(activeScene);
+  useEffect(() => { void applyOverlays(); }, [sceneKey]);
 
   // Re-configure (only while idle) when quality or audio settings change.
   useEffect(() => {
@@ -180,13 +215,20 @@ export function StudioScreen() {
     StudioEngine.getExposureRange().then(setExposureRange).catch(() => undefined);
   }, [engineState]);
 
+  useEffect(() => {
+    if (engineState === 'preview' || isLiveState(engineState)) void StudioEngine.setPreviewFill(previewFill).catch(() => undefined);
+  }, [previewFill, engineState]);
+
   const statusInfo = STATE_LABEL[engineState] ?? STATE_LABEL.idle;
   const elapsed = session ? now - session.startedAt : 0;
 
   const flip = useCallback(async () => {
     try {
       await StudioEngine.switchCamera();
-      patchSettings({ facing: facing === 'back' ? 'front' : 'back' });
+      const nextFacing = facing === 'back' ? 'front' : 'back';
+      const settings = useSettings.getState();
+      patchSettings({ facing: nextFacing, scenes: settings.scenes.map(scene => scene.id === settings.activeSceneId
+        ? { ...scene, camera: { kind: 'local', facing: nextFacing } } : scene) });
       syncPreparedSignature();
     } catch (cause) { patchStudio({ notice: `Could not switch camera: ${cause instanceof Error ? cause.message : String(cause)}` }); }
   }, [facing, patchSettings, patchStudio]);
@@ -219,21 +261,36 @@ export function StudioScreen() {
   })), [destinations, runtimeDestinations]);
 
   const hot = thermal >= 3;
+  const drawerWidth = width * 0.15;
+  const drawerBottom = insets.bottom + 124;
+  const scenePresets = SCENE_ANIMATION_PRESETS.filter(preset => activeScene.animations.includes(preset.id) && preset.game === pairing?.game);
+  const report = (cause: unknown) => patchStudio({ notice: cause instanceof Error ? cause.message : String(cause) });
+  const takeScene = async (id: string) => {
+    setSceneBusy(true);
+    try { await activateScene(id); } catch (cause) { report(cause); }
+    finally { setSceneBusy(false); }
+  };
   return (
     <View style={s.root}>
       <StudioPreview style={StyleSheet.absoluteFill} />
 
-      <View style={[s.top, { paddingTop: insets.top + space.sm }]} pointerEvents="box-none">
-        <Row style={{ flexWrap: 'wrap' }}>
+      {!clean && <View style={[s.top, { paddingTop: insets.top + space.sm }]} pointerEvents="box-none"
+        onLayout={event => setHudBottom(event.nativeEvent.layout.height + 8)}>
+        <Row style={s.hudBar}>
+          <Row style={{ flex: 1, minWidth: 0 }}>
+          <Image source={require('../assets/njs-store.png')} style={s.logo} resizeMode="contain" />
           <Pill label={statusInfo.label} tone={statusInfo.tone} />
           {live && <Text style={s.hud}>{formatElapsed(elapsed)}</Text>}
-          {stats && live && <Text style={s.hud}>{Math.round(stats.bitrateKbps)} kbps · {stats.fps} fps{stats.dropped ? ` · ${stats.dropped} dropped` : ''}</Text>}
-          {effective && <Text style={s.hudMuted}>{effective.preset.label}{effective.codec === 'h265' ? ' · HEVC' : ''}</Text>}
-          {programSource.kind === 'peer' && <Pill label={`CAM: ${programSource.name}`} tone="warn" />}
-          {battery && <Text style={s.hudMuted}>{battery.charging ? '⚡' : '🔋'} {Math.round(battery.level)}%</Text>}
+          {effective && (!live || landscape) && <Text style={s.hudMuted} numberOfLines={1}>{effective.preset.height}p{effective.preset.fps}</Text>}
+          {stats && live && landscape && <Text style={s.hudMuted}>{(stats.bitrateKbps / 1000).toFixed(1)}M · {stats.fps} fps</Text>}
+          </Row>
+          <Row>
+          {battery && <>{battery.charging ? <BatteryCharging size={14} color={colors.text} /> : <Battery size={14} color={colors.text} />}<Text style={s.hudMuted}>{Math.round(battery.level)}%</Text></>}
           {hot && <Pill label="HOT" tone="danger" />}
+          <IconButton icon={Maximize} label="Hide studio controls" onPress={() => setClean(true)} />
+          </Row>
         </Row>
-        {destinationChips.length > 0 && (
+        {destinationChips.length > 0 && live && (
           <Row style={{ flexWrap: 'wrap', marginTop: space.xs }}>
             {destinationChips.map(chip => (
               <Pill
@@ -246,26 +303,35 @@ export function StudioScreen() {
         )}
         {error && <View style={{ marginTop: space.sm }}><Banner tone="danger" text={error} onDismiss={() => patchStudio({ error: null })} /></View>}
         {!error && notice && <View style={{ marginTop: space.sm }}><Banner tone="info" text={notice} onDismiss={() => patchStudio({ notice: null })} /></View>}
-        {session && session.watchUrls.length > 0 && live && (
-          <Text style={s.watch} numberOfLines={1}>▶ {session.watchUrls[0]}</Text>
-        )}
-      </View>
+      </View>}
 
       {engineState === 'idle' && !error && (
         <View style={s.center} pointerEvents="none"><Text style={s.centerText}>Starting camera…</Text></View>
       )}
 
-      <View style={[s.rail, landscape && s.railLandscape, { top: insets.top + 64, right: insets.right + space.md }]} pointerEvents="box-none">
-        <RailButton icon="🔄" label="Flip camera" onPress={() => void flip()} />
-        <RailButton icon="🔦" label="Torch" active={stats?.torch} onPress={toggleTorch} />
-        <RailButton icon={stats?.muted ? '🔇' : '🎙️'} label={stats?.muted ? 'Unmute' : 'Mute'} active={stats?.muted} onPress={() => { void StudioEngine.setMuted(!(stats?.muted ?? false)); }} />
-        <RailButton icon="🖼️" label="Overlays" active={overlaysEnabled} onPress={toggleOverlays} />
-        <RailButton icon="⏺️" label="Record" active={stats?.recording} onPress={() => void toggleRecord()} />
-        <RailButton icon="🎚️" label="Zoom and exposure" active={showTuning} onPress={() => setShowTuning(value => !value)} />
-      </View>
+      {!clean && <View style={[s.leftTools, { top: hudBottom, left: insets.left + 8 + (showScenes ? drawerWidth + 6 : 0), bottom: drawerBottom }]} pointerEvents="box-none">
+        <IconButton icon={showTools ? X : SlidersHorizontal} label={showTools ? 'Collapse camera tools' : 'Camera tools'} active={showTools} onPress={() => setShowTools(value => !value)} />
+        {showTools && <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={s.toolList}>
+          <IconButton icon={FlipHorizontal2} label="Flip this phone camera" disabled={programSource.kind === 'peer'} onPress={() => void flip()} />
+          <IconButton icon={stats?.torch ? ZapOff : Zap} label="Flashlight" disabled={programSource.kind === 'peer'} active={stats?.torch} onPress={toggleTorch} />
+          <IconButton icon={stats?.muted ? MicOff : Mic} label={stats?.muted ? 'Unmute' : 'Mute'} active={stats?.muted} onPress={() => { void StudioEngine.setMuted(!(stats?.muted ?? false)).catch(report); }} />
+          <IconButton icon={Layers} label="Show or hide overlays" active={overlaysEnabled} onPress={toggleOverlays} />
+          <IconButton icon={stats?.recording ? CircleStop : Circle} label={stats?.recording ? 'Stop recording' : 'Record'} active={stats?.recording} onPress={() => void toggleRecord()} />
+          <IconButton icon={Settings2} label="Zoom and exposure" active={showTuning} onPress={() => setShowTuning(value => !value)} />
+          <IconButton icon={ScanLine} label={previewFill ? 'Fit entire output frame' : 'Fill preview screen'} active={!previewFill} onPress={() => patchSettings({ previewFill: !previewFill })} />
+        </ScrollView>}
+      </View>}
 
-      {showTuning && (
-        <View style={s.tuning}>
+      {showScenes && !clean && <View style={[s.sceneRail, { width: drawerWidth, top: hudBottom, left: insets.left + 6, bottom: drawerBottom }]}>
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={s.sceneList}>
+          {scenes.map((scene, index) => <SceneThumbnail key={scene.id} scene={scene} selected={scene.id === activeSceneId} onAir={scene.id === activeSceneId}
+            livePreview={index < 3 && !sceneBusy} onPress={() => { if (!sceneBusy) void takeScene(scene.id); }} />)}
+        </ScrollView>
+        <IconButton icon={Plus} label="Edit scenes and sources" onPress={() => setTab('scenes')} style={{ alignSelf: 'center' }} />
+      </View>}
+
+      {showTuning && showTools && !clean && (
+        <ScrollView style={[s.tuning, { left: insets.left + 52 + (showScenes ? drawerWidth + 6 : 0), width: Math.min(192, width - insets.left - insets.right - 62 - (showScenes ? drawerWidth + 6 : 0)), top: hudBottom, maxHeight: height - hudBottom - drawerBottom }]} contentContainerStyle={{ padding: 10, gap: 4 }}>
           <Text style={s.tuneLabel}>Zoom {zoom.toFixed(1)}×</Text>
           <Slider value={zoom} min={zoomRange.min} max={Math.max(zoomRange.max, zoomRange.min + 0.01)} step={0.1} label="Zoom"
             onChange={value => { setZoom(value); void StudioEngine.setZoom(value); }} />
@@ -276,54 +342,68 @@ export function StudioScreen() {
             <Btn small label="Lock exposure" onPress={() => { void StudioEngine.setExposureLock(true); }} />
             <Btn small label="Auto" onPress={() => { void StudioEngine.setExposureLock(false); void StudioEngine.setAutoFocus(true); }} />
           </Row>
-        </View>
+        </ScrollView>
       )}
 
-      <View style={[s.bottom, { paddingBottom: insets.bottom + space.md }]} pointerEvents="box-none">
-        <Row style={{ justifyContent: 'space-between', alignItems: 'flex-end' }} gap={space.md}>
-          <Btn small label="Setup" onPress={() => openSetup('destinations')} />
+      {!clean && <View style={[s.bottom, { bottom: insets.bottom + 62 }]} pointerEvents="box-none">
+        <Row style={{ justifyContent: 'space-between' }} gap={space.sm}>
+          <View style={{ width: 62, alignItems: 'center', gap: 2 }}><IconButton icon={PanelLeft} label="Setup scene previews" active={showScenes} onPress={() => setShowScenes(value => !value)} /><Text style={s.controlCaption}>Setup</Text></View>
+          <View style={{ flex: 1, alignItems: 'center', gap: 7 }}>
+          <Row gap={3}>
+            <IconButton icon={ChevronLeft} label="Previous scene" onPress={() => { void switchScene(-1).catch(report); }} disabled={sceneBusy} />
+            <Text style={s.sceneTitle} numberOfLines={1}>{activeScene.name}</Text>
+            <IconButton icon={ChevronRight} label="Next scene" onPress={() => { void switchScene(1).catch(report); }} disabled={sceneBusy} />
+          </Row>
           {live ? (
-            <Btn label="END STREAM" variant="danger" onPress={confirmEnd} style={s.goBtn} testID="end-live" />
+            <Btn small label="End stream" variant="danger" onPress={confirmEnd} style={s.goBtn} testID="end-live" />
           ) : (
-            <Btn label="GO LIVE" variant="primary" onPress={() => setShowPreflight(true)} style={s.goBtn} disabled={engineState === 'idle' || engineState === 'error'} testID="go-live" />
+            <Btn small label="Go live" variant="primary" onPress={() => setShowPreflight(true)} style={s.goBtn} disabled={engineState === 'idle' || engineState === 'error'} testID="go-live" />
           )}
-          <Btn small label="Video" onPress={() => openSetup('video')} />
+          </View>
+          <View style={{ width: 62, alignItems: 'center', gap: 2 }}>
+            <IconButton icon={scenePresets.length ? Sparkles : Video} label={scenePresets.length ? 'Scene animations' : 'Video quality'} active={showAnimations}
+              onPress={() => { if (scenePresets.length) setShowAnimations(value => !value); else openSetup('video'); }} />
+            <Text style={s.controlCaption}>{scenePresets.length ? 'Animate' : 'Quality'}</Text>
+          </View>
         </Row>
-      </View>
+        {showAnimations && scenePresets.length > 0 && <View style={s.animations}>
+          <Row><Btn small label="Side A" variant={animationSide === 'A' ? 'primary' : 'secondary'} onPress={() => setAnimationSide('A')} /><Btn small label="Side B" variant={animationSide === 'B' ? 'primary' : 'secondary'} onPress={() => setAnimationSide('B')} /></Row>
+          <ScrollView horizontal contentContainerStyle={{ gap: 6 }}>
+            {scenePresets.map(preset => <Btn key={preset.id} small label={preset.label} onPress={() => { void triggerSceneAnimation(preset.id, animationSide).catch(report); }} />)}
+          </ScrollView>
+        </View>}
+      </View>}
+
+      {clean && <View style={{ position: 'absolute', top: insets.top + 10, right: insets.right + 10 }}><IconButton icon={Maximize} label="Show studio controls" onPress={() => setClean(false)} /></View>}
 
       <PreflightSheet visible={showPreflight} onClose={() => setShowPreflight(false)} onConfirm={goLive} />
     </View>
   );
 }
 
-function RailButton({ icon, label, onPress, active }: Readonly<{ icon: string; label: string; onPress: () => void; active?: boolean }>) {
-  return (
-    <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={onPress} style={[s.railBtn, active && s.railBtnActive]}>
-      <Text style={s.railIcon}>{icon}</Text>
-    </Pressable>
-  );
-}
-
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#000' },
   top: { position: 'absolute', left: 0, right: 0, top: 0, paddingHorizontal: space.md },
-  hud: { color: '#fff', fontSize: 13, fontWeight: '700', textShadowColor: '#000', textShadowRadius: 4 },
-  hudMuted: { color: 'rgba(255,255,255,0.8)', fontSize: 12, textShadowColor: '#000', textShadowRadius: 4 },
-  watch: { color: '#bfdbfe', fontSize: 12, marginTop: space.xs, textShadowColor: '#000', textShadowRadius: 4 },
+  logo: { width: 22, height: 22 },
+  hudBar: { justifyContent: 'space-between', minHeight: 38, paddingHorizontal: 6, borderRadius: 6, backgroundColor: 'rgba(8,11,15,0.74)' },
+  hud: { color: '#fff', fontSize: 11, fontWeight: '700', textShadowColor: '#000', textShadowRadius: 4 },
+  hudMuted: { color: 'rgba(255,255,255,0.85)', fontSize: 10, textShadowColor: '#000', textShadowRadius: 4 },
   center: { ...StyleSheet.absoluteFill, alignItems: 'center', justifyContent: 'center' },
   centerText: { color: colors.muted, fontSize: 15 },
-  rail: { position: 'absolute', right: space.md, gap: space.sm },
-  railLandscape: { flexDirection: 'row' },
-  railBtn: { width: 46, height: 46, borderRadius: 23, backgroundColor: 'rgba(2,6,23,0.6)', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)' },
-  railBtnActive: { backgroundColor: 'rgba(61,220,132,0.35)', borderColor: colors.accent },
-  railIcon: { fontSize: 20 },
-  tuning: { position: 'absolute', right: 70, top: 120, width: 240, padding: space.md, gap: 4, borderRadius: radius.lg, backgroundColor: 'rgba(2,6,23,0.82)', borderWidth: 1, borderColor: colors.line },
+  leftTools: { position: 'absolute', width: 36, gap: 6 },
+  toolList: { gap: 7, paddingTop: 7, paddingBottom: 5 },
+  sceneRail: { position: 'absolute', borderRadius: 8, padding: 4, gap: 5, backgroundColor: 'rgba(12,15,19,0.9)', borderWidth: 1, borderColor: colors.line },
+  sceneList: { gap: 7, paddingBottom: 5 },
+  sceneTitle: { color: '#fff', fontSize: 11, fontWeight: '600', width: 86, textAlign: 'center' },
+  controlCaption: { color: '#fff', fontSize: 10 },
+  animations: { position: 'absolute', bottom: 91, left: 0, right: 0, backgroundColor: 'rgba(12,15,19,0.94)', padding: 10, borderRadius: 8, gap: 7 },
+  tuning: { position: 'absolute', width: 192, borderRadius: radius.lg, backgroundColor: 'rgba(12,15,19,0.94)', borderWidth: 1, borderColor: colors.line },
   tuneLabel: { color: colors.text, fontSize: 12, fontWeight: '700' },
-  bottom: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingHorizontal: space.lg },
-  goBtn: { minWidth: 168, minHeight: 56, borderRadius: 28 },
+  bottom: { position: 'absolute', left: 10, right: 10 },
+  goBtn: { width: 132, minHeight: 36, borderRadius: 8 },
   sheetBackdrop: { flex: 1, backgroundColor: colors.scrim, justifyContent: 'flex-end' },
-  sheet: { backgroundColor: colors.card, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: space.lg, gap: space.sm, maxHeight: '90%' },
-  sheetTitle: { color: colors.text, fontSize: 20, fontWeight: '800', marginBottom: space.xs },
+  sheet: { backgroundColor: colors.card, borderTopLeftRadius: 8, borderTopRightRadius: 8, padding: space.lg, gap: space.sm, maxHeight: '90%' },
+  sheetTitle: { color: colors.text, fontSize: 17, fontWeight: '700', marginBottom: space.xs },
   sheetMuted: { color: colors.muted, fontSize: 13 },
   checkIcon: { fontSize: 16, width: 20, marginTop: 1 },
   checkLabel: { color: colors.text, fontSize: 14, fontWeight: '700' },

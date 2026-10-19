@@ -89,6 +89,10 @@ gradle.taskGraph.whenReady { graph ->
     }
 }
 
+tasks.matching { it.name in ["assembleRelease", "bundleRelease"] }.configureEach {
+    dependsOn("lintRelease")
+}
+
 // RTSP-Server and RootEncoder must resolve to the same (Kotlin 2.2-compatible) RootEncoder release.
 configurations.configureEach {
     resolutionStrategy.eachDependency { details ->

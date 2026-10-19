@@ -25,6 +25,10 @@ class EngineModule(private val context: ReactApplicationContext) : ReactContextB
 
     @ReactMethod fun getCapabilities(promise: Promise) = promise.runValue { Engine.capabilities() }
 
+    @ReactMethod fun captureThumbnail(promise: Promise) = Engine.captureThumbnail { promise.resolve(it) }
+
+    @ReactMethod fun setPreviewFill(fill: Boolean, promise: Promise) = promise.runVoid { Engine.setPreviewFill(fill) }
+
     @ReactMethod fun prepare(configJson: String, mode: String, promise: Promise) = promise.runVoid { Engine.prepare(configJson, mode) }
 
     @ReactMethod fun release(promise: Promise) = promise.runVoid { Engine.release() }

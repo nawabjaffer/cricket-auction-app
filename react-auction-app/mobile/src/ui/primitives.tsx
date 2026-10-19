@@ -1,10 +1,23 @@
 // Small design-system layer: every screen is built from these so the app stays visually consistent.
 import React, { useCallback, useRef, useState, type ReactNode } from 'react';
 import {
-  PanResponder, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View,
+  PanResponder, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, ToastAndroid, View,
   type LayoutChangeEvent, type StyleProp, type TextInputProps, type ViewStyle,
 } from 'react-native';
 import { colors, radius, space } from './theme';
+import type { LucideIcon } from 'lucide-react-native';
+
+export function IconButton({ icon: Icon, label, onPress, active, disabled, style }: Readonly<{
+  icon: LucideIcon; label: string; onPress: () => void; active?: boolean; disabled?: boolean; style?: StyleProp<ViewStyle>;
+}>) {
+  return (
+    <Pressable accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ selected: !!active, disabled: !!disabled }}
+      onPress={onPress} disabled={disabled} hitSlop={4} onLongPress={() => ToastAndroid.show(label, ToastAndroid.SHORT)}
+      style={[s.iconBtn, active && { borderColor: colors.accent, backgroundColor: 'rgba(61,220,132,0.18)' }, disabled && { opacity: 0.35 }, style]}>
+      <Icon size={18} strokeWidth={1.8} color={active ? colors.accent : colors.text} />
+    </Pressable>
+  );
+}
 
 export function Card({ children, style }: Readonly<{ children: ReactNode; style?: StyleProp<ViewStyle> }>) {
   return <View style={[s.card, style]}>{children}</View>;
@@ -66,6 +79,7 @@ export function Btn({ label, onPress, variant = 'secondary', disabled, busy, sma
       accessibilityRole="button"
       accessibilityState={{ disabled: !!inactive, busy: !!busy }}
       onPress={inactive ? undefined : onPress}
+      hitSlop={small ? 5 : 2}
       style={({ pressed }) => [
         s.btn, small && s.btnSmall,
         { backgroundColor: palette.bg, borderColor: palette.border, opacity: inactive ? 0.45 : pressed ? 0.8 : 1 },
@@ -233,26 +247,27 @@ const s = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
   screenContent: { padding: space.lg, gap: space.md, paddingBottom: 96 },
   card: { backgroundColor: colors.card, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.line, padding: space.lg, gap: space.md },
-  h1: { color: colors.text, fontSize: 22, fontWeight: '800' },
-  h2: { color: colors.text, fontSize: 16, fontWeight: '800' },
-  muted: { color: colors.muted, fontSize: 13, lineHeight: 18 },
-  body: { color: colors.text, fontSize: 14, lineHeight: 20 },
+  h1: { color: colors.text, fontSize: 18, fontWeight: '700' },
+  h2: { color: colors.text, fontSize: 14, fontWeight: '700' },
+  muted: { color: colors.muted, fontSize: 12, lineHeight: 17 },
+  body: { color: colors.text, fontSize: 13, lineHeight: 18 },
   label: { color: colors.muted, fontSize: 12, fontWeight: '700' },
   hint: { color: colors.muted, fontSize: 12 },
   error: { color: colors.danger, fontSize: 12 },
-  section: { color: colors.muted, fontSize: 12, fontWeight: '800', letterSpacing: 1, textTransform: 'uppercase', marginTop: space.sm },
-  btn: { minHeight: 46, borderRadius: radius.md, borderWidth: 1, paddingHorizontal: space.lg, alignItems: 'center', justifyContent: 'center' },
-  btnSmall: { minHeight: 36, paddingHorizontal: space.md, borderRadius: radius.sm },
-  btnLabel: { fontSize: 15, fontWeight: '800' },
-  btnLabelSmall: { fontSize: 13 },
+  section: { color: colors.muted, fontSize: 11, fontWeight: '700', letterSpacing: 0, textTransform: 'uppercase', marginTop: space.sm },
+  iconBtn: { width: 36, height: 36, borderRadius: 8, borderWidth: 1, borderColor: colors.line, backgroundColor: 'rgba(13,17,22,0.86)', alignItems: 'center', justifyContent: 'center' },
+  btn: { minHeight: 42, borderRadius: radius.md, borderWidth: 1, paddingHorizontal: space.lg, alignItems: 'center', justifyContent: 'center' },
+  btnSmall: { minHeight: 34, paddingHorizontal: space.md, borderRadius: radius.sm },
+  btnLabel: { fontSize: 13, fontWeight: '700' },
+  btnLabelSmall: { fontSize: 12 },
   pill: { paddingHorizontal: 10, paddingVertical: 3, borderRadius: radius.pill, alignSelf: 'flex-start' },
-  pillText: { fontSize: 11, fontWeight: '800', letterSpacing: 0.6 },
+  pillText: { fontSize: 10, fontWeight: '700', letterSpacing: 0 },
   banner: { borderWidth: 1, borderRadius: radius.md, padding: space.md, backgroundColor: 'rgba(15,23,42,0.9)' },
-  bannerText: { color: colors.text, fontSize: 13, lineHeight: 18 },
-  input: { minHeight: 46, borderRadius: radius.md, borderWidth: 1, borderColor: colors.line, paddingHorizontal: space.md, color: colors.text, backgroundColor: 'rgba(2,6,23,0.55)', fontSize: 15 },
+  bannerText: { color: colors.text, fontSize: 12, lineHeight: 17 },
+  input: { minHeight: 42, borderRadius: radius.md, borderWidth: 1, borderColor: colors.line, paddingHorizontal: space.md, color: colors.text, backgroundColor: 'rgba(2,6,23,0.55)', fontSize: 13 },
   segmented: { flexDirection: 'row', borderRadius: radius.md, borderWidth: 1, borderColor: colors.line, overflow: 'hidden' },
-  segment: { flex: 1, minHeight: 40, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 6 },
-  segmentText: { color: colors.text, fontSize: 13, fontWeight: '700' },
+  segment: { flex: 1, minHeight: 36, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 5 },
+  segmentText: { color: colors.text, fontSize: 11, fontWeight: '700' },
   sliderHit: { height: 40, justifyContent: 'center' },
   sliderTrack: { height: 6, borderRadius: 3, backgroundColor: 'rgba(148,163,184,0.3)', overflow: 'hidden' },
   sliderFill: { height: 6, backgroundColor: colors.accent },

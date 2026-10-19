@@ -9,13 +9,16 @@ import { DEFAULT_ORIGIN } from '../config';
 import { storage } from '../services/storage';
 import { log } from '../services/logger';
 import type { LocalOverrides } from '../services/effectiveConfig';
+import { defaultScenes, normalizeScenes, type StudioScene } from '../shared/scenes';
+import { normalizeScoringWorkspace } from '../shared/scoringWorkspace';
 import {
   MAX_STUDIO_DESTINATIONS, STUDIO_PLATFORM_PRESETS,
-  type StudioDestination, type StudioGameType, type StudioPlatform, type StudioWidget,
+  type StudioDestination, type StudioGameType, type StudioPairing, type StudioPlatform, type StudioWidget,
 } from '../shared/studioProfile';
 
 export type RemoteAction =
-  | 'none' | 'toggleLive' | 'toggleMute' | 'switchCamera' | 'toggleOverlays' | 'toggleTorch' | 'toggleRecord';
+  | 'none' | 'toggleLive' | 'toggleMute' | 'switchCamera' | 'toggleOverlays' | 'toggleTorch' | 'toggleRecord'
+  | 'nextScene' | 'previousScene';
 
 export const REMOTE_ACTIONS: ReadonlyArray<{ id: RemoteAction; label: string }> = [
   { id: 'none', label: 'Do nothing' },
@@ -25,6 +28,8 @@ export const REMOTE_ACTIONS: ReadonlyArray<{ id: RemoteAction; label: string }> 
   { id: 'toggleOverlays', label: 'Show / hide overlays' },
   { id: 'toggleTorch', label: 'Torch' },
   { id: 'toggleRecord', label: 'Start / stop recording' },
+  { id: 'nextScene', label: 'Next scene' },
+  { id: 'previousScene', label: 'Previous scene' },
 ];
 
 export const DEFAULT_REMOTE_KEYS: Record<string, RemoteAction> = {
@@ -35,6 +40,10 @@ export const DEFAULT_REMOTE_KEYS: Record<string, RemoteAction> = {
   BUTTON_B: 'toggleTorch',
   VOLUME_UP: 'none',
   VOLUME_DOWN: 'none',
+  MEDIA_NEXT: 'nextScene',
+  MEDIA_PREVIOUS: 'previousScene',
+  BUTTON_R1: 'nextScene',
+  BUTTON_L1: 'previousScene',
 };
 
 export interface LocalDestination {
@@ -62,6 +71,7 @@ export interface SettingsData {
   hydrated: boolean;
   origin: string;
   pairing: Pairing | null;
+  scoringWorkspace: StudioPairing | null;
   deviceId: string;
   deviceName: string;
   role: 'studio' | 'camera';
@@ -79,6 +89,9 @@ export interface SettingsData {
   ytLinked: boolean;
   /** Cameras added by QR or by typing an RTSP address (IP cameras, other phones). */
   manualCameras: Array<{ name: string; url: string }>;
+  scenes: StudioScene[];
+  activeSceneId: string;
+  previewFill: boolean;
 }
 
 interface SettingsActions {
@@ -99,6 +112,7 @@ export function defaultSettings(): SettingsData {
     hydrated: false,
     origin: DEFAULT_ORIGIN,
     pairing: null,
+    scoringWorkspace: null,
     deviceId: randomId(),
     deviceName: 'Phone',
     role: 'studio',
@@ -115,6 +129,9 @@ export function defaultSettings(): SettingsData {
     cameraPort: 8554,
     ytLinked: false,
     manualCameras: [],
+    scenes: defaultScenes(),
+    activeSceneId: 'main',
+    previewFill: true,
   };
 }
 
@@ -169,6 +186,7 @@ export const useSettings = create<SettingsData & SettingsActions>((set, get) => 
     hydrate: async () => {
       const stored = await storage.getJson<Partial<SettingsData> | null>(STORAGE_KEY, null);
       const base = defaultSettings();
+      const scenes = normalizeScenes(stored?.scenes, stored?.facing ?? base.facing);
       set({
         ...base,
         ...(stored ?? {}),
@@ -176,6 +194,9 @@ export const useSettings = create<SettingsData & SettingsActions>((set, get) => 
         audio: { ...base.audio, ...(stored?.audio ?? {}) },
         remoteKeys: { ...DEFAULT_REMOTE_KEYS, ...(stored?.remoteKeys ?? {}) },
         deviceId: stored?.deviceId ?? base.deviceId,
+        scenes,
+        activeSceneId: scenes.some(scene => scene.id === stored?.activeSceneId) ? stored!.activeSceneId! : scenes[0].id,
+        scoringWorkspace: normalizeScoringWorkspace(stored?.scoringWorkspace),
         hydrated: true,
       });
       if (!stored) persist();

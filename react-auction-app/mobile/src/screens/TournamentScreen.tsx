@@ -52,6 +52,8 @@ export function TournamentScreen() {
   const [problem, setProblem] = useState<string | null>(null);
   const [update, setUpdate] = useState<UpdateInfo | null>(null);
   const [checking, setChecking] = useState(false);
+  const [updateError, setUpdateError] = useState<string | null>(null);
+  const [downloading, setDownloading] = useState(false);
   const [showLogs, setShowLogs] = useState(false);
 
   const pair = async (input: { origin: string; tenantId: string; slug: string; game: StudioGameType; matchId?: string }) => {
@@ -90,14 +92,29 @@ export function TournamentScreen() {
 
   const check = async () => {
     setChecking(true);
+    setUpdateError(null);
+    setUpdate(null);
     try {
-      setUpdate(await checkForUpdate(origin, appInfo?.versionCode ?? 0));
+      const installed = appInfo ?? await StudioSystem.getAppInfo();
+      if (!appInfo) useStudio.getState().patch({ appInfo: installed });
+      setUpdate(await checkForUpdate(origin, installed.versionCode, {
+        channel: installed.developmentSigned ? 'testing' : 'stable', sdk: installed.sdk, signerSha256: installed.signerSha256,
+      }));
     } catch (error) {
       log.warn('update', error);
-      setUpdate({ available: false, manifest: null, apkUrl: null });
+      setUpdateError(error instanceof Error ? error.message : 'Could not check for updates. Try again.');
     } finally {
       setChecking(false);
     }
+  };
+
+  const downloadUpdate = async () => {
+    if (!update?.available || !update.apkUrl) return;
+    setDownloading(true);
+    setUpdateError(null);
+    try { await Linking.openURL(update.apkUrl); }
+    catch { setUpdateError('Could not open the APK download. Check that a browser is enabled on this phone.'); }
+    finally { setDownloading(false); }
   };
 
   const chooseMatch = (matchId: string | undefined) => { if (pairing) setPairing({ ...pairing, matchId }); };
@@ -160,12 +177,14 @@ export function TournamentScreen() {
       <Card>
         <H2>App</H2>
         <Text style={{ color: colors.text }}>NJS Live Studio {appInfo?.versionName ?? '—'} (build {appInfo?.versionCode ?? '—'})</Text>
+        {appInfo && <Pill label={appInfo.developmentSigned ? 'Testing updates' : 'Production updates'} tone={appInfo.developmentSigned ? 'warn' : 'neutral'} />}
         <Btn label="Check for updates" onPress={() => void check()} busy={checking} />
-        {update && !update.available && <Muted>{update.manifest ? 'You have the latest version.' : 'No published release was found on the server.'}</Muted>}
+        {updateError && <Banner tone="warn" text={updateError} onDismiss={() => setUpdateError(null)} />}
+        {update && !update.available && <Muted>{update.manifest ? 'No newer version is available on this update channel.' : 'No release has been published on this update channel yet.'}</Muted>}
         {update?.available && update.manifest && update.apkUrl && (
           <>
-            <Banner tone="info" text={`Version ${update.manifest.versionName} is available.`} />
-            <Btn label="Download update" variant="primary" onPress={() => { void Linking.openURL(update.apkUrl as string); }} />
+            <Banner tone="info" text={`Version ${update.manifest.versionName} is available${update.manifest.channel === 'testing' ? ' (testing build)' : ''}.`} />
+            <Btn label="Download update" variant="primary" onPress={() => void downloadUpdate()} busy={downloading} />
           </>
         )}
       </Card>

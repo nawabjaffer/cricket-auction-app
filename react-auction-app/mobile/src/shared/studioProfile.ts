@@ -559,6 +559,8 @@ export function parsePairingLink(link: string): StudioPairing | null {
 
 // ── Release manifest (public/downloads/android/latest.json) ──────────────────
 
+export type StudioReleaseChannel = 'stable' | 'testing';
+
 export interface StudioReleaseManifest {
   schema: 1;
   appId: string;
@@ -569,6 +571,8 @@ export interface StudioReleaseManifest {
   size: number;
   sha256: string;
   builtAt: string;
+  channel?: StudioReleaseChannel;
+  signing?: 'release' | 'development';
   /** SHA-256 / SHA-1 of the APK signing certificate (register the SHA-1 for Google sign-in). */
   signerSha256?: string;
   signerSha1?: string;
@@ -581,10 +585,12 @@ const HEX_64 = /^[a-f0-9]{64}$/i;
 export function parseReleaseManifest(raw: unknown): StudioReleaseManifest | null {
   const item = asRecord(raw);
   if (item.schema !== 1) return null;
+  if (item.channel !== undefined && item.channel !== 'stable' && item.channel !== 'testing') return null;
+  if (item.signing !== undefined && item.signing !== 'release' && item.signing !== 'development') return null;
   const versionCode = Number(item.versionCode);
   const size = Number(item.size);
   const minSdk = Number(item.minSdk);
-  if (typeof item.appId !== 'string' || typeof item.versionName !== 'string') return null;
+  if (item.appId !== STUDIO_APP_ID || typeof item.versionName !== 'string') return null;
   if (typeof item.file !== 'string' || !/^[\w.-]+\.apk$/i.test(item.file)) return null;
   if (typeof item.sha256 !== 'string' || !HEX_64.test(item.sha256)) return null;
   if (!Number.isInteger(versionCode) || versionCode < 1 || !Number.isFinite(size) || size <= 0) return null;
@@ -599,6 +605,8 @@ export function parseReleaseManifest(raw: unknown): StudioReleaseManifest | null
     size,
     sha256: item.sha256.toLowerCase(),
     builtAt: typeof item.builtAt === 'string' ? item.builtAt : '',
+    channel: item.channel === 'testing' ? 'testing' : 'stable',
+    signing: item.signing === 'development' ? 'development' : item.signing === 'release' ? 'release' : undefined,
     signerSha256: optionalHex(item.signerSha256),
     signerSha1: optionalHex(item.signerSha1),
     abis: asList(item.abis).filter((abi): abi is string => typeof abi === 'string').slice(0, 8),
@@ -606,12 +614,12 @@ export function parseReleaseManifest(raw: unknown): StudioReleaseManifest | null
   };
 }
 
-export function releaseManifestUrl(origin: string): string {
-  return `${origin}${STUDIO_RELEASE_DIR}/latest.json`;
+export function releaseManifestUrl(origin: string, channel: StudioReleaseChannel = 'stable'): string {
+  return `${origin}${STUDIO_RELEASE_DIR}${channel === 'testing' ? '/testing' : ''}/latest.json`;
 }
 
-export function releaseApkUrl(origin: string, manifest: Pick<StudioReleaseManifest, 'file'>): string {
-  return `${origin}${STUDIO_RELEASE_DIR}/${manifest.file}`;
+export function releaseApkUrl(origin: string, manifest: Pick<StudioReleaseManifest, 'file' | 'channel'>): string {
+  return `${origin}${STUDIO_RELEASE_DIR}${manifest.channel === 'testing' ? '/testing' : ''}/${manifest.file}`;
 }
 
 /** Android 7.0 = API 24 … */

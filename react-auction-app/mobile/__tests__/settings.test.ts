@@ -2,10 +2,11 @@ jest.mock('../src/native', () => ({
   StudioSecure: { getItem: jest.fn(async () => null), setItem: jest.fn(async () => undefined), removeItem: jest.fn(), clear: jest.fn() },
 }));
 
-import { DEFAULT_REMOTE_KEYS, defaultSettings, mergeDestinations, newLocalDestination, type LocalDestination } from '../src/store/settingsStore';
+import { DEFAULT_REMOTE_KEYS, defaultSettings, mergeDestinations, newLocalDestination, useSettings, type LocalDestination } from '../src/store/settingsStore';
 import { redactEndpoint } from '../src/services/logger';
 import { StudioSecure } from '../src/native';
 import { storage } from '../src/services/storage';
+import { adjacentSceneId, createScene, defaultScenes, MAX_STUDIO_SCENES, normalizeScenes, SCENE_ANIMATION_PRESETS, sceneMatchPath } from '../src/shared/scenes';
 
 const local = (patch: Partial<LocalDestination>): LocalDestination => ({ ...newLocalDestination('youtube'), ...patch });
 
@@ -86,6 +87,84 @@ describe('settings defaults', () => {
     const ids = new Set(Array.from({ length: 20 }, () => newLocalDestination('rtmp').id));
     expect(ids.size).toBeGreaterThan(15);
     expect(newLocalDestination('twitch').label).toBe('Twitch');
+  });
+});
+
+describe('scene settings', () => {
+  it('migrates older settings to two local camera scenes', () => {
+    const scenes = normalizeScenes(undefined, 'front');
+    expect(scenes.map(scene => scene.camera)).toEqual([{ kind: 'local', facing: 'front' }, { kind: 'local', facing: 'back' }]);
+    expect(defaultSettings().activeSceneId).toBe('main');
+    expect(defaultSettings().scenes).toHaveLength(2);
+  });
+
+  it('keeps scene-specific camera and overlay choices', () => {
+    const scene = createScene('Wide', { kind: 'peer', url: 'rtsp://192.168.1.20:8554/', name: 'Wide camera' });
+    scene.profileOverlays = false;
+    scene.animations = ['carrom:queen', 'carrom:queen', 'javascript:alert(1)'];
+    const normalized = normalizeScenes([scene]);
+    expect(normalized[0].camera).toEqual(scene.camera);
+    expect(normalized[0].profileOverlays).toBe(false);
+    expect(normalized[0].animations).toEqual(['carrom:queen']);
+  });
+
+  it('sanitizes invalid sources, duplicate IDs and empty names', () => {
+    const scenes = normalizeScenes([
+      { id: 'same', name: '  ', camera: { kind: 'peer', url: 'javascript:alert(1)' } },
+      { id: 'same', name: 'Rear', camera: { kind: 'local', facing: 'back' } },
+    ]);
+    expect(scenes[0].camera).toEqual({ kind: 'local', facing: 'back' });
+    expect(scenes[0].name).toBe('Scene');
+    expect(new Set(scenes.map(scene => scene.id)).size).toBe(2);
+    expect(normalizeScenes(Array.from({ length: 30 }, () => createScene('Camera')))).toHaveLength(MAX_STUDIO_SCENES);
+  });
+
+  it('cycles scenes in both directions and recovers a missing selection', () => {
+    const scenes = defaultScenes();
+    expect(adjacentSceneId(scenes, 'main', 1)).toBe('second');
+    expect(adjacentSceneId(scenes, 'main', -1)).toBe('second');
+    expect(adjacentSceneId(scenes, 'second', 1)).toBe('main');
+    expect(adjacentSceneId(scenes, 'missing', 1)).toBe('main');
+    expect(adjacentSceneId([], null, 1)).toBeNull();
+  });
+
+  it('links animation presets to tenant-scoped match overlay paths', () => {
+    expect(sceneMatchPath('tenant_1', 'cricket', 'match_1', 'overlay')).toBe('tenants/tenant_1/scoring/matches/match_1/overlay');
+    expect(sceneMatchPath('tenant_2', 'carrom', 'match_2', 'overlay')).toBe('tenants/tenant_2/carrom/matches/match_2/overlay');
+    expect(() => sceneMatchPath('../other', 'carrom', 'match_1', 'live')).toThrow('Invalid tournament');
+    expect(SCENE_ANIMATION_PRESETS.find(item => item.id === 'cricket:four')?.type).toBe('boundary_four');
+    expect(SCENE_ANIMATION_PRESETS.find(item => item.id === 'carrom:queen')?.type).toBe('queen_covered');
+  });
+
+  it('upgrades encrypted v1.0 settings without losing pairing or custom key bindings', async () => {
+    useSettings.setState(useSettings.getInitialState());
+    jest.mocked(StudioSecure.getItem).mockReset().mockResolvedValueOnce(JSON.stringify({
+      deviceName: 'Original phone', facing: 'front',
+      pairing: { tenantId: 'tenant_1', slug: 'league', game: 'carrom' },
+      remoteKeys: { MEDIA_NEXT: 'none', PAGE_UP: 'toggleRecord' },
+    }));
+    await useSettings.getState().hydrate();
+    const settings = useSettings.getState();
+    expect(settings).toMatchObject({ hydrated: true, deviceName: 'Original phone', facing: 'front', activeSceneId: 'main', previewFill: true });
+    expect(settings.pairing?.tenantId).toBe('tenant_1');
+    expect(settings.scenes[0].camera).toEqual({ kind: 'local', facing: 'front' });
+    expect(settings.remoteKeys).toMatchObject({ MEDIA_NEXT: 'none', MEDIA_PREVIOUS: 'previousScene', PAGE_UP: 'toggleRecord' });
+    useSettings.setState(useSettings.getInitialState());
+  });
+
+  it('persists scoring selection independently and ignores malformed workspace data', async () => {
+    useSettings.setState(useSettings.getInitialState());
+    const pairing = { tenantId: 'stream_tenant', slug: 'streaming-league', game: 'cricket' };
+    const scoringWorkspace = { origin: 'https://app.example.com', tenantId: 'score_tenant', slug: 'scoring-league', game: 'carrom' };
+    jest.mocked(StudioSecure.getItem).mockReset().mockResolvedValueOnce(JSON.stringify({ pairing, scoringWorkspace }));
+    await useSettings.getState().hydrate();
+    expect(useSettings.getState().pairing).toEqual(pairing);
+    expect(useSettings.getState().scoringWorkspace).toEqual(scoringWorkspace);
+    jest.mocked(StudioSecure.getItem).mockResolvedValueOnce(JSON.stringify({ pairing, scoringWorkspace: { ...scoringWorkspace, origin: 'javascript:alert(1)' } }));
+    await useSettings.getState().hydrate();
+    expect(useSettings.getState().scoringWorkspace).toBeNull();
+    expect(useSettings.getState().pairing).toEqual(pairing);
+    useSettings.setState(useSettings.getInitialState());
   });
 });
 

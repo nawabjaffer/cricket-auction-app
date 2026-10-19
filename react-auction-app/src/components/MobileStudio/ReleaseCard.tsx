@@ -35,7 +35,8 @@ export default function ReleaseCard({ origin, autoDownload = false }: Readonly<P
         const response = await fetch(releaseManifestUrl(origin), { cache: 'no-store', signal: controller.signal });
         // Hosting rewrites unknown paths to index.html, so a 200 is not proof the file exists.
         const manifest = response.ok ? parseReleaseManifest(await response.json()) : null;
-        setState(manifest ? { status: 'ready', manifest } : { status: 'missing' });
+        setState(manifest && manifest.channel === 'stable' && manifest.signing !== 'development'
+          ? { status: 'ready', manifest } : { status: 'missing' });
       } catch {
         if (!controller.signal.aborted) setState({ status: 'missing' });
       }

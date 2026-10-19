@@ -31,7 +31,7 @@ class StudioService : Service() {
         val text = intent?.getStringExtra(EXTRA_TEXT) ?: ""
         val notification = buildNotification(title, text)
         try {
-            if (Build.VERSION.SDK_INT >= 29) {
+            if (Build.VERSION.SDK_INT >= 30) {
                 val type = ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA or ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
                 startForeground(NOTIFICATION_ID, notification, type)
             } else {

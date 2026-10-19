@@ -1,7 +1,16 @@
+/// <reference types="node" />
+
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { runInNewContext } from 'node:vm';
 import { createElement } from 'react';
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import ReleaseCard from '../components/MobileStudio/ReleaseCard';
+import { MAX_WORKSPACE_EXPORT_BYTES, scoringBrowserScript } from '../../mobile/src/services/scoringBrowser';
 import { DEFAULT_TENANT_ID, tenantPath } from '../services/tenantPath';
 import {
   DEFAULT_OVERLAY_URL_TEMPLATE, MAX_STUDIO_DESTINATIONS, MAX_STUDIO_WIDGETS, STUDIO_DEVICE_STALE_MS, STUDIO_PLATFORM_PRESETS,
@@ -226,6 +235,10 @@ describe('release manifest', () => {
     expect(androidVersionLabel(99)).toBe('Android API 99+');
   });
 
+  it('rejects a release manifest for a different application', () => {
+    expect(parseReleaseManifest({ ...valid, appId: 'com.other.application' })).toBeNull();
+  });
+
   describe('download card', () => {
     afterEach(() => {
       cleanup();
@@ -248,6 +261,20 @@ describe('release manifest', () => {
       expect(screen.getByText('Android 7.0+')).toBeInTheDocument();
     });
 
+    it('downloads the immutable APK filename supplied by the release manifest', async () => {
+      const file = `njs-live-studio-3-${'a'.repeat(64)}.apk`;
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => ({ ...valid, file }) }));
+      render(createElement(ReleaseCard, { origin: CTX.origin }));
+      expect(await screen.findByRole('link', { name: /Download APK/ })).toHaveAttribute('href', `${CTX.origin}/downloads/android/${file}`);
+    });
+
+    it('never presents a testing or development-signed manifest as a production download', async () => {
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => ({ ...valid, channel: 'testing', signing: 'development' }) }));
+      render(createElement(ReleaseCard, { origin: CTX.origin, autoDownload: true }));
+      expect(await screen.findByText('The Android app has not been published to this site yet.')).toBeInTheDocument();
+      expect(screen.queryByRole('link', { name: /Download APK/ })).not.toBeInTheDocument();
+    });
+
     it('starts the Quick link download once after validating the manifest', async () => {
       vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => valid }));
       const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined);
@@ -260,6 +287,221 @@ describe('release manifest', () => {
       view.rerender(createElement(ReleaseCard, { origin: CTX.origin, autoDownload: true }));
       expect(click).toHaveBeenCalledTimes(1);
     });
+  });
+});
+
+describe('APK publication', () => {
+  const fixtures: string[] = [];
+
+  afterEach(() => {
+    for (const directory of fixtures.splice(0)) rmSync(directory, { recursive: true, force: true });
+  });
+
+  function publisherFixture() {
+    const root = mkdtempSync(join(tmpdir(), 'njs-apk-publish-'));
+    fixtures.push(root);
+    const script = join(root, 'scripts/publish-android-app.mjs');
+    const sdk = join(root, 'sdk');
+    const tools = join(sdk, 'build-tools/37.0.0');
+    const output = join(root, 'public/downloads/android');
+    const apk = join(root, 'app-release.apk');
+    mkdirSync(join(root, 'scripts'), { recursive: true });
+    mkdirSync(tools, { recursive: true });
+    copyFileSync(join(process.cwd(), 'scripts/publish-android-app.mjs'), script);
+    writeFileSync(apk, 'first APK fixture');
+
+    const tool = (name: string, stdout: string, exitCode = 0) => {
+      writeFileSync(join(tools, name), `#!${process.execPath}\nprocess.stdout.write(${JSON.stringify(stdout)});\nprocess.exit(${exitCode});\n`, { mode: 0o755 });
+    };
+    const packageInfo = (versionCode = 42, appId = 'com.njsstore.livestudio', debuggable = false) => {
+      tool('aapt2', `package: name='${appId}' versionCode='${versionCode}' versionName='1.0.0'\nsdkVersion:'24'\nnative-code: 'arm64-v8a' 'armeabi-v7a'\n${debuggable ? 'application-debuggable\n' : ''}`);
+    };
+    packageInfo();
+    tool('apksigner', `Signer #1 certificate DN: CN=NJS Release\nSigner #1 certificate SHA-256 digest: ${'b'.repeat(64)}\nSigner #1 certificate SHA-1 digest: ${'c'.repeat(40)}\n`);
+
+    return {
+      apk, output, tool, packageInfo,
+      publish: (...args: string[]) => spawnSync(process.execPath, [script, '--apk', apk, ...args], {
+        encoding: 'utf8',
+        env: { ...process.env, ANDROID_HOME: sdk, ANDROID_SDK_ROOT: sdk },
+      }),
+    };
+  }
+
+  it('publishes a checksum-addressed APK rather than overwriting the download filename', () => {
+    const fixture = publisherFixture();
+    const result = fixture.publish('--notes', 'First release | Device validated');
+    expect(result.status, result.stderr).toBe(0);
+    const bytes = readFileSync(fixture.apk);
+    const digest = createHash('sha256').update(bytes).digest('hex');
+    const manifest = parseReleaseManifest(JSON.parse(readFileSync(join(fixture.output, 'latest.json'), 'utf8')));
+    expect(manifest?.file).toBe(`njs-live-studio-42-${digest}.apk`);
+    expect(manifest?.sha256).toBe(digest);
+    expect(manifest).toMatchObject({
+      versionCode: 42, minSdk: 24, size: bytes.length, signerSha256: 'b'.repeat(64),
+      abis: ['arm64-v8a', 'armeabi-v7a'], notes: ['First release', 'Device validated'],
+    });
+    expect(readFileSync(join(fixture.output, manifest!.file))).toEqual(bytes);
+    expect(readdirSync(fixture.output).sort()).toEqual(['latest.json', manifest!.file].sort());
+  });
+
+  it('retains the previous APK when a newer release is published', () => {
+    const fixture = publisherFixture();
+    expect(fixture.publish().status).toBe(0);
+    const previous = JSON.parse(readFileSync(join(fixture.output, 'latest.json'), 'utf8'));
+    const previousBytes = readFileSync(join(fixture.output, previous.file));
+    fixture.packageInfo(43);
+    writeFileSync(fixture.apk, 'second APK fixture');
+
+    const result = fixture.publish();
+    expect(result.status, result.stderr).toBe(0);
+    const latest = JSON.parse(readFileSync(join(fixture.output, 'latest.json'), 'utf8'));
+    expect(latest.versionCode).toBe(43);
+    expect(latest.file).not.toBe(previous.file);
+    expect(readFileSync(join(fixture.output, previous.file))).toEqual(previousBytes);
+    expect(readFileSync(join(fixture.output, latest.file))).toEqual(readFileSync(fixture.apk));
+  });
+
+  it('rejects debug signing before creating any public release files', () => {
+    const fixture = publisherFixture();
+    fixture.tool('apksigner', 'Signer #1 certificate DN: CN=Android Debug, O=Android\n');
+    const result = fixture.publish();
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('signed with the Android debug key');
+    expect(existsSync(fixture.output)).toBe(false);
+  });
+
+  it('rejects an APK for a different application', () => {
+    const fixture = publisherFixture();
+    fixture.packageInfo(42, 'com.other.application');
+    const result = fixture.publish();
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('Unexpected package');
+    expect(existsSync(fixture.output)).toBe(false);
+  });
+
+  it('publishes development signing only in the explicit testing channel', () => {
+    const fixture = publisherFixture();
+    fixture.tool('apksigner', `Signer #1 certificate DN: CN=Android Debug, O=Android\nSigner #1 certificate SHA-256 digest: ${'b'.repeat(64)}\n`);
+    const result = fixture.publish('--channel', 'testing', '--allow-debug');
+    expect(result.status, result.stderr).toBe(0);
+    const testing = join(fixture.output, 'testing');
+    const manifest = parseReleaseManifest(JSON.parse(readFileSync(join(testing, 'latest.json'), 'utf8')));
+    expect(manifest).toMatchObject({ channel: 'testing', signing: 'development' });
+    expect(releaseManifestUrl(CTX.origin, 'testing')).toBe(`${CTX.origin}/downloads/android/testing/latest.json`);
+    expect(releaseApkUrl(CTX.origin, manifest!)).toBe(`${CTX.origin}/downloads/android/testing/${manifest!.file}`);
+    expect(existsSync(join(fixture.output, 'latest.json'))).toBe(false);
+  });
+
+  it('does not allow the test-signing override on the production channel', () => {
+    const fixture = publisherFixture();
+    const result = fixture.publish('--allow-debug');
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('requires --channel testing');
+    expect(existsSync(fixture.output)).toBe(false);
+  });
+
+  it('rejects a debuggable APK even with the test-signing override', () => {
+    const fixture = publisherFixture();
+    fixture.packageInfo(42, 'com.njsstore.livestudio', true);
+    const result = fixture.publish('--allow-debug');
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('debuggable');
+    expect(existsSync(fixture.output)).toBe(false);
+  });
+
+  it('preserves the last release when signature verification fails', () => {
+    const fixture = publisherFixture();
+    expect(fixture.publish().status).toBe(0);
+    const previous = readFileSync(join(fixture.output, 'latest.json'), 'utf8');
+    const previousFile = JSON.parse(previous).file;
+    const previousBytes = readFileSync(join(fixture.output, previousFile));
+    fixture.tool('apksigner', 'Signature verification failed', 1);
+    const result = fixture.publish();
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('could not verify the APK signature');
+    expect(readFileSync(join(fixture.output, 'latest.json'), 'utf8')).toBe(previous);
+    expect(readFileSync(join(fixture.output, previousFile))).toEqual(previousBytes);
+  });
+
+  it('preserves the last manifest and cleans staging files if APK publication fails', () => {
+    const fixture = publisherFixture();
+    expect(fixture.publish().status).toBe(0);
+    const previous = readFileSync(join(fixture.output, 'latest.json'), 'utf8');
+    fixture.packageInfo(43);
+    writeFileSync(fixture.apk, 'second APK fixture');
+    const digest = createHash('sha256').update(readFileSync(fixture.apk)).digest('hex');
+    mkdirSync(join(fixture.output, `njs-live-studio-43-${digest}.apk`));
+
+    const result = fixture.publish();
+    expect(result.status).not.toBe(0);
+    expect(readFileSync(join(fixture.output, 'latest.json'), 'utf8')).toBe(previous);
+    expect(readdirSync(fixture.output).some(name => name.startsWith('.publish-'))).toBe(false);
+  });
+});
+
+describe('embedded scoring browser compatibility', () => {
+  function adapter(origin = CTX.origin) {
+    const messages: Array<Record<string, unknown>> = [];
+    const readers: Array<{ blob?: unknown; result: string; onload?: () => void }> = [];
+    const listeners = new Map<string, (event: unknown) => void>();
+    const browser = {
+      location: { origin, pathname: `/${CTX.slug}/cricket/scorer/admin` },
+      ReactNativeWebView: { postMessage: (message: string) => messages.push(JSON.parse(message)) },
+      print: vi.fn(),
+    };
+    const clipboard = {} as { clipboard?: { writeText: (value: string) => Promise<void> } };
+    const urls = { createObjectURL: vi.fn<(blob: unknown) => string>(() => 'blob:scoring-export'), revokeObjectURL: vi.fn() };
+    class Reader {
+      blob?: unknown;
+      result = 'data:text/csv;base64,YSwx';
+      onload?: () => void;
+      constructor() { readers.push(this); }
+      readAsDataURL(blob: unknown) { this.blob = blob; }
+    }
+    runInNewContext(scoringBrowserScript(CTX, 'workspace-token'), {
+      window: browser, navigator: clipboard, URL: urls, FileReader: Reader,
+      document: { addEventListener: (name: string, listener: (event: unknown) => void) => listeners.set(name, listener) },
+    });
+    return { messages, readers, listeners, browser, clipboard, urls };
+  }
+
+  it('supports native clipboard and print actions without injecting a login session', async () => {
+    const frame = adapter();
+    await frame.clipboard.clipboard?.writeText('https://app.example.com/scorecard');
+    frame.browser.print();
+    expect(frame.messages).toEqual([
+      { type: 'clipboard', token: 'workspace-token', text: 'https://app.example.com/scorecard' },
+      { type: 'print', token: 'workspace-token' },
+    ]);
+  });
+
+  it('preserves a programmatic CSV Blob after its object URL is revoked', () => {
+    const frame = adapter();
+    const blob = { size: 4, type: 'text/csv' };
+    const url = frame.urls.createObjectURL(blob);
+    const preventDefault = vi.fn();
+    frame.listeners.get('click')?.({ target: { closest: () => ({ href: url, download: 'fixtures.csv' }) }, preventDefault, stopImmediatePropagation: vi.fn() });
+    frame.urls.revokeObjectURL(url);
+    expect(preventDefault).toHaveBeenCalled();
+    expect(frame.readers[0].blob).toBe(blob);
+    frame.readers[0].onload?.();
+    expect(frame.messages[0]).toEqual({ type: 'download', token: 'workspace-token', name: 'fixtures.csv', dataUrl: 'data:text/csv;base64,YSwx' });
+  });
+
+  it('does not install the native adapter on another origin', () => {
+    const frame = adapter('https://other.example.com');
+    expect(frame.clipboard.clipboard).toBeUndefined();
+    expect(frame.listeners.size).toBe(0);
+    expect(frame.messages).toHaveLength(0);
+  });
+
+  it('bounds exports before moving their bytes across the native bridge', () => {
+    const frame = adapter();
+    const url = frame.urls.createObjectURL({ size: MAX_WORKSPACE_EXPORT_BYTES + 1 });
+    frame.listeners.get('click')?.({ target: { closest: () => ({ href: url, download: 'large.zip' }) }, preventDefault: vi.fn(), stopImmediatePropagation: vi.fn() });
+    expect(frame.readers).toHaveLength(0);
+    expect(frame.messages[0]).toMatchObject({ type: 'error' });
   });
 });
 

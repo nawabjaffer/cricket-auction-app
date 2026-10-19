@@ -1,6 +1,6 @@
 {
   "name": "njs-live-studio",
-  "version": "1.0.0",
+  "version": "1.2.0",
   "private": true,
   "description": "NJS Live Studio — Android live streaming studio (RTMP / SRT, 1080p-4K, overlays, multi-camera) for the NJS scoring platform.",
   "scripts": {
@@ -15,10 +15,13 @@
   },
   "dependencies": {
     "firebase": "^12.19.0",
+    "lucide-react-native": "^1.59.0",
     "qrcode-generator": "^1.4.4",
     "react": "19.2.3",
     "react-native": "0.87.1",
     "react-native-safe-area-context": "^5.5.2",
+    "react-native-svg": "^15.16.0",
+    "react-native-webview": "^14.0.1",
     "zustand": "^5.0.9"
   },
   "devDependencies": {

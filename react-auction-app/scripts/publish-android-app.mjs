@@ -8,10 +8,11 @@
 // Options:  --apk <path>        use a different APK
 //           --notes "a|b|c"     release notes shown on the download page (separate lines with |)
 //           --allow-debug       permit an APK signed with the Android debug key (never for production)
+//           --channel testing   publish an explicitly labeled testing feed, separate from production
 import { createHash } from 'node:crypto';
 import { execFile } from 'node:child_process';
 import { createReadStream, existsSync } from 'node:fs';
-import { copyFile, mkdir, readdir, stat, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, mkdtemp, readdir, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -19,8 +20,9 @@ import { promisify } from 'node:util';
 
 const run = promisify(execFile);
 const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const outDir = resolve(projectRoot, 'public/downloads/android');
-const APK_NAME = 'njs-live-studio.apk';
+const channel = option('channel') ?? 'stable';
+if (channel !== 'stable' && channel !== 'testing') fail('Release channel must be stable or testing.');
+const outDir = resolve(projectRoot, 'public/downloads/android', channel === 'testing' ? 'testing' : '.');
 const APP_ID = 'com.njsstore.livestudio';
 
 function option(name) {
@@ -68,6 +70,8 @@ const packageLine = badging.match(/package: name='([^']+)' versionCode='(\d+)' v
 if (!packageLine) fail('Could not read the package name / version from the APK.');
 const [, packageName, versionCode, versionName] = packageLine;
 if (packageName !== APP_ID) fail(`Unexpected package "${packageName}" (expected ${APP_ID}).`);
+if (/^application-debuggable\b/m.test(badging)) fail('The APK is debuggable. Build the release variant before publishing.');
+if (process.argv.includes('--allow-debug') && channel !== 'testing') fail('The test-signing override requires --channel testing; production publication is not allowed.');
 const minSdk = Number(badging.match(/sdkVersion:'(\d+)'/)?.[1] ?? 24);
 const abis = (badging.match(/native-code: ([^\n]+)/)?.[1] ?? '').match(/'([^']+)'/g)?.map(abi => abi.replaceAll("'", '')) ?? [];
 
@@ -80,15 +84,14 @@ try {
 const signerDn = certs.match(/certificate DN: (.+)/)?.[1] ?? '';
 const signerSha256 = certs.match(/certificate SHA-256 digest: ([0-9a-f]+)/i)?.[1];
 const signerSha1 = certs.match(/certificate SHA-1 digest: ([0-9a-f]+)/i)?.[1];
-if (/CN=Android Debug/i.test(signerDn) && !process.argv.includes('--allow-debug')) {
-  fail('The APK is signed with the Android debug key. Configure the release keystore (mobile/android/keystore.properties) and rebuild, or pass --allow-debug for a throw-away test build.');
+const developmentSigned = /CN=Android Debug/i.test(signerDn);
+if (developmentSigned && (channel !== 'testing' || !process.argv.includes('--allow-debug'))) {
+  fail('The APK is signed with the Android debug key. Configure production signing, or use --channel testing --allow-debug for an explicitly labeled test release.');
 }
 
 const size = (await stat(apkPath)).size;
 const digest = await sha256(apkPath);
-
-await mkdir(outDir, { recursive: true });
-await copyFile(apkPath, join(outDir, APK_NAME));
+const apkName = `njs-live-studio-${versionCode}-${digest}.apk`;
 
 const manifest = {
   schema: 1,
@@ -96,19 +99,36 @@ const manifest = {
   versionName,
   versionCode: Number(versionCode),
   minSdk,
-  file: APK_NAME,
+  file: apkName,
   size,
   sha256: digest,
   builtAt: new Date().toISOString(),
+  channel,
+  signing: developmentSigned ? 'development' : 'release',
   ...(signerSha256 ? { signerSha256 } : {}),
   ...(signerSha1 ? { signerSha1 } : {}),
   ...(abis.length ? { abis } : {}),
   ...(option('notes') ? { notes: option('notes').split('|').map(note => note.trim()).filter(Boolean) } : {}),
 };
-await writeFile(join(outDir, 'latest.json'), `${JSON.stringify(manifest, null, 2)}\n`);
 
-console.info(`\n✔ Published NJS Live Studio ${versionName} (build ${versionCode})`);
-console.info(`  file      public/downloads/android/${APK_NAME}  (${(size / 1024 / 1024).toFixed(1)} MB)`);
+await mkdir(outDir, { recursive: true });
+const staging = await mkdtemp(join(outDir, '.publish-'));
+try {
+  const stagedApk = join(staging, apkName);
+  await copyFile(apkPath, stagedApk);
+  if ((await stat(stagedApk)).size !== size || await sha256(stagedApk) !== digest) {
+    throw new Error('APK changed while publishing. Rebuild and retry.');
+  }
+  await rename(stagedApk, join(outDir, apkName));
+  const stagedManifest = join(staging, 'latest.json');
+  await writeFile(stagedManifest, `${JSON.stringify(manifest, null, 2)}\n`);
+  await rename(stagedManifest, join(outDir, 'latest.json'));
+} finally {
+  await rm(staging, { recursive: true, force: true });
+}
+
+console.info(`\n✔ Published NJS Live Studio ${versionName} (build ${versionCode}, ${channel} channel)`);
+console.info(`  file      ${outDir}/${apkName}  (${(size / 1024 / 1024).toFixed(1)} MB)`);
 console.info(`  sha-256   ${digest}`);
 if (signerSha1) console.info(`  signer    SHA-1 ${signerSha1}  ← register this in Google Cloud for YouTube sign-in`);
 console.info('\nNext: npm run deploy   (or npm run dev to try the Quick link locally)\n');

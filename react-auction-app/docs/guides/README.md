@@ -10,7 +10,9 @@ The user guides are split by the area of the app they describe. The same files a
 - [Cricket Scoring](cricket/README.md)
 - [Public Scoreboard](scoreboard/README.md)
 - [Broadcast and OBS](broadcast/README.md)
+- [Android Live Studio](../../mobile/README.md)
 - [Football](football/README.md)
 - [Kabaddi](kabaddi/README.md)
+- [Carrom](carrom/README.md)
 
 These are operator guides. Architecture and deployment references remain in the parent `docs/` directory.

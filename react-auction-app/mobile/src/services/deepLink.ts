@@ -28,8 +28,7 @@ export class PairingError extends Error {
   }
 }
 
-/** Validates the pairing against the tournament registry and stores it. */
-export async function applyPairing(pairing: StudioPairing): Promise<TenantInfo> {
+export async function validatePairing(pairing: StudioPairing): Promise<{ tenant: TenantInfo; pairing: StudioPairing }> {
   const origin = normalizeOrigin(pairing.origin);
   if (!origin) throw new PairingError('The pairing link has an invalid server address.');
   const tenant = await resolveTenant(pairing.tenantId || pairing.slug);
@@ -38,9 +37,15 @@ export async function applyPairing(pairing: StudioPairing): Promise<TenantInfo> 
   if (!isStudioGameType(pairing.game) || !tenant.sports.includes(pairing.game)) {
     throw new PairingError(`${pairing.game} is not enabled for ${tenant.name}.`);
   }
+  return { tenant, pairing: { origin, tenantId: tenant.id, slug: tenant.slug, game: pairing.game, matchId: pairing.matchId } };
+}
+
+/** Validates the pairing against the tournament registry and stores it. */
+export async function applyPairing(pairing: StudioPairing): Promise<TenantInfo> {
+  const { tenant, pairing: resolved } = await validatePairing(pairing);
   const settings = useSettings.getState();
-  settings.patch({ origin });
-  settings.setPairing({ tenantId: tenant.id, slug: tenant.slug, game: pairing.game, matchId: pairing.matchId });
+  settings.patch({ origin: resolved.origin });
+  settings.setPairing({ tenantId: tenant.id, slug: tenant.slug, game: resolved.game, matchId: resolved.matchId });
   useStudio.getState().patch({ tenant, profile: null, matches: [], activeMatchId: null });
   return tenant;
 }

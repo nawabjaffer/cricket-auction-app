@@ -6,6 +6,8 @@ jest.mock('../src/native', () => ({
     setOverlays: jest.fn(async () => undefined),
     startCameraServer: jest.fn(async () => 'rtsp://192.168.1.20:8554/'),
     stopCameraServer: jest.fn(async () => undefined),
+    setOverlayOptions: jest.fn(async () => undefined),
+    switchCamera: jest.fn(async () => undefined),
   },
   StudioNetwork: {
     getSnapshot: jest.fn(async () => ({ addresses: [{ iface: 'wlan0', ip: '192.168.1.20', kind: 'wifi' }] })),
@@ -15,18 +17,73 @@ jest.mock('../src/native', () => ({
   StudioSecure: { getItem: jest.fn(async () => null), setItem: jest.fn(async () => undefined), removeItem: jest.fn(), clear: jest.fn() },
 }));
 jest.mock('../src/services/tournament', () => ({ resolveTenant: jest.fn() }));
-jest.mock('../src/services/streamController', () => ({ effectiveMatchId: jest.fn(), queueEngineTask: jest.fn(), refreshCapabilities: jest.fn(), studioContext: jest.fn() }));
+jest.mock('../src/services/streamController', () => ({ ...jest.requireActual('../src/services/streamController'), effectiveMatchId: jest.fn(), queueEngineTask: jest.fn(), refreshCapabilities: jest.fn(), studioContext: jest.fn() }));
+jest.mock('../src/services/peers', () => ({ selectProgram: jest.fn(async () => undefined) }));
 jest.mock('../src/services/liveCam', () => ({ publishSource: jest.fn() }));
 jest.mock('../src/services/permissions', () => ({ requestMediaPermissions: jest.fn() }));
 
 import { cameraUrl, pickLanAddress, startCameraServer, stopCameraServer } from '../src/services/cameraRole';
 import { StudioEngine } from '../src/native';
-import { PairingError, applyPairing, classifyLink } from '../src/services/deepLink';
+import { PairingError, applyPairing, classifyLink, validatePairing } from '../src/services/deepLink';
 import { requestMediaPermissions } from '../src/services/permissions';
 import { queueEngineTask, refreshCapabilities } from '../src/services/streamController';
 import { resolveTenant } from '../src/services/tournament';
 import { useSettings } from '../src/store/settingsStore';
 import { useStudio } from '../src/store/studioStore';
+import { activateScene, switchScene } from '../src/services/scenes';
+import { selectProgram } from '../src/services/peers';
+import { createScene } from '../src/shared/scenes';
+
+describe('scene switching', () => {
+  const actual = jest.requireActual<typeof import('../src/services/streamController')>('../src/services/streamController');
+
+  beforeEach(() => {
+    useSettings.setState(useSettings.getInitialState());
+    useStudio.setState(useStudio.getInitialState());
+    jest.mocked(queueEngineTask).mockImplementation(actual.queueEngineTask);
+    jest.mocked(requestMediaPermissions).mockResolvedValue({ granted: true, denied: [], blocked: false });
+    jest.mocked(StudioEngine.prepare).mockImplementation(async (_config, mode) => { useStudio.getState().patch({ engineState: 'preview', engineMode: mode }); });
+    jest.mocked(StudioEngine.switchCamera).mockReset().mockResolvedValue(undefined);
+    jest.mocked(StudioEngine.setOverlays).mockReset().mockResolvedValue(undefined);
+    jest.mocked(selectProgram).mockReset().mockImplementation(async source => { useStudio.getState().patch({ programSource: source }); });
+  });
+
+  it('switches rear/front scenes without rebuilding the encoder', async () => {
+    await activateScene('second');
+    expect(StudioEngine.switchCamera).toHaveBeenCalledTimes(1);
+    expect(useSettings.getState()).toMatchObject({ activeSceneId: 'second', facing: 'front' });
+    const prepared = jest.mocked(StudioEngine.prepare).mock.calls.length;
+    await activateScene('main');
+    expect(StudioEngine.prepare).toHaveBeenCalledTimes(prepared);
+    expect(useSettings.getState()).toMatchObject({ activeSceneId: 'main', facing: 'back' });
+  });
+
+  it('switches a scene to a LAN source', async () => {
+    const scene = createScene('Wide', { kind: 'peer', url: 'rtsp://192.168.1.20:8554/', name: 'Wide camera', remoteId: 'wide' });
+    useSettings.getState().patch({ scenes: [...useSettings.getState().scenes, scene] });
+    await activateScene(scene.id);
+    expect(selectProgram).toHaveBeenCalledWith({ kind: 'peer', url: scene.camera.kind === 'peer' ? scene.camera.url : '', name: 'Wide camera' }, 'wide');
+    expect(useSettings.getState().activeSceneId).toBe(scene.id);
+  });
+
+  it('serializes next/previous operations and keeps the queue usable after failure', async () => {
+    await expect(activateScene('missing')).rejects.toThrow('no longer exists');
+    await Promise.all([switchScene(1), switchScene(1)]);
+    expect(useSettings.getState().activeSceneId).toBe('main');
+  });
+
+  it('restores the previous scene if overlay application fails', async () => {
+    await actual.prepareStudio();
+    jest.mocked(StudioEngine.setOverlays).mockRejectedValueOnce(new Error('Overlay unavailable'));
+    await expect(activateScene('second')).rejects.toThrow('Overlay unavailable');
+    expect(useSettings.getState()).toMatchObject({ activeSceneId: 'main', facing: 'back' });
+  });
+
+  it('does not interrupt a phone serving a LAN camera', async () => {
+    useStudio.getState().patch({ cameraServerUrl: 'rtsp://192.168.1.20:8554/' });
+    await expect(activateScene('second')).rejects.toThrow('Stop the LAN camera');
+  });
+});
 
 describe('studio preparation', () => {
   const actual = jest.requireActual<typeof import('../src/services/streamController')>('../src/services/streamController');
@@ -217,6 +274,14 @@ describe('applyPairing', () => {
     expect(resolveTenant).toHaveBeenCalledWith('pkl');
     expect(useSettings.getState().pairing).toEqual({ tenantId: 't_1', slug: 'pkl', game: 'carrom', matchId: undefined });
     expect(useSettings.getState().origin).toBe('https://app.example.com');
+  });
+
+  it('validates a separate scoring workspace without changing the stream pairing', async () => {
+    const existing = { tenantId: 'stream_tenant', slug: 'stream-league', game: 'cricket' as const };
+    useSettings.getState().patch({ pairing: existing });
+    (resolveTenant as jest.Mock).mockResolvedValue(tenant);
+    await expect(validatePairing(pairing)).resolves.toMatchObject({ tenant, pairing: { origin: 'https://app.example.com', slug: 'pkl' } });
+    expect(useSettings.getState().pairing).toEqual(existing);
   });
 
   it('refuses unknown, deactivated and sport-less tournaments', async () => {

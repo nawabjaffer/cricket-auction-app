@@ -24,7 +24,7 @@ export interface LanCamera extends LanService {
 
 export type ProgramSource = { kind: 'local' } | { kind: 'peer'; url: string; name: string };
 
-export interface AppInfo { versionName: string; versionCode: number; packageName: string; sdk: number; model: string }
+export interface AppInfo { versionName: string; versionCode: number; packageName: string; sdk: number; model: string; developmentSigned?: boolean; signerSha256?: string }
 
 export interface StudioRuntime {
   appInfo: AppInfo | null;
@@ -52,6 +52,7 @@ export interface StudioRuntime {
   programSource: ProgramSource;
   cameraServerUrl: string | null;
   cameraClients: number;
+  scenePreviews: Record<string, string>;
   patch: (partial: Partial<StudioRuntime>) => void;
   setDestination: (id: string, value: DestinationRuntime) => void;
   clearDestinations: () => void;
@@ -82,6 +83,7 @@ export const useStudio = create<StudioRuntime>(set => ({
   programSource: { kind: 'local' },
   cameraServerUrl: null,
   cameraClients: 0,
+  scenePreviews: {},
   patch: partial => set(partial),
   setDestination: (id, value) => set(state => ({ destinations: { ...state.destinations, [id]: value } })),
   clearDestinations: () => set({ destinations: {} }),

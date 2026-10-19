@@ -101,6 +101,8 @@ export interface EngineStats {
 
 interface StudioEngineNative {
   getCapabilities(): Promise<string>;
+  captureThumbnail(): Promise<string | null>;
+  setPreviewFill(fill: boolean): Promise<void>;
   prepare(configJson: string, mode: EngineMode): Promise<void>;
   release(): Promise<void>;
   startStream(destinationsJson: string): Promise<void>;
@@ -159,6 +161,7 @@ interface StudioBluetoothNative {
   stopScan(): Promise<void>;
   readBattery(address: string): Promise<number>;
   setRemoteKeyCapture(enabled: boolean): Promise<void>;
+  setRemoteKeyBindings(keysJson: string): Promise<void>;
   openBluetoothSettings(): Promise<void>;
   addListener(eventName: string): void;
   removeListeners(count: number): void;
@@ -191,12 +194,15 @@ interface StudioNetworkNative {
 export interface BatterySnapshot { level: number; charging: boolean; temperatureC: number }
 
 interface StudioSystemNative {
-  getAppInfo(): Promise<{ versionName: string; versionCode: number; packageName: string; sdk: number; model: string }>;
+  getAppInfo(): Promise<{ versionName: string; versionCode: number; packageName: string; sdk: number; model: string; developmentSigned?: boolean; signerSha256?: string }>;
   getBattery(): Promise<BatterySnapshot>;
   getThermalStatus(): Promise<number>;
   getFreeStorageMb(): Promise<number>;
   setKeepScreenOn(enabled: boolean): Promise<void>;
   copyText(text: string): Promise<void>;
+  createWorkspaceToken(): Promise<string>;
+  saveWorkspaceDocument(name: string, dataUrl: string): Promise<boolean>;
+  printWorkspace(): Promise<void>;
   openAppSettings(): Promise<void>;
   startService(title: string, text: string): Promise<void>;
   stopService(): Promise<void>;
@@ -242,7 +248,7 @@ export const isAndroid = Platform.OS === 'android';
 
 // ── Events ───────────────────────────────────────────────────────────────────
 
-export interface RemoteKeyEvent { keyCode: number; key: string; action: 'down' | 'up'; repeat: number }
+export interface RemoteKeyEvent { keyCode: number; key: string; action: 'down' | 'up'; repeat: number; learning?: boolean }
 
 export interface StudioEventMap {
   'studio.state': { state: EngineState; mode: EngineMode | 'none'; message?: string };

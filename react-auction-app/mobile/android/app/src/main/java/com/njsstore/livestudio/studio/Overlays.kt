@@ -38,30 +38,31 @@ class OverlayHost(context: Context) : FrameLayout(context) {
     private val main = Handler(Looper.getMainLooper())
 
     override fun draw(canvas: Canvas) {
+        val render = {
+            val saved = canvas.save()
+            try {
+                if (opacity < 0.999f) {
+                    canvas.saveLayerAlpha(0f, 0f, width.toFloat(), height.toFloat(), (opacity * 255).toInt())
+                }
+                super.draw(canvas)
+            } finally {
+                canvas.restoreToCount(saved)
+            }
+        }
         if (Looper.myLooper() === Looper.getMainLooper()) {
-            drawLayer(canvas)
+            render()
             return
         }
         val done = CountDownLatch(1)
         val abandoned = AtomicBoolean(false)
         main.post {
             try {
-                if (!abandoned.get()) drawLayer(canvas)
+                if (!abandoned.get()) render()
             } finally {
                 done.countDown()
             }
         }
         if (!done.await(DRAW_TIMEOUT_MS, TimeUnit.MILLISECONDS)) abandoned.set(true)
-    }
-
-    private fun drawLayer(canvas: Canvas) {
-        if (opacity >= 0.999f) {
-            super.draw(canvas)
-            return
-        }
-        val saved = canvas.saveLayerAlpha(0f, 0f, width.toFloat(), height.toFloat(), (opacity * 255).toInt())
-        super.draw(canvas)
-        canvas.restoreToCount(saved)
     }
 
     private companion object {

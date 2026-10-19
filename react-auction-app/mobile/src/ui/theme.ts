@@ -1,7 +1,7 @@
 export const colors = {
-  bg: '#070b16',
-  card: '#101830',
-  card2: '#16213f',
+  bg: '#0c0f13',
+  card: '#161b21',
+  card2: '#202832',
   line: 'rgba(148,163,184,0.22)',
   text: '#e2e8f0',
   muted: '#94a3b8',
@@ -14,5 +14,5 @@ export const colors = {
   scrim: 'rgba(2,6,23,0.72)',
 } as const;
 
-export const space = { xs: 4, sm: 8, md: 12, lg: 16, xl: 24 } as const;
-export const radius = { sm: 8, md: 12, lg: 16, pill: 999 } as const;
+export const space = { xs: 3, sm: 6, md: 10, lg: 12, xl: 20 } as const;
+export const radius = { sm: 6, md: 8, lg: 8, pill: 999 } as const;

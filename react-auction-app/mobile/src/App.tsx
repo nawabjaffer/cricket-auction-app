@@ -1,10 +1,14 @@
-import React, { useEffect, useMemo } from 'react';
-import { Alert, BackHandler, Pressable, StatusBar, StyleSheet, Text, View } from 'react-native';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Alert, BackHandler, Image, Pressable, StatusBar, StyleSheet, Text, ToastAndroid, View } from 'react-native';
+import { Camera, Clapperboard, Home, Layers, Settings2, Trophy, type LucideIcon } from 'lucide-react-native';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StudioSystem } from './native';
 import { CamerasScreen } from './screens/CamerasScreen';
 import { SetupScreen } from './screens/SetupScreen';
 import { StudioScreen } from './screens/StudioScreen';
+import { ScenesScreen } from './screens/ScenesScreen';
+import { HomeScreen } from './screens/HomeScreen';
+import { ScoringScreen } from './screens/ScoringScreen';
 import { TournamentScreen, confirmPairing } from './screens/TournamentScreen';
 import { applyPairing, classifyLink, subscribeIncomingLinks } from './services/deepLink';
 import { startProgramSync } from './services/peers';
@@ -18,30 +22,37 @@ import { useSettings } from './store/settingsStore';
 import { isLiveState, useStudio } from './store/studioStore';
 import { colors, space } from './ui/theme';
 
-const TABS: ReadonlyArray<{ id: Tab; label: string; icon: string }> = [
-  { id: 'studio', label: 'Studio', icon: '🎥' },
-  { id: 'cameras', label: 'Cameras', icon: '📡' },
-  { id: 'setup', label: 'Setup', icon: '⚙️' },
-  { id: 'tournament', label: 'Tournament', icon: '🏆' },
+const TABS: ReadonlyArray<{ id: Tab; label: string; icon: LucideIcon }> = [
+  { id: 'studio', label: 'Studio', icon: Clapperboard },
+  { id: 'cameras', label: 'Cameras', icon: Camera },
+  { id: 'scenes', label: 'Scene Setup', icon: Layers },
+  { id: 'setup', label: 'Setup', icon: Settings2 },
+  { id: 'tournament', label: 'Tournament', icon: Trophy },
 ];
 
 function TabBar() {
   const insets = useSafeAreaInsets();
   const tab = useNav(state => state.tab);
   const setTab = useNav(state => state.setTab);
+  const setWorkspace = useNav(state => state.setWorkspace);
+  const clean = useNav(state => state.studioClean);
   const live = useStudio(state => isLiveState(state.engineState));
+  if (tab === 'studio' && clean) return null;
   return (
-    <View style={[styles.tabBar, { paddingBottom: Math.max(insets.bottom, space.sm) }]}>
+    <View style={[styles.tabBar, tab === 'studio' && styles.overlayTabs, { paddingBottom: Math.max(insets.bottom, space.xs) }]}>
       {TABS.map(item => {
         const active = item.id === tab;
+        const TabIcon = item.icon;
         return (
-          <Pressable key={item.id} accessibilityRole="tab" accessibilityState={{ selected: active }} onPress={() => setTab(item.id)} style={styles.tab}>
-            <Text style={[styles.tabIcon, !active && { opacity: 0.55 }]}>{item.icon}</Text>
-            <Text style={[styles.tabLabel, active && { color: colors.accent }]}>{item.label}</Text>
+          <Pressable key={item.id} accessibilityRole="tab" accessibilityLabel={item.label} accessibilityState={{ selected: active }}
+            onPress={() => setTab(item.id)} onLongPress={() => ToastAndroid.show(item.label, ToastAndroid.SHORT)} style={styles.tab}>
+            <TabIcon size={18} strokeWidth={1.8} color={active ? colors.accent : colors.muted} />
+            <Text style={[styles.tabLabel, active && { color: colors.accent }]} numberOfLines={1} adjustsFontSizeToFit>{item.label}</Text>
             {live && item.id === 'studio' && <View style={styles.liveDot} />}
           </Pressable>
         );
       })}
+      <Pressable accessibilityRole="button" accessibilityLabel="Streaming and Scoring home" onPress={() => setWorkspace('home')} style={styles.homeTab}><Home size={17} color={colors.muted} /></Pressable>
     </View>
   );
 }
@@ -49,12 +60,21 @@ function TabBar() {
 function Content() {
   const insets = useSafeAreaInsets();
   const tab = useNav(state => state.tab);
-  if (tab === 'studio') return <StudioScreen />;
+  const workspace = useNav(state => state.workspace);
+  const [scoringOpened, setScoringOpened] = useState(workspace === 'scoring');
+  useEffect(() => { if (workspace === 'scoring') setScoringOpened(true); }, [workspace]);
   return (
-    <View style={{ flex: 1, paddingTop: insets.top, backgroundColor: colors.bg }}>
-      {tab === 'cameras' && <CamerasScreen />}
-      {tab === 'setup' && <SetupScreen />}
-      {tab === 'tournament' && <TournamentScreen />}
+    <View style={{ flex: 1 }}>
+      {workspace === 'home' && <HomeScreen />}
+      {workspace === 'streaming' && (tab === 'studio' ? <StudioScreen /> : <View style={{ flex: 1, paddingTop: insets.top, backgroundColor: colors.bg }}>
+        {tab === 'cameras' && <CamerasScreen />}
+        {tab === 'setup' && <SetupScreen />}
+        {tab === 'tournament' && <TournamentScreen />}
+        {tab === 'scenes' && <ScenesScreen />}
+      </View>)}
+      {(scoringOpened || workspace === 'scoring') && <View style={{ flex: 1, display: workspace === 'scoring' ? 'flex' : 'none' }}>
+        <ScoringScreen active={workspace === 'scoring'} />
+      </View>}
     </View>
   );
 }
@@ -65,6 +85,8 @@ function Shell() {
   const role = useSettings(state => state.role);
   const activeMatchId = useStudio(state => state.activeMatchId);
   const setTab = useNav(state => state.setTab);
+  const workspace = useNav(state => state.workspace);
+  const live = useStudio(state => isLiveState(state.engineState));
 
   useEffect(() => {
     useSettings.getState().hydrate()
@@ -76,25 +98,29 @@ function Shell() {
       })
       .catch(error => log.error('boot', error));
     const stopEngine = bindEngineEvents();
-    const stopKeys = bindRemoteKeys();
     const stopHealth = startDeviceHealth();
-    return () => { stopEngine(); stopKeys(); stopHealth(); };
+    return () => { stopEngine(); stopHealth(); };
   }, []);
+
+  useEffect(() => {
+    if (!hydrated || (workspace !== 'streaming' && !live)) return undefined;
+    return bindRemoteKeys();
+  }, [hydrated, workspace, live]);
 
   const tenantId = pairing?.tenantId;
   const game = pairing?.game;
   useEffect(() => {
-    if (!hydrated || !pairing) return undefined;
+    if (!hydrated || !pairing || (workspace !== 'streaming' && !live)) return undefined;
     return startTournamentSync(pairing);
     // Re-subscribe only when the tournament or game changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hydrated, tenantId, game]);
+  }, [hydrated, tenantId, game, workspace, live]);
 
   const matchId = pairing?.matchId ?? activeMatchId;
   useEffect(() => {
-    if (!hydrated || !tenantId || !game || !matchId || role !== 'studio') return undefined;
+    if (!hydrated || !tenantId || !game || !matchId || role !== 'studio' || (workspace !== 'streaming' && !live)) return undefined;
     return startProgramSync({ tenantId, game, matchId: effectiveMatchId() ?? matchId });
-  }, [hydrated, tenantId, game, matchId, role]);
+  }, [hydrated, tenantId, game, matchId, role, workspace, live]);
 
   useEffect(() => subscribeIncomingLinks(url => {
     const link = classifyLink(url);
@@ -115,12 +141,20 @@ function Shell() {
   useEffect(() => {
     const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
       const { tab, setTab: go } = useNav.getState();
+      if (useNav.getState().workspace === 'home') {
+        if (!isLiveState(useStudio.getState().engineState)) return false;
+        Alert.alert('Streaming is live', 'Open Streaming and use End stream before leaving the app.');
+        return true;
+      }
+      if (useNav.getState().workspace === 'scoring') { useNav.getState().setWorkspace('home'); return true; }
       if (tab !== 'studio') { go('studio'); return true; }
+      if (useNav.getState().studioClean) { useNav.getState().setStudioClean(false); return true; }
       if (isLiveState(useStudio.getState().engineState)) {
         Alert.alert('Streaming is live', 'Use END STREAM to stop before leaving the app.');
         return true;
       }
-      return false;
+      useNav.getState().setWorkspace('home');
+      return true;
     });
     return () => subscription.remove();
   }, []);
@@ -128,13 +162,13 @@ function Shell() {
   const statusBar = useMemo(() => <StatusBar barStyle="light-content" />, []);
 
   if (!hydrated) {
-    return <View style={[styles.splash]}><Text style={styles.splashText}>NJS Live Studio</Text></View>;
+    return <View style={styles.splash}><Image source={require('./assets/njs-store.png')} style={styles.splashLogo} resizeMode="contain" /><Text style={styles.splashText}>NJS Live Studio</Text></View>;
   }
   return (
     <View style={styles.root}>
       {statusBar}
       <View style={{ flex: 1 }}><Content /></View>
-      <TabBar />
+      {workspace === 'streaming' && <TabBar />}
     </View>
   );
 }
@@ -150,10 +184,12 @@ export default function App() {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
   splash: { flex: 1, backgroundColor: colors.bg, alignItems: 'center', justifyContent: 'center' },
-  splashText: { color: colors.accent, fontSize: 22, fontWeight: '800' },
-  tabBar: { flexDirection: 'row', backgroundColor: '#0a1022', borderTopWidth: 1, borderTopColor: colors.line, paddingTop: space.xs },
-  tab: { flex: 1, alignItems: 'center', paddingVertical: space.xs, gap: 2 },
-  tabIcon: { fontSize: 20 },
-  tabLabel: { color: colors.muted, fontSize: 11, fontWeight: '700' },
-  liveDot: { position: 'absolute', top: 2, right: '28%', width: 9, height: 9, borderRadius: 5, backgroundColor: colors.live },
+  splashLogo: { width: 64, height: 64, marginBottom: 14 },
+  splashText: { color: colors.text, fontSize: 16, fontWeight: '600' },
+  tabBar: { flexDirection: 'row', backgroundColor: '#10151b', borderTopWidth: 1, borderTopColor: colors.line, paddingTop: 3 },
+  overlayTabs: { position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: 'rgba(12,15,19,0.92)' },
+  tab: { flex: 1, minHeight: 44, alignItems: 'center', justifyContent: 'center', paddingVertical: 4, paddingHorizontal: 2, gap: 3 },
+  tabLabel: { color: colors.muted, fontSize: 9, fontWeight: '600' },
+  liveDot: { position: 'absolute', top: 3, right: '30%', width: 5, height: 5, borderRadius: 3, backgroundColor: colors.live },
+  homeTab: { width: 36, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
 });

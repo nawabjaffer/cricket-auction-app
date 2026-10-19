@@ -17,6 +17,150 @@ This is not a claim of full PRISM feature parity. Bluetooth remote control and t
 updates do not provide frame-accurate camera synchronization. Output quality and frame rate depend
 on the camera, encoder, network and thermal limits. Hardware-dependent features require device tests.
 
+## Operator Quick Start
+
+### Version 1.2.0: Streaming and Scoring
+
+The app now starts with two main options, **Streaming** and **Scoring**. Opening the home screen
+or Scoring does not start the camera. Streaming retains Studio, Cameras, Scene Setup, Setup and
+Tournament; its home icon returns to the two-option screen. An active stream continues when you
+open Scoring, and the live Streaming option returns you to it. The scoring page remains mounted
+when switching modes, preserving its current form and navigation until the app is closed or the
+scoring tournament is changed. Cloud-saved scores and fixtures persist as they do on the website.
+
+Scoring uses the complete existing online scorer/admin application inside a native workspace,
+not a separate implementation of the sport rules or an offline scoring database. Select the HTTPS
+server, an active tournament slug and an enabled sport. Cricket, football, kabaddi and carrom use
+their existing pages. Sign in normally when prompted; the app does not bypass account permissions.
+
+- **Matches** opens the sport admin workspace, including existing fixtures, match scheduling,
+	teams/players, competition setup and settings.
+- **Score** opens the existing live scorer, including the sport's current controls and match selection.
+- **Scoreboard** opens the public cricket scorecard or the selected sport's existing scoreboard.
+- **Tournament** opens the existing tournament admin. Its normal registration, player, team,
+	auction, reports and other enabled modules remain available through the web navigation.
+- Scoring options include the existing scorecard designer, broadcast controls and operator guides.
+	Native Back/Forward, reload, browser fallback and page-error recovery remain available.
+- File inputs use Android's file chooser. CSV/Blob exports up to 8 MB use Android's document-save
+	picker; choose a destination to save the file. Larger exports can be downloaded using the browser
+	option. Clipboard writes and printing/save-as-PDF use Android system integration.
+
+The Scoring tournament selection is saved separately from Streaming pairing. Changing scoring
+sport or tournament never retargets a live stream's overlay profile. Internet is required, and
+existing web sessions live in the scoring WebView's storage rather than the stream-key keystore.
+Scoring still follows the existing server's authentication, sport gates and database rules; the
+pre-existing database authorization limitations below are not removed by this integration.
+
+Install the current v1.2.0 testing update over the previous same-signer build to keep settings.
+Use **App updates** on home or **Streaming > Tournament > App** for subsequent updates.
+
+### Version 1.1.0: scenes and compact studio
+
+- The launcher and app use the public NJS app logo. Studio, Cameras, Setup and Tournament use
+	smaller typography and denser controls, with accessible labels and long-press icon names.
+- Studio opens with a full-screen camera preview. Its bottom navigation floats over the preview;
+	the expand icon hides the HUD and navigation until restored, or until Android Back is pressed.
+- Tap **Setup** on the Studio preview to open the left scene rail. It uses 15% of the screen width.
+	The separate bottom **Setup** tab
+	still contains platforms, quality, global overlays and Bluetooth settings.
+- Tap the small left tools icon to reveal camera flip, flashlight, microphone, overlays, recording,
+	zoom/exposure and Fit/Fill controls. Fill crops only the preview to the screen; Fit displays the
+	complete encoded frame. Neither mode changes the resolution or framing sent to viewers.
+- The new bottom **Scene Setup** tab creates up to 12 named scenes. Scenes can be duplicated,
+	reordered and deleted; take another scene to air before deleting the active one. Choose rear,
+	front or LAN RTSP camera, then **Take to air** or **Apply scene**. Camera support is checked before
+	switching; a failed switch restores the previous selection.
+- Add scene sources with the plus icon: website overlays, image URLs or app-linked sport animation
+	presets. Website/image sources have position, width, opacity, visibility and removal controls.
+	Tournament overlays can be enabled separately for each scene. Apply changes before returning live.
+- Scene rail thumbnails use captured local frames and live remote RTSP previews for up to three
+	scenes. Inactive local cameras show their last captured frame or a camera placeholder rather
+	than opening extra camera sessions. The studio phone's microphone remains the program audio.
+- Added animation presets appear under **Animate** in Studio. Select side A/B before playing them.
+	These controls only trigger the existing paired match overlay; they do not modify scoring.
+	Pairing and a selected/on-air match are required. Presets follow the tournament's sport.
+- Media Next/Previous and gamepad R1/L1 switch scenes by default. Under **Setup > Bluetooth**,
+	tap a key to choose its action, or learn a supported custom Android key. Learning does not fire
+	streaming actions, repeated held keys are ignored, and Android system keys remain reserved.
+
+Install the v1.1.0 APK over the previous test APK to retain encrypted settings and credentials;
+both builds must use the same signer. Existing installs receive rear/front scenes automatically.
+An incompatible-signer error requires the correct signing key, not bypassing Android verification.
+
+### Install and pair
+
+1. On your computer, sign in to an active tournament and open **Android Live Studio** from the
+	scorer admin Quick links: `/<tenantSlug>/<gameType>/scorer/mobile-app`.
+2. Download the APK only when a release is available. An unavailable download means that no APK
+	has been published; it does not mean that you should bypass Android security warnings.
+	For internal testing, use the test APK supplied directly by your developer on a trusted network.
+3. Install on an ARM Android phone running Android 7.0 or newer. If needed, grant your browser
+	permission to install this known APK, then revoke that permission after installation.
+	Release-mode APKs run without Metro or a connection to the development computer.
+4. Open **NJS Live Studio**, grant camera and microphone permissions, then open **Tournament**.
+5. Tap **Scan pairing QR** and scan the pairing code on the computer, not the APK download code.
+	Confirm the server, tournament and sport before accepting. Alternatively, enter the HTTPS
+	server address, tournament slug and sport under **Pair manually**, then tap **Connect**.
+6. Choose a fixture or **Follow the on-air match**. Use an active tournament's actual slug; a
+	deactivated tournament cannot be used for pairing. `localhost` on a phone refers to the phone,
+	not your computer, so use a server address reachable from the phone.
+
+Pairing and phone presence require internet access to the configured Firebase project. Pairing
+is not authorization; use a test tournament until the database access controls are hardened.
+
+### Record and stream
+
+1. In **Setup**, start with H.264 at 1080p/30 fps, or a lower preset supported by the phone.
+	Keep the phone powered and monitor its temperature. Do not select 4K solely because the
+	preview looks sharp; verify the supported camera and encoder combination and actual output.
+2. In **Studio**, record a short clip. Inspect decoded video, audio and timing before going live;
+	a working preview does not prove that the encoded output is correct.
+3. Under **Setup > Platforms**, configure a manual RTMPS destination using the platform's ingest
+	address and stream key. Keep the key on the phone; never put it into the shared profile or QR.
+	YouTube account linking requires the OAuth setup below; manual RTMPS is a separate option.
+4. Configure the scoreboard and other widgets in the web profile or the phone's overlay settings.
+	Check the final Studio preview against the selected fixture before starting the broadcast.
+5. Start a private or unlisted broadcast first. Inspect received video and audio on the platform,
+	exercise reconnect and camera switching, then stop the broadcast and check the recording.
+
+### LAN cameras
+
+1. Put the studio phone and camera phones on the same trusted Wi-Fi or hotspot, with client
+	isolation disabled. Do not expose RTSP ports to the internet.
+2. On a camera phone, open **Cameras > LAN camera > Start LAN camera**. Keep that app running.
+3. On the studio phone, choose **Cameras > Studio host > Scan camera QR**, or add the camera's
+	RTSP URL manually. Discovery may be blocked by a router even when direct RTSP works.
+4. Tap **Take to air** and inspect the Studio preview and received broadcast. Use **Back to this
+	phone** to return to the host camera. The studio phone's microphone remains the program audio;
+	a remote camera does not replace it with its own microphone feed.
+5. Stop the LAN camera before changing that phone back to studio use. OBS or VLC can open its
+	RTSP URL as a media source; a browser cannot play that RTSP feed directly.
+
+### Monitor from your computer
+
+The web Mobile Studio page's **Connected phones** list reports phone state, resolution, bitrate
+and battery, with a heartbeat about every five seconds. It is not a remote video monitor or a
+remote copy of the phone's detailed log. Read app events under **Tournament > Diagnostics > Show log**.
+
+For native logs and crashes, connect a phone over USB, enable **Developer options > USB debugging**,
+authorize your own computer and open the app. On this macOS development setup:
+
+```sh
+ADB="$HOME/Library/Android/sdk/platform-tools/adb"
+"$ADB" devices -l
+APP_PID=$("$ADB" shell pidof -s com.njsstore.livestudio | tr -d '\r')
+if [ -n "$APP_PID" ]; then
+	 "$ADB" logcat --pid="$APP_PID" -v threadtime
+else
+	 printf 'Open NJS Live Studio on the connected phone first.\n'
+fi
+```
+
+With multiple devices, add `-s <device-serial>` to each ADB command. Rerun the log command after
+restarting the app, since its process ID changes. This release-mode build keeps its JavaScript
+event log in the app rather than forwarding it to the development console. Keep device logs
+private and remove credentials before sharing them. Disable USB debugging when testing is done.
+
 ## Development
 
 Install Node.js 22.11 or newer, JDK 17/21 and the Android SDK. Set `ANDROID_HOME` and
@@ -54,14 +198,49 @@ npm run mobile:build
 npm run mobile:publish
 ```
 
-The publisher verifies the APK signature and package, then writes the APK and checksum/version
-manifest into `public/downloads/android`. It rejects the Android debug signer by default.
+The publisher verifies the APK signature and package, then writes a checksum-addressed APK and
+version manifest into `public/downloads/android`. It verifies the staged copy before replacing
+`latest.json` atomically, so a failed publication leaves the previous release usable. Previous
+APKs are retained; keep them when preparing subsequent Hosting builds. A clean CI workspace must
+restore retained release artifacts before deployment if older download links must remain available.
+The publisher rejects the Android debug signer by default and always rejects debuggable APKs,
+including when the test-signing override is used. Web and app downloads reject manifests for a
+different application ID.
+Release APK and app-bundle builds run Android release lint first and fail if it reports errors.
 Deploy Firebase Hosting through the normal release process only after the device checks below pass.
 The admin Quick link opens `/{tenantSlug}/{gameType}/scorer/mobile-app?download=1`.
 An unpublished release remains unavailable; a working public download requires an actual deployment.
+This same guide is available in the app at `/{tenantSlug}/help?section=mobile`.
 
 For local smoke testing only, build with `-PallowDebugSigning=true`. This is a release-mode APK
 signed with the public development key, not a production release. Do not publish it as production.
+
+## In-App Updates
+
+Starting with v1.1.1, **Tournament > App > Check for updates** selects a feed using the installed
+signing certificate. Development-signed test builds use `/downloads/android/testing/latest.json`;
+production-signed builds use `/downloads/android/latest.json`. The app displays its update channel.
+An update is offered only when its version code is higher, its Android requirement is supported,
+and its signing certificate matches the installed app. Downloading opens the Android browser;
+installation still requires your approval in Android.
+
+Versions up to v1.1.0 only know the production feed. Install v1.1.1 manually once, over the existing
+test app with the same development signer, to enable the corrected testing-feed checker. A server
+URL without a published JSON manifest cannot supply updates; the SPA HTML fallback is not a feed.
+Network failures, invalid feeds and timeouts now show an actionable message instead of claiming
+that no release exists. Checks bypass stale manifest caches and time out after 15 seconds.
+
+To prepare an explicitly labeled testing release, without publishing it as production:
+
+```sh
+npm run mobile:publish -- --channel testing --allow-debug
+```
+
+This writes only the testing subdirectory and includes `channel: testing` and
+`signing: development` in its manifest. Build and deploy Hosting after publication to make the
+feed reachable from the phone. The production web download card does not offer testing builds.
+The test-signing override is rejected on the production channel; all channels reject debuggable
+APKs. Production signing and the physical-device release checklist remain required for a real release.
 
 ## YouTube Setup
 

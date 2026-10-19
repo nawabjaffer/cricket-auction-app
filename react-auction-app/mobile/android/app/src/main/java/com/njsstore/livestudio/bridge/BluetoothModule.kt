@@ -25,36 +25,30 @@ import com.facebook.react.bridge.ReactMethod
 import com.facebook.react.bridge.WritableMap
 import com.njsstore.livestudio.studio.Events
 import com.njsstore.livestudio.studio.Threads
+import org.json.JSONArray
 
 /** Dispatches Bluetooth / HID remote key presses (clickers, gamepads, headset buttons) to JS. */
 object RemoteKeys {
     @Volatile var capture = false
+    @Volatile var bindings: Set<Int> = emptySet()
 
     private val system = setOf(
         KeyEvent.KEYCODE_BACK, KeyEvent.KEYCODE_HOME, KeyEvent.KEYCODE_APP_SWITCH, KeyEvent.KEYCODE_POWER,
         KeyEvent.KEYCODE_MENU, KeyEvent.KEYCODE_SLEEP, KeyEvent.KEYCODE_WAKEUP, KeyEvent.KEYCODE_ASSIST,
     )
-    private val volume = setOf(KeyEvent.KEYCODE_VOLUME_UP, KeyEvent.KEYCODE_VOLUME_DOWN, KeyEvent.KEYCODE_VOLUME_MUTE)
-
-    private fun isRemoteKey(code: Int): Boolean =
-        code in KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE..KeyEvent.KEYCODE_MEDIA_FAST_FORWARD ||
-            code in KeyEvent.KEYCODE_MEDIA_PLAY..KeyEvent.KEYCODE_MEDIA_RECORD ||
-            code == KeyEvent.KEYCODE_HEADSETHOOK || code == KeyEvent.KEYCODE_CAMERA || code == KeyEvent.KEYCODE_FOCUS ||
-            code in KeyEvent.KEYCODE_BUTTON_A..KeyEvent.KEYCODE_BUTTON_MODE || code in volume
-
     /** @return true when the key was consumed so Android does not also act on it. */
     fun handle(event: KeyEvent): Boolean {
         val code = event.keyCode
         if (code in system) return false
-        if (!capture && !isRemoteKey(code)) return false
+        if (!capture && code !in bindings) return false
         Events.emit("studio.remoteKey") {
             putInt("keyCode", code)
             putString("key", KeyEvent.keyCodeToString(code).removePrefix("KEYCODE_"))
             putString("action", if (event.action == KeyEvent.ACTION_UP) "up" else "down")
             putInt("repeat", event.repeatCount)
+            putBoolean("learning", capture)
         }
-        // Volume keys keep their normal behaviour unless the operator is learning a key.
-        return capture || code !in volume
+        return true
     }
 }
 
@@ -114,6 +108,7 @@ class BluetoothModule(private val context: ReactApplicationContext) : ReactConte
         audioCallback?.let { audio.unregisterAudioDeviceCallback(it) }
         audioCallback = null
         RemoteKeys.capture = false
+        RemoteKeys.bindings = emptySet()
         super.invalidate()
     }
 
@@ -175,7 +170,7 @@ class BluetoothModule(private val context: ReactApplicationContext) : ReactConte
     @ReactMethod
     fun startScan(promise: Promise) {
         val bluetooth = adapter
-        if (bluetooth == null || !bluetooth.isEnabled) {
+        if (bluetooth == null) {
             promise.reject("bluetooth_off", "Turn Bluetooth on to scan")
             return
         }
@@ -183,13 +178,27 @@ class BluetoothModule(private val context: ReactApplicationContext) : ReactConte
             promise.reject("permission", "Allow Bluetooth access to scan")
             return
         }
+        try {
+            if (!bluetooth.isEnabled) {
+                promise.reject("bluetooth_off", "Turn Bluetooth on to scan")
+                return
+            }
+        } catch (error: SecurityException) {
+            promise.reject("permission", "Allow Bluetooth access to scan", error)
+            return
+        }
         stopScanInternal()
         found.clear()
         val receiver = object : BroadcastReceiver() {
             override fun onReceive(c: Context, intent: Intent) {
+                if (!connectGranted()) return
                 val device = deviceOf(intent) ?: return
                 val rssi = intent.getShortExtra(BluetoothDevice.EXTRA_RSSI, Short.MIN_VALUE).takeIf { it != Short.MIN_VALUE }?.toInt()
-                val info = runCatching { describe(device, device.bondState == BluetoothDevice.BOND_BONDED, rssi) }.getOrNull() ?: return
+                val info = try {
+                    describe(device, device.bondState == BluetoothDevice.BOND_BONDED, rssi)
+                } catch (_: SecurityException) {
+                    return
+                }
                 found[device.address] = info
                 emitFound()
             }
@@ -214,7 +223,11 @@ class BluetoothModule(private val context: ReactApplicationContext) : ReactConte
     private fun stopScanInternal() {
         scanReceiver?.let { runCatching { context.unregisterReceiver(it) } }
         scanReceiver = null
-        runCatching { adapter?.cancelDiscovery() }
+        try {
+            if (scanGranted()) adapter?.cancelDiscovery()
+        } catch (_: SecurityException) {
+            Unit
+        }
     }
 
     private fun emitFound() {
@@ -242,6 +255,20 @@ class BluetoothModule(private val context: ReactApplicationContext) : ReactConte
     }
 
     @ReactMethod
+    fun setRemoteKeyBindings(keysJson: String, promise: Promise) {
+        try {
+            val keys = JSONArray(keysJson)
+            RemoteKeys.bindings = (0 until minOf(keys.length(), 64))
+                .map { KeyEvent.keyCodeFromString("KEYCODE_" + keys.optString(it)) }
+                .filter { it != KeyEvent.KEYCODE_UNKNOWN }
+                .toSet()
+            promise.resolve(null)
+        } catch (error: Exception) {
+            promise.reject("bindings", "Could not configure remote keys", error)
+        }
+    }
+
+    @ReactMethod
     fun openBluetoothSettings(promise: Promise) {
         try {
             context.startActivity(Intent(Settings.ACTION_BLUETOOTH_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
@@ -252,7 +279,11 @@ class BluetoothModule(private val context: ReactApplicationContext) : ReactConte
     }
 
     private fun describe(device: BluetoothDevice, bonded: Boolean, rssi: Int?): Found {
-        val major = runCatching { device.bluetoothClass?.majorDeviceClass }.getOrNull()
+        val major = try {
+            device.bluetoothClass?.majorDeviceClass
+        } catch (_: SecurityException) {
+            null
+        }
         val kind = when (major) {
             BluetoothClass.Device.Major.AUDIO_VIDEO -> "audio"
             BluetoothClass.Device.Major.PERIPHERAL -> "remote"
@@ -261,7 +292,12 @@ class BluetoothModule(private val context: ReactApplicationContext) : ReactConte
             null -> "other"
             else -> "other"
         }
-        return Found(device.address, runCatching { device.name }.getOrNull().orEmpty().ifBlank { device.address }, kind, bonded, rssi)
+        val name = try {
+            device.name
+        } catch (_: SecurityException) {
+            null
+        }
+        return Found(device.address, name.orEmpty().ifBlank { device.address }, kind, bonded, rssi)
     }
 
     private fun typeName(type: Int): String = when (type) {

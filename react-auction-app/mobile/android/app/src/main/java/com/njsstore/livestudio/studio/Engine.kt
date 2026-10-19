@@ -5,6 +5,7 @@ import android.app.Application
 import android.content.Context
 import android.content.pm.ActivityInfo
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
 import android.hardware.camera2.CameraCharacteristics
 import android.hardware.camera2.CameraManager
 import android.hardware.display.DisplayManager
@@ -16,6 +17,8 @@ import android.os.Environment
 import android.os.Handler
 import android.os.HandlerThread
 import android.util.Log
+import android.util.Base64
+import android.view.PixelCopy
 import android.view.Surface
 import androidx.core.content.ContextCompat
 import com.facebook.react.bridge.Arguments
@@ -26,9 +29,11 @@ import com.pedro.encoder.input.sources.OrientationForced
 import com.pedro.encoder.input.sources.audio.MicrophoneSource
 import com.pedro.encoder.input.sources.video.Camera2Source
 import com.pedro.encoder.utils.CodecUtil
+import com.pedro.encoder.utils.gl.AspectRatioMode
 import com.pedro.library.base.recording.RecordController
 import com.pedro.library.util.FpsListener
 import java.io.File
+import java.io.ByteArrayOutputStream
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -62,6 +67,7 @@ object Engine {
     private var previewSurface: Surface? = null
     private var previewWidth = 0
     private var previewHeight = 0
+    private var previewFill = true
     private var overlayFps = 15
     private var overlayHardware = false
     private var overlaySpecs: List<OverlaySpec> = emptyList()
@@ -262,6 +268,43 @@ object Engine {
 
     // ── Preview ──────────────────────────────────────────────────────────────
 
+    fun setPreviewFill(fill: Boolean) {
+        previewFill = fill
+        stream?.getGlInterface()?.setAspectRatioMode(if (fill) AspectRatioMode.Fill else AspectRatioMode.Adjust)
+    }
+
+    fun captureThumbnail(result: (String?) -> Unit) = submit {
+        val surface = previewSurface
+        if (Build.VERSION.SDK_INT < 26 || surface == null || !surface.isValid || previewWidth <= 0 || previewHeight <= 0) {
+            result(null)
+            return@submit
+        }
+        val width = 240
+        val height = (width * previewHeight / previewWidth).coerceIn(64, 360)
+        val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+        try {
+            PixelCopy.request(surface, bitmap, { code ->
+                try {
+                    if (code != PixelCopy.SUCCESS) result(null)
+                    else {
+                        val bytes = ByteArrayOutputStream().use { output ->
+                            bitmap.compress(Bitmap.CompressFormat.JPEG, 65, output)
+                            output.toByteArray()
+                        }
+                        result("data:image/jpeg;base64," + Base64.encodeToString(bytes, Base64.NO_WRAP))
+                    }
+                } catch (_: Exception) {
+                    result(null)
+                } finally {
+                    bitmap.recycle()
+                }
+            }, handler)
+        } catch (_: Exception) {
+            bitmap.recycle()
+            result(null)
+        }
+    }
+
     fun onPreviewSurface(surface: Surface, width: Int, height: Int) = submit {
         previewSurface = surface
         previewWidth = width
@@ -303,6 +346,7 @@ object Engine {
 
     /** Filters and stabilisation are lost whenever the GL pipeline stops, so they are re-applied after every start. */
     private fun afterGlStarted() {
+        setPreviewFill(previewFill)
         applyStabilization()
         rebindOverlays()
     }

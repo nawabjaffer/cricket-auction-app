@@ -7,6 +7,7 @@ import android.net.NetworkCapabilities
 import android.net.nsd.NsdManager
 import android.net.nsd.NsdServiceInfo
 import android.net.wifi.WifiManager
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
@@ -67,7 +68,11 @@ class NetworkModule(private val context: ReactApplicationContext) : ReactContext
         }
         callback = networkCallback
         try {
-            connectivity.registerDefaultNetworkCallback(networkCallback, main)
+            if (Build.VERSION.SDK_INT >= 26) {
+                connectivity.registerDefaultNetworkCallback(networkCallback, main)
+            } else {
+                connectivity.registerDefaultNetworkCallback(networkCallback)
+            }
             promise.resolve(null)
         } catch (e: Exception) {
             promise.reject("network", e.message, e)

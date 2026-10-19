@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { Modal, Pressable, ScrollView, Text, View } from 'react-native';
+import { Check, X } from 'lucide-react-native';
 import {
   StudioBluetooth, StudioEngine, onStudioEvent,
   type BluetoothAudioInput, type BluetoothDevice, type RemoteKeyEvent,
@@ -7,7 +8,7 @@ import {
 import { requestBluetoothPermissions } from '../../services/permissions';
 import { log } from '../../services/logger';
 import { REMOTE_ACTIONS, useSettings, type RemoteAction } from '../../store/settingsStore';
-import { Btn, Card, H2, Muted, Pill, Row } from '../../ui/primitives';
+import { Btn, Card, H2, IconButton, Muted, Pill, Row } from '../../ui/primitives';
 import { colors, radius, space } from '../../ui/theme';
 
 const KEY_LABELS: Record<string, string> = {
@@ -15,11 +16,6 @@ const KEY_LABELS: Record<string, string> = {
   BUTTON_B: 'Gamepad B', VOLUME_UP: 'Volume up', VOLUME_DOWN: 'Volume down', MEDIA_NEXT: 'Next', MEDIA_PREVIOUS: 'Previous',
   ENTER: 'Enter / OK', DPAD_CENTER: 'D-pad center', BUTTON_X: 'Gamepad X', BUTTON_Y: 'Gamepad Y',
 };
-
-function nextAction(current: RemoteAction): RemoteAction {
-  const index = REMOTE_ACTIONS.findIndex(action => action.id === current);
-  return REMOTE_ACTIONS[(index + 1) % REMOTE_ACTIONS.length].id;
-}
 
 export function BluetoothSection() {
   const inputId = useSettings(state => state.audio.inputId);
@@ -36,6 +32,7 @@ export function BluetoothSection() {
   const [learning, setLearning] = useState(false);
   const [lastKey, setLastKey] = useState<RemoteKeyEvent | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [editingKey, setEditingKey] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -132,12 +129,11 @@ export function BluetoothSection() {
 
       <Card>
         <H2>Remote buttons</H2>
-        <Muted>Use a Bluetooth clicker, gamepad or headset button to control the stream hands-free. Tap a row to change its action.</Muted>
         {Object.keys(remoteKeys).map(key => (
-          <Pressable key={key} accessibilityRole="button" onPress={() => patch({ remoteKeys: { ...remoteKeys, [key]: nextAction(remoteKeys[key]) } })}
-            style={{ paddingVertical: 10, flexDirection: 'row', justifyContent: 'space-between', borderBottomWidth: 1, borderBottomColor: colors.line }}>
-            <Text style={{ color: colors.text, fontSize: 14 }}>{KEY_LABELS[key] ?? key}</Text>
-            <Text style={{ color: colors.accent, fontSize: 14, fontWeight: '700' }}>{REMOTE_ACTIONS.find(action => action.id === remoteKeys[key])?.label}</Text>
+          <Pressable key={key} accessibilityRole="button" accessibilityLabel={`${KEY_LABELS[key] ?? key}: ${REMOTE_ACTIONS.find(action => action.id === remoteKeys[key])?.label}`} onPress={() => setEditingKey(key)}
+            style={{ minHeight: 44, paddingVertical: 9, gap: 12, flexDirection: 'row', justifyContent: 'space-between', borderBottomWidth: 1, borderBottomColor: colors.line }}>
+            <Text style={{ color: colors.text, fontSize: 12, flex: 1 }}>{KEY_LABELS[key] ?? key}</Text>
+            <Text style={{ color: colors.accent, fontSize: 12, fontWeight: '600', flexShrink: 1 }}>{REMOTE_ACTIONS.find(action => action.id === remoteKeys[key])?.label}</Text>
           </Pressable>
         ))}
         <Row>
@@ -164,6 +160,18 @@ export function BluetoothSection() {
         {found.map(device => <DeviceRow key={device.address} device={device} />)}
         {!scanning && found.length === 0 && <Muted>Gimbals, clickers and sensors that advertise over BLE show up here. Pair them in Android settings to use them.</Muted>}
       </Card>
+      <Modal visible={editingKey !== null} transparent animationType="slide" onRequestClose={() => setEditingKey(null)} supportedOrientations={['portrait', 'landscape']}>
+        <View style={{ flex: 1, justifyContent: 'flex-end', backgroundColor: colors.scrim }}>
+          <ScrollView style={{ flexGrow: 0, maxHeight: '85%', backgroundColor: colors.card, borderTopLeftRadius: 8, borderTopRightRadius: 8 }} contentContainerStyle={{ padding: 16, paddingBottom: 30, gap: 4 }}>
+            <Row style={{ justifyContent: 'space-between', marginBottom: 8 }}><H2>{editingKey ? KEY_LABELS[editingKey] ?? editingKey : 'Action'}</H2><IconButton icon={X} label="Close key actions" onPress={() => setEditingKey(null)} /></Row>
+            {REMOTE_ACTIONS.map(action => <Pressable key={action.id} accessibilityRole="radio" accessibilityState={{ selected: !!editingKey && remoteKeys[editingKey] === action.id }}
+              onPress={() => { if (editingKey) patch({ remoteKeys: { ...remoteKeys, [editingKey]: action.id as RemoteAction } }); setEditingKey(null); }}
+              style={{ minHeight: 44, paddingVertical: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: 1, borderBottomColor: colors.line }}>
+              <Text style={{ fontSize: 13, color: colors.text }}>{action.label}</Text>{editingKey && remoteKeys[editingKey] === action.id && <Check size={17} color={colors.accent} />}
+            </Pressable>)}
+          </ScrollView>
+        </View>
+      </Modal>
     </View>
   );
 }

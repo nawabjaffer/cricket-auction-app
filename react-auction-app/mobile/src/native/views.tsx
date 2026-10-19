@@ -6,7 +6,7 @@ interface NativePeerProps { style?: StyleProp<ViewStyle>; url?: string; active?:
 const NativeStudioPreview = requireNativeComponent<NativePreviewProps>('NjsStudioPreview');
 const NativePeerPreview = requireNativeComponent<NativePeerProps>('NjsPeerPreview');
 
-/** Live camera preview rendered by the encoder's GL pipeline — overlays included, exactly what is streamed. */
+/** Composited encoder output; fill mode crops only the screen preview, not the encoded frame. */
 export function StudioPreview({ style }: Readonly<NativePreviewProps>) {
   return <NativeStudioPreview style={style} />;
 }

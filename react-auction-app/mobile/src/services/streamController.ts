@@ -58,7 +58,9 @@ function localOverrides(settings: SettingsData): LocalOverrides {
 
 export function allWidgets(): StudioWidget[] {
   const { profile } = useStudio.getState();
-  return [...(profile?.widgets ?? []), ...useSettings.getState().customWidgets];
+  const settings = useSettings.getState();
+  const scene = settings.scenes.find(item => item.id === settings.activeSceneId);
+  return [...(scene?.profileOverlays === false ? [] : profile?.widgets ?? []), ...settings.customWidgets, ...(scene?.widgets ?? [])];
 }
 
 // ── Capabilities ─────────────────────────────────────────────────────────────
@@ -150,13 +152,17 @@ export function releaseEngine(): Promise<void> {
   });
 }
 
-export async function applyOverlays(): Promise<void> {
+export async function applyOverlays(strict = false): Promise<void> {
   const settings = useSettings.getState();
-  const context = studioContext();
-  if (!context) { await StudioEngine.setOverlays('[]').catch(() => undefined); return; }
+  const context = studioContext() ?? { origin: settings.origin, tenantId: '', slug: '', game: 'cricket' as const };
   const specs = settings.overlaysEnabled ? buildOverlaySpecs(allWidgets(), settings.overlayHidden, context) : [];
-  await StudioEngine.setOverlayOptions(settings.overlayFps, settings.overlayRender === 'hardware').catch(() => undefined);
-  await StudioEngine.setOverlays(JSON.stringify(specs)).catch(error => log.warn('overlay', message(error)));
+  try {
+    await StudioEngine.setOverlayOptions(settings.overlayFps, settings.overlayRender === 'hardware');
+    await StudioEngine.setOverlays(JSON.stringify(specs));
+  } catch (error) {
+    if (strict) throw error;
+    log.warn('overlay', message(error));
+  }
 }
 
 // ── Go live / end live ───────────────────────────────────────────────────────
