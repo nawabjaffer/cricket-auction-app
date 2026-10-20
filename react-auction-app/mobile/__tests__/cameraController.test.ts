@@ -33,8 +33,8 @@ import { defaultStudioProfile } from '../src/shared/studioProfile';
 import React from 'react';
 import renderer, { act } from 'react-test-renderer';
 import { CameraScreen } from '../src/screens/CameraScreen';
-import { sliderValueFromOffset } from '../src/ui/primitives';
-import { PanResponder } from 'react-native';
+import { sliderShouldCaptureGesture, sliderValueFromOffset } from '../src/ui/primitives';
+import { PanResponder, ScrollView, Text } from 'react-native';
 
 beforeEach(() => {
   jest.useFakeTimers(); jest.clearAllMocks();
@@ -50,6 +50,11 @@ describe('Camera controller', () => {
     expect(sliderValueFromOffset(100, 100, 1, 8)).toBe(8);
     expect(sliderValueFromOffset(50, 100, 1, 8, 0.5)).toBe(4.5);
     expect(sliderValueFromOffset(25, 0, 1, 8)).toBe(1);
+  });
+  it('lets vertical scrolling win while taking predominantly horizontal slider drags', () => {
+    expect(sliderShouldCaptureGesture(2, 14)).toBe(false);
+    expect(sliderShouldCaptureGesture(20, 5)).toBe(true);
+    expect(sliderShouldCaptureGesture(3, 0)).toBe(false);
   });
 
   it('uses recording settings without changing Host settings or destinations', async () => {
@@ -169,6 +174,38 @@ describe('Camera controller', () => {
     await act(async () => screen!.unmount());
   });
 
+  it('opens one centered framing panel with all transform controls and no scrolling', async () => {
+    let screen: renderer.ReactTestRenderer | undefined;
+    try {
+      await act(async () => { screen = renderer.create(React.createElement(CameraScreen)); });
+      await act(async () => { screen!.root.findByProps({ accessibilityLabel: 'Camera settings' }).props.onPress(); });
+      const framingButton = screen!.root.findAll(node => node.props.accessibilityRole === 'button')
+        .find(node => node.findAllByType(Text).some(item => item.props.children === 'Adjust overlay framing in preview'));
+      expect(framingButton).toBeTruthy();
+      await act(async () => { framingButton!.props.onPress(); });
+      const panel = screen!.root.findByProps({ accessibilityLabel: 'Overlay framing controls' });
+      expect(panel.findByProps({ accessibilityLabel: 'Overlay size' })).toBeTruthy();
+      expect(panel.findByProps({ accessibilityLabel: 'Overlay horizontal position' })).toBeTruthy();
+      expect(panel.findByProps({ accessibilityLabel: 'Overlay vertical position' })).toBeTruthy();
+      expect(screen!.root.findAllByType(ScrollView)).toHaveLength(0);
+    } finally { if (screen) await act(async () => screen!.unmount()); }
+  });
+
+  it('keeps overlay framing available from the selected preset when camera permission is unavailable', async () => {
+    jest.mocked(StudioEngine.prepare).mockRejectedValueOnce(new Error('Camera permission denied'));
+    let screen: renderer.ReactTestRenderer | undefined;
+    try {
+      await act(async () => { screen = renderer.create(React.createElement(CameraScreen)); });
+      await act(async () => { screen!.root.findByProps({ accessibilityLabel: 'Camera settings' }).props.onPress(); });
+      const framingButton = screen!.root.findAll(node => node.props.accessibilityRole === 'button')
+        .find(node => node.findAllByType(Text).some(item => item.props.children === 'Adjust overlay framing in preview'));
+      expect(framingButton).toBeTruthy();
+      await act(async () => { framingButton!.props.onPress(); });
+      expect(screen!.root.findByProps({ accessibilityLabel: 'Overlay framing controls' })).toBeTruthy();
+      expect(screen!.root.findAllByProps({ accessibilityLabel: 'Overlay size' }).length).toBeGreaterThan(0);
+    } finally { if (screen) await act(async () => screen!.unmount()); }
+  });
+
   it('hides zoom until Camera controls open and applies zoom while dragging', async () => {
     const frames: Array<(timestamp: number) => void> = [];
     const requestFrame = globalThis.requestAnimationFrame;
@@ -176,9 +213,9 @@ describe('Camera controller', () => {
       panHandlers: {
         onStartShouldSetResponder: handlers.onStartShouldSetPanResponder,
         onMoveShouldSetResponder: handlers.onMoveShouldSetPanResponder,
-        onResponderGrant: (event: { nativeEvent: { locationX: number; pageX: number } }) => handlers.onPanResponderGrant?.(event as never, { moveX: event.nativeEvent.pageX } as never),
-        onResponderMove: (event: { nativeEvent: { pageX: number } }) => handlers.onPanResponderMove?.(event as never, { moveX: event.nativeEvent.pageX } as never),
-        onResponderRelease: (event: { nativeEvent: { pageX: number } }) => handlers.onPanResponderRelease?.(event as never, { moveX: event.nativeEvent.pageX } as never),
+        onResponderGrant: (event: { nativeEvent: { locationX: number; pageX: number } }) => handlers.onPanResponderGrant?.(event as never, { dx: 0, dy: 0 } as never),
+        onResponderMove: (event: { nativeEvent: { pageX: number } }) => handlers.onPanResponderMove?.(event as never, { dx: event.nativeEvent.pageX - 100, dy: 0 } as never),
+        onResponderRelease: (event: { nativeEvent: { pageX: number } }) => handlers.onPanResponderRelease?.(event as never, { dx: event.nativeEvent.pageX - 100, dy: 0 } as never),
         onResponderTerminate: () => undefined,
         onResponderTerminationRequest: () => true,
         onShouldBlockNativeResponder: () => true,
@@ -186,7 +223,7 @@ describe('Camera controller', () => {
       getInteractionHandle: () => undefined,
     } as unknown as ReturnType<typeof PanResponder.create>));
     globalThis.requestAnimationFrame = callback => { frames.push(callback); return frames.length; };
-    let screen: renderer.ReactTestRenderer;
+    let screen: renderer.ReactTestRenderer | undefined;
     try {
       await act(async () => { screen = renderer.create(React.createElement(CameraScreen)); });
       expect(screen!.root.findAllByProps({ accessibilityLabel: 'Camera zoom' })).toHaveLength(0);
@@ -198,11 +235,13 @@ describe('Camera controller', () => {
         zoomSlider.props.onResponderMove({ nativeEvent: { pageX: 150 } });
       });
       expect(frames).toHaveLength(1);
-      await act(async () => { frames.shift()!(16); });
+      await act(async () => { while (frames.length) frames.shift()!(16); });
       expect(StudioEngine.setZoom).toHaveBeenCalledWith(4.5);
       zoomSlider = screen!.root.findByProps({ accessibilityLabel: 'Camera zoom' });
       expect(zoomSlider.props.accessibilityValue.now).toBe(4.5);
-      await act(async () => screen!.unmount());
-    } finally { responderFactory.mockRestore(); globalThis.requestAnimationFrame = requestFrame; }
+    } finally {
+      if (screen) await act(async () => screen!.unmount());
+      responderFactory.mockRestore(); globalThis.requestAnimationFrame = requestFrame;
+    }
   });
 });

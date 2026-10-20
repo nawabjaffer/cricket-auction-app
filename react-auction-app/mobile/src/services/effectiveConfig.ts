@@ -13,7 +13,7 @@ import type { DeviceCapabilities, EngineConfig, OverlaySpec } from '../native';
 export interface LocalOverrides {
   video: {
     presetId: string | null; codec: StudioCodec | null; adaptive: boolean | null; record: boolean | null;
-    stabilization: boolean | null; orientation: 'landscape' | 'portrait' | null; bitrateKbps: number | null;
+    stabilization: boolean | null; orientation: 'auto' | 'landscape' | 'portrait' | null; bitrateKbps: number | null;
   };
   audio: { bitrateKbps: number | null; stereo: boolean | null; echo: boolean | null; noise: boolean | null };
   overlayRender: 'software' | 'hardware';
@@ -30,6 +30,7 @@ export interface EffectiveVideo {
   record: boolean;
   stabilization: boolean;
   orientation: 'landscape' | 'portrait';
+  autoOrientation: boolean;
   /** Set when the device cannot do the requested preset and a lower one was chosen. */
   downgradeReason?: string;
 }
@@ -68,7 +69,7 @@ export function pickSupportedPreset(
 }
 
 export function resolveEffectiveVideo(
-  profile: StudioProfile, local: LocalOverrides, caps: DeviceCapabilities | null,
+  profile: StudioProfile, local: LocalOverrides, caps: DeviceCapabilities | null, displayOrientation: 'landscape' | 'portrait' = 'landscape',
 ): EffectiveVideo {
   const codec = local.video.codec ?? profile.video.codec;
   const requestedPresetId = local.video.presetId ?? profile.video.presetId;
@@ -87,7 +88,8 @@ export function resolveEffectiveVideo(
     adaptive: local.video.adaptive ?? profile.video.adaptiveBitrate,
     record: local.video.record ?? profile.video.recordLocal,
     stabilization: local.video.stabilization ?? profile.video.stabilization,
-    orientation: local.video.orientation ?? profile.video.orientation,
+    orientation: local.video.orientation === 'auto' ? displayOrientation : local.video.orientation ?? profile.video.orientation,
+    autoOrientation: local.video.orientation === 'auto',
     downgradeReason,
   };
 }
@@ -95,6 +97,7 @@ export function resolveEffectiveVideo(
 export function buildEngineConfig(effective: EffectiveVideo, profile: StudioProfile, local: LocalOverrides): EngineConfig {
   const { preset } = effective;
   return {
+    autoOrientation: effective.autoOrientation,
     video: {
       width: preset.width,
       height: preset.height,

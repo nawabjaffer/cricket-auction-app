@@ -381,6 +381,7 @@ object Engine {
         val current = stream ?: throw StudioException("not_prepared", "The camera is not ready")
         val cfg = config ?: throw StudioException("not_prepared", "The camera is not ready")
 
+        if (cfg.autoOrientation) lockOrientation(cfg.video.rotation)
         destinations.clear()
         everLive = false
         specs.forEach { destinations[it.id] = DestinationInfo("connecting") }
@@ -388,6 +389,7 @@ object Engine {
             current.startEncoders()
         } catch (e: Exception) {
             destinations.clear()
+            if (cfg.autoOrientation) lockOrientation(cfg.video.rotation, automatic = true)
             throw StudioException("encoder", "Could not start the encoder: ${e.message}", e)
         }
         afterGlStarted()
@@ -413,6 +415,7 @@ object Engine {
         if (!current.stopDestinations()) needsPrepare = true
         destinations.clear()
         everLive = false
+        config?.takeIf { it.autoOrientation && !current.isRecording && !current.hasServer() }?.let { lockOrientation(it.video.rotation, automatic = true) }
         if (!current.isRecording && !current.hasServer()) StudioService.stop(app)
         setState(if (current.isOnPreview) "preview" else "prepared", mode, null)
     }
@@ -540,7 +543,7 @@ object Engine {
         if (!current.stopRecord()) needsPrepare = true
         recordingPath = null
         if (!current.hasSinks() && !current.hasServer()) StudioService.stop(app)
-        config?.takeIf { it.autoOrientation }?.let { lockOrientation(it.video.rotation, automatic = true) }
+        config?.takeIf { it.autoOrientation && !current.hasSinks() && !current.hasServer() }?.let { lockOrientation(it.video.rotation, automatic = true) }
     }
 
     fun pauseRecording() {

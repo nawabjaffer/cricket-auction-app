@@ -78,6 +78,7 @@ describe('settings defaults', () => {
     expect(settings.origin).toMatch(/^https:\/\//);
     expect(settings.overlayRender).toBe('software');
     expect(settings.cameraPort).toBe(8554);
+    expect(settings.overlayFraming).toMatchObject({ scalePct: 45, rotation: 'auto', offsetXPct: 0, offsetYPct: 0 });
     expect(settings.remoteKeys).toEqual(DEFAULT_REMOTE_KEYS);
     expect(settings.remoteKeys).not.toBe(DEFAULT_REMOTE_KEYS);
     expect(settings.deviceId).toMatch(/^dev_/);

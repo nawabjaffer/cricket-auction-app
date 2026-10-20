@@ -3,7 +3,8 @@ import { useCamera } from '../store/cameraStore';
 import { useSettings } from '../store/settingsStore';
 import { useNav } from '../store/navStore';
 import { isLiveState, useStudio } from '../store/studioStore';
-import { emptyRecordingSession, pauseRecordingSession, recordingBusy, resolveCameraOverlayRotation, resumeRecordingSession, startRecordingSession } from '../shared/cameraRecording';
+import { emptyRecordingSession, pauseRecordingSession, recordingBusy, resumeRecordingSession, startRecordingSession } from '../shared/cameraRecording';
+import { applyOverlayFraming } from '../shared/overlayFraming';
 import { defaultStudioProfile, type StudioPairing } from '../shared/studioProfile';
 import { buildEngineConfig, buildOverlaySpecs, resolveEffectiveVideo, type LocalOverrides } from './effectiveConfig';
 import { queueEngineTask, refreshCapabilities } from './streamController';
@@ -23,13 +24,12 @@ export async function applyCameraOverlays(): Promise<void> {
   const context = workspace ? { ...workspace, matchId } : { origin: useSettings.getState().origin, tenantId: '', slug: '', game: 'cricket' as const };
   const widgets = [...(workspace && matchId ? (profile ?? defaultStudioProfile(workspace.game)).widgets : []), ...camera.widgets];
   const frameOrientation = useCamera.getState().effective?.orientation ?? (camera.orientation === 'auto' ? useCamera.getState().screenOrientation : camera.orientation);
-  const specs = camera.overlays ? buildOverlaySpecs(widgets, {}, context).map(spec => ({
-    ...spec,
-    rotation: resolveCameraOverlayRotation(camera.overlayRotation, spec.pageWidth, spec.pageHeight, frameOrientation),
+  const specs = camera.overlays ? applyOverlayFraming(buildOverlaySpecs(widgets, {}, context), {
     scalePct: camera.overlayScalePct,
+    rotation: camera.overlayRotation,
     offsetXPct: camera.overlayOffsetXPct,
     offsetYPct: camera.overlayOffsetYPct,
-  })) : [];
+  }, frameOrientation) : [];
   await StudioEngine.setOverlayOptions(20, false);
   await StudioEngine.setOverlays(JSON.stringify(specs));
 }

@@ -102,7 +102,7 @@ export function VideoSection() {
         />
         {codec === 'h265' && <Muted>YouTube, Facebook and Twitch accept H.264 over RTMP. Use HEVC for SRT or servers that support Enhanced RTMP.</Muted>}
         <Segmented
-          options={[{ value: 'landscape', label: 'Landscape' }, { value: 'portrait', label: 'Portrait' }]}
+          options={[{ value: 'auto', label: 'Auto' }, { value: 'landscape', label: 'Landscape' }, { value: 'portrait', label: 'Portrait' }]}
           value={video.orientation ?? profile?.video.orientation ?? 'landscape'}
           onChange={orientation => setVideo({ orientation })}
         />

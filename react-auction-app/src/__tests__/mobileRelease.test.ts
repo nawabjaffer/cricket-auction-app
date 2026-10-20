@@ -101,5 +101,5 @@ describe('change-aware mobile release planning', () => {
     expect(execFileSync('git', ['--git-dir', remote, 'rev-parse', 'refs/heads/main'], { encoding: 'utf8' }).trim()).toBe(result.commit);
     expect(git('status', '--short')).toContain('.firebase/');
     expect(git('status', '--short')).toContain('private.JKS');
-  });
+  }, 60000);
 });

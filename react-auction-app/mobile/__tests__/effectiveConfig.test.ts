@@ -4,6 +4,7 @@ import {
 } from '../src/services/effectiveConfig';
 import { defaultStudioProfile, type StudioWidget } from '../src/shared/studioProfile';
 import type { DeviceCapabilities } from '../src/native';
+import { applyOverlayFraming, DEFAULT_OVERLAY_FRAMING } from '../src/shared/overlayFraming';
 
 const sizes = (list: Array<[number, number, number]>) => list.map(([w, h, maxFps]) => ({ w, h, maxFps }));
 
@@ -119,6 +120,13 @@ describe('resolveEffectiveVideo / buildEngineConfig', () => {
     const config = buildEngineConfig(effective, profile, local({ orientation: 'portrait' }));
     expect(config.video).toMatchObject({ width: 1920, height: 1080, rotation: 90 });
   });
+
+  it('follows screen orientation in Auto mode and marks the engine config as auto-rotating', () => {
+    const effective = resolveEffectiveVideo(profile, local({ orientation: 'auto' }), caps(), 'portrait');
+    const config = buildEngineConfig(effective, profile, local({ orientation: 'auto' }));
+    expect(effective).toMatchObject({ orientation: 'portrait', autoOrientation: true });
+    expect(config).toMatchObject({ video: { rotation: 90 }, autoOrientation: true });
+  });
 });
 
 describe('buildOverlaySpecs', () => {
@@ -145,6 +153,22 @@ describe('buildOverlaySpecs', () => {
   it('skips widgets whose URL cannot be resolved', () => {
     expect(buildOverlaySpecs([widget({ url: 'ftp://nope' })], {}, context)).toEqual([]);
     expect(buildOverlaySpecs([widget({})], {}, { ...context, origin: 'javascript:alert(1)' })).toEqual([]);
+  });
+});
+
+describe('shared overlay framing', () => {
+  it('keeps web overlays centered at a reduced default size and rotates them with frame orientation', () => {
+    const framingContext = { origin: 'https://app.example.com', tenantId: 't_1', slug: 'pkl', game: 'cricket' as const, matchId: 'm_1' };
+    const [spec] = buildOverlaySpecs([{
+      id: 'score', label: 'Scoreboard', kind: 'web', url: 'https://app.example/overlay', enabled: true,
+      anchor: 'full', widthPct: 100, opacity: 1, pageWidth: 1920, pageHeight: 1080,
+    }], {}, framingContext);
+    expect(DEFAULT_OVERLAY_FRAMING.scalePct).toBe(45);
+    expect(applyOverlayFraming([spec], DEFAULT_OVERLAY_FRAMING, 'portrait')[0]).toMatchObject({
+      rotation: 90, scalePct: 45, offsetXPct: 0, offsetYPct: 0,
+    });
+    expect(applyOverlayFraming([spec], { ...DEFAULT_OVERLAY_FRAMING, rotation: 0, offsetXPct: 10 }, 'landscape')[0])
+      .toMatchObject({ rotation: 0, scalePct: 45, offsetXPct: 10 });
   });
 });
 

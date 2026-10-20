@@ -3,7 +3,7 @@
 // included) with live HUD, camera controls and the Go Live flow.
 // ============================================================================
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Image, Modal, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { Battery, BatteryCharging, ChevronLeft, ChevronRight, Circle, CircleStop, FlipHorizontal2, Layers, Maximize, Mic, MicOff, PanelLeft, Plus, ScanLine, Settings2, SlidersHorizontal, Sparkles, Video, X, Zap, ZapOff } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -26,6 +26,8 @@ import { activateScene, rememberSceneFrame, switchScene } from '../services/scen
 import { triggerSceneAnimation } from '../services/sceneAnimations';
 import { SCENE_ANIMATION_PRESETS } from '../shared/scenes';
 import { startPeerDiscovery } from '../services/peers';
+import { OverlayFramingPanel } from '../ui/OverlayFramingPanel';
+import { orientedFrameDimensions } from '../shared/overlayFraming';
 
 function useTick(intervalMs: number, active: boolean): number {
   const [now, setNow] = useState(() => Date.now());
@@ -160,14 +162,23 @@ export function StudioScreen() {
   const activeSceneId = useSettings(state => state.activeSceneId);
   const pairing = useSettings(state => state.pairing);
   const previewFill = useSettings(state => state.previewFill);
+  const overlayFraming = useSettings(state => state.overlayFraming);
+  const orientationMode = useSettings(state => state.video.orientation);
   const activeScene = scenes.find(scene => scene.id === activeSceneId) ?? scenes[0];
 
   const [showPreflight, setShowPreflight] = useState(false);
   const [zoom, setZoom] = useState(1);
   const [zoomRange, setZoomRange] = useState({ min: 1, max: 1 });
+  const zoomPending = useRef(1);
+  const zoomFrame = useRef<number | null>(null);
+  const zoomFrameAt = useRef<number | null>(null);
   const [exposure, setExposure] = useState(0);
   const [exposureRange, setExposureRange] = useState({ min: 0, max: 0, step: 1 });
+  const exposurePending = useRef(0);
+  const exposureFrame = useRef<number | null>(null);
+  const exposureFrameAt = useRef<number | null>(null);
   const [showTuning, setShowTuning] = useState(false);
+  const [showOverlayFraming, setShowOverlayFraming] = useState(false);
   const [showTools, setShowTools] = useState(false);
   const [showScenes, setShowScenes] = useState(false);
   const [showAnimations, setShowAnimations] = useState(false);
@@ -176,6 +187,7 @@ export function StudioScreen() {
   const [sceneBusy, setSceneBusy] = useState(false);
   const [animationSide, setAnimationSide] = useState<'A' | 'B'>('A');
   const [hudBottom, setHudBottom] = useState(insets.top + 54);
+  const overlayApplyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const live = isLiveState(engineState);
   const now = useTick(1000, live);
@@ -205,8 +217,57 @@ export function StudioScreen() {
 
   // Re-configure (only while idle) when quality or audio settings change.
   useEffect(() => {
-    if (!isLiveState(useStudio.getState().engineState)) void prepareStudio();
-  }, [settingsKey, profileKey]);
+    if (!stats?.recording && !isLiveState(useStudio.getState().engineState)) void prepareStudio();
+  }, [settingsKey, profileKey, stats?.recording]);
+
+  useEffect(() => {
+    if (orientationMode === 'auto' && !stats?.recording && !isLiveState(useStudio.getState().engineState)) void prepareStudio();
+  }, [landscape, orientationMode, stats?.recording]);
+
+  useEffect(() => {
+    if (orientationMode === 'auto' && !isLiveState(useStudio.getState().engineState)) void prepareStudio();
+  }, [landscape, orientationMode]);
+
+  useEffect(() => () => {
+    if (overlayApplyTimer.current !== null) clearTimeout(overlayApplyTimer.current);
+    if (zoomFrame.current !== null) cancelAnimationFrame(zoomFrame.current);
+    if (exposureFrame.current !== null) cancelAnimationFrame(exposureFrame.current);
+  }, []);
+
+  const updateEngineSlider = (
+    value: number,
+    update: (value: number) => void,
+    pending: React.MutableRefObject<number>,
+    frame: React.MutableRefObject<number | null>,
+    lastFrameAt: React.MutableRefObject<number | null>,
+    apply: (value: number) => Promise<unknown>,
+  ) => {
+    update(value);
+    pending.current = value;
+    if (frame.current !== null) return;
+    frame.current = requestAnimationFrame(timestamp => {
+      frame.current = null;
+      if (lastFrameAt.current !== null && timestamp - lastFrameAt.current < 33) return;
+      lastFrameAt.current = timestamp;
+      void apply(pending.current).catch(report);
+    });
+  };
+
+  const finishEngineSlider = (
+    value: number,
+    update: (value: number) => void,
+    pending: React.MutableRefObject<number>,
+    frame: React.MutableRefObject<number | null>,
+    lastFrameAt: React.MutableRefObject<number | null>,
+    apply: (value: number) => Promise<unknown>,
+  ) => {
+    update(value);
+    pending.current = value;
+    if (frame.current !== null) cancelAnimationFrame(frame.current);
+    frame.current = null;
+    lastFrameAt.current = null;
+    void apply(value).catch(report);
+  };
 
   // Read camera limits once the preview is up.
   useEffect(() => {
@@ -241,6 +302,16 @@ export function StudioScreen() {
     patchSettings({ overlaysEnabled: !overlaysEnabled });
     void applyOverlays();
   }, [overlaysEnabled, patchSettings]);
+
+  const updateOverlayFraming = (partial: Partial<typeof overlayFraming>) => {
+    const current = useSettings.getState().overlayFraming;
+    patchSettings({ overlayFraming: { ...current, ...partial } });
+    if (overlayApplyTimer.current !== null) return;
+    overlayApplyTimer.current = setTimeout(() => {
+      overlayApplyTimer.current = null;
+      void applyOverlays();
+    }, 80);
+  };
 
   const toggleRecord = useCallback(async () => {
     try {
@@ -316,6 +387,7 @@ export function StudioScreen() {
           <IconButton icon={stats?.torch ? ZapOff : Zap} label="Flashlight" disabled={programSource.kind === 'peer'} active={stats?.torch} onPress={toggleTorch} />
           <IconButton icon={stats?.muted ? MicOff : Mic} label={stats?.muted ? 'Unmute' : 'Mute'} active={stats?.muted} onPress={() => { void StudioEngine.setMuted(!(stats?.muted ?? false)).catch(report); }} />
           <IconButton icon={Layers} label="Show or hide overlays" active={overlaysEnabled} onPress={toggleOverlays} />
+          <IconButton icon={ScanLine} label="Overlay framing" active={showOverlayFraming} disabled={!overlaysEnabled} onPress={() => setShowOverlayFraming(value => !value)} />
           <IconButton icon={stats?.recording ? CircleStop : Circle} label={stats?.recording ? 'Stop recording' : 'Record'} active={stats?.recording} onPress={() => void toggleRecord()} />
           <IconButton icon={Settings2} label="Zoom and exposure" active={showTuning} onPress={() => setShowTuning(value => !value)} />
           <IconButton icon={ScanLine} label={previewFill ? 'Fit entire output frame' : 'Fill preview screen'} active={!previewFill} onPress={() => patchSettings({ previewFill: !previewFill })} />
@@ -334,16 +406,26 @@ export function StudioScreen() {
         <ScrollView style={[s.tuning, { left: insets.left + 52 + (showScenes ? drawerWidth + 6 : 0), width: Math.min(192, width - insets.left - insets.right - 62 - (showScenes ? drawerWidth + 6 : 0)), top: hudBottom, maxHeight: height - hudBottom - drawerBottom }]} contentContainerStyle={{ padding: 10, gap: 4 }}>
           <Text style={s.tuneLabel}>Zoom {zoom.toFixed(1)}×</Text>
           <Slider value={zoom} min={zoomRange.min} max={Math.max(zoomRange.max, zoomRange.min + 0.01)} step={0.1} label="Zoom"
-            onChange={value => { setZoom(value); void StudioEngine.setZoom(value); }} />
+            onChange={value => updateEngineSlider(value, setZoom, zoomPending, zoomFrame, zoomFrameAt, next => StudioEngine.setZoom(next))}
+            onComplete={value => finishEngineSlider(value, setZoom, zoomPending, zoomFrame, zoomFrameAt, next => StudioEngine.setZoom(next))} />
           <Text style={s.tuneLabel}>Exposure {exposure > 0 ? '+' : ''}{exposure}</Text>
           <Slider value={exposure} min={exposureRange.min} max={Math.max(exposureRange.max, exposureRange.min + 1)} step={1} label="Exposure"
-            onChange={value => { setExposure(value); void StudioEngine.setExposure(value); }} />
+            onChange={value => updateEngineSlider(value, setExposure, exposurePending, exposureFrame, exposureFrameAt, next => StudioEngine.setExposure(next))}
+            onComplete={value => finishEngineSlider(value, setExposure, exposurePending, exposureFrame, exposureFrameAt, next => StudioEngine.setExposure(next))} />
           <Row>
             <Btn small label="Lock exposure" onPress={() => { void StudioEngine.setExposureLock(true); }} />
             <Btn small label="Auto" onPress={() => { void StudioEngine.setExposureLock(false); void StudioEngine.setAutoFocus(true); }} />
           </Row>
         </ScrollView>
       )}
+
+      {showOverlayFraming && !clean && effective && <OverlayFramingPanel
+        value={overlayFraming}
+        orientation={effective.orientation}
+        {...orientedFrameDimensions(effective.preset.width, effective.preset.height, effective.orientation)}
+        onChange={updateOverlayFraming}
+        onClose={() => setShowOverlayFraming(false)}
+      />}
 
       {!clean && <View style={[s.bottom, { bottom: insets.bottom + 62 }]} pointerEvents="box-none">
         <Row style={{ justifyContent: 'space-between' }} gap={space.sm}>

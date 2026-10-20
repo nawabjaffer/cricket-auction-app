@@ -6,7 +6,7 @@
 //   LAN camera  : serve this phone's camera as RTSP and share the URL by QR.
 // ============================================================================
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Text, View } from 'react-native';
 import { FlipHorizontal2, Settings2, Zap } from 'lucide-react-native';
 import { StudioScanner, StudioSystem } from '../native';
@@ -207,13 +207,19 @@ export function CamerasScreen() {
 function RemoteCameraControls({ camera }: Readonly<{ camera: StudioCameraLink }>) {
   const [open, setOpen] = useState(false);
   const [state, setState] = useState<ConnectorState | null>(null);
+  const [zoomValue, setZoomValue] = useState<number | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const pendingZoom = useRef<number | null>(null);
+  const zoomTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const zoomInFlight = useRef(false);
+  const lastZoomSentAt = useRef(0);
+  const mounted = useRef(true);
   useEffect(() => {
     if (!open) return;
     let closed = false;
     setBusy(true);
-    void controlConnector(camera, 'status').then(result => { if (!closed) { setState(result); setProblem(null); } })
+    void controlConnector(camera, 'status').then(result => { if (!closed) { setState(result); setZoomValue(result.zoom); setProblem(null); } })
       .catch(error => { if (!closed) setProblem(error instanceof Error ? error.message : 'Connector did not respond.'); })
       .finally(() => { if (!closed) setBusy(false); });
     return () => { closed = true; };
@@ -224,14 +230,38 @@ function RemoteCameraControls({ camera }: Readonly<{ camera: StudioCameraLink }>
     catch (error) { setProblem(error instanceof Error ? error.message : 'Connector did not respond.'); }
     finally { setBusy(false); }
   };
+  const flushZoom = () => {
+    if (!mounted.current || zoomInFlight.current || pendingZoom.current === null) return;
+    const wait = Math.max(0, 100 - (Date.now() - lastZoomSentAt.current));
+    if (wait > 0) {
+      if (zoomTimer.current === null) zoomTimer.current = setTimeout(() => { zoomTimer.current = null; flushZoom(); }, wait);
+      return;
+    }
+    const value = pendingZoom.current;
+    pendingZoom.current = null;
+    zoomInFlight.current = true;
+    lastZoomSentAt.current = Date.now();
+    void command('zoom', value).finally(() => {
+      zoomInFlight.current = false;
+      if (pendingZoom.current !== null) flushZoom();
+    });
+  };
+  const updateZoom = (value: number, complete = false) => {
+    setZoomValue(value);
+    pendingZoom.current = value;
+    if (zoomTimer.current !== null) { clearTimeout(zoomTimer.current); zoomTimer.current = null; }
+    if (complete) flushZoom();
+    else zoomTimer.current = setTimeout(() => { zoomTimer.current = null; flushZoom(); }, 100);
+  };
+  useEffect(() => () => { mounted.current = false; pendingZoom.current = null; if (zoomTimer.current !== null) clearTimeout(zoomTimer.current); }, []);
   return <View style={{ gap: 8 }}>
     <Row><IconButton icon={Settings2} label="Connector camera controls" active={open} onPress={() => setOpen(value => !value)} /></Row>
     {open && <>
       <Row><IconButton icon={FlipHorizontal2} label="Flip connector camera" disabled={busy} onPress={() => void command('flip')} />
         <IconButton icon={Zap} label="Connector torch" disabled={busy || !state?.flash} active={state?.torch} onPress={() => void command('torch', state?.torch ? 0 : 1)} />
-        {state && <Pill label={`${state.zoom.toFixed(1)}x`} />}</Row>
-      {state && state.maxZoom > state.minZoom && <Slider value={state.zoom} min={state.minZoom} max={state.maxZoom} step={0.1} label="Connector zoom"
-        onChange={zoom => setState(current => current ? { ...current, zoom } : current)} onComplete={zoom => { void command('zoom', zoom); }} />}
+        {state && <Pill label={`${(zoomValue ?? state.zoom).toFixed(1)}x`} />}</Row>
+      {state && state.maxZoom > state.minZoom && <Slider value={zoomValue ?? state.zoom} min={state.minZoom} max={state.maxZoom} step={0.1} label="Connector zoom"
+        onChange={zoom => updateZoom(zoom)} onComplete={zoom => updateZoom(zoom, true)} />}
       {problem && <Banner tone="warn" text={problem} />}
     </>}
   </View>;

@@ -34,12 +34,17 @@ paused or saving, and Back/deep links cannot silently abandon the recording.
 	landscape device rotation before recording; orientation is held steady for the duration of a clip.
 	Choose Portrait or Landscape in Camera settings to lock a preferred format.
 - Open **Camera settings > Adjust overlay framing in preview** to see and tune the composited result
-	before recording. The default overlay scale is 60%. Adjust size, rotation (Auto/0/90/180/270) and
+	before recording. The default overlay scale is 45%. Adjust size, rotation (Auto/0/90/180/270) and
 	position; the preview shows the selected video resolution and orientation. Overlay geometry is
 	calculated from the supported camera/encoder preset and rotated frame dimensions.
 - Zoom and Video/RAW selection are inside the **Camera controls** panel, keeping the default preview
 	clear. Zoom follows the drag continuously with coalesced native updates; it is not applied only
 	after releasing the slider.
+- Streaming uses the same centered, no-scroll overlay-framing panel from **Streaming > Camera tools >
+	Overlay framing**. Choose **Auto** under **Setup > Video > orientation** to follow device rotation
+	while previewing. Orientation is held while streaming/recording and restored when the session ends.
+- Camera zoom/exposure, Streaming camera tuning, and other sliders share frame-coalesced drag handling;
+	vertical scrolling gestures continue to scroll, and native camera updates are rate-limited while dragging.
 - Select **Use scoring tournament** or enter the tournament/sport and choose **Follow on-air match**.
 	The Camera selection is saved independently. Its scoreboard and existing sport animations follow
 	the active/on-air match automatically; starting a recording never starts or resets a match.

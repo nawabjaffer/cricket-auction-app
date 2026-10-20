@@ -27,6 +27,8 @@ import {
   defaultStudioProfile, resolveStudioTitle, STUDIO_GAME_LABELS,
   type StudioContext, type StudioWidget,
 } from '../shared/studioProfile';
+import { Dimensions } from 'react-native';
+import { applyOverlayFraming } from '../shared/overlayFraming';
 
 export class UserFacingError extends Error {
   constructor(message: string) {
@@ -98,7 +100,9 @@ export function planEngine(): PlannedEngine {
   const studio = useStudio.getState();
   const profile = studio.profile ?? defaultStudioProfile(settings.pairing?.game ?? 'cricket');
   const local = localOverrides(settings);
-  const effective = resolveEffectiveVideo(profile, local, studio.capabilities);
+  const { width, height } = Dimensions.get('window');
+  const displayOrientation = width > height ? 'landscape' : 'portrait';
+  const effective = resolveEffectiveVideo(profile, local, studio.capabilities, displayOrientation);
   const config = buildEngineConfig(effective, profile, local);
   useStudio.getState().patch({ effective });
   return { config, signature: JSON.stringify(config) };
@@ -160,7 +164,11 @@ export async function applyOverlays(strict = false): Promise<void> {
   if (useNav.getState().workspace === 'recording' || recordingBusy(useCamera.getState().session)) return;
   const settings = useSettings.getState();
   const context = studioContext() ?? { origin: settings.origin, tenantId: '', slug: '', game: 'cricket' as const };
-  const specs = settings.overlaysEnabled ? buildOverlaySpecs(allWidgets(), settings.overlayHidden, context) : [];
+  const { width, height } = Dimensions.get('window');
+  const orientation = useStudio.getState().effective?.orientation ?? (width > height ? 'landscape' : 'portrait');
+  const specs = settings.overlaysEnabled
+    ? applyOverlayFraming(buildOverlaySpecs(allWidgets(), settings.overlayHidden, context), settings.overlayFraming, orientation)
+    : [];
   try {
     await StudioEngine.setOverlayOptions(settings.overlayFps, settings.overlayRender === 'hardware');
     await StudioEngine.setOverlays(JSON.stringify(specs));

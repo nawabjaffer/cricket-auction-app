@@ -10,10 +10,12 @@ import { useCamera } from '../store/cameraStore';
 import { useSettings } from '../store/settingsStore';
 import { useNav } from '../store/navStore';
 import { recordedDurationMs, type CameraRecordingSettings } from '../shared/cameraRecording';
-import { STUDIO_GAME_LABELS, STUDIO_GAME_TYPES, STUDIO_VIDEO_PRESETS, type StudioGameType } from '../shared/studioProfile';
+import { findStudioVideoPreset, STUDIO_GAME_LABELS, STUDIO_GAME_TYPES, STUDIO_VIDEO_PRESETS, type StudioGameType } from '../shared/studioProfile';
 import { presetSupport } from '../services/effectiveConfig';
 import { useStudio } from '../store/studioStore';
 import { Banner, Btn, Field, IconButton, Row, Segmented, Slider, ToggleRow } from '../ui/primitives';
+import { OverlayFramingPanel } from '../ui/OverlayFramingPanel';
+import { orientedFrameDimensions } from '../shared/overlayFraming';
 import { colors } from '../ui/theme';
 
 const elapsed = (ms: number) => {
@@ -134,6 +136,8 @@ export function CameraScreen() {
     }, 80);
   };
   const captureOrientation = camera.orientation === 'auto' ? screenOrientation : camera.orientation;
+  const framingPreset = runtime.effective?.preset ?? findStudioVideoPreset(camera.presetId);
+  const framingOrientation = runtime.effective?.orientation ?? captureOrientation;
   const configKey = JSON.stringify([camera.presetId, camera.codec, camera.facing, camera.orientation, captureOrientation, camera.stabilization]);
   const workspaceKey = JSON.stringify(camera.workspace);
   const pro = async (overrides: Partial<{ manual: boolean; iso: number; shutter: number; focusLock: boolean; focus: number; whiteBalance: number }> = {}) => {
@@ -151,6 +155,10 @@ export function CameraScreen() {
     run(() => prepareCamera(captureOrientation));
     return () => { void releaseCamera(); };
   }, [configKey, captureOrientation]);
+  useEffect(() => {
+    if (!runtime.ready || camera.orientation !== 'auto' || occupied || runtime.effective?.orientation === screenOrientation) return;
+    run(() => prepareCamera(screenOrientation));
+  }, [camera.orientation, occupied, runtime.effective?.orientation, runtime.ready, screenOrientation]);
   useEffect(() => startCameraSync(camera.workspace), [workspaceKey]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { run(applyCameraOverlays); }, [camera.overlays, camera.widgets]);
   useEffect(() => { if (runtime.ready) run(() => StudioEngine.setMuted(camera.muted)); }, [camera.muted, runtime.ready]);
@@ -194,20 +202,18 @@ export function CameraScreen() {
         <IconButton icon={SlidersHorizontal} label="Camera controls" active={tools} disabled={!runtime.ready || runtime.busy} onPress={() => setTools(!tools)} />
       </Row>
     </View>
-    {overlayTools && <View style={[s.overlayPanel, { bottom: insets.bottom + 104, maxHeight: Math.min(420, height * 0.46) }]}>
-      <Row style={s.panelHeader}><Text style={s.heading}>Overlay framing</Text><IconButton icon={X} label="Close overlay framing" onPress={() => setOverlayTools(false)} /></Row>
-      {runtime.effective && <Text style={s.caption}>{runtime.effective.orientation === 'portrait' ? `${runtime.effective.preset.height} x ${runtime.effective.preset.width}` : `${runtime.effective.preset.width} x ${runtime.effective.preset.height}`} · {runtime.effective.orientation}</Text>}
-      <ScrollView contentContainerStyle={s.panelContent}>
-        <Row style={s.controlLabel}><Text style={s.text}>Size</Text><Text style={s.text}>{camera.overlayScalePct}%</Text></Row>
-        <Slider label="Overlay size" min={20} max={100} step={1} value={camera.overlayScalePct} onChange={value => updateOverlayTransform({ overlayScalePct: value })} onComplete={value => updateOverlayTransform({ overlayScalePct: value })} />
-        <Text style={s.caption}>Rotation</Text>
-        <Segmented value={camera.overlayRotation} options={[{ value: 'auto', label: 'Auto' }, { value: 0, label: '0°' }, { value: 90, label: '90°' }, { value: 180, label: '180°' }, { value: 270, label: '270°' }]} onChange={overlayRotation => updateOverlayTransform({ overlayRotation })} />
-        <Row style={s.controlLabel}><Text style={s.text}>Horizontal</Text><Text style={s.text}>{camera.overlayOffsetXPct}%</Text></Row>
-        <Slider label="Overlay horizontal position" min={-25} max={25} step={1} value={camera.overlayOffsetXPct} onChange={value => updateOverlayTransform({ overlayOffsetXPct: value })} onComplete={value => updateOverlayTransform({ overlayOffsetXPct: value })} />
-        <Row style={s.controlLabel}><Text style={s.text}>Vertical</Text><Text style={s.text}>{camera.overlayOffsetYPct}%</Text></Row>
-        <Slider label="Overlay vertical position" min={-25} max={25} step={1} value={camera.overlayOffsetYPct} onChange={value => updateOverlayTransform({ overlayOffsetYPct: value })} onComplete={value => updateOverlayTransform({ overlayOffsetYPct: value })} />
-      </ScrollView>
-    </View>}
+    {overlayTools && <OverlayFramingPanel
+      value={{ scalePct: camera.overlayScalePct, rotation: camera.overlayRotation, offsetXPct: camera.overlayOffsetXPct, offsetYPct: camera.overlayOffsetYPct }}
+      orientation={framingOrientation}
+      {...orientedFrameDimensions(framingPreset.width, framingPreset.height, framingOrientation)}
+      onChange={partial => updateOverlayTransform({
+        ...(partial.scalePct !== undefined ? { overlayScalePct: partial.scalePct } : {}),
+        ...(partial.rotation !== undefined ? { overlayRotation: partial.rotation } : {}),
+        ...(partial.offsetXPct !== undefined ? { overlayOffsetXPct: partial.offsetXPct } : {}),
+        ...(partial.offsetYPct !== undefined ? { overlayOffsetYPct: partial.offsetYPct } : {}),
+      })}
+      onClose={() => setOverlayTools(false)}
+    />}
     {tools && <Modal visible animationType="slide" supportedOrientations={['portrait', 'landscape']} onRequestClose={() => setTools(false)}><View style={[s.settings, { paddingTop: insets.top, paddingBottom: insets.bottom, paddingLeft: insets.left, paddingRight: insets.right }]}>
       <Row style={s.sheetHeader}><Text style={s.heading}>Camera controls</Text><IconButton icon={X} label="Close camera controls" onPress={() => setTools(false)} /></Row>
       <ScrollView contentContainerStyle={{ paddingTop: 10, paddingBottom: 24, paddingHorizontal: 20, gap: 18 }}>
@@ -237,8 +243,6 @@ const s = StyleSheet.create({
   record: { width: 62, height: 62, borderRadius: 31, backgroundColor: '#f44752' }, stop: { width: 30, height: 30, borderRadius: 5, backgroundColor: '#f44752' },
   raw: { width: 62, height: 62, borderRadius: 31, backgroundColor: '#fff' },
   text: { color: '#fff', fontSize: 13 }, notice: { color: '#a7e8c1', fontSize: 12, textAlign: 'center' }, zoom: { maxWidth: 290, alignSelf: 'center', width: '80%', gap: 12 },
-  overlayPanel: { position: 'absolute', left: 12, right: 12, backgroundColor: 'rgba(10,14,18,0.94)', borderColor: 'rgba(255,255,255,0.2)', borderWidth: 1, borderRadius: 8, padding: 12, gap: 8 },
-  panelHeader: { justifyContent: 'space-between' }, panelContent: { gap: 7, paddingBottom: 4 }, controlLabel: { justifyContent: 'space-between' },
   settings: { flex: 1, backgroundColor: colors.bg }, heading: { color: '#fff', fontSize: 20, fontWeight: '600' }, label: { color: '#b1b7be', fontSize: 12, fontWeight: '600' },
   sheetHeader: { justifyContent: 'space-between', paddingVertical: 12, paddingHorizontal: 20 },
   qualityList: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 }, quality: { padding: 12, borderRadius: 6, borderWidth: 1, borderColor: colors.line }, selected: { borderColor: colors.accent }, disabled: { opacity: 0.35 },

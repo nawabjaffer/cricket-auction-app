@@ -1,5 +1,5 @@
 // Small design-system layer: every screen is built from these so the app stays visually consistent.
-import React, { useCallback, useRef, useState, type ReactNode } from 'react';
+import React, { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import {
   PanResponder, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, ToastAndroid, View,
   type LayoutChangeEvent, type StyleProp, type TextInputProps, type ViewStyle,
@@ -197,32 +197,62 @@ export function sliderValueFromOffset(offset: number, width: number, min: number
   return Math.min(max, Math.max(min, stepped));
 }
 
+export function sliderShouldCaptureGesture(dx: number, dy: number): boolean {
+  return Math.abs(dx) >= 4 && Math.abs(dx) >= Math.abs(dy) * 1.15;
+}
+
 /** Minimal horizontal slider (React Native ships none). */
 export function Slider({ value, min, max, step = 0, onChange, onComplete, label }: Readonly<SliderProps>) {
   const [width, setWidth] = useState(1);
   const widthRef = useRef(1);
   const latest = useRef(value);
   const bounds = useRef({ min, max, step });
-  const originX = useRef(0);
+  const startX = useRef(0);
+  const callbacks = useRef({ onChange, onComplete });
+  const pendingValue = useRef(value);
+  const changeFrame = useRef<number | null>(null);
   bounds.current = { min, max, step };
+  callbacks.current = { onChange, onComplete };
 
   const toValue = useCallback((x: number) => {
     const current = bounds.current;
     return sliderValueFromOffset(x, widthRef.current, current.min, current.max, current.step);
   }, []);
 
+  const publish = useCallback((next: number) => {
+    latest.current = next;
+    pendingValue.current = next;
+    if (changeFrame.current !== null) return;
+    changeFrame.current = requestAnimationFrame(() => {
+      changeFrame.current = null;
+      callbacks.current.onChange(pendingValue.current);
+    });
+  }, []);
+
+  const commit = useCallback((next: number) => {
+    latest.current = next;
+    pendingValue.current = next;
+    if (changeFrame.current !== null) cancelAnimationFrame(changeFrame.current);
+    changeFrame.current = null;
+    callbacks.current.onChange(next);
+    callbacks.current.onComplete?.(next);
+  }, []);
+
   const responder = useRef(PanResponder.create({
-    onStartShouldSetPanResponder: () => true,
-    onMoveShouldSetPanResponder: () => true,
+    onStartShouldSetPanResponder: () => false,
+    onMoveShouldSetPanResponder: (_event, gesture) => sliderShouldCaptureGesture(gesture.dx, gesture.dy),
     onPanResponderGrant: (event, gesture) => {
-      originX.current = gesture.moveX - event.nativeEvent.locationX;
-      latest.current = toValue(gesture.moveX - originX.current);
-      onChange(latest.current);
+      startX.current = event.nativeEvent.locationX - gesture.dx;
+      publish(toValue(startX.current + gesture.dx));
     },
-    onPanResponderMove: (_event, gesture) => { latest.current = toValue(gesture.moveX - originX.current); onChange(latest.current); },
-    onPanResponderRelease: () => onComplete?.(latest.current),
-    onPanResponderTerminate: () => onComplete?.(latest.current),
+    onPanResponderMove: (_event, gesture) => publish(toValue(startX.current + gesture.dx)),
+    onPanResponderRelease: (_event, gesture) => commit(toValue(startX.current + gesture.dx)),
+    onPanResponderTerminate: (_event, gesture) => commit(toValue(startX.current + gesture.dx)),
   })).current;
+
+  useEffect(() => () => {
+    if (changeFrame.current !== null) cancelAnimationFrame(changeFrame.current);
+  }, []);
 
   const onLayout = (event: LayoutChangeEvent) => {
     widthRef.current = Math.max(1, event.nativeEvent.layout.width);

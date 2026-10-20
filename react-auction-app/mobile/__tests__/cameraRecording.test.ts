@@ -2,7 +2,7 @@ import { DEFAULT_CAMERA_SETTINGS, emptyRecordingSession, pauseRecordingSession, 
 
 describe('standalone camera recording', () => {
   it('defaults to automatic orientation and a mobile-sized overlay', () => {
-    expect(DEFAULT_CAMERA_SETTINGS).toMatchObject({ orientation: 'auto', orientationConfigured: true, overlayScalePct: 60 });
+    expect(DEFAULT_CAMERA_SETTINGS).toMatchObject({ orientation: 'auto', orientationConfigured: true, overlayScalePct: 45 });
   });
   it('auto-rotates overlay pages only when their aspect differs from the recording frame', () => {
     expect(resolveCameraOverlayRotation('auto', 1920, 1080, 'portrait')).toBe(90);

@@ -12,6 +12,7 @@ import type { LocalOverrides } from '../services/effectiveConfig';
 import { defaultScenes, normalizeScenes, type StudioScene } from '../shared/scenes';
 import { normalizeScoringWorkspace } from '../shared/scoringWorkspace';
 import { DEFAULT_CAMERA_SETTINGS, type CameraRecordingSettings } from '../shared/cameraRecording';
+import { DEFAULT_OVERLAY_FRAMING, type OverlayFramingSettings } from '../shared/overlayFraming';
 import {
   MAX_STUDIO_DESTINATIONS, STUDIO_PLATFORM_PRESETS,
   type StudioDestination, type StudioGameType, type StudioPairing, type StudioPlatform, type StudioWidget,
@@ -74,6 +75,7 @@ export interface SettingsData {
   pairing: Pairing | null;
   scoringWorkspace: StudioPairing | null;
   camera: CameraRecordingSettings;
+  overlayFraming: OverlayFramingSettings;
   deviceId: string;
   deviceName: string;
   role: 'studio' | 'camera';
@@ -116,6 +118,7 @@ export function defaultSettings(): SettingsData {
     pairing: null,
     scoringWorkspace: null,
     camera: { ...DEFAULT_CAMERA_SETTINGS },
+    overlayFraming: { ...DEFAULT_OVERLAY_FRAMING },
     deviceId: randomId(),
     deviceName: 'Phone',
     role: 'studio',
@@ -209,6 +212,7 @@ export const useSettings = create<SettingsData & SettingsActions>((set, get) => 
           orientationConfigured: true,
           workspace: normalizeScoringWorkspace(stored?.camera?.workspace),
         },
+        overlayFraming: { ...DEFAULT_OVERLAY_FRAMING, ...stored?.overlayFraming },
         hydrated: true,
       });
       if (!stored) persist();

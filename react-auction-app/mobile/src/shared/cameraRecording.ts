@@ -1,7 +1,8 @@
 import type { StudioCodec, StudioPairing, StudioWidget } from './studioProfile';
+import type { OverlayRotation } from './overlayFraming';
 
 export type CameraOrientation = 'auto' | 'portrait' | 'landscape';
-export type CameraOverlayRotation = 'auto' | 0 | 90 | 180 | 270;
+export type CameraOverlayRotation = OverlayRotation;
 
 export function resolveCameraOverlayRotation(
   mode: CameraOverlayRotation, pageWidth: number, pageHeight: number, frameOrientation: Exclude<CameraOrientation, 'auto'>,
@@ -45,7 +46,7 @@ export const DEFAULT_CAMERA_SETTINGS: CameraRecordingSettings = {
   orientationConfigured: true,
   facing: 'back', stabilization: true, workspace: null, widgets: [], packageUrl: '',
   captureMode: 'video',
-  overlayScalePct: 60, overlayRotation: 'auto', overlayOffsetXPct: 0, overlayOffsetYPct: 0,
+  overlayScalePct: 45, overlayRotation: 'auto', overlayOffsetXPct: 0, overlayOffsetYPct: 0,
 };
 export function emptyRecordingSession(): CameraRecordingSession {
   return { status: 'idle', startedAt: 0, pausedAt: null, pausedMs: 0, path: null };
