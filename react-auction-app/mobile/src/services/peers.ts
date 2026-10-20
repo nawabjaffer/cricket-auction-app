@@ -6,7 +6,7 @@
 // ============================================================================
 
 import { StudioEngine, StudioNetwork, onStudioEvent } from '../native';
-import { isValidRtspUrl, type StudioGameType } from '../shared/studioProfile';
+import { isValidRtspUrl, type StudioCameraLink, type StudioGameType } from '../shared/studioProfile';
 import { effectiveMatchId, studioContext } from './streamController';
 import { setProgram, subscribeProgram, subscribeSources } from './liveCam';
 import { log } from './logger';
@@ -14,6 +14,14 @@ import { useSettings } from '../store/settingsStore';
 import { useStudio, type LanCamera, type ProgramSource } from '../store/studioStore';
 
 const lanKey = (service: { host: string; port: number }) => `${service.host}:${service.port}`;
+
+export function saveCameraPairing(camera: StudioCameraLink): void {
+  if (!isValidRtspUrl(camera.url)) throw new Error('Invalid camera address.');
+  const settings = useSettings.getState();
+  settings.patch({ manualCameras: [...settings.manualCameras.filter(item => item.url !== camera.url), {
+    url: camera.url, name: camera.name, ...(camera.control ? { control: camera.control } : {}),
+  }].slice(-8) });
+}
 
 export function startPeerDiscovery(): () => void {
   StudioNetwork.startDiscovery().catch(error => log.warn('nsd', error));

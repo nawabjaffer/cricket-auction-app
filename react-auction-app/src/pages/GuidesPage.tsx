@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { IoArrowBackOutline, IoBookOutline, IoSearchOutline } from 'react-icons/io5';
 import { useTenantNavigate } from '../hooks/useTenantNavigate';
-import { useSearchParams } from 'react-router-dom';
+import { useLocation, useSearchParams } from 'react-router-dom';
 import './GuidesPage.css';
 
 const GUIDE_META: Record<string, { title: string; summary: string }> = {
@@ -35,6 +35,7 @@ const GUIDE_SECTIONS = Object.entries(guideFiles)
 
 export default function GuidesPage() {
   const navigate = useTenantNavigate();
+  const publicGuide = useLocation().pathname === '/help';
   const [searchParams] = useSearchParams();
   const [activeId, setActiveId] = useState(() => {
     const requestedSection = searchParams.get('section');
@@ -56,8 +57,8 @@ export default function GuidesPage() {
     <main className="guides-page">
       <header className="guides-page__header">
         <div className="guides-page__brand"><IoBookOutline aria-hidden="true" /><span>Operator guides</span></div>
-        <button type="button" className="guides-page__back" onClick={() => navigate('/')}>
-          <IoArrowBackOutline aria-hidden="true" /> Back to app
+        <button type="button" className="guides-page__back" onClick={() => navigate(publicGuide ? '/help' : '/')}>
+          <IoArrowBackOutline aria-hidden="true" /> {publicGuide ? 'Help center' : 'Back to app'}
         </button>
       </header>
 

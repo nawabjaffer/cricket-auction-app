@@ -18,6 +18,8 @@ import type {
 } from '../types/carrom';
 import { withScorerAdminChrome } from './withScorerAdminChrome';
 import './CarromAdminPage.css';
+import { useMobileScoringOptions } from '../hooks/useMobileScoringOptions';
+import { mobileScoringTabVisible } from '../types/mobileStudio';
 
 type Tab = 'entries' | 'matches' | 'broadcast' | 'rules';
 
@@ -46,7 +48,9 @@ function CarromAdminPageContent() {
   const tenantSlug = getTenantSlugFromPath(location.pathname);
   const baseUrl = window.location.origin + (tenantSlug ? `/${tenantSlug}` : '');
   const [ready, setReady] = useState(false);
-  const [tab, setTab] = useState<Tab>('matches');
+  const { mobile, options: mobileOptions } = useMobileScoringOptions('carrom');
+  const [selectedTab, setTab] = useState<Tab>('matches');
+  const tab = mobile && !mobileScoringTabVisible(selectedTab, mobileOptions) ? 'matches' : selectedTab;
   const [teams, setTeams] = useState<CarromTeam[]>([]);
   const [matches, setMatches] = useState<CarromMatchSetup[]>([]);
   const [activeMatchId, setActiveMatchId] = useState<string | null>(null);
@@ -201,7 +205,7 @@ function CarromAdminPageContent() {
     <div className="carrom-admin">
       {toast && <div className="carrom-admin__toast" role="status">{toast}</div>}
       <nav className="carrom-admin__tabs" aria-label="Carrom admin sections">
-        {([['matches', 'Fixtures'], ['entries', rules.format === 'doubles' ? 'Pairs' : 'Players'], ['broadcast', 'Broadcast'], ['rules', 'Rules']] as const).map(([key, label]) => (
+        {([['matches', 'Fixtures'], ['entries', rules.format === 'doubles' ? 'Pairs' : 'Players'], ['broadcast', 'Broadcast'], ['rules', 'Rules']] as const).filter(([key]) => !mobile || mobileScoringTabVisible(key, mobileOptions)).map(([key, label]) => (
           <button key={key} className={`carrom-admin__tab ${tab === key ? 'is-active' : ''}`} onClick={() => setTab(key)}>{label}</button>
         ))}
       </nav>

@@ -1,6 +1,6 @@
 {
   "name": "njs-live-studio",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "private": true,
   "description": "NJS Live Studio — Android live streaming studio (RTMP / SRT, 1080p-4K, overlays, multi-camera) for the NJS scoring platform.",
   "scripts": {

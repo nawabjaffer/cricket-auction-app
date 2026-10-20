@@ -88,7 +88,7 @@ export interface SettingsData {
   cameraPort: number;
   ytLinked: boolean;
   /** Cameras added by QR or by typing an RTSP address (IP cameras, other phones). */
-  manualCameras: Array<{ name: string; url: string }>;
+  manualCameras: Array<{ name: string; url: string; control?: { port: number; token: string } }>;
   scenes: StudioScene[];
   activeSceneId: string;
   previewFill: boolean;

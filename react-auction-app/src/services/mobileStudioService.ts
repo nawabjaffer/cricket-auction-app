@@ -12,6 +12,7 @@ import { tenantPath } from './tenantPath';
 import {
   STUDIO_PROFILE_VERSION, defaultStudioProfile, normalizeDevices, normalizeStudioProfile,
   sortMatchSummaries, studioSportNamespace, summarizeMatchSetup,
+  normalizeMobileScoringOptions, type MobileScoringOptions,
   type StudioDevicePresence, type StudioGameType, type StudioMatchSummary, type StudioProfile,
 } from '../types/mobileStudio';
 
@@ -57,6 +58,16 @@ class MobileStudioService {
     return onValue(ref(this.ensureDb(), this.devicesPath(game)), snap => {
       cb(snap.exists() ? normalizeDevices(snap.val()) : []);
     });
+  }
+
+  subscribeScoringOptions(game: StudioGameType, cb: (options: MobileScoringOptions) => void, onError?: (error: Error) => void): () => void {
+    return onValue(ref(this.ensureDb(), tenantPath(`mobileStudio/${game}/scoringOptions`)), snapshot => {
+      cb(normalizeMobileScoringOptions(snapshot.val()));
+    }, error => onError?.(error));
+  }
+
+  async saveScoringOptions(game: StudioGameType, value: MobileScoringOptions): Promise<void> {
+    await set(ref(this.ensureDb(), tenantPath(`mobileStudio/${game}/scoringOptions`)), normalizeMobileScoringOptions(value));
   }
 
   /** Reads each match's small `setup` node through the sport's id-only `matchIndex`. */

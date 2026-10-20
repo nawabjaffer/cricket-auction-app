@@ -3,14 +3,17 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { runInNewContext } from 'node:vm';
 import { createElement } from 'react';
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import ReleaseCard from '../components/MobileStudio/ReleaseCard';
 import { MAX_WORKSPACE_EXPORT_BYTES, scoringBrowserScript } from '../../mobile/src/services/scoringBrowser';
+import { DEFAULT_MOBILE_SCORING_OPTIONS, mobileScoringOptionsPath, mobileScoringPageVisible, mobileScoringTabVisible, normalizeMobileScoringOptions } from '../../mobile/src/shared/mobileScoring';
+import ScoringOptionsCard from '../components/MobileStudio/ScoringOptionsCard';
+import { mobileStudioService } from '../services/mobileStudioService';
 import { DEFAULT_TENANT_ID, tenantPath } from '../services/tenantPath';
 import {
   DEFAULT_OVERLAY_URL_TEMPLATE, MAX_STUDIO_DESTINATIONS, MAX_STUDIO_WIDGETS, STUDIO_DEVICE_STALE_MS, STUDIO_PLATFORM_PRESETS,
@@ -23,6 +26,50 @@ import {
 } from '../types/mobileStudio';
 
 const CTX = { origin: 'https://app.example.com', tenantId: 'pkl_2026', slug: 'pkl-2026', game: 'cricket' as const };
+const mobileAdmin = vi.hoisted(() => ({ allowed: true }));
+vi.mock('../hooks/useAdminAuth', () => ({ useAdminAuth: () => ({ isAuthenticated: mobileAdmin.allowed }) }));
+
+describe('admin mobile scoring controls', () => {
+  afterEach(() => { cleanup(); vi.restoreAllMocks(); mobileAdmin.allowed = true; });
+  it('saves optional features from the admin control card', async () => {
+    vi.spyOn(mobileStudioService, 'subscribeScoringOptions').mockImplementation((_game, callback) => { callback({ ...DEFAULT_MOBILE_SCORING_OPTIONS }); return () => undefined; });
+    const save = vi.spyOn(mobileStudioService, 'saveScoringOptions').mockResolvedValue(undefined);
+    render(createElement(ScoringOptionsCard, { gameType: 'cricket' }));
+    fireEvent.click(screen.getByLabelText('Broadcast and animations'));
+    fireEvent.click(screen.getByRole('button', { name: 'Save mobile options' }));
+    await waitFor(() => expect(save).toHaveBeenCalledWith('cricket', expect.objectContaining({ broadcast: true, tournamentAdmin: false })));
+    expect(await screen.findByText('Mobile scoring options saved.')).toBeTruthy();
+  });
+  it('does not expose admin controls to an unsigned-in visitor', () => {
+    mobileAdmin.allowed = false;
+    const subscribe = vi.spyOn(mobileStudioService, 'subscribeScoringOptions');
+    render(createElement(ScoringOptionsCard, { gameType: 'carrom' }));
+    expect(screen.queryByText('Mobile scoring options')).toBeNull();
+    expect(subscribe).not.toHaveBeenCalled();
+  });
+});
+
+describe('mobile scoring visibility', () => {
+  it('keeps scheduling visible and hides unrelated advanced options by default', () => {
+    expect(mobileScoringTabVisible('matches', DEFAULT_MOBILE_SCORING_OPTIONS)).toBe(true);
+    expect(mobileScoringTabVisible('obs', DEFAULT_MOBILE_SCORING_OPTIONS)).toBe(false);
+    expect(mobileScoringTabVisible('provider', DEFAULT_MOBILE_SCORING_OPTIONS)).toBe(false);
+    expect(DEFAULT_MOBILE_SCORING_OPTIONS.scoreboard).toBe(true);
+    expect(DEFAULT_MOBILE_SCORING_OPTIONS.tournamentAdmin).toBe(false);
+    expect(mobileScoringPageVisible('matches', DEFAULT_MOBILE_SCORING_OPTIONS)).toBe(true);
+    expect(mobileScoringPageVisible('score', DEFAULT_MOBILE_SCORING_OPTIONS)).toBe(true);
+    expect(mobileScoringPageVisible('admin', DEFAULT_MOBILE_SCORING_OPTIONS)).toBe(false);
+    expect(mobileScoringPageVisible('designer', DEFAULT_MOBILE_SCORING_OPTIONS)).toBe(false);
+  });
+  it('lets admin controls enable specific optional features without trusting arbitrary input', () => {
+    const options = normalizeMobileScoringOptions({ teams: true, provider: true, broadcast: true, ads: 'true' });
+    expect(mobileScoringTabVisible('teams', options)).toBe(true);
+    expect(mobileScoringTabVisible('provider', options)).toBe(true);
+    expect(mobileScoringTabVisible('obs', options)).toBe(true);
+    expect(options.ads).toBe(false);
+    expect(mobileScoringOptionsPath('tenant_1', 'carrom')).toBe('tenants/tenant_1/mobileStudio/carrom/scoringOptions');
+  });
+});
 
 describe('studio paths', () => {
   it('stay in lock-step with tenantPath so the web admin and the phone read the same nodes', () => {
@@ -362,6 +409,20 @@ describe('APK publication', () => {
     expect(readFileSync(join(fixture.output, latest.file))).toEqual(readFileSync(fixture.apk));
   });
 
+  it('does not rewrite an identical APK or manifest when publishing twice', () => {
+    const fixture = publisherFixture();
+    expect(fixture.publish('--source-fingerprint', 'd'.repeat(64)).status).toBe(0);
+    const catalog = join(fixture.output, 'latest.json');
+    const previous = readFileSync(catalog, 'utf8');
+    const file = join(fixture.output, JSON.parse(previous).file);
+    const times = [statSync(catalog).mtimeMs, statSync(file).mtimeMs];
+    const result = fixture.publish('--source-fingerprint', 'd'.repeat(64));
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stdout).toContain('No files rewritten');
+    expect(readFileSync(catalog, 'utf8')).toBe(previous);
+    expect([statSync(catalog).mtimeMs, statSync(file).mtimeMs]).toEqual(times);
+  });
+
   it('rejects debug signing before creating any public release files', () => {
     const fixture = publisherFixture();
     fixture.tool('apksigner', 'Signer #1 certificate DN: CN=Android Debug, O=Android\n');
@@ -506,6 +567,11 @@ describe('embedded scoring browser compatibility', () => {
 });
 
 describe('LAN camera links', () => {
+  it('carries private camera-control pairing only in the scanned link', () => {
+    const camera = { url: 'rtsp://192.168.1.20:8554/', name: 'Connector', control: { port: 8555, token: 'a'.repeat(36) } };
+    expect(parseCameraLink(buildCameraLink(camera))).toEqual(camera);
+    expect(parseCameraLink('njslive://camera?u=rtsp%3A%2F%2F192.168.1.20%3A8554%2F&cp=8555&ct=short')?.control).toBeUndefined();
+  });
   it('round-trips a camera QR link', () => {
     const link = buildCameraLink({ url: 'rtsp://192.168.1.20:8554/', name: 'Cam 2 · Square leg', matchId: 'm_1' });
     expect(link.startsWith('njslive://camera?')).toBe(true);

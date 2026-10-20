@@ -1,6 +1,7 @@
 jest.mock('../src/native', () => ({
   StudioEngine: { switchCamera: jest.fn(async () => undefined) },
   StudioBluetooth: { setRemoteKeyBindings: jest.fn(async () => undefined) },
+  StudioNetwork: { sendConnectorCommand: jest.fn(async () => JSON.stringify({ zoom: 2, minZoom: 1, maxZoom: 8, torch: false, flash: true })) },
   StudioSecure: { getItem: jest.fn(async () => null), setItem: jest.fn(async () => undefined) },
   onStudioEvent: jest.fn(() => jest.fn()),
 }));
@@ -18,12 +19,14 @@ jest.mock('firebase/database', () => ({
 }));
 
 import { get, ref, runTransaction, set } from 'firebase/database';
-import { StudioBluetooth, StudioEngine } from '../src/native';
+import { StudioBluetooth, StudioEngine, StudioNetwork } from '../src/native';
 import { bindRemoteKeys, handleRemoteKey } from '../src/services/remoteKeys';
 import { triggerSceneAnimation } from '../src/services/sceneAnimations';
 import { switchScene } from '../src/services/scenes';
 import { useSettings } from '../src/store/settingsStore';
 import { useStudio } from '../src/store/studioStore';
+import { controlConnector } from '../src/services/connectorControl';
+import { saveCameraPairing } from '../src/services/peers';
 
 beforeEach(() => {
   jest.useFakeTimers({ now: Date.now() + 1000 });
@@ -95,5 +98,23 @@ describe('linked scene animations', () => {
     const updater = jest.mocked(runTransaction).mock.calls[0][1];
     expect(updater({ lastUpdated: control.lastUpdated + 1 })).toBeUndefined();
     expect(updater({ lastUpdated: control.lastUpdated })).toMatchObject({ activeOverlay: 'none' });
+  });
+});
+
+describe('paired connector controls', () => {
+  const camera = { url: 'rtsp://192.168.1.20:8554/', name: 'Wide', control: { port: 8555, token: 'a'.repeat(36) } };
+  it('sends only explicit commands through the paired session', async () => {
+    await expect(controlConnector(camera, 'zoom', 3)).resolves.toMatchObject({ minZoom: 1, maxZoom: 8, flash: true });
+    expect(StudioNetwork.sendConnectorCommand).toHaveBeenCalledWith(camera.url, 8555, camera.control.token, 'zoom', 3);
+  });
+  it('requires QR pairing before sending camera commands', async () => {
+    await expect(controlConnector({ url: camera.url, name: 'Unpaired' }, 'flip')).rejects.toThrow('Scan this connector QR');
+    expect(StudioNetwork.sendConnectorCommand).not.toHaveBeenCalled();
+  });
+  it('replaces an expired session when a connector is paired again', () => {
+    saveCameraPairing(camera);
+    saveCameraPairing({ ...camera, control: { port: 8555, token: 'b'.repeat(36) } });
+    expect(useSettings.getState().manualCameras).toHaveLength(1);
+    expect(useSettings.getState().manualCameras[0].control?.token).toBe('b'.repeat(36));
   });
 });

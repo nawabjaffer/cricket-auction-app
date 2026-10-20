@@ -1,3 +1,5 @@
+import { useMobileScoringOptions } from '../hooks/useMobileScoringOptions';
+import { mobileScoringTabVisible } from '../types/mobileStudio';
 // ============================================================================
 // KABADDI ADMIN PAGE — /:tenantSlug/kabaddi/scorer/admin
 //
@@ -100,7 +102,9 @@ function KabaddiAdminPageContent() {
   const tenantSlug = getTenantSlugFromPath(window.location.pathname);
 
   const [ready, setReady] = useState(false);
-  const [tab, setTab] = useState<Tab>('matches');
+  const { mobile, options: mobileOptions } = useMobileScoringOptions('kabaddi');
+  const [selectedTab, setTab] = useState<Tab>('matches');
+  const tab = mobile && !mobileScoringTabVisible(selectedTab, mobileOptions) ? 'matches' : selectedTab;
   const [teams, setTeams] = useState<KabaddiTeam[]>([]);
   const [players, setPlayers] = useState<KabaddiPlayer[]>([]);
   const [matches, setMatches] = useState<KabaddiMatchSetup[]>([]);
@@ -555,9 +559,9 @@ function KabaddiAdminPageContent() {
 
       <nav className="kba__tabs">
         <button className={tab === 'matches' ? 'is-active' : ''} onClick={() => setTab('matches')}>Matches</button>
-        <button className={tab === 'teams' ? 'is-active' : ''} onClick={() => setTab('teams')}>Teams</button>
-        <button className={tab === 'players' ? 'is-active' : ''} onClick={() => setTab('players')}>Players</button>
-        <button className={tab === 'overlay' ? 'is-active' : ''} onClick={() => setTab('overlay')}>Overlay &amp; Animations</button>
+        {(!mobile || mobileOptions.teams) && <button className={tab === 'teams' ? 'is-active' : ''} onClick={() => setTab('teams')}>Teams</button>}
+        {(!mobile || mobileOptions.players) && <button className={tab === 'players' ? 'is-active' : ''} onClick={() => setTab('players')}>Players</button>}
+        {(!mobile || mobileOptions.broadcast) && <button className={tab === 'overlay' ? 'is-active' : ''} onClick={() => setTab('overlay')}>Overlay &amp; Animations</button>}
       </nav>
 
       {toast && <div className="kba__toast">{toast}</div>}

@@ -10,11 +10,14 @@ jest.mock('../src/native', () => ({
     switchCamera: jest.fn(async () => undefined),
   },
   StudioNetwork: {
+    startConnectorControl: jest.fn(async () => undefined),
+    stopConnectorControl: jest.fn(async () => undefined),
     getSnapshot: jest.fn(async () => ({ addresses: [{ iface: 'wlan0', ip: '192.168.1.20', kind: 'wifi' }] })),
     registerService: jest.fn(async () => undefined),
     unregisterService: jest.fn(async () => undefined),
   },
   StudioSecure: { getItem: jest.fn(async () => null), setItem: jest.fn(async () => undefined), removeItem: jest.fn(), clear: jest.fn() },
+  StudioSystem: { createWorkspaceToken: jest.fn(async () => 'a'.repeat(36)) },
 }));
 jest.mock('../src/services/tournament', () => ({ resolveTenant: jest.fn() }));
 jest.mock('../src/services/streamController', () => ({ ...jest.requireActual('../src/services/streamController'), effectiveMatchId: jest.fn(), queueEngineTask: jest.fn(), refreshCapabilities: jest.fn(), studioContext: jest.fn() }));

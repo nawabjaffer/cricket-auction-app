@@ -12,11 +12,14 @@ import { useNav } from '../store/navStore';
 import { useSettings } from '../store/settingsStore';
 import { Banner, Btn, Field, H1, IconButton, Row, Screen, Segmented } from '../ui/primitives';
 import { colors } from '../ui/theme';
+import { onValue, ref } from 'firebase/database';
+import { getDb } from '../services/firebase';
+import { DEFAULT_MOBILE_SCORING_OPTIONS, mobileScoringOptionsPath, mobileScoringPageVisible, normalizeMobileScoringOptions } from '../shared/mobileScoring';
 
 const SECTIONS: ReadonlyArray<{ id: ScoringPage; label: string; icon: LucideIcon }> = [
   { id: 'matches', label: 'Matches', icon: CalendarDays },
   { id: 'score', label: 'Score', icon: ClipboardList },
-  { id: 'scoreboard', label: 'Scoreboard', icon: Trophy },
+  { id: 'scoreboard', label: 'Results', icon: Trophy },
   { id: 'admin', label: 'Tournament', icon: Settings2 },
 ];
 
@@ -41,6 +44,7 @@ export function ScoringScreen({ active = true }: Readonly<{ active?: boolean }>)
   const [canGoBack, setCanGoBack] = useState(false);
   const [canGoForward, setCanGoForward] = useState(false);
   const [menu, setMenu] = useState(false);
+  const [options, setOptions] = useState({ ...DEFAULT_MOBILE_SCORING_OPTIONS });
   const web = useRef<WebView<object>>(null);
   const connection = useRef(0);
   const externalPrompt = useRef(false);
@@ -90,8 +94,27 @@ export function ScoringScreen({ active = true }: Readonly<{ active?: boolean }>)
     return () => subscription.remove();
   }, [active, menu, chooser, canGoBack, workspace]);
 
+  useEffect(() => {
+    setOptions({ ...DEFAULT_MOBILE_SCORING_OPTIONS });
+    if (!workspace) return undefined;
+    return onValue(ref(getDb(), mobileScoringOptionsPath(workspace.tenantId, workspace.game)), snapshot => {
+      setOptions(normalizeMobileScoringOptions(snapshot.val()));
+    }, () => setOptions({ ...DEFAULT_MOBILE_SCORING_OPTIONS }));
+  }, [workspace]);
+
+  const visiblePage = (page: ScoringPage) => mobileScoringPageVisible(page, options);
+
+  useEffect(() => {
+    if (!workspace || mobileScoringPageVisible(section, options)) return;
+    const url = scoringPageUrl(workspace, 'matches');
+    setEntryUrl(url);
+    setCurrentUrl(url);
+    setSection('matches');
+    setMenu(false);
+  }, [options, section, workspace]);
+
   const navigate = (page: ScoringPage) => {
-    if (!workspace) return;
+    if (!workspace || !visiblePage(page)) return;
     const url = scoringPageUrl(workspace, page);
     setEntryUrl(url);
     setCurrentUrl(url);
@@ -128,6 +151,10 @@ export function ScoringScreen({ active = true }: Readonly<{ active?: boolean }>)
     if (!active || !workspace || !isScoringNavigationAllowed(event.nativeEvent.url, workspace)) return;
     const message = parseScoringBrowserMessage(event.nativeEvent.data, token);
     if (!message) return;
+    if ((message.type === 'download' || message.type === 'print') && !options.exports) {
+      setProblem('Exports are disabled in the mobile scoring options.');
+      return;
+    }
     try {
       if (message.type === 'clipboard') { await StudioSystem.copyText(message.text); ToastAndroid.show('Copied', ToastAndroid.SHORT); }
       if (message.type === 'download') {
@@ -156,12 +183,12 @@ export function ScoringScreen({ active = true }: Readonly<{ active?: boolean }>)
         {problem && <Banner tone="danger" text={problem} onDismiss={() => setProblem(null)} />}
         <Btn label="Open scoring" variant="primary" busy={busy} disabled={!slug.trim() || !normalizeOrigin(server)} onPress={() => { void connect({ origin: normalizeOrigin(server) ?? '', tenantId: '', slug: slug.trim(), game }); }} />
       </Screen> : <>
-        <Row style={s.browserTools}>
+        {options.tournamentAdmin && <Row style={s.browserTools}>
           <IconButton icon={ArrowLeft} label="Previous scoring page" disabled={!canGoBack} onPress={() => web.current?.goBack()} />
           <IconButton icon={ArrowRight} label="Next scoring page" disabled={!canGoForward} onPress={() => web.current?.goForward()} />
           <Text style={s.server} numberOfLines={1}>{workspace.origin.replace('https://', '')}</Text>
           <IconButton icon={ExternalLink} label="Open current scoring page in browser" onPress={() => browser(currentUrl)} />
-        </Row>
+        </Row>}
         {problem && <View style={s.notice}><Banner tone="warn" text={problem} onDismiss={() => setProblem(null)} /></View>}
         <View style={s.browser}>
           {token && <WebView<object> ref={web} source={{ uri: entryUrl }} style={s.web} javaScriptEnabled domStorageEnabled sharedCookiesEnabled thirdPartyCookiesEnabled={false}
@@ -180,7 +207,7 @@ export function ScoringScreen({ active = true }: Readonly<{ active?: boolean }>)
           {(loading || !token) && <View style={s.loading} pointerEvents="none"><ActivityIndicator size="small" color={colors.accent} /></View>}
           {pageError && <View style={s.recovery}><Btn label="Reload scoring" onPress={() => { setPageError(false); setProblem(null); web.current?.reload(); }} /></View>}
         </View>
-        <View style={s.tabs}>{SECTIONS.map(item => {
+        <View style={s.tabs}>{SECTIONS.filter(item => visiblePage(item.id)).map(item => {
           const ItemIcon = item.icon;
           return <Pressable key={item.id} accessibilityRole="tab" accessibilityLabel={item.label} accessibilityState={{ selected: section === item.id }} onPress={() => navigate(item.id)} style={s.tab}>
             <ItemIcon size={18} color={section === item.id ? colors.accent : colors.muted} /><Text style={[s.tabText, section === item.id && { color: colors.accent }]}>{item.label}</Text>
@@ -193,10 +220,10 @@ export function ScoringScreen({ active = true }: Readonly<{ active?: boolean }>)
           <Row style={{ justifyContent: 'space-between' }}><Text style={s.title}>Scoring options</Text><IconButton icon={X} label="Close scoring options" onPress={() => setMenu(false)} /></Row>
           <Btn label="Change tournament or sport" onPress={() => { setMenu(false); setChooser(true); setProblem(null); }} />
           {workspace && <>
-            <Btn label="Scorecard designer" onPress={() => navigate('designer')} />
-            <Btn label="Broadcast controls" onPress={() => navigate('dock')} />
-            <Btn label="Operator guides" onPress={() => navigate('guides')} />
-            <Btn label="Print / save PDF" onPress={() => { setMenu(false); void StudioSystem.printWorkspace().catch(() => setProblem('Open a scoring page before printing.')); }} />
+            {options.designer && <Btn label="Scorecard designer" onPress={() => navigate('designer')} />}
+            {options.broadcast && <Btn label="Broadcast controls" onPress={() => navigate('dock')} />}
+            {options.guides && <Btn label="Operator guides" onPress={() => navigate('guides')} />}
+            {options.exports && <Btn label="Print / save PDF" onPress={() => { setMenu(false); void StudioSystem.printWorkspace().catch(() => setProblem('Open a scoring page before printing.')); }} />}
           </>}
           <Btn label="Back to home" variant="ghost" onPress={() => { setMenu(false); setWorkspace('home'); }} />
         </ScrollView></View>

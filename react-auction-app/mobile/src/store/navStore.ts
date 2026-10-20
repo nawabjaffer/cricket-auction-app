@@ -2,7 +2,7 @@ import { create } from 'zustand';
 
 export type Tab = 'studio' | 'cameras' | 'setup' | 'tournament' | 'scenes';
 export type SetupSection = 'destinations' | 'video' | 'overlays' | 'bluetooth';
-export type Workspace = 'home' | 'streaming' | 'scoring';
+export type Workspace = 'home' | 'streaming-role' | 'streaming' | 'connector' | 'scoring';
 
 interface NavState {
   workspace: Workspace;

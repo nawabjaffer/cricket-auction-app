@@ -12,6 +12,7 @@ import { IoClose, IoPencil, IoDesktop, IoVideocam, IoGameController, IoSettings,
 import { useTenantNavigate as useNavigate, getTenantSlugFromPath } from '../hooks/useTenantNavigate';
 import { gameTypeIcon, gameTypeLabel, type SupportedGameType } from './scorerPages';
 import './withScorerAdminChrome.css';
+import { useMobileScoringOptions } from '../hooks/useMobileScoringOptions';
 
 interface ScorerAdminChromeConfig {
   gameType: SupportedGameType;
@@ -28,6 +29,7 @@ export function withScorerAdminChrome<P extends object>(
     const tenantSlug = getTenantSlugFromPath(location.pathname);
     const baseUrl = window.location.origin + (tenantSlug ? `/${tenantSlug}` : '');
     const { gameType, subtitle } = config;
+    const { mobile, options } = useMobileScoringOptions(gameType);
     const openQuickTab = (path: string) => {
       window.open(`${baseUrl}${path}`, '_blank', 'noopener,noreferrer');
     };
@@ -43,16 +45,16 @@ export function withScorerAdminChrome<P extends object>(
             </div>
           </div>
           <div className="scorer-chrome__header-actions">
-            <button className="scorer-chrome__guide-btn" onClick={() => openQuickTab('/help?section=broadcast')}>
+            {(!mobile || options.guides) && <button className="scorer-chrome__guide-btn" onClick={() => openQuickTab('/help?section=broadcast')}>
               <IoHelpCircleOutline size={16} /> Guides
-            </button>
-            <button className="scorer-chrome__close-btn" onClick={() => navigate('/admin')} title="Back to Auction Admin" aria-label="Back to Auction Admin">
+            </button>}
+            {(!mobile || options.tournamentAdmin) && <button className="scorer-chrome__close-btn" onClick={() => navigate('/admin')} title="Back to Auction Admin" aria-label="Back to Auction Admin">
               <IoClose size={20} />
-            </button>
+            </button>}
           </div>
         </header>
 
-        <div className="scorer-chrome__quick-actions">
+        {!mobile && <div className="scorer-chrome__quick-actions">
           {gameType === 'cricket' && <button className="scorer-chrome__quick-btn" onClick={() => openQuickTab('/cricket/scoreboard')}>
             <IoDesktop size={14} /> Public Scorecard
           </button>}
@@ -81,7 +83,7 @@ export function withScorerAdminChrome<P extends object>(
           <button className="scorer-chrome__quick-btn" onClick={() => openQuickTab('/admin')}>
             <IoSettings size={14} /> Auction Admin
           </button>
-        </div>
+        </div>}
 
         <Content {...props} />
       </>

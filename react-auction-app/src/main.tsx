@@ -27,6 +27,7 @@ import TenantScoringRouterPage from './pages/TenantScoringRouterPage'
 import GameScorerPage from './pages/GameScorerPage'
 import PlayerRegistrationPage from './pages/PlayerRegistrationPage'
 import GuidesPage from './pages/GuidesPage'
+import HelpPage from './pages/HelpPage'
 import { TenantGate } from './components/TenantGate/TenantGate'
 import './index.css'
 
@@ -107,7 +108,7 @@ createRoot(document.getElementById('root')!).render(
             <Route path="/score/obs-overlay" element={<ScoreOBSOverlayPage />} />
             <Route path="/score/obs-dock" element={<ScoreOBSControlDock />} />
             </Route>
-            <Route path="/help" element={<GuidesPage />} />
+            <Route path="/help" element={<HelpPage />} />
             {/* Super-admin portal — manage tournaments (tenants) */}
             <Route path="/platform-admin" element={<PlatformAdminPage />} />
 

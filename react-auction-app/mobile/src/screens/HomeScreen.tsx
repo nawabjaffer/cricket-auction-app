@@ -14,7 +14,8 @@ export function HomeScreen() {
   const { width, height } = useWindowDimensions();
   const setWorkspace = useNav(state => state.setWorkspace);
   const setTab = useNav(state => state.setTab);
-  const live = useStudio(state => isLiveState(state.engineState));
+  const live = useStudio(state => state.engineMode === 'studio' && isLiveState(state.engineState));
+  const serving = useStudio(state => !!state.cameraServerUrl);
   const version = useStudio(state => state.appInfo?.versionName);
   const scoring = useSettings(state => state.scoringWorkspace);
   const pairing = useSettings(state => state.pairing);
@@ -27,10 +28,10 @@ export function HomeScreen() {
           <IconButton icon={Download} label="App updates" onPress={() => setTab('tournament')} />
         </Row>
         <View style={[s.choices, width > height && s.landscape]}>
-          <Pressable accessibilityRole="button" accessibilityLabel="Streaming" onPress={() => setWorkspace('streaming')} style={({ pressed }) => [s.choice, pressed && s.pressed]}>
+          <Pressable accessibilityRole="button" accessibilityLabel="Streaming" onPress={() => { if (serving) setWorkspace('connector'); else if (live) setTab('studio'); else setWorkspace('streaming-role'); }} style={({ pressed }) => [s.choice, pressed && s.pressed]}>
             <Clapperboard size={29} strokeWidth={1.5} color={colors.accent} />
             <View style={s.choiceText}><Text style={s.title}>Streaming</Text>{pairing && <Text style={s.detail} numberOfLines={1}>{pairing.slug}</Text>}</View>
-            {live ? <Pill label="LIVE" tone="live" /> : <ArrowRight size={20} color={colors.muted} />}
+            {live || serving ? <Pill label={serving ? 'CAMERA' : 'LIVE'} tone={serving ? 'ok' : 'live'} /> : <ArrowRight size={20} color={colors.muted} />}
           </Pressable>
           <Pressable accessibilityRole="button" accessibilityLabel="Scoring" onPress={() => setWorkspace('scoring')} style={({ pressed }) => [s.choice, pressed && s.pressed]}>
             <ClipboardList size={29} strokeWidth={1.5} color="#7ac6ea" />

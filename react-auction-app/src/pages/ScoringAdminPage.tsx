@@ -57,6 +57,8 @@ const DEFAULT_OBS_WEBSOCKET_CONFIG: OBSWebSocketConfig = {
 };
 import { withScorerAdminChrome } from './withScorerAdminChrome';
 import './ScoringAdminPage.css';
+import { useMobileScoringOptions } from '../hooks/useMobileScoringOptions';
+import { mobileScoringTabVisible } from '../types/mobileStudio';
 
 type Tab = ScoringAdminTabKey;
 const prematchSequenceTimers = new Map<string, ReturnType<typeof setTimeout>[]>();
@@ -120,10 +122,12 @@ function ScoringAdminPageContent({ configurationOnly = false }: { configurationO
   const tenantSlug = getTenantSlugFromPath(location.pathname);
   const baseUrl = window.location.origin + (tenantSlug ? `/${tenantSlug}` : '');
   const { isAuthenticated, extendSession } = useAdminAuth();
-  const [activeTab, setActiveTab] = useState<Tab>(() => {
+  const { mobile, options: mobileOptions } = useMobileScoringOptions('cricket');
+  const [selectedTab, setActiveTab] = useState<Tab>(() => {
     const requestedTab = new URLSearchParams(location.search).get('tab') as Tab | null;
     return requestedTab && isScoringAdminTabVisible(requestedTab, false) ? requestedTab : 'matches';
   });
+  const activeTab = mobile && !mobileScoringTabVisible(selectedTab, mobileOptions) ? 'matches' : selectedTab;
   const cricHeroesSync = useCricHeroesSyncAdapter();
 
   useInitialData();
@@ -235,7 +239,7 @@ function ScoringAdminPageContent({ configurationOnly = false }: { configurationO
           { key: 'ticker', icon: <IoDesktop size={16} />, label: 'Ticker' },
           { key: 'stats', icon: <IoTrophy size={16} />, label: 'Stats' },
           { key: 'obs', icon: <IoLink size={16} />, label: 'OBS Settings' },
-        ] as { key: Tab; icon: React.ReactNode; label: string }[]).filter(tab => isScoringAdminTabVisible(tab.key, configurationOnly)).map(tab => (
+        ] as { key: Tab; icon: React.ReactNode; label: string }[]).filter(tab => isScoringAdminTabVisible(tab.key, configurationOnly) && (!mobile || mobileScoringTabVisible(tab.key, mobileOptions))).map(tab => (
           <button
             key={tab.key}
             className={`scoring-admin__tab ${activeTab === tab.key ? 'active' : ''}`}
@@ -477,6 +481,7 @@ function MatchesTab({ settingsOnly = false, matches, teams, soldPlayers, onFeedb
     return `${year}-${month}-${day}T${hours}:${minutes}`;
   };
 
+  const { mobile, options: mobileOptions } = useMobileScoringOptions('cricket');
   const [showForm, setShowForm] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [squadMatchId, setSquadMatchId] = useState<string | null>(null);
@@ -896,7 +901,7 @@ function MatchesTab({ settingsOnly = false, matches, teams, soldPlayers, onFeedb
         </div>
       </div>
 
-      {singleOverlayMode && (
+      {singleOverlayMode && (!mobile || mobileOptions.broadcast) && (
         <div className="scoring-admin__form-card" style={{ marginBottom: '1rem' }}>
           <strong>🔗 Single Overlay Mode is ON</strong> — use the <strong>Quick Actions</strong> bar above for the universal Overlay/Scorer/Dock links. Toggle this mode from Admin → Streaming tab.
           {activeMatchId ? (
@@ -1287,12 +1292,12 @@ function MatchesTab({ settingsOnly = false, matches, teams, soldPlayers, onFeedb
               )}
             </div>
             {/* Match ID & Quick Links */}
-            <div className="scoring-admin__match-id-row">
+            {!mobile && <div className="scoring-admin__match-id-row">
               <span className="scoring-admin__match-id" title="Click to copy" onClick={() => { navigator.clipboard.writeText(match.id); onFeedback('Match ID copied'); }}>
                 ID: {match.id}
               </span>
-            </div>
-            {singleOverlayMode ? (
+            </div>}
+            {(!mobile || mobileOptions.broadcast) && (singleOverlayMode ? (
               <div className="scoring-admin__match-links">
                 <span className="scoring-admin__hint">🔗 Overlay / Dock / Scorer use the universal quick actions above — no per-match link needed</span>
                 <button className="scoring-admin__link-btn" onClick={() => window.open(`${baseUrl}/cricket/scorer/camera?matchId=${match.id}`, '_blank')} title="Mobile Camera Recorder">
@@ -1328,8 +1333,9 @@ function MatchesTab({ settingsOnly = false, matches, teams, soldPlayers, onFeedb
                   <IoLink size={13} /> Copy Dock URL
                 </button>
               </div>
-            )}
+            ))}
             <div className="scoring-admin__match-actions">
+              {mobile && match.status === 'live' && <button className="scoring-admin__btn scoring-admin__btn--sm scoring-admin__btn--primary" onClick={() => navigate(`/cricket/scorer/update?matchId=${match.id}&pin=1`)}><IoPencil size={14} /> Resume scoring</button>}
               <button className="scoring-admin__btn scoring-admin__btn--sm scoring-admin__btn--primary" onClick={() => setSquadMatchId(match.id)}>
                 <IoPeople size={14} /> Squad
               </button>

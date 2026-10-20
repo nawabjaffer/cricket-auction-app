@@ -17,6 +17,7 @@ import ReleaseCard from '../components/MobileStudio/ReleaseCard';
 import PairCard from '../components/MobileStudio/PairCard';
 import ProfileEditor from '../components/MobileStudio/ProfileEditor';
 import DevicesCard from '../components/MobileStudio/DevicesCard';
+import ScoringOptionsCard from '../components/MobileStudio/ScoringOptionsCard';
 import {
   STUDIO_GAME_LABELS, defaultStudioProfile,
   type StudioContext, type StudioDevicePresence, type StudioGameType, type StudioMatchSummary, type StudioProfile,
@@ -138,6 +139,7 @@ export default function MobileStudioPage({ gameType }: Readonly<{ gameType: Stud
               onReset={() => setDraft(defaultStudioProfile(gameType))}
             />
             <DevicesCard devices={devices} />
+            <ScoringOptionsCard gameType={gameType} />
           </>
         )}
         {!ready && <p className="mstudio__muted">Connecting to the tournament…</p>}

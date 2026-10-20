@@ -46,11 +46,13 @@ function nextHalfFor(half: FootballHalf, rules: FootballRulesConfig): FootballHa
 
 export default function FootballUpdatePage() {
   const navigate = useNavigate();
-  const [params] = useSearchParams();
+  const [params, setParams] = useSearchParams();
   const matchId = params.get('matchId');
   const { isAuthenticated, extendSession } = useAdminAuth();
 
   const [ready, setReady] = useState(false);
+  const [availableMatches, setAvailableMatches] = useState<FootballMatchSetup[]>([]);
+  const [pickerError, setPickerError] = useState('');
   const [match, setMatch] = useState<FootballMatchSetup | null>(null);
   const [live, setLive] = useState<FootballLiveState | null>(null);
   const [players, setPlayers] = useState<FootballPlayer[]>([]);
@@ -89,6 +91,15 @@ export default function FootballUpdatePage() {
   }, [isAuthenticated, navigate, extendSession]);
 
   // ── Subscriptions ──
+  useEffect(() => {
+    if (!ready || matchId) return;
+    try {
+      return footballService.subscribeMatches(matches => setAvailableMatches(matches.filter(item => item.status === 'live' || item.status === 'scheduled')));
+    } catch {
+      setPickerError('Could not load matches. Reload the scorer and try again.');
+    }
+  }, [ready, matchId]);
+
   useEffect(() => {
     if (!ready || !matchId) return;
     const unsubMatch = footballService.subscribeMatch(matchId, setMatch);
@@ -200,7 +211,17 @@ export default function FootballUpdatePage() {
   }, [persist]);
 
   if (!isAuthenticated) return null;
-  if (!matchId) return <div className="fbu"><div className="fbu__empty">No matchId. Open this page from the Football Admin.</div></div>;
+  if (!matchId) return <main className="fbu"><section className="fbu__empty">
+    <h1>Choose a match</h1>
+    {pickerError && <p role="alert">{pickerError}</p>}
+    {!ready && <p>Loading matches...</p>}
+    {ready && !availableMatches.length && <p>No match is scheduled or started.</p>}
+    {[...availableMatches].sort((left, right) => Number(right.status === 'live') - Number(left.status === 'live') || Date.parse(left.date) - Date.parse(right.date)).map(candidate =>
+      <div key={candidate.id} style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: 12, borderBottom: '1px solid #334155' }}>
+        <div><strong>{candidate.teamA.name} vs {candidate.teamB.name}</strong><p>{candidate.status === 'live' ? 'Live' : 'Scheduled'} · {candidate.venue}</p></div>
+        <button className="fbu__btn" onClick={() => { const next = new URLSearchParams(params); next.set('matchId', candidate.id); setParams(next, { replace: true }); }}><IoPlay aria-hidden="true" /> {candidate.status === 'live' ? 'Resume scoring' : 'Open match'}</button>
+      </div>)}
+  </section></main>;
   if (!ready || !match || !live) return <div className="fbu"><div className="fbu__empty">Loading match…</div></div>;
 
   const { minute, second } = computeMatchMinute(live);

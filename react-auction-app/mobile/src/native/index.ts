@@ -180,6 +180,9 @@ export interface NetworkSnapshot {
 export interface LanService { name: string; host: string; port: number; attrs: Record<string, string> }
 
 interface StudioNetworkNative {
+  startConnectorControl(port: number, token: string): Promise<void>;
+  stopConnectorControl(): Promise<void>;
+  sendConnectorCommand(url: string, port: number, token: string, action: 'status' | 'flip' | 'torch' | 'zoom', value: number): Promise<string>;
   getSnapshot(): Promise<NetworkSnapshot>;
   startMonitor(): Promise<void>;
   stopMonitor(): Promise<void>;
@@ -262,6 +265,7 @@ export interface StudioEventMap {
   'studio.network': NetworkSnapshot;
   'studio.lan': { type: 'found' | 'lost'; service: LanService };
   'studio.thermal': { status: number };
+  'studio.connectorControl': { action: 'flip' };
 }
 
 let emitter: NativeEventEmitter | null = null;

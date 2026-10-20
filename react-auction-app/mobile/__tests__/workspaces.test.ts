@@ -22,6 +22,15 @@ describe('app workspaces', () => {
     expect(useNav.getState().workspace).toBe('home');
   });
 
+  it('keeps host selection and connector camera navigation separate', () => {
+    useNav.getState().setWorkspace('streaming-role');
+    expect(useNav.getState().workspace).toBe('streaming-role');
+    useNav.getState().setWorkspace('connector');
+    expect(useNav.getState().workspace).toBe('connector');
+    useNav.getState().setWorkspace('streaming');
+    expect(useNav.getState()).toMatchObject({ workspace: 'streaming', tab: 'studio' });
+  });
+
   it('keeps streaming deep links and setup shortcuts working', () => {
     useNav.getState().setTab('cameras');
     expect(useNav.getState()).toMatchObject({ workspace: 'streaming', tab: 'cameras' });

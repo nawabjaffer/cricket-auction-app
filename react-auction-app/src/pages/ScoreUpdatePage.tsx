@@ -36,6 +36,7 @@ import FieldPlacementEditor from '../components/FieldPlacementEditor/FieldPlacem
 import LiveCameraSwitcher from '../components/LiveCameraSwitcher/LiveCameraSwitcher';
 import { getDockReplayButtons } from '../utils/obsReplayConfig';
 import './ScoreUpdatePage.css';
+import { useMobileScoringOptions } from '../hooks/useMobileScoringOptions';
 
 // ── Run buttons layout ───────────────────────────────────────────────────────
 
@@ -108,6 +109,7 @@ const TICKER_WIDGET_OPTIONS: Array<{ key: TickerStatWidget; label: string }> = [
 ];
 
 export default function ScoreUpdatePage() {
+  const { mobile, options: mobileOptions } = useMobileScoringOptions('cricket');
   const [searchParams, setSearchParams] = useSearchParams();
   const urlMatchId = searchParams.get('matchId') || undefined;
   const urlPinned = searchParams.get('pin') === '1';
@@ -120,6 +122,7 @@ export default function ScoreUpdatePage() {
   const [activeMatchId, setActiveMatchId] = useState<string | null>(null);
   const [matchActionFeedback, setMatchActionFeedback] = useState('');
   const [scheduledMatches, setScheduledMatches] = useState<MatchSetup[]>([]);
+  const [liveMatches, setLiveMatches] = useState<MatchSetup[]>([]);
   const [scheduledMatchesLoading, setScheduledMatchesLoading] = useState(true);
   const [scheduledMatchesError, setScheduledMatchesError] = useState('');
   const [startingMatchId, setStartingMatchId] = useState<string | null>(null);
@@ -207,6 +210,8 @@ export default function ScoreUpdatePage() {
     let cancelled = false;
     let unsubscribe = () => {};
     const applyMatches = (matches: MatchSetup[]) => {
+      if (cancelled) return;
+      setLiveMatches(matches.filter(item => item.status === 'live' && !item.interruption));
       const scheduled = matches.filter(item => item.status === 'scheduled' && !item.interruption);
       scheduled.sort((left, right) => {
         const leftDate = Date.parse(left.date);
@@ -582,10 +587,25 @@ export default function ScoreUpdatePage() {
       <main className="score-update score-update--no-match">
         <section className="score-update__no-match-panel">
           <p className="score-update__no-match-eyebrow">CRICKET SCORER</p>
-          <h1>No match is currently started</h1>
-          <p className="score-update__no-match-intro">Choose a scheduled fixture to start scoring. Fixtures are listed in start-time order.</p>
+          <h1>Choose a match</h1>
+          <p className="score-update__no-match-intro">Resume a live match or start a scheduled fixture.</p>
           {scheduledMatchesError && <p className="score-update__no-match-error" role="alert">{scheduledMatchesError}</p>}
-          {scheduledMatchesLoading ? <p className="score-update__no-match-empty">Loading scheduled matches…</p> : scheduledMatches.length > 0 ? (
+          {scheduledMatchesLoading && <p className="score-update__no-match-empty">Loading matches…</p>}
+          {liveMatches.length > 0 && <section className="score-update__scheduled-matches" aria-labelledby="live-matches-heading">
+            <h2 id="live-matches-heading">Live matches</h2>
+            {[...liveMatches].sort((left, right) => Number(right.id === activeMatchId) - Number(left.id === activeMatchId)).map(liveMatch => <article className="score-update__scheduled-match" key={liveMatch.id}>
+              <div><strong>{liveMatch.teamA.name} vs {liveMatch.teamB.name}</strong>
+                <span>{liveMatch.id === activeMatchId ? 'On air' : 'Live'} · Match {liveMatch.matchNumber ?? '—'}</span>
+                <span>{liveMatch.venue || 'Venue TBC'}</span></div>
+              <button className="score-update__btn score-update__btn--primary" onClick={() => {
+                const nextParams = new URLSearchParams(searchParams);
+                nextParams.set('matchId', liveMatch.id);
+                nextParams.set('pin', '1');
+                setSearchParams(nextParams, { replace: true });
+              }}><IoPlay aria-hidden="true" /> Resume scoring</button>
+            </article>)}
+          </section>}
+          {!scheduledMatchesLoading && scheduledMatches.length > 0 && (
             <section className="score-update__scheduled-matches" aria-labelledby="scheduled-matches-heading">
               <h2 id="scheduled-matches-heading">Scheduled matches</h2>
               {scheduledMatches.map(scheduledMatch => <article className="score-update__scheduled-match" key={scheduledMatch.id}>
@@ -605,7 +625,8 @@ export default function ScoreUpdatePage() {
                 </button>
               </article>)}
             </section>
-          ) : (
+          )}
+          {!scheduledMatchesLoading && !liveMatches.length && !scheduledMatches.length && (
             <div className="score-update__no-match-empty">
               <h2>No match is scheduled or started</h2>
               <p>Create a cricket fixture in Scoring Admin, then return here to start it.</p>
@@ -1173,7 +1194,7 @@ export default function ScoreUpdatePage() {
       </div>
 
       {/* ── Overlay Trigger Buttons ───────────────────────────────────── */}
-      <details className="score-update__advanced">
+      {(!mobile || mobileOptions.broadcast) && <details className="score-update__advanced">
       <summary>Advanced</summary>
       <label className="score-update__visibility-toggle">
         <input type="checkbox" checked={scoreboardVisible} onChange={async e => {
@@ -1301,7 +1322,7 @@ export default function ScoreUpdatePage() {
         )}
       </AnimatePresence>
 
-      </details>
+      </details>}
       {/* ── Modals ────────────────────────────────────────────────────── */}
       <AnimatePresence>
         {showWicketModal && (

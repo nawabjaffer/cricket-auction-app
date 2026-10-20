@@ -40,6 +40,7 @@ export function startTournamentSync(pairing: Pairing): () => void {
       useStudio.getState().patch({ profile });
       useSettings.getState().mergeProfileDestinations(profile.destinations);
       // Overlay and quality changes made in the web admin apply immediately while idle or previewing.
+      if (useSettings.getState().role !== 'studio') return;
       void applyOverlays();
       const state = useStudio.getState().engineState;
       if (state === 'preview' || state === 'prepared') void prepareStudio();
@@ -48,7 +49,7 @@ export function startTournamentSync(pairing: Pairing): () => void {
   );
   const unsubActive = subscribeActiveMatch(pairing.tenantId, pairing.game, matchId => {
     useStudio.getState().patch({ activeMatchId: matchId });
-    if (!useSettings.getState().pairing?.matchId) void applyOverlays();
+    if (useSettings.getState().role === 'studio' && !useSettings.getState().pairing?.matchId) void applyOverlays();
   });
 
   const stopPresence = startPresence(

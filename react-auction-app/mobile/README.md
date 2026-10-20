@@ -19,6 +19,43 @@ on the camera, encoder, network and thermal limits. Hardware-dependent features 
 
 ## Operator Quick Start
 
+### Version 1.3.0: simple scoring and Host/Connector streaming
+
+- **Scoring > Score** now shows **Live matches** with **Resume scoring**, as well as scheduled
+	fixtures. A match started from Matches stays available after its status changes to live. Resume
+	opens the existing match without calling the start API or resetting its innings/score.
+- Mobile scoring defaults to **Matches**, **Score** and **Results**. Desktop quick links and
+	broadcast/provider/advertising/designer/admin tools are hidden by default. Scheduling, squads,
+	starting/resuming matches and normal score entry remain available.
+- In the desktop scorer admin, open **Android Live Studio > Mobile scoring options** to enable
+	optional teams/players, statistics, broadcast, provider, ads, full admin, designer, guides or
+	exports per sport. Save the changes; connected apps and mobile web pages update live. Matches
+	and Score are always available. These are visibility controls, not a replacement for server
+	authorization or account permissions.
+- **Streaming** asks **Host** or **Connector** before starting the camera. A running stream or
+	connector can be resumed from home. Stop a connector before reusing that phone as a Host.
+- **Host** retains scenes, overlays, YouTube and the existing multiple enabled destinations under
+	**Setup > Platforms**. It can receive several connector phones, select one as program, switch
+	scenes and composite overlays into the outgoing stream. The Host microphone remains program audio.
+- **Connector** shows only camera details, Start/Stop, its RTSP URL and a pairing QR. Camera quality,
+	port and optional tournament pairing are behind small header controls, not Host streaming tabs.
+	Connector feeds remain clean; Host overlays are not burned into their camera feed.
+- Put phones on the same private Wi-Fi or hotspot without client isolation. Start each Connector,
+	then use **Host > Cameras > Scan connector QR**. A bare RTSP address permits video preview/taking
+	to air; scanning the session QR additionally pairs Host **flip, torch and zoom** controls. Open
+	the small camera-controls button on a paired connector tile. Alternatively, copy the Connector's
+	**pairing link** and paste it into the Host's **Connection URL** field. Discovery can be blocked
+	by a router; the displayed URL/QR is the manual alternative. Keep pairing links private.
+- Camera commands and responses use HMAC-SHA256 session proofs, timestamps and bounded replay
+	protection on private-network UDP. Keep device clocks synchronized. The session key stays in
+	the QR and encrypted Host settings, never Firebase/mDNS or command packets. Stop/restart renews
+	the key, so scan again afterward. Never expose RTSP/control ports publicly. RTSP video itself
+	remains unencrypted; use a trusted venue LAN. This is not frame-accurate multi-camera sync.
+
+Use **App updates** to install the current v1.3.0 testing build over the same-signer version.
+Physical-phone camera controls, LAN throughput and multi-destination ingest still need venue/device
+validation; emulator graphics are not sufficient to certify received media.
+
 ### Version 1.2.0: Streaming and Scoring
 
 The app now starts with two main options, **Streaming** and **Scoring**. Opening the home screen
@@ -179,6 +216,64 @@ For development, run `npm start --prefix mobile` and `npm run android --prefix m
 in separate terminals. Release APKs bundle JavaScript and do not require Metro.
 
 ## Release Signing
+
+### Easy Release Commands
+
+Run these from the web project root. The public customer help page is `/help`; detailed Android
+instructions remain at `/help?section=mobile`.
+
+```sh
+npm run mobile:release:plan
+npm run mobile:deploy
+npm run mobile:deploy:major
+npm run mobile:deploy:production
+```
+
+- `mobile:release:plan` is read-only: it prints skip, baseline, release or resume, without changing
+	versions, building, publishing, committing or pushing.
+- `mobile:deploy` targets the explicitly labeled **testing** channel. It fingerprints app source,
+	Android resources/build configuration and locked dependencies. Documentation, tests, generated
+	output and version-only edits do not create an app release. Identical published inputs mean no
+	build, version bump, APK copy, Hosting deploy, commit or push.
+- Changed app inputs increment the patch version once, for example `1.3.0` to `1.3.1`. A conventional
+	`feat!:`/`fix!:` commit or `BREAKING CHANGE:` since the prior release selects a major bump instead.
+	`mobile:deploy:major` explicitly requests that major bump. A major request still skips when inputs
+	have not changed. Breaking behavior cannot safely be inferred from the size of a code diff.
+- `mobile:deploy:production` uses the **stable** channel and requires real release signing. It does
+	not bypass signing or production device/security requirements. Testing builds never enter stable.
+- Releases run web/mobile tests, mobile types/lint and Android release lint/build. Gradle and Metro
+	reuse build caches; APKs use immutable checksum filenames. Publishing the same artifact/catalog
+	does not rewrite either file. Firebase Hosting reuses unchanged file hashes rather than uploading
+	the same APK again. The current previous APK is restored for clean CI workspaces before deployment.
+- Failed builds restore the version if app inputs stayed unchanged. A failed deploy retains the
+	verified local catalog/APK; rerunning resumes it without allocating another version. A lock prevents
+	concurrent releases. If a process was killed, remove `.mobile-release.lock` only after verifying
+	no release process is running.
+
+For the first use with an older catalog that lacks a source fingerprint, initialize it once:
+
+```sh
+npm run mobile:baseline
+```
+
+This builds the existing version and requires its APK checksum to match the already published APK.
+It records the verified input fingerprint without changing the version or re-uploading the APK.
+If the checksum differs, it stops rather than claiming changed inputs are unchanged. Subsequent
+clones/CI runs use the fingerprint in the public catalog; they do not need a machine-local baseline.
+
+Optional source delivery after a changed release:
+
+```sh
+npm run mobile:deploy -- --commit --push
+npm run release:sync -- --message "feat: describe the verified changes"
+```
+
+`release:sync` is for source changes, including web/help-only work that does not need a new Android
+version. It validates, commits reviewed project source and pushes the current branch without force.
+Review `git diff` first. Generated Hosting caches, download artifacts, dependencies and signing files
+are excluded, and staged credentials are checked. A clean worktree performs no commit or push, even
+if a remote is configured. No branches, tags or production keys are generated. Do not put secrets in
+source files; these guards do not replace credential review.
 
 Use a durable, privately backed-up release keystore. Losing it prevents updates to installed apps.
 Create it with Android Studio, or run `keytool` yourself and enter passwords directly in the terminal:

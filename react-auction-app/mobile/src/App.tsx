@@ -2,16 +2,17 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Alert, BackHandler, Image, Pressable, StatusBar, StyleSheet, Text, ToastAndroid, View } from 'react-native';
 import { Camera, Clapperboard, Home, Layers, Settings2, Trophy, type LucideIcon } from 'lucide-react-native';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { StudioSystem } from './native';
+import { onStudioEvent, StudioSystem } from './native';
 import { CamerasScreen } from './screens/CamerasScreen';
 import { SetupScreen } from './screens/SetupScreen';
 import { StudioScreen } from './screens/StudioScreen';
 import { ScenesScreen } from './screens/ScenesScreen';
 import { HomeScreen } from './screens/HomeScreen';
 import { ScoringScreen } from './screens/ScoringScreen';
+import { ConnectorScreen, StreamingRoleScreen } from './screens/StreamingRoleScreen';
 import { TournamentScreen, confirmPairing } from './screens/TournamentScreen';
 import { applyPairing, classifyLink, subscribeIncomingLinks } from './services/deepLink';
-import { startProgramSync } from './services/peers';
+import { saveCameraPairing, startProgramSync } from './services/peers';
 import { bindRemoteKeys } from './services/remoteKeys';
 import { bindEngineEvents, effectiveMatchId } from './services/streamController';
 import { startDeviceHealth, startTournamentSync } from './services/sync';
@@ -36,7 +37,7 @@ function TabBar() {
   const setTab = useNav(state => state.setTab);
   const setWorkspace = useNav(state => state.setWorkspace);
   const clean = useNav(state => state.studioClean);
-  const live = useStudio(state => isLiveState(state.engineState));
+  const live = useStudio(state => state.engineMode === 'studio' && isLiveState(state.engineState));
   if (tab === 'studio' && clean) return null;
   return (
     <View style={[styles.tabBar, tab === 'studio' && styles.overlayTabs, { paddingBottom: Math.max(insets.bottom, space.xs) }]}>
@@ -66,6 +67,8 @@ function Content() {
   return (
     <View style={{ flex: 1 }}>
       {workspace === 'home' && <HomeScreen />}
+      {workspace === 'streaming-role' && <StreamingRoleScreen />}
+      {workspace === 'connector' && <ConnectorScreen />}
       {workspace === 'streaming' && (tab === 'studio' ? <StudioScreen /> : <View style={{ flex: 1, paddingTop: insets.top, backgroundColor: colors.bg }}>
         {tab === 'cameras' && <CamerasScreen />}
         {tab === 'setup' && <SetupScreen />}
@@ -86,7 +89,8 @@ function Shell() {
   const activeMatchId = useStudio(state => state.activeMatchId);
   const setTab = useNav(state => state.setTab);
   const workspace = useNav(state => state.workspace);
-  const live = useStudio(state => isLiveState(state.engineState));
+  const live = useStudio(state => state.engineMode === 'studio' && isLiveState(state.engineState));
+  const serving = useStudio(state => !!state.cameraServerUrl);
 
   useEffect(() => {
     useSettings.getState().hydrate()
@@ -98,8 +102,12 @@ function Shell() {
       })
       .catch(error => log.error('boot', error));
     const stopEngine = bindEngineEvents();
+    const stopConnectorControls = onStudioEvent('studio.connectorControl', () => {
+      const current = useSettings.getState();
+      if (current.role === 'camera') current.patch({ facing: current.facing === 'back' ? 'front' : 'back' });
+    });
     const stopHealth = startDeviceHealth();
-    return () => { stopEngine(); stopHealth(); };
+    return () => { stopEngine(); stopConnectorControls(); stopHealth(); };
   }, []);
 
   useEffect(() => {
@@ -110,11 +118,11 @@ function Shell() {
   const tenantId = pairing?.tenantId;
   const game = pairing?.game;
   useEffect(() => {
-    if (!hydrated || !pairing || (workspace !== 'streaming' && !live)) return undefined;
+    if (!hydrated || !pairing || (workspace !== 'streaming' && workspace !== 'connector' && !live && !serving)) return undefined;
     return startTournamentSync(pairing);
     // Re-subscribe only when the tournament or game changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hydrated, tenantId, game, workspace, live]);
+  }, [hydrated, tenantId, game, workspace, live, serving]);
 
   const matchId = pairing?.matchId ?? activeMatchId;
   useEffect(() => {
@@ -130,10 +138,13 @@ function Shell() {
         applyPairing(incoming).then(() => setTab('studio')).catch(error => Alert.alert('Could not pair', error instanceof Error ? error.message : String(error)));
       });
     } else if (link.kind === 'camera' && isValidRtspUrl(link.camera.url)) {
-      const settings = useSettings.getState();
-      if (!settings.manualCameras.some(camera => camera.url === link.camera.url)) {
-        settings.patch({ manualCameras: [...settings.manualCameras, { name: link.camera.name, url: link.camera.url }].slice(-8), role: 'studio' });
+      if (useStudio.getState().cameraServerUrl) {
+        Alert.alert('Connector is running', 'Stop this connector before using it as a host for another camera.');
+        return;
       }
+      const settings = useSettings.getState();
+      saveCameraPairing(link.camera);
+      settings.patch({ role: 'studio' });
       setTab('cameras');
     }
   }), [setTab]);
@@ -147,6 +158,8 @@ function Shell() {
         return true;
       }
       if (useNav.getState().workspace === 'scoring') { useNav.getState().setWorkspace('home'); return true; }
+      if (useNav.getState().workspace === 'streaming-role') { useNav.getState().setWorkspace('home'); return true; }
+      if (useNav.getState().workspace === 'connector') { useNav.getState().setWorkspace('streaming-role'); return true; }
       if (tab !== 'studio') { go('studio'); return true; }
       if (useNav.getState().studioClean) { useNav.getState().setStudioClean(false); return true; }
       if (isLiveState(useStudio.getState().engineState)) {

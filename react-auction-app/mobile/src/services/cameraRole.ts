@@ -5,7 +5,7 @@
 // published to the tournament's liveCam node so web admins can see it.
 // ============================================================================
 
-import { StudioEngine, StudioNetwork, type NetworkAddress } from '../native';
+import { StudioEngine, StudioNetwork, StudioSystem, type NetworkAddress } from '../native';
 import { buildCameraLink, findStudioVideoPreset } from '../shared/studioProfile';
 import { buildEngineConfig, resolveEffectiveVideo, type LocalOverrides } from './effectiveConfig';
 import { effectiveMatchId, queueEngineTask, refreshCapabilities, studioContext } from './streamController';
@@ -17,6 +17,7 @@ import { isLiveState, useStudio } from '../store/studioStore';
 import { defaultStudioProfile } from '../shared/studioProfile';
 
 let publisher: Awaited<ReturnType<typeof publishSource>> | null = null;
+let controlSession: { port: number; token: string } | undefined;
 
 /** Prefer Wi-Fi / hotspot / Ethernet addresses: that is where other phones on the venue network are. */
 export function pickLanAddress(addresses: NetworkAddress[]): NetworkAddress | null {
@@ -58,7 +59,16 @@ async function startCameraServerOnce(): Promise<string> {
   const address = pickLanAddress(network.addresses);
   if (!address) throw new Error('Connect to Wi-Fi (or turn on the hotspot) so other phones can reach this camera.');
 
+  const session = { port: settings.cameraPort === 65535 ? 65534 : settings.cameraPort + 1, token: await StudioSystem.createWorkspaceToken() };
+  await StudioEngine.setOverlays('[]');
   const nativeUrl = await StudioEngine.startCameraServer(settings.cameraPort);
+  try {
+    await StudioNetwork.startConnectorControl(session.port, session.token);
+    controlSession = session;
+  } catch (error) {
+    await StudioEngine.stopCameraServer().catch(() => undefined);
+    throw error;
+  }
   const url = cameraUrl(address.ip, settings.cameraPort);
   log.info('camera', `serving ${url} (native reported ${nativeUrl})`);
 
@@ -84,6 +94,8 @@ async function startCameraServerOnce(): Promise<string> {
 
 export function stopCameraServer(): Promise<void> {
   return queueEngineTask(async () => {
+    await StudioNetwork.stopConnectorControl().catch(() => undefined);
+    controlSession = undefined;
     await publisher?.stop().catch(() => undefined);
     publisher = null;
     await StudioNetwork.unregisterService().catch(() => undefined);
@@ -96,5 +108,5 @@ export function stopCameraServer(): Promise<void> {
 export function cameraShareLink(): string | null {
   const { cameraServerUrl } = useStudio.getState();
   if (!cameraServerUrl) return null;
-  return buildCameraLink({ url: cameraServerUrl, name: useSettings.getState().deviceName, matchId: effectiveMatchId() ?? undefined });
+  return buildCameraLink({ url: cameraServerUrl, name: useSettings.getState().deviceName, matchId: effectiveMatchId() ?? undefined, control: controlSession });
 }

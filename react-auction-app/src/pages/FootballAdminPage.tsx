@@ -28,6 +28,8 @@ import type {
   FootballPosition, FootballFormation, FootballTeamRef, FootballRulesConfig,
 } from '../types/football';
 import './FootballAdminPage.css';
+import { useMobileScoringOptions } from '../hooks/useMobileScoringOptions';
+import { mobileScoringTabVisible } from '../types/mobileStudio';
 
 type Tab = 'teams' | 'players' | 'matches' | 'overlay';
 
@@ -41,7 +43,9 @@ function FootballAdminPageContent() {
   const { isAuthenticated, extendSession } = useAdminAuth();
 
   const [ready, setReady] = useState(false);
-  const [activeTab, setActiveTab] = useState<Tab>('teams');
+  const { mobile, options: mobileOptions } = useMobileScoringOptions('football');
+  const [selectedTab, setActiveTab] = useState<Tab>('teams');
+  const activeTab = mobile && !mobileScoringTabVisible(selectedTab, mobileOptions) ? 'matches' : selectedTab;
   const [feedback, setFeedback] = useState<string | null>(null);
 
   // Data
@@ -104,7 +108,7 @@ function FootballAdminPageContent() {
           { id: 'players', label: 'Players', icon: <IoPeople size={18} /> },
           { id: 'matches', label: 'Matches', icon: <IoFootball size={18} /> },
           { id: 'overlay', label: 'Overlay & Branding', icon: <IoColorPalette size={18} /> },
-        ] as { id: Tab; label: string; icon: React.ReactNode }[]).map((t) => (
+        ] as { id: Tab; label: string; icon: React.ReactNode }[]).filter(item => !mobile || mobileScoringTabVisible(item.id, mobileOptions)).map((t) => (
           <button
             key={t.id}
             className={`fb-admin__tab ${activeTab === t.id ? 'fb-admin__tab--active' : ''}`}

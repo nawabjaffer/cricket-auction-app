@@ -654,12 +654,16 @@ export interface StudioCameraLink {
   url: string;
   name: string;
   matchId?: string;
+  control?: { port: number; token: string };
 }
 
 /** `njslive://camera?u=…&n=…[&m=…]` — what a camera phone shows as a QR for the studio phone to scan. */
 export function buildCameraLink(link: StudioCameraLink): string {
   const params = [`u=${encodeURIComponent(link.url)}`, `n=${encodeURIComponent(link.name)}`];
   if (link.matchId) params.push(`m=${encodeURIComponent(link.matchId)}`);
+  if (link.control) {
+    params.push(`cp=${link.control.port}`, `ct=${encodeURIComponent(link.control.token)}`);
+  }
   return `${STUDIO_DEEP_LINK_SCHEME}://camera?${params.join('&')}`;
 }
 
@@ -675,10 +679,14 @@ export function parseCameraLink(raw: string): StudioCameraLink | null {
   if (!deep) return null;
   const q = readQuery(deep[1].split('#')[0]);
   if (!isValidRtspUrl(q.u)) return null;
+  const port = Number(q.cp);
+  const control = Number.isInteger(port) && port >= 1024 && port <= 65535 && /^[a-zA-Z0-9_-]{32,96}$/.test(q.ct ?? '')
+    ? { port, token: q.ct } : undefined;
   return {
     url: q.u,
     name: cleanText(q.n, 'Camera', 40),
     matchId: q.m && isSafeStudioId(q.m) ? q.m : undefined,
+    ...(control ? { control } : {}),
   };
 }
 

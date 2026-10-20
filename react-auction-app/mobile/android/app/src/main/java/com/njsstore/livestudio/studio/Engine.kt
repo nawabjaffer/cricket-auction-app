@@ -519,6 +519,25 @@ object Engine {
 
     private fun requireCamera(): Camera2Source = cameraRef ?: throw StudioException("not_prepared", "The camera is not ready")
 
+    fun connectorCommand(action: String, value: Double): org.json.JSONObject {
+        if (mode != "camera") throw StudioException("role", "This phone is not a connector camera")
+        val cam = requireCamera()
+        when (action) {
+            "flip" -> switchCamera()
+            "torch" -> setTorch(value == 1.0)
+            "zoom" -> {
+                require(value.isFinite()) { "Invalid zoom" }
+                val (min, max) = zoomRange()
+                setZoom(value.coerceIn(min, max).toFloat())
+            }
+            "status" -> Unit
+            else -> throw IllegalArgumentException("Unsupported camera control")
+        }
+        val (min, max) = zoomRange()
+        return org.json.JSONObject().put("zoom", cam.getZoom().toDouble()).put("minZoom", min).put("maxZoom", max)
+            .put("torch", cam.isLanternEnabled()).put("flash", hasFlash(cam))
+    }
+
     fun setVideoBitrate(bps: Int) {
         if (bps < 100_000) throw StudioException("invalid_argument", "Bitrate is too low")
         stream?.setVideoBitrateOnFly(bps)

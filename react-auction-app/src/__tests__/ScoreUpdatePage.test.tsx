@@ -1,7 +1,8 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, useSearchParams } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { MatchSetup } from '../types/scoring';
+import type { FootballMatchSetup } from '../types/football';
 
 const mocks = vi.hoisted(() => ({
   getAllMatches: vi.fn(),
@@ -18,6 +19,10 @@ const mocks = vi.hoisted(() => ({
   getDatabase: vi.fn(),
   scoringState: vi.fn(),
   navigate: vi.fn(),
+  footballMatches: vi.fn(),
+  footballMatch: vi.fn(),
+  footballLive: vi.fn(),
+  footballPlayers: vi.fn(),
 }));
 
 vi.mock('../hooks/useAdminAuth', () => ({ useAdminAuth: () => ({ isAuthenticated: true, session: { role: 'admin' }, extendSession: vi.fn() }) }));
@@ -39,8 +44,14 @@ vi.mock('../services/cricHeroesMappingService', () => ({ cricHeroesMappingServic
 vi.mock('../services/scoring/statsEngine', () => ({ statsEngine: { initialize: vi.fn() } }));
 vi.mock('../services/scoring/obsReplaySourceService', () => ({ obsReplaySourceService: { initialize: vi.fn(), getButtons: vi.fn().mockResolvedValue([]) } }));
 vi.mock('../services/liveCommentService', () => ({ liveCommentService: { initialize: vi.fn(), subscribe: vi.fn(() => vi.fn()) } }));
+vi.mock('../services/football', () => ({ footballService: {
+  initialize: vi.fn(), subscribeMatches: mocks.footballMatches, subscribeMatch: mocks.footballMatch,
+  subscribeLive: mocks.footballLive, subscribePlayers: mocks.footballPlayers,
+} }));
+vi.mock('../services/tenantService', () => ({ tenantService: { getTenant: vi.fn(async () => null) } }));
 
 import ScoreUpdatePage from '../pages/ScoreUpdatePage';
+import FootballUpdatePage from '../pages/FootballUpdatePage';
 
 const makeMatch = (id: string, date: string): MatchSetup => ({
   id,
@@ -93,7 +104,7 @@ describe('ScoreUpdatePage without an active match', () => {
       <MatchIdProbe />
     </MemoryRouter>);
 
-    expect(await screen.findByRole('heading', { name: 'No match is currently started' })).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: 'Choose a match' })).toBeTruthy();
     const startButtons = await screen.findAllByRole('button', { name: 'Start match' });
     expect(startButtons).toHaveLength(2);
     fireEvent.click(startButtons[0]);
@@ -112,5 +123,67 @@ describe('ScoreUpdatePage without an active match', () => {
     </MemoryRouter>);
 
     expect(await screen.findByRole('heading', { name: 'No match is scheduled or started' })).toBeTruthy();
+  });
+
+  it('shows the match just started in admin and resumes it without restarting', async () => {
+    const live = { ...makeMatch('live_match', '2026-10-19T12:00:00Z'), status: 'live' as const };
+    mocks.getAllMatches.mockResolvedValue([live]);
+    mocks.subscribeMatches.mockImplementation((callback: (matches: MatchSetup[]) => void) => { callback([live]); return vi.fn(); });
+    mocks.subscribeActiveMatch.mockImplementation((callback: (matchId: string | null) => void) => { callback(live.id); return vi.fn(); });
+    render(<MemoryRouter initialEntries={['/league-2026/cricket/scorer/update']}><ScoreUpdatePage /><MatchIdProbe /></MemoryRouter>);
+    expect(await screen.findByRole('heading', { name: 'Live matches' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Resume scoring' }));
+    await waitFor(() => expect(screen.getByTestId('selected-match-id').textContent).toBe(live.id));
+    expect(mocks.startMatchQuick).not.toHaveBeenCalled();
+    expect(mocks.scoringState).toHaveBeenCalledWith(live.id);
+  });
+
+  it('keeps an already-live match separate from upcoming scheduled fixtures', async () => {
+    const matches = [makeMatch('upcoming', '2026-10-20T12:00:00Z'), { ...makeMatch('playing', '2026-10-19T12:00:00Z'), status: 'live' as const }];
+    mocks.getAllMatches.mockResolvedValue(matches);
+    mocks.subscribeMatches.mockImplementation((callback: (matches: MatchSetup[]) => void) => { callback(matches); return vi.fn(); });
+    render(<MemoryRouter initialEntries={['/league-2026/cricket/scorer/update']}><ScoreUpdatePage /></MemoryRouter>);
+    expect(await screen.findByRole('button', { name: 'Resume scoring' })).toBeTruthy();
+    expect(screen.getAllByRole('button', { name: 'Start match' })).toHaveLength(1);
+    expect(screen.queryByRole('heading', { name: 'No match is scheduled or started' })).toBeNull();
+  });
+
+  it('moves a fixture into live matches when another screen starts it', async () => {
+    const fixture = makeMatch('started_on_mobile', '2026-10-19T12:00:00Z');
+    let listener: ((matches: MatchSetup[]) => void) | undefined;
+    mocks.getAllMatches.mockResolvedValue([fixture]);
+    mocks.subscribeMatches.mockImplementation((callback: (matches: MatchSetup[]) => void) => { listener = callback; return vi.fn(); });
+    render(<MemoryRouter initialEntries={['/league-2026/cricket/scorer/update']}><ScoreUpdatePage /></MemoryRouter>);
+    expect(await screen.findByRole('button', { name: 'Start match' })).toBeTruthy();
+    await waitFor(() => expect(listener).toBeDefined());
+    act(() => listener?.([{ ...fixture, status: 'live' }]));
+    expect(await screen.findByRole('button', { name: 'Resume scoring' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Start match' })).toBeNull();
+  });
+});
+
+describe('Football mobile Score without a match URL', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.ensureRealtime.mockResolvedValue(true);
+    mocks.getDatabase.mockReturnValue({});
+    mocks.footballMatch.mockReturnValue(vi.fn());
+    mocks.footballLive.mockReturnValue(vi.fn());
+    mocks.footballPlayers.mockReturnValue(vi.fn());
+  });
+  it('lists a live football match and resumes it from the generic Score tab', async () => {
+    const live = { ...makeMatch('football_live', '2026-10-19T12:00:00Z'), status: 'live', halfDurationMin: 45 } as unknown as FootballMatchSetup;
+    mocks.footballMatches.mockImplementation((callback: (matches: FootballMatchSetup[]) => void) => { callback([live]); return vi.fn(); });
+    render(<MemoryRouter initialEntries={['/league-2026/football/scorer/update']}><FootballUpdatePage /><MatchIdProbe /></MemoryRouter>);
+    fireEvent.click(await screen.findByRole('button', { name: 'Resume scoring' }));
+    await waitFor(() => expect(screen.getByTestId('selected-match-id').textContent).toBe(live.id));
+    expect(mocks.footballMatch).toHaveBeenCalledWith(live.id, expect.any(Function));
+  });
+  it('keeps completed football matches out of the active picker', async () => {
+    const completed = { ...makeMatch('finished', '2026-10-18T12:00:00Z'), status: 'completed', halfDurationMin: 45 } as unknown as FootballMatchSetup;
+    mocks.footballMatches.mockImplementation((callback: (matches: FootballMatchSetup[]) => void) => { callback([completed]); return vi.fn(); });
+    render(<MemoryRouter initialEntries={['/league-2026/football/scorer/update']}><FootballUpdatePage /></MemoryRouter>);
+    expect(await screen.findByText('No match is scheduled or started.')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Resume scoring' })).toBeNull();
   });
 });

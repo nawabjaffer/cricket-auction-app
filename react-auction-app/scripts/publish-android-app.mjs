@@ -12,11 +12,11 @@
 import { createHash } from 'node:crypto';
 import { execFile } from 'node:child_process';
 import { createReadStream, existsSync } from 'node:fs';
-import { copyFile, mkdir, mkdtemp, readdir, rename, rm, stat, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, mkdtemp, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { promisify } from 'node:util';
+import { isDeepStrictEqual, promisify } from 'node:util';
 
 const run = promisify(execFile);
 const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -92,6 +92,14 @@ if (developmentSigned && (channel !== 'testing' || !process.argv.includes('--all
 const size = (await stat(apkPath)).size;
 const digest = await sha256(apkPath);
 const apkName = `njs-live-studio-${versionCode}-${digest}.apk`;
+let previous = null;
+try { previous = JSON.parse(await readFile(join(outDir, 'latest.json'), 'utf8')); }
+catch (error) { if (error.code !== 'ENOENT') fail('The existing release catalog is invalid. Repair it before publishing.'); }
+const sameBuild = previous?.file === apkName && previous?.sha256 === digest;
+const sourceFingerprint = option('source-fingerprint');
+const releaseCommit = option('release-commit');
+if (sourceFingerprint && !/^[a-f0-9]{64}$/.test(sourceFingerprint)) fail('Invalid release source fingerprint.');
+if (releaseCommit && !/^[a-f0-9]{40}$/.test(releaseCommit)) fail('Invalid release commit.');
 
 const manifest = {
   schema: 1,
@@ -102,24 +110,34 @@ const manifest = {
   file: apkName,
   size,
   sha256: digest,
-  builtAt: new Date().toISOString(),
+  builtAt: sameBuild ? previous.builtAt : new Date().toISOString(),
   channel,
   signing: developmentSigned ? 'development' : 'release',
   ...(signerSha256 ? { signerSha256 } : {}),
   ...(signerSha1 ? { signerSha1 } : {}),
   ...(abis.length ? { abis } : {}),
-  ...(option('notes') ? { notes: option('notes').split('|').map(note => note.trim()).filter(Boolean) } : {}),
+  ...(option('notes') ? { notes: option('notes').split('|').map(note => note.trim()).filter(Boolean) } : sameBuild && previous.notes ? { notes: previous.notes } : {}),
+  ...(sourceFingerprint ? { sourceFingerprint } : sameBuild && previous.sourceFingerprint ? { sourceFingerprint: previous.sourceFingerprint } : {}),
+  ...(releaseCommit ? { releaseCommit } : sameBuild && previous.releaseCommit ? { releaseCommit: previous.releaseCommit } : {}),
 };
 
+const targetApk = join(outDir, apkName);
+const existingApk = existsSync(targetApk) && (await stat(targetApk)).isFile() && await sha256(targetApk) === digest;
+if (existingApk && isDeepStrictEqual(previous, manifest)) {
+  console.info(`Already published ${versionName} (${channel}); APK and catalog unchanged. No files rewritten.`);
+  process.exit(0);
+}
 await mkdir(outDir, { recursive: true });
 const staging = await mkdtemp(join(outDir, '.publish-'));
 try {
   const stagedApk = join(staging, apkName);
-  await copyFile(apkPath, stagedApk);
-  if ((await stat(stagedApk)).size !== size || await sha256(stagedApk) !== digest) {
-    throw new Error('APK changed while publishing. Rebuild and retry.');
+  if (!existingApk) {
+    await copyFile(apkPath, stagedApk);
+    if ((await stat(stagedApk)).size !== size || await sha256(stagedApk) !== digest) {
+      throw new Error('APK changed while publishing. Rebuild and retry.');
+    }
+    await rename(stagedApk, targetApk);
   }
-  await rename(stagedApk, join(outDir, apkName));
   const stagedManifest = join(staging, 'latest.json');
   await writeFile(stagedManifest, `${JSON.stringify(manifest, null, 2)}\n`);
   await rename(stagedManifest, join(outDir, 'latest.json'));

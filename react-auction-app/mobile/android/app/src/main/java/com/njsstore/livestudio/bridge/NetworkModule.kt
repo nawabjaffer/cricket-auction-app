@@ -21,6 +21,8 @@ import com.njsstore.livestudio.studio.Net
 import com.njsstore.livestudio.studio.toWritableMap
 import org.json.JSONObject
 import java.util.ArrayDeque
+import java.util.concurrent.Executors
+import com.njsstore.livestudio.studio.ConnectorControl
 
 /** Connectivity snapshots plus mDNS (NSD) announcement and discovery of LAN cameras. */
 class NetworkModule(private val context: ReactApplicationContext) : ReactContextBaseJavaModule(context) {
@@ -39,12 +41,35 @@ class NetworkModule(private val context: ReactApplicationContext) : ReactContext
     private val resolveQueue = ArrayDeque<NsdServiceInfo>()
     private var resolving = false
     private var multicastLock: WifiManager.MulticastLock? = null
+    private val cameraCommands = Executors.newSingleThreadExecutor()
 
     override fun invalidate() {
+        ConnectorControl.stop()
+        cameraCommands.shutdown()
         stopMonitorInternal()
         stopDiscoveryInternal()
         unregisterInternal()
         super.invalidate()
+    }
+
+    @ReactMethod
+    fun startConnectorControl(port: Int, token: String, promise: Promise) {
+        try { ConnectorControl.start(port, token); promise.resolve(null) }
+        catch (error: Exception) { promise.reject("control", "Could not start camera controls", error) }
+    }
+
+    @ReactMethod
+    fun stopConnectorControl(promise: Promise) {
+        ConnectorControl.stop()
+        promise.resolve(null)
+    }
+
+    @ReactMethod
+    fun sendConnectorCommand(url: String, port: Int, token: String, action: String, value: Double, promise: Promise) {
+        cameraCommands.execute {
+            try { promise.resolve(ConnectorControl.send(url, port, token, action, value)) }
+            catch (error: Exception) { promise.reject("control", error.message ?: "Camera did not respond. Check its connection and pair again.", error) }
+        }
     }
 
     @ReactMethod
