@@ -132,6 +132,7 @@ describe('buildOverlaySpecs', () => {
     const [spec] = buildOverlaySpecs([widget({})], {}, context);
     expect(spec.url).toBe('https://app.example.com/pkl/cricket/scorer/obs-overlay?matchId=m_1&pin=1');
     expect(spec.enabled).toBe(true);
+    expect(spec).toMatchObject({ rotation: 0, scalePct: 100, offsetXPct: 0, offsetYPct: 0 });
   });
 
   it('applies the local hide switch but never re-enables an admin-disabled widget', () => {

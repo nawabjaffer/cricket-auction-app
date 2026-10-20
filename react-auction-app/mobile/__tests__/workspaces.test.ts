@@ -1,8 +1,10 @@
 import { useNav } from '../src/store/navStore';
+import { useCamera } from '../src/store/cameraStore';
+import { startRecordingSession } from '../src/shared/cameraRecording';
 import { isScoringNavigationAllowed, normalizeScoringWorkspace, scoringEntryUrl, scoringPageUrl } from '../src/shared/scoringWorkspace';
 import { MAX_WORKSPACE_EXPORT_BYTES, parseScoringBrowserMessage, scoringBrowserScript } from '../src/services/scoringBrowser';
 
-beforeEach(() => useNav.setState(useNav.getInitialState()));
+beforeEach(() => { useNav.setState(useNav.getInitialState()); useCamera.setState(useCamera.getInitialState()); });
 
 describe('app workspaces', () => {
   it('opens the mode chooser instead of requesting camera access on launch', () => {
@@ -20,6 +22,20 @@ describe('app workspaces', () => {
     expect(useNav.getState().workspace).toBe('scoring');
     useNav.getState().setWorkspace('home');
     expect(useNav.getState().workspace).toBe('home');
+  });
+
+  it('opens a standalone recording workspace without selecting streaming tabs', () => {
+    useNav.getState().setWorkspace('recording');
+    expect(useNav.getState().workspace).toBe('recording');
+  });
+
+  it.each(['recording', 'paused', 'saving'] as const)('protects %s recordings from mode and deep-link shortcuts', status => {
+    useNav.getState().setWorkspace('recording');
+    useCamera.setState({ session: { ...startRecordingSession('/clip.mp4'), status } });
+    useNav.getState().setWorkspace('home');
+    useNav.getState().setTab('tournament');
+    useNav.getState().openSetup('video');
+    expect(useNav.getState().workspace).toBe('recording');
   });
 
   it('keeps host selection and connector camera navigation separate', () => {

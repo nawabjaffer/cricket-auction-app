@@ -30,7 +30,7 @@ describe('public app help', () => {
     expect(screen.getByRole('link', { name: /Run a player auction/ })).toBeTruthy();
     expect(screen.queryByRole('link', { name: /Score a match/ })).toBeNull();
     fireEvent.click(screen.getByRole('tab', { name: 'Android' }));
-    expect(screen.getByRole('heading', { name: 'Two modes. One match-day app.' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Three modes. One match-day app.' })).toBeTruthy();
     expect(await screen.findByText('The Android testing download is currently unavailable.')).toBeTruthy();
   });
   it('explains Android testing limits and links only a validated release', async () => {

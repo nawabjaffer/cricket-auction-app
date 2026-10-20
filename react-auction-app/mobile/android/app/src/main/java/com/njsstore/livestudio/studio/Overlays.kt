@@ -15,6 +15,7 @@ import android.view.ViewGroup
 import android.webkit.RenderProcessGoneDetail
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -72,7 +73,7 @@ class OverlayHost(context: Context) : FrameLayout(context) {
 
 /** Owns the off-screen WebViews/ImageViews behind the overlay widgets and turns them into GL filters. */
 class OverlayManager(private val appContext: Context, private val currentActivity: () -> Activity?) {
-    private class Item(val spec: OverlaySpec, val host: OverlayHost, val web: WebView?, val image: ImageView?) {
+    private class Item(var spec: OverlaySpec, val host: OverlayHost, val web: WebView?, val image: ImageView?) {
         var reload: Runnable? = null
         var parkedUntil = 0L
     }
@@ -100,10 +101,11 @@ class OverlayManager(private val appContext: Context, private val currentActivit
         val wanted = specs.associateBy { it.id }
         for (id in live.keys.toList()) {
             val item = live[id] ?: continue
-            if (wanted[id] != item.spec) {
+            val next = wanted[id]
+            if (next == null || item.spec.kind != next.kind || item.spec.url != next.url || item.spec.pageWidth != next.pageWidth || item.spec.pageHeight != next.pageHeight) {
                 live.remove(id)
                 park(item)
-            }
+            } else item.spec = next
         }
         for (spec in specs) {
             if (live.containsKey(spec.id)) continue
@@ -126,12 +128,16 @@ class OverlayManager(private val appContext: Context, private val currentActivit
             val spec = item.spec
             if (!spec.enabled) continue
             item.host.opacity = spec.opacity
-            var scaleX = spec.widthPct
-            var scaleY = scaleX * spec.pageHeight / spec.pageWidth * frameWidth / frameHeight
+            val rotated = spec.rotation % 180 != 0
+            val designWidth = if (rotated) spec.pageHeight else spec.pageWidth
+            val designHeight = if (rotated) spec.pageWidth else spec.pageHeight
+            var scaleX = (spec.widthPct * spec.scalePct / 100f).coerceAtMost(100f)
+            var scaleY = scaleX * designHeight / designWidth * frameWidth / frameHeight
             if (scaleY > 100f) {
                 scaleX *= 100f / scaleY
                 scaleY = 100f
             }
+            if (scaleX > 100f) { scaleY *= 100f / scaleX; scaleX = 100f }
             val filter = AndroidViewFilterRender()
             filter.isHardwareMode = hardware
             filter.targetFps = fps
@@ -147,8 +153,11 @@ class OverlayManager(private val appContext: Context, private val currentActivit
             // The filter measures the view with UNSPECIFIED; restore the exact page size it is drawn at.
             layoutHost()
             filter.setScale(scaleX, scaleY)
-            val (x, y) = position(spec.anchor, scaleX, scaleY)
-            filter.setPosition(x, y)
+            filter.rotation = spec.rotation
+            val boundsX = if (rotated) scaleY else scaleX
+            val boundsY = if (rotated) scaleX else scaleY
+            val (x, y) = position(spec.anchor, boundsX, boundsY)
+            filter.setPosition((x + spec.offsetXPct).coerceIn(0f, 100f - boundsX), (y + spec.offsetYPct).coerceIn(0f, 100f - boundsY))
             gl.addFilter(filter)
         }
     }
@@ -263,6 +272,9 @@ class OverlayManager(private val appContext: Context, private val currentActivit
         override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean =
             request.isForMainFrame && request.url.host != origin
 
+        override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? =
+            runCatching { OverlayAssets.get(appContext).intercept(request) }.getOrNull()
+
         override fun onReceivedError(view: WebView, request: WebResourceRequest, error: WebResourceError) {
             if (!request.isForMainFrame) return
             item.reload?.let { main.removeCallbacks(it) }
@@ -303,6 +315,7 @@ class OverlayManager(private val appContext: Context, private val currentActivit
     }
 
     private fun download(url: String): Bitmap? {
+        OverlayAssets.get(appContext).image(url)?.let { bytes -> return decodeImage(bytes) }
         val connection = URL(url).openConnection() as HttpURLConnection
         connection.connectTimeout = 8_000
         connection.readTimeout = 8_000
@@ -322,14 +335,18 @@ class OverlayManager(private val appContext: Context, private val currentActivit
                 }
                 buffer.toByteArray()
             }
-            val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-            BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
-            var sample = 1
-            while (bounds.outWidth / sample > 2048 || bounds.outHeight / sample > 2048) sample *= 2
-            BitmapFactory.decodeByteArray(bytes, 0, bytes.size, BitmapFactory.Options().apply { inSampleSize = sample })
+            decodeImage(bytes)
         } finally {
             connection.disconnect()
         }
+    }
+
+    private fun decodeImage(bytes: ByteArray): Bitmap? {
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+        var sample = 1
+        while (bounds.outWidth / sample > 2048 || bounds.outHeight / sample > 2048) sample *= 2
+        return BitmapFactory.decodeByteArray(bytes, 0, bytes.size, BitmapFactory.Options().apply { inSampleSize = sample })
     }
 
     private fun destroy(item: Item) {

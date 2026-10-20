@@ -1,6 +1,6 @@
 import React from 'react';
-import { Image, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
-import { ArrowRight, Clapperboard, ClipboardList, Download } from 'lucide-react-native';
+import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { ArrowRight, Camera, Clapperboard, ClipboardList, Download } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNav } from '../store/navStore';
 import { useSettings } from '../store/settingsStore';
@@ -28,6 +28,11 @@ export function HomeScreen() {
           <IconButton icon={Download} label="App updates" onPress={() => setTab('tournament')} />
         </Row>
         <View style={[s.choices, width > height && s.landscape]}>
+          <Pressable accessibilityRole="button" accessibilityLabel="Camera" onPress={() => { if (live || serving || useStudio.getState().stats?.recording) Alert.alert('Camera is in use', 'Stop Streaming or the Connector before opening Camera.'); else setWorkspace('recording'); }} style={({ pressed }) => [s.choice, pressed && s.pressed]}>
+            <Camera size={29} strokeWidth={1.5} color="#ff9b9b" />
+            <View style={s.choiceText}><Text style={s.title}>Camera</Text></View>
+            <ArrowRight size={20} color={colors.muted} />
+          </Pressable>
           <Pressable accessibilityRole="button" accessibilityLabel="Streaming" onPress={() => { if (serving) setWorkspace('connector'); else if (live) setTab('studio'); else setWorkspace('streaming-role'); }} style={({ pressed }) => [s.choice, pressed && s.pressed]}>
             <Clapperboard size={29} strokeWidth={1.5} color={colors.accent} />
             <View style={s.choiceText}><Text style={s.title}>Streaming</Text>{pairing && <Text style={s.detail} numberOfLines={1}>{pairing.slug}</Text>}</View>
@@ -47,14 +52,14 @@ export function HomeScreen() {
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
   content: { flexGrow: 1, justifyContent: 'center' },
-  inner: { width: '100%', maxWidth: 760, alignSelf: 'center', gap: 28 },
+  inner: { width: '100%', maxWidth: 980, alignSelf: 'center', gap: 28 },
   header: { gap: 12 },
   logo: { width: 46, height: 46 },
   brand: { color: colors.text, fontSize: 18, fontWeight: '700' },
   version: { color: colors.muted, fontSize: 11, marginTop: 3 },
   choices: { gap: 12 },
   landscape: { flexDirection: 'row' },
-  choice: { flexDirection: 'row', flex: 1, minHeight: 112, padding: 18, gap: 16, alignItems: 'center', borderRadius: 8, borderWidth: 1, borderColor: colors.line, backgroundColor: colors.card },
+  choice: { flexDirection: 'row', flex: 1, minHeight: 100, padding: 14, gap: 12, alignItems: 'center', borderRadius: 8, borderWidth: 1, borderColor: colors.line, backgroundColor: colors.card },
   pressed: { backgroundColor: colors.card2 },
   choiceText: { flex: 1, minWidth: 0, gap: 6 },
   title: { color: colors.text, fontSize: 19, fontWeight: '600' },

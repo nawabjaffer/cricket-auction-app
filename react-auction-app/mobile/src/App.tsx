@@ -8,6 +8,8 @@ import { SetupScreen } from './screens/SetupScreen';
 import { StudioScreen } from './screens/StudioScreen';
 import { ScenesScreen } from './screens/ScenesScreen';
 import { HomeScreen } from './screens/HomeScreen';
+import { CameraScreen } from './screens/CameraScreen';
+import { cameraOccupied } from './services/cameraController';
 import { ScoringScreen } from './screens/ScoringScreen';
 import { ConnectorScreen, StreamingRoleScreen } from './screens/StreamingRoleScreen';
 import { TournamentScreen, confirmPairing } from './screens/TournamentScreen';
@@ -67,6 +69,7 @@ function Content() {
   return (
     <View style={{ flex: 1 }}>
       {workspace === 'home' && <HomeScreen />}
+      {workspace === 'recording' && <CameraScreen />}
       {workspace === 'streaming-role' && <StreamingRoleScreen />}
       {workspace === 'connector' && <ConnectorScreen />}
       {workspace === 'streaming' && (tab === 'studio' ? <StudioScreen /> : <View style={{ flex: 1, paddingTop: insets.top, backgroundColor: colors.bg }}>
@@ -131,6 +134,7 @@ function Shell() {
   }, [hydrated, tenantId, game, matchId, role, workspace, live]);
 
   useEffect(() => subscribeIncomingLinks(url => {
+    if (cameraOccupied()) { Alert.alert('Camera is recording', 'Stop and save the recording before changing modes.'); return; }
     const link = classifyLink(url);
     if (link.kind === 'pair') {
       const { pairing: incoming } = link;
@@ -152,6 +156,11 @@ function Shell() {
   useEffect(() => {
     const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
       const { tab, setTab: go } = useNav.getState();
+      if (useNav.getState().workspace === 'recording') {
+        if (cameraOccupied()) Alert.alert('Recording in progress', 'Stop and save the clip before leaving Camera.');
+        else useNav.getState().setWorkspace('home');
+        return true;
+      }
       if (useNav.getState().workspace === 'home') {
         if (!isLiveState(useStudio.getState().engineState)) return false;
         Alert.alert('Streaming is live', 'Open Streaming and use End stream before leaving the app.');

@@ -21,7 +21,7 @@ const TOPICS = [
   { id: 'cricket', title: 'Score a match', detail: 'Start a fixture, resume a live match and record the action.', icon: IoTrophyOutline },
   { id: 'broadcast', title: 'Take your match live', detail: 'Score overlays, OBS controls and broadcast preparation.', icon: IoRadioOutline },
   { id: 'players', title: 'Players & registration', detail: 'Player records, registration, team allocation and exports.', icon: IoPeopleOutline },
-  { id: 'mobile', title: 'Android Live Studio', detail: 'Streaming, mobile scoring, scenes and connector cameras.', icon: IoPhonePortraitOutline },
+  { id: 'mobile', title: 'Android Live Studio', detail: 'Camera recording, mobile scoring, streaming and connector cameras.', icon: IoPhonePortraitOutline },
 ];
 
 const QUESTIONS = [
@@ -80,15 +80,15 @@ function HelpOverview() {
       <div id="platform-panel" role="tabpanel" aria-labelledby={`${platform}-tab`} className="help-hub__platform-panel">
         <div className="help-hub__workflow">
           <p className="help-hub__label">{platform === 'web' ? 'THE TOURNAMENT WORKSPACE' : 'NJS LIVE STUDIO FOR ANDROID'}</p>
-          <h3>{platform === 'web' ? 'From the first player to the final result.' : 'Two modes. One match-day app.'}</h3>
-          <p>{platform === 'web' ? 'Organize players and teams, schedule fixtures, operate your sport\'s scorer and share the scoreboard. Your enabled features follow the tournament and your account permissions.' : 'Choose Scoring for your existing online fixtures and scorer. Choose Streaming to run the Host studio or share another phone\'s camera as a Connector.'}</p>
+          <h3>{platform === 'web' ? 'From the first player to the final result.' : 'Three modes. One match-day app.'}</h3>
+          <p>{platform === 'web' ? 'Organize players and teams, schedule fixtures, operate your sport\'s scorer and share the scoreboard. Your enabled features follow the tournament and your account permissions.' : 'Choose Camera to record with scoreboard graphics and save to Gallery. Choose Scoring for online fixtures and scoring, or Streaming for the Host studio and Connector cameras.'}</p>
           <ul>
-            {(platform === 'web' ? ['Tournament setup, registration and player auctions', 'Match schedules, live scoring and results', 'Scorecard design and OBS broadcast controls'] : ['Simple Matches, Score and Results navigation', 'Host scenes, web overlays and streaming destinations', 'Connector QR pairing and local camera switching']).map(item => <li key={item}><IoCheckmarkOutline aria-hidden="true" />{item}</li>)}
+            {(platform === 'web' ? ['Tournament setup, registration and player auctions', 'Match schedules, live scoring and results', 'Scorecard design and OBS broadcast controls'] : ['Camera recording, pause/resume and Gallery saving', 'Online scoring and on-air scoreboard overlays', 'Host scenes, streaming destinations and Connector pairing']).map(item => <li key={item}><IoCheckmarkOutline aria-hidden="true" />{item}</li>)}
           </ul>
           <a className="help-hub__text-link" href={`/help?section=${platform === 'web' ? 'administration' : 'mobile'}`}>Read the {platform === 'web' ? 'web' : 'Android'} guide <IoArrowForwardOutline aria-hidden="true" /></a>
         </div>
         <div className="help-hub__screens">
-          <figure><img src={appHomeImage} alt="NJS Android app home with Streaming and Scoring choices" width="540" height="1200" loading="lazy" /><figcaption>Streaming or Scoring</figcaption></figure>
+          <figure><img src={appHomeImage} alt="NJS Android app home with Camera, Streaming and Scoring choices" width="540" height="1200" loading="lazy" /><figcaption>Camera, Streaming or Scoring</figcaption></figure>
           <figure><img src={platform === 'web' ? scoringImage : connectorImage} alt={platform === 'web' ? 'Existing web administration sign-in inside the Android scoring workspace' : 'Android Connector camera screen with Start connector and camera details'} width="540" height="1200" loading="lazy" /><figcaption>{platform === 'web' ? 'Your existing online workspace' : 'A camera-focused Connector'}</figcaption></figure>
         </div>
       </div>

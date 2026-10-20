@@ -189,25 +189,37 @@ interface SliderProps {
   label?: string;
 }
 
+export function sliderValueFromOffset(offset: number, width: number, min: number, max: number, step = 0): number {
+  if (!(width > 0) || !(max > min)) return min;
+  const ratio = Math.min(1, Math.max(0, offset / width));
+  const raw = min + ratio * (max - min);
+  const stepped = step > 0 ? min + Math.round((raw - min) / step) * step : raw;
+  return Math.min(max, Math.max(min, stepped));
+}
+
 /** Minimal horizontal slider (React Native ships none). */
 export function Slider({ value, min, max, step = 0, onChange, onComplete, label }: Readonly<SliderProps>) {
   const [width, setWidth] = useState(1);
   const widthRef = useRef(1);
   const latest = useRef(value);
-  const valueRef = useRef(value);
-  valueRef.current = value;
+  const bounds = useRef({ min, max, step });
+  const originX = useRef(0);
+  bounds.current = { min, max, step };
 
   const toValue = useCallback((x: number) => {
-    const ratio = Math.min(1, Math.max(0, x / widthRef.current));
-    const raw = min + ratio * (max - min);
-    return step > 0 ? Math.round(raw / step) * step : raw;
-  }, [min, max, step]);
+    const current = bounds.current;
+    return sliderValueFromOffset(x, widthRef.current, current.min, current.max, current.step);
+  }, []);
 
   const responder = useRef(PanResponder.create({
     onStartShouldSetPanResponder: () => true,
     onMoveShouldSetPanResponder: () => true,
-    onPanResponderGrant: event => { latest.current = toValue(event.nativeEvent.locationX); onChange(latest.current); },
-    onPanResponderMove: event => { latest.current = toValue(event.nativeEvent.locationX); onChange(latest.current); },
+    onPanResponderGrant: (event, gesture) => {
+      originX.current = gesture.moveX - event.nativeEvent.locationX;
+      latest.current = toValue(gesture.moveX - originX.current);
+      onChange(latest.current);
+    },
+    onPanResponderMove: (_event, gesture) => { latest.current = toValue(gesture.moveX - originX.current); onChange(latest.current); },
     onPanResponderRelease: () => onComplete?.(latest.current),
     onPanResponderTerminate: () => onComplete?.(latest.current),
   })).current;

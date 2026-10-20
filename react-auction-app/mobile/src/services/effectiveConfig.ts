@@ -138,6 +138,10 @@ export function buildOverlaySpecs(
       opacity: widget.opacity,
       pageWidth: widget.pageWidth,
       pageHeight: widget.pageHeight,
+      rotation: 0,
+      scalePct: 100,
+      offsetXPct: 0,
+      offsetYPct: 0,
     });
   }
   return specs;

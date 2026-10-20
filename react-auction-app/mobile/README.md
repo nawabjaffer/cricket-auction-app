@@ -19,6 +19,59 @@ on the camera, encoder, network and thermal limits. Hardware-dependent features 
 
 ## Operator Quick Start
 
+### Camera recording
+
+Home has **Camera**, **Streaming** and **Scoring**. Camera is a separate recording workspace,
+not a streaming destination. It has the composited preview, record/stop, true pause/resume in one
+MP4, elapsed recording time excluding pauses, torch, microphone, zoom, grid and Gallery access.
+Stop Host/Connector sessions before opening Camera. Video settings cannot change while recording,
+paused or saving, and Back/deep links cannot silently abandon the recording.
+
+- Open Camera settings for quality, H.264/HEVC, orientation, stabilization and overlays. Unsupported
+	video combinations fall back to a supported preset with a notice. Settings do not modify Host
+	presets, stream keys, destinations, scenes or the Scoring tournament.
+- Camera orientation defaults to **Auto**. The preview and encoded overlay frame follow portrait or
+	landscape device rotation before recording; orientation is held steady for the duration of a clip.
+	Choose Portrait or Landscape in Camera settings to lock a preferred format.
+- Open **Camera settings > Adjust overlay framing in preview** to see and tune the composited result
+	before recording. The default overlay scale is 60%. Adjust size, rotation (Auto/0/90/180/270) and
+	position; the preview shows the selected video resolution and orientation. Overlay geometry is
+	calculated from the supported camera/encoder preset and rotated frame dimensions.
+- Zoom and Video/RAW selection are inside the **Camera controls** panel, keeping the default preview
+	clear. Zoom follows the drag continuously with coalesced native updates; it is not applied only
+	after releasing the slider.
+- Select **Use scoring tournament** or enter the tournament/sport and choose **Follow on-air match**.
+	The Camera selection is saved independently. Its scoreboard and existing sport animations follow
+	the active/on-air match automatically; starting a recording never starts or resets a match.
+- Setup downloads the web overlay asset package once. The download button resyncs changed assets;
+	verified files already on the phone are reused. Static scripts/styles/images/fonts and packaged
+	animation media are served from persistent app storage, not downloaded for each recording/frame.
+	Live scores, match selection, tenant checks and animation events still require network access.
+	Arbitrary third-party web pages and remote media are not automatically made fully offline.
+- Custom overlays use an HTTPS overlay URL and a same-origin asset manifest URL. The JSON format is
+	`{version:1,id,revision,entry,files:[{path,sha256,bytes,mime}]}`; `revision` and file `sha256` are
+	lowercase SHA-256 hex, `entry`/`path` are absolute URL paths, and all declared files are immutable
+	public HTTPS resources on the manifest origin, without redirects or credentials. Include every
+	required script, font, image and animation clip. The generated web package is published as
+	`/camera-overlay-manifest.json`. Packages activate only after every file verifies; failed sync
+	retains the previous package. Limits: 512 files, 64 MB/file, 192 MB/package, four packages.
+- Pro controls show only probed camera capabilities: exposure compensation, ISO/shutter manual
+	exposure, focus distance and supported white-balance presets. Shutter choices respect video FPS.
+- **RAW** is a separate, supported-camera-only DNG still-photo mode, not RAW video or Apple ProRAW.
+	It temporarily opens a dedicated sensor capture session and restores video preview afterward.
+	DNG contains unprocessed sensor data and does **not** contain burned-in overlays. Use Video for
+	recorded scoreboard/animation graphics. RAW is unavailable during video recording/streaming.
+- Stop finalizes the MP4 and saves it automatically to Android Gallery under `Movies/NJSLiveStudio`;
+	RAW photos go under `Pictures/NJSLiveStudio`. Android 7-9 asks for legacy storage permission.
+	Modern Android uses scoped MediaStore storage. A failed save keeps the private original for retry;
+	reopening Camera offers interrupted private files again. Unfinalized MP4s cannot be repaired by
+	copying them. Explicit discard removes an unsavable private file; success removes the private
+	duplicate after Gallery publication. Neither flow silently claims an invalid file was saved.
+
+Unit/render tests, TypeScript and Android release lint do not certify real camera media. Validate
+pause/resume playback, Gallery indexing, RAW metadata/quality, preview recovery, overlays, storage
+failure, background interruptions, thermal behavior and 4K/frame rate on the target physical phone.
+
 ### Version 1.3.0: simple scoring and Host/Connector streaming
 
 - **Scoring > Score** now shows **Live matches** with **Resume scoring**, as well as scheduled

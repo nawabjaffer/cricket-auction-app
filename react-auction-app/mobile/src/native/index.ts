@@ -35,6 +35,7 @@ export interface EngineConfig {
   };
   overlayFps: number;
   overlayHardware: boolean;
+  autoOrientation?: boolean;
 }
 
 export interface EngineDestination {
@@ -54,6 +55,10 @@ export interface OverlaySpec {
   opacity: number;
   pageWidth: number;
   pageHeight: number;
+  rotation: number;
+  scalePct: number;
+  offsetXPct: number;
+  offsetYPct: number;
 }
 
 export interface CameraCapability {
@@ -64,6 +69,12 @@ export interface CameraCapability {
   logicalMulti: boolean;
   physicalIds: string[];
   stabilization: string[];
+  raw?: boolean;
+  manualSensor?: boolean;
+  iso?: { min: number; max: number };
+  exposureNs?: { min: number; max: number };
+  focusDiopters?: number;
+  whiteBalanceModes?: number[];
   /** Output sizes the camera can feed the encoder, with the highest frame rate each supports. */
   sizes: Array<{ w: number; h: number; maxFps: number }>;
 }
@@ -95,6 +106,7 @@ export interface EngineStats {
   torch: boolean;
   muted: boolean;
   recording: boolean;
+  recordingPaused?: boolean;
   destinations: Array<{ id: string; kbps: number; dropped: number; state: DestinationState }>;
   clients: number;
 }
@@ -111,6 +123,16 @@ interface StudioEngineNative {
   stopCameraServer(): Promise<void>;
   startRecording(name: string): Promise<string>;
   stopRecording(): Promise<void>;
+  pauseRecording(): Promise<void>;
+  resumeRecording(): Promise<void>;
+  finishCameraRecording(): Promise<string>;
+  captureRawStill(): Promise<string>;
+  saveRecordingToGallery(path: string): Promise<string>;
+  getPendingCameraMedia(): Promise<string[]>;
+  discardCameraMedia(path: string): Promise<void>;
+  openGalleryItem(uri: string): Promise<void>;
+  syncOverlayAssets(url: string): Promise<string>;
+  clearOverlayAssets(): Promise<void>;
   setVideoBitrate(bitrateBps: number): Promise<void>;
   requestKeyframe(): Promise<void>;
   switchCamera(): Promise<void>;
@@ -118,6 +140,7 @@ interface StudioEngineNative {
   setZoom(level: number): Promise<void>;
   setTorch(enabled: boolean): Promise<boolean>;
   setExposure(level: number): Promise<void>;
+  setCameraProControls(json: string): Promise<void>;
   setExposureLock(locked: boolean): Promise<void>;
   setAutoFocus(enabled: boolean): Promise<void>;
   setStabilization(enabled: boolean): Promise<void>;
@@ -259,7 +282,7 @@ export interface StudioEventMap {
   'studio.stats': EngineStats;
   'studio.error': { code: string; message: string; fatal: boolean };
   'studio.source': { source: 'local' | 'peer'; url?: string; state: 'ok' | 'failed'; reason?: string };
-  'studio.record': { state: 'started' | 'stopped' | 'error'; path?: string; message?: string };
+  'studio.record': { state: 'started' | 'stopped' | 'paused' | 'resumed' | 'error'; path?: string; message?: string };
   'studio.remoteKey': RemoteKeyEvent;
   'studio.bluetooth': { type: 'acl' | 'scan' | 'audio'; [key: string]: unknown };
   'studio.network': NetworkSnapshot;

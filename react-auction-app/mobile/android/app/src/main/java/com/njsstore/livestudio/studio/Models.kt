@@ -20,13 +20,14 @@ data class VideoConfig(
 
 data class AudioConfig(val sampleRate: Int, val stereo: Boolean, val bitrateBps: Int, val echoCanceler: Boolean, val noiseSuppressor: Boolean)
 
-data class EngineConfig(val video: VideoConfig, val audio: AudioConfig, val overlayFps: Int, val overlayHardware: Boolean)
+data class EngineConfig(val video: VideoConfig, val audio: AudioConfig, val overlayFps: Int, val overlayHardware: Boolean, val autoOrientation: Boolean)
 
 data class DestinationSpec(val id: String, val protocol: String, val url: String)
 
 data class OverlaySpec(
     val id: String, val kind: String, val url: String, val enabled: Boolean, val anchor: String,
     val widthPct: Float, val opacity: Float, val pageWidth: Int, val pageHeight: Int,
+    val rotation: Int = 0, val scalePct: Float = 100f, val offsetXPct: Float = 0f, val offsetYPct: Float = 0f,
 )
 
 object Models {
@@ -78,7 +79,7 @@ object Models {
                 echoCanceler = audio.optBoolean("echoCanceler", false), noiseSuppressor = audio.optBoolean("noiseSuppressor", false),
             ),
             overlayFps = root.optInt("overlayFps", 15).coerceIn(1, 30),
-            overlayHardware = root.optBoolean("overlayHardware", false),
+            overlayHardware = root.optBoolean("overlayHardware", false), autoOrientation = root.optBoolean("autoOrientation", false),
         )
     }
 
@@ -121,6 +122,10 @@ object Models {
                 opacity = item.optDouble("opacity", 1.0).toFloat().coerceIn(0f, 1f),
                 pageWidth = item.optInt("pageWidth", 1920).coerceIn(160, 3840),
                 pageHeight = item.optInt("pageHeight", 1080).coerceIn(90, 2160),
+                rotation = item.optInt("rotation", 0).let { if (it in setOf(0, 90, 180, 270)) it else 0 },
+                scalePct = item.optDouble("scalePct", 100.0).toFloat().coerceIn(10f, 100f),
+                offsetXPct = item.optDouble("offsetXPct", 0.0).toFloat().coerceIn(-50f, 50f),
+                offsetYPct = item.optDouble("offsetYPct", 0.0).toFloat().coerceIn(-50f, 50f),
             )
         }
         return result

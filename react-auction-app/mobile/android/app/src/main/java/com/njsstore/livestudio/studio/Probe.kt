@@ -79,6 +79,12 @@ object Probe {
                     put("physicalIds", physical)
                     put("stabilization", stabilization)
                     put("sizes", sizes)
+                    put("raw", capabilities.contains(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES_RAW) && map.getOutputSizes(android.graphics.ImageFormat.RAW_SENSOR)?.isNotEmpty() == true)
+                    put("manualSensor", capabilities.contains(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES_MANUAL_SENSOR))
+                    c.get(CameraCharacteristics.SENSOR_INFO_SENSITIVITY_RANGE)?.let { range -> put("iso", JSONObject().put("min", range.lower).put("max", range.upper)) }
+                    c.get(CameraCharacteristics.SENSOR_INFO_EXPOSURE_TIME_RANGE)?.let { range -> put("exposureNs", JSONObject().put("min", range.lower).put("max", range.upper)) }
+                    put("focusDiopters", (c.get(CameraCharacteristics.LENS_INFO_MINIMUM_FOCUS_DISTANCE) ?: 0f).toDouble())
+                    put("whiteBalanceModes", JSONArray(c.get(CameraCharacteristics.CONTROL_AWB_AVAILABLE_MODES)?.toList().orEmpty()))
                 })
             } catch (_: Exception) {
                 // A camera that cannot be queried (in use, restricted) is simply not offered.

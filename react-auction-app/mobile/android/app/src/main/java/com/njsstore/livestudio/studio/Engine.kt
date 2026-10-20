@@ -79,6 +79,10 @@ object Engine {
     private var needsPrepare = false
     private var peerSource: PeerRtspVideoSource? = null
     private var recordingPath: String? = null
+    private var recordingPaused = false
+    private var proControls = "{}"
+    @Volatile private var recordStatus: RecordController.Status? = null
+    private var capturingRaw = false
     private var muted = false
     private var micVolume = 1f
     private var preferredAudioDevice: AudioDeviceInfo? = null
@@ -116,14 +120,16 @@ object Engine {
     private fun hasSession() = destinations.isNotEmpty() || stream?.hasServer() == true
 
     fun prepare(json: String, requestedMode: String) {
+        if (capturingRaw) throw StudioException("busy", "Wait for the RAW photo to finish")
         val cfg = Models.parseConfig(json)
         if (requestedMode != "studio" && requestedMode != "camera") throw StudioException("invalid_argument", "Unknown mode: $requestedMode")
-        if (hasSession()) throw StudioException("busy", "Stop the live stream before changing the video settings.")
+        if (hasSession() || stream?.isRecording == true) throw StudioException("busy", "Stop the stream or recording before changing the video settings.")
         requirePermissions()
         teardown()
+        proControls = "{}"
         setState("idle", "none", null)
 
-        lockOrientation(cfg.video.rotation)
+        lockOrientation(cfg.video.rotation, cfg.autoOrientation)
         val camera = Camera2Source(app)
         if (cfg.video.facing == "front") camera.switchCamera()
         val microphone = MicrophoneSource()
@@ -168,7 +174,10 @@ object Engine {
         overlayFps = cfg.overlayFps
         overlayHardware = cfg.overlayHardware
         abr = AdaptiveBitrate(cfg.video.bitrateBps, cfg.video.minBitrateBps) { bps -> stream?.setVideoBitrateOnFly(bps) }
-        Threads.onMain { overlays.configure(cfg.video.frameWidth, cfg.video.frameHeight, overlayFps, overlayHardware) }
+        Threads.onMain {
+            overlays.configure(cfg.video.frameWidth, cfg.video.frameHeight, overlayFps, overlayHardware)
+            overlays.setSpecs(overlaySpecs)
+        }
         registerDisplayListener()
         setState("prepared", mode, null)
         startPreviewIfPossible()
@@ -181,7 +190,8 @@ object Engine {
         prepare(json, currentMode)
     }
 
-    fun release() {
+    fun release(force: Boolean = false) {
+        if (!force && (stream?.isRecording == true || capturingRaw || hasSession())) throw StudioException("busy", "Stop recording or streaming before releasing the camera")
         teardown()
         setState("idle", "none", null)
     }
@@ -203,6 +213,8 @@ object Engine {
         destinations.clear()
         everLive = false
         recordingPath = null
+        recordingPaused = false
+        recordStatus = null
         needsPrepare = false
         serverBytes = 0
         serverKbps = 0
@@ -227,8 +239,12 @@ object Engine {
     // ── Orientation: the screen follows the stream so the preview is upright ─
 
     @Suppress("DEPRECATION")
-    private fun lockOrientation(rotation: Int) {
+    private fun lockOrientation(rotation: Int, automatic: Boolean = false) {
         val activity = ActivityHolder.activity ?: return
+        if (automatic) {
+            Threads.onMain { activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR }
+            return
+        }
         val wanted = if (rotation == 90) ActivityInfo.SCREEN_ORIENTATION_PORTRAIT else ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
         Threads.onMain { activity.requestedOrientation = wanted }
         val deadline = System.currentTimeMillis() + 1_500
@@ -349,6 +365,10 @@ object Engine {
         setPreviewFill(previewFill)
         applyStabilization()
         rebindOverlays()
+        val expectedCamera = cameraRef
+        handler.postDelayed({
+            if (cameraRef === expectedCamera && expectedCamera?.isRunning() == true && proControls != "{}") runCatching { setCameraProControls(proControls) }
+        }, 800)
     }
 
     // ── Streaming (RTMP / RTMPS / SRT) ───────────────────────────────────────
@@ -483,17 +503,22 @@ object Engine {
     // ── Recording ────────────────────────────────────────────────────────────
 
     fun startRecording(name: String): String {
+        if (needsPrepare) reprepare()
         val current = stream ?: throw StudioException("not_prepared", "The camera is not ready")
         if (current.isRecording) throw StudioException("busy", "Already recording")
+        if (config?.autoOrientation == true) lockOrientation(config!!.video.rotation)
         val dir = File(app.getExternalFilesDir(Environment.DIRECTORY_MOVIES), "NJSLiveStudio").apply { mkdirs() }
         val safe = name.replace(Regex("[^A-Za-z0-9 _-]"), "").trim().replace(' ', '_').take(40).ifEmpty { "recording" }
-        val file = File(dir, "${safe}_${SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())}.mp4")
+        val file = File(dir, "${safe}_${SimpleDateFormat("yyyyMMdd_HHmmss_SSS", Locale.US).format(Date())}.mp4")
         val path = file.absolutePath
         current.startRecord(path, listener = object : RecordController.Listener {
             override fun onStatusChange(status: RecordController.Status) {
+                recordStatus = status
                 when (status) {
                     RecordController.Status.STARTED -> Events.emit("studio.record") { putString("state", "started"); putString("path", path) }
                     RecordController.Status.STOPPED -> Events.emit("studio.record") { putString("state", "stopped"); putString("path", path) }
+                    RecordController.Status.PAUSED -> Events.emit("studio.record") { putString("state", "paused"); putString("path", path) }
+                    RecordController.Status.RESUMED -> Events.emit("studio.record") { putString("state", "resumed"); putString("path", path) }
                     else -> Unit
                 }
             }
@@ -503,6 +528,8 @@ object Engine {
             }
         })
         recordingPath = path
+        recordingPaused = false
+        StudioService.start(app, "Recording video", "Your clip is being recorded on this phone")
         afterGlStarted()
         return path
     }
@@ -513,6 +540,51 @@ object Engine {
         if (!current.stopRecord()) needsPrepare = true
         recordingPath = null
         if (!current.hasSinks() && !current.hasServer()) StudioService.stop(app)
+        config?.takeIf { it.autoOrientation }?.let { lockOrientation(it.video.rotation, automatic = true) }
+    }
+
+    fun pauseRecording() {
+        val current = stream ?: throw StudioException("not_prepared", "The camera is not ready")
+        if (!current.isRecording || recordingPaused) return
+        require(recordStatus == RecordController.Status.RECORDING) { "The recording is starting. Try pausing again in a moment." }
+        current.pauseRecord()
+        recordingPaused = true
+    }
+
+    fun resumeRecording() {
+        val current = stream ?: throw StudioException("not_prepared", "The camera is not ready")
+        if (!current.isRecording || !recordingPaused) return
+        current.resumeRecord()
+        recordingPaused = false
+    }
+
+    fun captureRawStill(result: (Result<String>) -> Unit) {
+        if (hasSession() || stream?.isRecording == true || capturingRaw) throw StudioException("busy", "RAW photos are available only when video recording and streaming are stopped")
+        val camera = requireCamera()
+        val id = camera.getCurrentCameraId() ?: throw StudioException("camera", "The camera is not ready")
+        val json = configJson ?: throw StudioException("camera", "The camera is not prepared")
+        val previousMode = mode
+        val controls = proControls
+        @Suppress("DEPRECATION")
+        val rotation = Threads.onMain { ActivityHolder.activity?.windowManager?.defaultDisplay?.rotation ?: Surface.ROTATION_0 }
+        val degrees = when (rotation) { Surface.ROTATION_90 -> 90; Surface.ROTATION_180 -> 180; Surface.ROTATION_270 -> 270; else -> 0 }
+        teardown()
+        capturingRaw = true
+        fun restore(outcome: Result<String>) {
+            capturingRaw = false
+            runCatching { prepare(json, previousMode); proControls = controls }.onFailure { emitError("camera", "RAW capture finished, but preview recovery failed: ${it.message}", false) }
+            result(outcome)
+        }
+        try {
+            RawStill(app, handler).capture(id, controls, degrees) { outcome -> restore(outcome.map { it.absolutePath }) }
+        } catch (error: Exception) { restore(Result.failure(error)) }
+    }
+
+    fun finishCameraRecording(): String {
+        val path = recordingPath ?: throw StudioException("recording", "No recording is available to save")
+        stopRecording()
+        recordingPaused = false
+        return path
     }
 
     // ── Camera controls ──────────────────────────────────────────────────────
@@ -584,6 +656,16 @@ object Engine {
     }
 
     fun setExposure(level: Int) { requireCamera().setExposure(level) }
+
+    fun setCameraProControls(json: String) {
+        val camera = requireCamera()
+        val manager = app.getSystemService(Context.CAMERA_SERVICE) as CameraManager
+        val characteristics = manager.getCameraCharacteristics(camera.getCurrentCameraId() ?: throw StudioException("camera", "Camera is not ready"))
+        val controls = org.json.JSONObject(json)
+        val fps = config?.video?.fps ?: 30
+        require(camera.setCustomRequest { builder -> CameraPro.apply(builder, controls, characteristics, 1_000_000_000L / fps) }) { "Camera controls are not ready" }
+        proControls = json
+    }
 
     fun exposureRange(): Triple<Int, Int, Double> {
         val cam = cameraRef ?: return Triple(0, 0, 1.0)
@@ -824,6 +906,7 @@ object Engine {
             putBoolean("torch", running && cam?.isLanternEnabled() == true)
             putBoolean("muted", muted)
             putBoolean("recording", current.isRecording)
+            putBoolean("recordingPaused", recordingPaused)
             putArray("destinations", list)
             putInt("clients", clients)
         }

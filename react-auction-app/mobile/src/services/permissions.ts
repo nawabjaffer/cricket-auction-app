@@ -30,6 +30,11 @@ export async function hasMediaPermissions(): Promise<boolean> {
   return checks.every(Boolean);
 }
 
+export async function requestGalleryPermission(): Promise<boolean> {
+  if (Platform.OS !== 'android' || Number(Platform.Version) >= 29) return true;
+  return (await request([PermissionsAndroid.PERMISSIONS.WRITE_EXTERNAL_STORAGE])).granted;
+}
+
 /** Android 12+ runtime Bluetooth permissions; older versions need location only for BLE scanning. */
 export async function requestBluetoothPermissions(): Promise<boolean> {
   if (Platform.OS !== 'android') return false;

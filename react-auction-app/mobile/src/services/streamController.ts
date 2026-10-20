@@ -20,6 +20,9 @@ import { requestMediaPermissions } from './permissions';
 import { log, redactEndpoint } from './logger';
 import { useSettings, type SettingsData } from '../store/settingsStore';
 import { isLiveState, useStudio } from '../store/studioStore';
+import { useCamera } from '../store/cameraStore';
+import { recordingBusy } from '../shared/cameraRecording';
+import { useNav } from '../store/navStore';
 import {
   defaultStudioProfile, resolveStudioTitle, STUDIO_GAME_LABELS,
   type StudioContext, type StudioWidget,
@@ -113,6 +116,7 @@ export function prepareStudio(force = false): Promise<boolean> {
 
 async function prepareStudioOnce(force: boolean): Promise<boolean> {
   try {
+    if (recordingBusy(useCamera.getState().session) || useNav.getState().workspace === 'recording') return false;
     const studio = useStudio.getState();
     if (studio.engineState === 'live' || studio.engineState === 'connecting' || studio.engineState === 'reconnecting') return true;
     if (studio.cameraServerUrl) {
@@ -146,13 +150,14 @@ async function prepareStudioOnce(force: boolean): Promise<boolean> {
 export function releaseEngine(): Promise<void> {
   return queueEngineTask(async () => {
     const current = useStudio.getState();
-    if (current.cameraServerUrl || current.engineMode === 'camera' || isLiveState(current.engineState)) return;
+    if (current.cameraServerUrl || current.engineMode === 'camera' || isLiveState(current.engineState) || current.stats?.recording || recordingBusy(useCamera.getState().session) || useNav.getState().workspace === 'recording') return;
     try { await StudioEngine.release(); } catch (error) { log.warn('engine', message(error)); }
     useStudio.getState().patch({ preparedSignature: null, engineState: 'idle', engineMode: 'none', stats: null });
   });
 }
 
 export async function applyOverlays(strict = false): Promise<void> {
+  if (useNav.getState().workspace === 'recording' || recordingBusy(useCamera.getState().session)) return;
   const settings = useSettings.getState();
   const context = studioContext() ?? { origin: settings.origin, tenantId: '', slug: '', game: 'cricket' as const };
   const specs = settings.overlaysEnabled ? buildOverlaySpecs(allWidgets(), settings.overlayHidden, context) : [];
@@ -264,6 +269,7 @@ export function bindEngineEvents(): () => void {
     onStudioEvent('studio.state', event => {
       patch({ engineState: event.state, engineMode: event.mode, engineMessage: event.message });
       if (event.state === 'idle' || event.state === 'error') patch({ stats: null });
+      if (event.state === 'error' && useNav.getState().workspace === 'recording') useCamera.getState().patch({ ready: false, error: event.message ?? 'Camera stopped unexpectedly' });
     }),
     onStudioEvent('studio.destination', event => {
       useStudio.getState().setDestination(event.id, { state: event.state, reason: event.reason, attempt: event.attempt });
@@ -272,8 +278,13 @@ export function bindEngineEvents(): () => void {
     onStudioEvent('studio.error', event => {
       log.error('engine', `${event.code}: ${event.message}`);
       patch({ error: event.message });
+      if (useNav.getState().workspace === 'recording') useCamera.getState().patch({ error: event.message });
     }),
     onStudioEvent('studio.record', event => {
+      if (useNav.getState().workspace === 'recording') {
+        if (event.state === 'error') useCamera.getState().patch({ error: `Recording problem: ${event.message ?? 'unknown'}` });
+        return;
+      }
       if (event.state === 'error') patch({ notice: `Recording problem: ${event.message ?? 'unknown'}` });
       if (event.state === 'stopped' && event.path) patch({ notice: `Recording saved: ${event.path}` });
     }),

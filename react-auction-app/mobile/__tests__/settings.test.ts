@@ -152,6 +152,17 @@ describe('scene settings', () => {
     useSettings.setState(useSettings.getInitialState());
   });
 
+  it('migrates the old default portrait setting to auto and preserves an explicit orientation choice', async () => {
+    useSettings.setState(useSettings.getInitialState());
+    jest.mocked(StudioSecure.getItem).mockReset().mockResolvedValueOnce(JSON.stringify({ camera: { orientation: 'portrait' } }));
+    await useSettings.getState().hydrate();
+    expect(useSettings.getState().camera).toMatchObject({ orientation: 'auto', orientationConfigured: true });
+    jest.mocked(StudioSecure.getItem).mockResolvedValueOnce(JSON.stringify({ camera: { orientation: 'portrait', orientationConfigured: true } }));
+    await useSettings.getState().hydrate();
+    expect(useSettings.getState().camera).toMatchObject({ orientation: 'portrait', orientationConfigured: true });
+    useSettings.setState(useSettings.getInitialState());
+  });
+
   it('persists scoring selection independently and ignores malformed workspace data', async () => {
     useSettings.setState(useSettings.getInitialState());
     const pairing = { tenantId: 'stream_tenant', slug: 'streaming-league', game: 'cricket' };

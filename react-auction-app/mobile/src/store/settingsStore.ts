@@ -11,6 +11,7 @@ import { log } from '../services/logger';
 import type { LocalOverrides } from '../services/effectiveConfig';
 import { defaultScenes, normalizeScenes, type StudioScene } from '../shared/scenes';
 import { normalizeScoringWorkspace } from '../shared/scoringWorkspace';
+import { DEFAULT_CAMERA_SETTINGS, type CameraRecordingSettings } from '../shared/cameraRecording';
 import {
   MAX_STUDIO_DESTINATIONS, STUDIO_PLATFORM_PRESETS,
   type StudioDestination, type StudioGameType, type StudioPairing, type StudioPlatform, type StudioWidget,
@@ -72,6 +73,7 @@ export interface SettingsData {
   origin: string;
   pairing: Pairing | null;
   scoringWorkspace: StudioPairing | null;
+  camera: CameraRecordingSettings;
   deviceId: string;
   deviceName: string;
   role: 'studio' | 'camera';
@@ -113,6 +115,7 @@ export function defaultSettings(): SettingsData {
     origin: DEFAULT_ORIGIN,
     pairing: null,
     scoringWorkspace: null,
+    camera: { ...DEFAULT_CAMERA_SETTINGS },
     deviceId: randomId(),
     deviceName: 'Phone',
     role: 'studio',
@@ -197,6 +200,15 @@ export const useSettings = create<SettingsData & SettingsActions>((set, get) => 
         scenes,
         activeSceneId: scenes.some(scene => scene.id === stored?.activeSceneId) ? stored!.activeSceneId! : scenes[0].id,
         scoringWorkspace: normalizeScoringWorkspace(stored?.scoringWorkspace),
+        camera: {
+          ...DEFAULT_CAMERA_SETTINGS,
+          ...stored?.camera,
+          orientation: stored?.camera?.orientationConfigured
+            ? stored.camera.orientation
+            : stored?.camera?.orientation === 'landscape' ? 'landscape' : 'auto',
+          orientationConfigured: true,
+          workspace: normalizeScoringWorkspace(stored?.camera?.workspace),
+        },
         hydrated: true,
       });
       if (!stored) persist();
