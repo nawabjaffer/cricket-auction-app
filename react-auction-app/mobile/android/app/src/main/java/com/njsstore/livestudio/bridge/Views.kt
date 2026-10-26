@@ -21,6 +21,7 @@ import com.facebook.react.uimanager.SimpleViewManager
 import com.facebook.react.uimanager.ThemedReactContext
 import com.facebook.react.uimanager.annotations.ReactProp
 import com.njsstore.livestudio.studio.Engine
+import com.njsstore.livestudio.studio.PeerMedia
 
 /** The encoder's own GL output (overlays included): what you see is what is streamed. */
 class StudioPreviewView(context: Context) : SurfaceView(context), SurfaceHolder.Callback {
@@ -79,7 +80,7 @@ class PeerPreviewView(context: Context) : FrameLayout(context) {
     fun refresh() {
         stop()
         val address = url
-        if (!active || address.isNullOrBlank() || !address.startsWith("rtsp://", true) || address.length > 300) return
+        if (!active || address.isNullOrBlank() || !PeerMedia.valid(address)) return
         val exo = ExoPlayer.Builder(context)
             .setLoadControl(DefaultLoadControl.Builder().setBufferDurationsMs(300, 1000, 150, 300).build())
             .build()
@@ -92,7 +93,7 @@ class PeerPreviewView(context: Context) : FrameLayout(context) {
             override fun onPlayerError(error: PlaybackException) = scheduleRetry()
         })
         exo.setMediaSource(
-            RtspMediaSource.Factory().setForceUseRtpTcp(true).setTimeoutMs(8_000).createMediaSource(MediaItem.fromUri(address)),
+            PeerMedia.source(address),
         )
         exo.prepare()
         exo.playWhenReady = true

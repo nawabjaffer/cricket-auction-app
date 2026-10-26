@@ -62,5 +62,12 @@
         android:name=".studio.StudioService"
         android:exported="false"
         android:foregroundServiceType="camera|microphone" />
+      <provider
+        android:name="androidx.core.content.FileProvider"
+        android:authorities="${applicationId}.apkshare"
+        android:exported="false"
+        android:grantUriPermissions="true">
+        <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/apk_share_paths" />
+      </provider>
     </application>
 </manifest>

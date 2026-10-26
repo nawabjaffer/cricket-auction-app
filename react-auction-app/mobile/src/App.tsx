@@ -19,7 +19,7 @@ import { bindRemoteKeys } from './services/remoteKeys';
 import { bindEngineEvents, effectiveMatchId } from './services/streamController';
 import { startDeviceHealth, startTournamentSync } from './services/sync';
 import { log } from './services/logger';
-import { STUDIO_GAME_LABELS, isValidRtspUrl } from './shared/studioProfile';
+import { STUDIO_GAME_LABELS, isValidCameraSourceUrl } from './shared/studioProfile';
 import { useNav, type Tab } from './store/navStore';
 import { useSettings } from './store/settingsStore';
 import { isLiveState, useStudio } from './store/studioStore';
@@ -141,7 +141,7 @@ function Shell() {
       confirmPairing(incoming.origin, incoming.slug, STUDIO_GAME_LABELS[incoming.game], () => {
         applyPairing(incoming).then(() => setTab('studio')).catch(error => Alert.alert('Could not pair', error instanceof Error ? error.message : String(error)));
       });
-    } else if (link.kind === 'camera' && isValidRtspUrl(link.camera.url)) {
+    } else if (link.kind === 'camera' && isValidCameraSourceUrl(link.camera.url)) {
       if (useStudio.getState().cameraServerUrl) {
         Alert.alert('Connector is running', 'Stop this connector before using it as a host for another camera.');
         return;

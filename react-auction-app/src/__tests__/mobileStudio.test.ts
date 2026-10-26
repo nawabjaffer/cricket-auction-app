@@ -13,7 +13,27 @@ import ReleaseCard from '../components/MobileStudio/ReleaseCard';
 import { MAX_WORKSPACE_EXPORT_BYTES, scoringBrowserScript } from '../../mobile/src/services/scoringBrowser';
 import { DEFAULT_MOBILE_SCORING_OPTIONS, mobileScoringOptionsPath, mobileScoringPageVisible, mobileScoringTabVisible, normalizeMobileScoringOptions } from '../../mobile/src/shared/mobileScoring';
 import ScoringOptionsCard from '../components/MobileStudio/ScoringOptionsCard';
+import { DEFAULT_MOBILE_HIGHLIGHTS, highlightStoragePath, mobileHighlightOptionsPath, mobileHighlightsPath, normalizeMobileHighlights, parseBoundaryReplayTrigger } from '../../mobile/src/shared/mobileHighlights';
 import { mobileStudioService } from '../services/mobileStudioService';
+
+describe('mobile boundary highlight policy', () => {
+  it('accepts fresh scored boundaries but rejects replayed history, future events and wickets', () => {
+    expect(parseBoundaryReplayTrigger({ id: 'ball_1', type: 'four', timestamp: 19000 }, 10000, 20000)).toEqual({ id: 'ball_1', boundary: 4, timestamp: 19000 });
+    expect(parseBoundaryReplayTrigger({ id: 'ball_1', type: 'six', timestamp: 5000 }, 10000, 20000)).toBeNull();
+    expect(parseBoundaryReplayTrigger({ id: 'ball_1', type: 'wicket', timestamp: 19000 }, 10000, 20000)).toBeNull();
+    expect(parseBoundaryReplayTrigger({ id: 'ball_1', type: 'six', timestamp: 30000 }, 10000, 20000)).toBeNull();
+  });
+  it('is opt-in, clamps replay/storage limits and rejects unsafe paths', () => {
+    expect(normalizeMobileHighlights(null)).toEqual(DEFAULT_MOBILE_HIGHLIGHTS);
+    expect(normalizeMobileHighlights({ enabled: true, seconds: 1000, upload: 'true', maxClipsPerMatch: 0 }))
+      .toEqual({ enabled: true, seconds: 60, upload: false, maxClipsPerMatch: 1 });
+    expect(normalizeMobileHighlights({ seconds: NaN }).seconds).toBe(12);
+    expect(mobileHighlightOptionsPath('tenant_1')).toBe('tenants/tenant_1/mobileStudio/cricket/highlightOptions');
+    expect(mobileHighlightsPath('tenant_1', 'match_1')).toBe('tenants/tenant_1/scoring/matches/match_1/mobileHighlights');
+    expect(highlightStoragePath('tenant_1', 'match_1', 'phone_1', 'ball_1')).toBe('tenants/tenant_1/highlights/match_1/phone_1/ball_1.mp4');
+    expect(() => highlightStoragePath('tenant_1', '../other', 'phone_1', 'ball_1')).toThrow();
+  });
+});
 import { DEFAULT_TENANT_ID, tenantPath } from '../services/tenantPath';
 import {
   DEFAULT_OVERLAY_URL_TEMPLATE, MAX_STUDIO_DESTINATIONS, MAX_STUDIO_WIDGETS, STUDIO_DEVICE_STALE_MS, STUDIO_PLATFORM_PRESETS,
@@ -32,6 +52,7 @@ vi.mock('../hooks/useAdminAuth', () => ({ useAdminAuth: () => ({ isAuthenticated
 describe('admin mobile scoring controls', () => {
   afterEach(() => { cleanup(); vi.restoreAllMocks(); mobileAdmin.allowed = true; });
   it('saves optional features from the admin control card', async () => {
+    vi.spyOn(mobileStudioService, 'subscribeHighlightOptions').mockImplementation(callback => { callback({ ...DEFAULT_MOBILE_HIGHLIGHTS }); return () => undefined; });
     vi.spyOn(mobileStudioService, 'subscribeScoringOptions').mockImplementation((_game, callback) => { callback({ ...DEFAULT_MOBILE_SCORING_OPTIONS }); return () => undefined; });
     const save = vi.spyOn(mobileStudioService, 'saveScoringOptions').mockResolvedValue(undefined);
     render(createElement(ScoringOptionsCard, { gameType: 'cricket' }));
@@ -39,6 +60,16 @@ describe('admin mobile scoring controls', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save mobile options' }));
     await waitFor(() => expect(save).toHaveBeenCalledWith('cricket', expect.objectContaining({ broadcast: true, tournamentAdmin: false })));
     expect(await screen.findByText('Mobile scoring options saved.')).toBeTruthy();
+  });
+  it('lets scorer admin configure opt-in boundary replay seconds and upload policy', async () => {
+    vi.spyOn(mobileStudioService, 'subscribeScoringOptions').mockImplementation((_game, callback) => { callback({ ...DEFAULT_MOBILE_SCORING_OPTIONS }); return () => undefined; });
+    vi.spyOn(mobileStudioService, 'subscribeHighlightOptions').mockImplementation(callback => { callback({ ...DEFAULT_MOBILE_HIGHLIGHTS }); return () => undefined; });
+    const save = vi.spyOn(mobileStudioService, 'saveHighlightOptions').mockResolvedValue(undefined);
+    render(createElement(ScoringOptionsCard, { gameType: 'cricket' }));
+    fireEvent.click(screen.getByLabelText('Save boundary highlights'));
+    fireEvent.change(screen.getByLabelText('Seconds before boundary'), { target: { value: '20' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save highlight settings' }));
+    await waitFor(() => expect(save).toHaveBeenCalledWith({ enabled: true, seconds: 20, upload: false, maxClipsPerMatch: 40 }));
   });
   it('does not expose admin controls to an unsigned-in visitor', () => {
     mobileAdmin.allowed = false;

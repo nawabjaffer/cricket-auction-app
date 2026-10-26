@@ -62,10 +62,7 @@ class PeerRtspVideoSource(
                 if (state == Player.STATE_ENDED) fail("The camera ended the stream")
             }
         })
-        val source = RtspMediaSource.Factory()
-            .setForceUseRtpTcp(true)
-            .setTimeoutMs(8_000)
-            .createMediaSource(MediaItem.fromUri(url))
+        val source = PeerMedia.source(url)
         exo.setMediaSource(source)
         exo.prepare()
         exo.playWhenReady = true

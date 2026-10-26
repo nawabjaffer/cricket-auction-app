@@ -145,6 +145,11 @@ try {
   await rm(staging, { recursive: true, force: true });
 }
 
+const retained = new Set([apkName, previous?.file].filter(Boolean));
+for (const name of await readdir(outDir)) {
+  if (/^njs-live-studio-\d+-[a-f0-9]{64}\.apk$/.test(name) && !retained.has(name)) await rm(join(outDir, name));
+}
+
 console.info(`\n✔ Published NJS Live Studio ${versionName} (build ${versionCode}, ${channel} channel)`);
 console.info(`  file      ${outDir}/${apkName}  (${(size / 1024 / 1024).toFixed(1)} MB)`);
 console.info(`  sha-256   ${digest}`);

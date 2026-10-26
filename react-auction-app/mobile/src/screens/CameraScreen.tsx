@@ -17,6 +17,7 @@ import { Banner, Btn, Field, IconButton, Row, Segmented, Slider, ToggleRow } fro
 import { OverlayFramingPanel } from '../ui/OverlayFramingPanel';
 import { orientedFrameDimensions } from '../shared/overlayFraming';
 import { colors } from '../ui/theme';
+import { retryCameraHighlights } from '../services/cameraHighlights';
 
 const elapsed = (ms: number) => {
   const seconds = Math.floor(ms / 1000);
@@ -28,6 +29,8 @@ function CameraSettings({ close, onOverlaySetup, run }: Readonly<{ close: () => 
   const camera = useSettings(state => state.camera);
   const capabilities = useStudio(state => state.capabilities);
   const busy = useCamera(state => state.busy);
+  const highlightOptions = useCamera(state => state.highlightOptions);
+  const pendingHighlights = useCamera(state => state.pendingHighlightUploads);
   const [slug, setSlug] = useState(camera.workspace?.slug ?? '');
   const [game, setGame] = useState<StudioGameType>(camera.workspace?.game ?? 'cricket');
   const [origin, setOrigin] = useState(camera.workspace?.origin ?? useSettings.getState().origin);
@@ -57,6 +60,12 @@ function CameraSettings({ close, onOverlaySetup, run }: Readonly<{ close: () => 
       <ToggleRow label="Grid" value={camera.grid} onChange={grid => update({ grid })} />
       <ToggleRow label="Microphone" value={!camera.muted} onChange={enabled => update({ muted: !enabled })} />
       <Text style={s.label}>Scoreboard and animations</Text>
+      {camera.workspace?.game === 'cricket' && <>
+        <Text style={s.caption}>Scorer highlight policy: {highlightOptions.enabled ? `${highlightOptions.seconds} sec` : 'Off'}{pendingHighlights ? ` / ${pendingHighlights} pending` : ''}</Text>
+        <ToggleRow label="Allow boundary highlights on this phone" value={camera.highlightCapture} onChange={highlightCapture => update({ highlightCapture })} />
+        <ToggleRow label="Allow highlight cloud uploads" value={camera.highlightCloudUpload} onChange={highlightCloudUpload => update({ highlightCloudUpload })} />
+      </>}
+      {pendingHighlights > 0 && <Btn label="Retry saving highlights" onPress={() => run(retryCameraHighlights)} />}
       <ToggleRow label="Overlays" value={camera.overlays} onChange={overlays => update({ overlays })} />
       <Btn label="Adjust overlay framing in preview" disabled={!camera.overlays} onPress={() => { close(); onOverlaySetup(); }} />
       {camera.workspace && <Row style={{ justifyContent: 'space-between' }}><Text style={[s.text, { flex: 1 }]}>{camera.workspace.slug} / {STUDIO_GAME_LABELS[camera.workspace.game]}</Text><Btn small label="Disconnect" onPress={() => update({ workspace: null })} /></Row>}

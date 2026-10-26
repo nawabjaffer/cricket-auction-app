@@ -179,6 +179,7 @@ export function TournamentScreen() {
         <Text style={{ color: colors.text }}>NJS Live Studio {appInfo?.versionName ?? '—'} (build {appInfo?.versionCode ?? '—'})</Text>
         {appInfo && <Pill label={appInfo.developmentSigned ? 'Testing updates' : 'Production updates'} tone={appInfo.developmentSigned ? 'warn' : 'neutral'} />}
         <Btn label="Check for updates" onPress={() => void check()} busy={checking} />
+        <Btn label="Share installed APK" onPress={() => { void StudioSystem.shareInstalledApp().catch(error => setUpdateError(error instanceof Error ? error.message : 'Could not share this APK.')); }} />
         {updateError && <Banner tone="warn" text={updateError} onDismiss={() => setUpdateError(null)} />}
         {update && !update.available && <Muted>{update.manifest ? 'No newer version is available on this update channel.' : 'No release has been published on this update channel yet.'}</Muted>}
         {update?.available && update.manifest && update.apkUrl && (

@@ -10,6 +10,7 @@ import { buildEngineConfig, buildOverlaySpecs, resolveEffectiveVideo, type Local
 import { queueEngineTask, refreshCapabilities } from './streamController';
 import { requestGalleryPermission, requestMediaPermissions } from './permissions';
 import { subscribeActiveMatch, subscribeProfile } from './tournament';
+import { startBoundaryHighlights } from './cameraHighlights';
 
 export function cameraOccupied(): boolean {
   return recordingBusy(useCamera.getState().session) || useCamera.getState().busy;
@@ -38,6 +39,7 @@ export function startCameraSync(workspace: StudioPairing | null): () => void {
   const camera = useCamera.getState();
   camera.patch({ profile: null, activeMatchId: null });
   if (!workspace) return () => undefined;
+  const stopHighlights = startBoundaryHighlights(workspace);
   let stopped = false;
   const refresh = () => { if (!stopped) void applyCameraOverlays().catch(error => camera.patch({ error: String(error) })); };
   const stopProfile = subscribeProfile(workspace.tenantId, workspace.game, profile => {
@@ -46,7 +48,7 @@ export function startCameraSync(workspace: StudioPairing | null): () => void {
   const stopMatch = subscribeActiveMatch(workspace.tenantId, workspace.game, activeMatchId => {
     if (!stopped) { camera.patch({ activeMatchId }); refresh(); }
   });
-  return () => { stopped = true; stopProfile(); stopMatch(); };
+  return () => { stopped = true; stopProfile(); stopMatch(); stopHighlights(); };
 }
 
 export function prepareCamera(displayOrientation = useCamera.getState().screenOrientation): Promise<boolean> {

@@ -649,6 +649,13 @@ export function isValidRtspUrl(value: unknown): value is string {
   return typeof value === 'string' && value.length <= 300 && RTSP_URL.test(value);
 }
 
+export function isValidCameraSourceUrl(value: unknown): value is string {
+  if (isValidRtspUrl(value)) return true;
+  if (typeof value !== 'string' || value.length > 600 || /[\s\u0000-\u001f\u007f]/.test(value)) return false;
+  const match = /^rtmp:\/\/(\[[0-9a-f:]+\]|[a-z0-9][a-z0-9.-]*)(?::(\d{1,5}))?\/[a-z0-9_./%~+=&?@!-]+$/i.exec(value);
+  return !!match && (!match[2] || (Number(match[2]) > 0 && Number(match[2]) <= 65535));
+}
+
 export interface StudioCameraLink {
   /** Pull URL, e.g. rtsp://192.168.1.20:8554/ */
   url: string;
@@ -671,16 +678,16 @@ export function buildCameraLink(link: StudioCameraLink): string {
 export function parseCameraLink(raw: string): StudioCameraLink | null {
   if (typeof raw !== 'string') return null;
   const trimmed = raw.trim();
-  if (isValidRtspUrl(trimmed)) {
-    const host = /^rtsp:\/\/(?:[^@/]*@)?([^/:]+)/i.exec(trimmed)?.[1] ?? 'Camera';
+  if (isValidCameraSourceUrl(trimmed)) {
+    const host = /^(?:rtsp|rtmp):\/\/(?:[^@/]*@)?([^/:]+)/i.exec(trimmed)?.[1] ?? 'Camera';
     return { url: trimmed, name: cleanText(host, 'Camera', 40) };
   }
   const deep = new RegExp(`^${STUDIO_DEEP_LINK_SCHEME}://camera\\?(.*)$`, 'i').exec(trimmed);
   if (!deep) return null;
   const q = readQuery(deep[1].split('#')[0]);
-  if (!isValidRtspUrl(q.u)) return null;
+  if (!isValidCameraSourceUrl(q.u)) return null;
   const port = Number(q.cp);
-  const control = Number.isInteger(port) && port >= 1024 && port <= 65535 && /^[a-zA-Z0-9_-]{32,96}$/.test(q.ct ?? '')
+  const control = isValidRtspUrl(q.u) && Number.isInteger(port) && port >= 1024 && port <= 65535 && /^[a-zA-Z0-9_-]{32,96}$/.test(q.ct ?? '')
     ? { port, token: q.ct } : undefined;
   return {
     url: q.u,

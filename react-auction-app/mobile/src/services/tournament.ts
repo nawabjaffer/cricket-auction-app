@@ -1,5 +1,5 @@
 // Tournament data the phone needs: tenant registry, the synced studio profile and the match list.
-import { get, onValue, ref } from 'firebase/database';
+import { get, limitToLast, onValue, query, ref } from 'firebase/database';
 import { getDb } from './firebase';
 import {
   defaultStudioProfile, isStudioGameType, normalizeStudioProfile, sortMatchSummaries, studioActiveMatchPath,
@@ -50,13 +50,21 @@ export function subscribeActiveMatch(tenantId: string, game: StudioGameType, onA
 
 export async function listMatches(tenantId: string, game: StudioGameType, limit = 40): Promise<StudioMatchSummary[]> {
   const db = getDb();
-  const index = await get(ref(db, studioMatchIndexPath(tenantId, game)));
+  const pageSize = Math.min(120, Math.max(1, Math.round(limit)));
+  const [index, active] = await Promise.all([
+    get(query(ref(db, studioMatchIndexPath(tenantId, game)), limitToLast(pageSize))),
+    get(ref(db, studioActiveMatchPath(tenantId, game))),
+  ]);
   const ids = index.exists() ? Object.keys(index.val() as Record<string, unknown>) : [];
+  const activeId = active.val();
+  if (typeof activeId === 'string' && /^[a-zA-Z0-9_-]{1,64}$/.test(activeId) && !ids.includes(activeId)) ids.push(activeId);
   const summaries = await Promise.all(ids.map(async id => {
     const snapshot = await get(ref(db, studioMatchSetupPath(tenantId, game, id)));
     return snapshot.exists() ? summarizeMatchSetup(id, snapshot.val()) : null;
   }));
-  return sortMatchSummaries(summaries.filter((item): item is StudioMatchSummary => item !== null)).slice(0, limit);
+  const sorted = sortMatchSummaries(summaries.filter((item): item is StudioMatchSummary => item !== null));
+  const onAir = sorted.find(item => item.id === activeId);
+  return [...(onAir ? [onAir] : []), ...sorted.filter(item => item.id !== activeId)].slice(0, pageSize);
 }
 
 export async function getMatch(tenantId: string, game: StudioGameType, matchId: string): Promise<StudioMatchSummary | null> {

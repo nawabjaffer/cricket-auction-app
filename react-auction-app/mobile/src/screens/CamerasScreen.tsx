@@ -7,11 +7,11 @@
 // ============================================================================
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Text, View } from 'react-native';
+import { Text, useWindowDimensions, View } from 'react-native';
 import { FlipHorizontal2, Settings2, Zap } from 'lucide-react-native';
 import { StudioScanner, StudioSystem } from '../native';
 import { PeerPreview, StudioPreview } from '../native/views';
-import { parseCameraLink, isValidRtspUrl, type StudioCameraLink } from '../shared/studioProfile';
+import { parseCameraLink, isValidCameraSourceUrl, type StudioCameraLink } from '../shared/studioProfile';
 import { cameraShareLink, startCameraServer, stopCameraServer } from '../services/cameraRole';
 import { saveCameraPairing, selectProgram, startPeerDiscovery } from '../services/peers';
 import { controlConnector, type ConnectorState } from '../services/connectorControl';
@@ -82,6 +82,7 @@ export function CameraRolePanel() {
 }
 
 function StudioHostPanel() {
+  const { width } = useWindowDimensions();
   const lanCameras = useStudio(state => state.lanCameras);
   const remoteSources = useStudio(state => state.remoteSources);
   const programSource = useStudio(state => state.programSource);
@@ -90,6 +91,7 @@ function StudioHostPanel() {
   const deviceId = useSettings(state => state.deviceId);
   const patch = useSettings(state => state.patch);
   const [urlInput, setUrlInput] = useState('rtsp://');
+  const [sourceName, setSourceName] = useState('');
   const [problem, setProblem] = useState<string | null>(null);
   const [previewOff, setPreviewOff] = useState<Record<string, boolean>>({});
   const [busyKey, setBusyKey] = useState<string | null>(null);
@@ -107,7 +109,7 @@ function StudioHostPanel() {
   }, [lanCameras, remoteSources, manualCameras, deviceId]);
 
   const addCamera = useCallback((name: string, url: string) => {
-    if (!isValidRtspUrl(url)) { setProblem('That is not a valid RTSP address (rtsp://host:port/path).'); return; }
+    if (!isValidCameraSourceUrl(url)) { setProblem('Use an RTSP camera address or RTMP relay playback URL.'); return; }
     setProblem(null);
     if (!manualCameras.some(camera => camera.url === url)) patch({ manualCameras: [...manualCameras, { name, url }].slice(-8) });
   }, [manualCameras, patch]);
@@ -156,12 +158,13 @@ function StudioHostPanel() {
       {entries.length === 0 && (
         <Card><Muted>No connectors online.</Muted></Card>
       )}
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', rowGap: 12 }}>
       {entries.map((entry, index) => (
-        <Card key={entry.key}>
+        <Card key={entry.key} style={{ width: entries.length > 1 && width >= 360 ? '48%' : '100%', padding: 10 }}>
           <Row style={{ justifyContent: 'space-between' }}>
             <View style={{ flex: 1 }}>
               <H2>{entry.name}</H2>
-              <Muted>{entry.info ? `${entry.info} · ` : ''}{entry.source}</Muted>
+              <Muted>{entry.url.startsWith('rtmp://') ? 'RTMP' : 'RTSP'} · {entry.source}</Muted>
             </View>
             {onAir(entry.url) && <Pill label="ON AIR" tone="live" />}
           </Row>
@@ -170,7 +173,7 @@ function StudioHostPanel() {
               ? <PeerPreview url={entry.url} style={{ flex: 1 }} />
               : <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}><Text style={{ color: colors.muted }}>{onAir(entry.url) ? 'On air — see the Studio tab' : 'Preview off'}</Text></View>}
           </View>
-          <Row>
+          <Row style={{ flexWrap: 'wrap' }}>
             <Btn label={onAir(entry.url) ? 'On air' : 'Take to air'} variant={onAir(entry.url) ? 'secondary' : 'primary'} disabled={onAir(entry.url)} busy={busyKey === entry.key} onPress={() => void take(entry)} style={{ flex: 1 }} />
             <Btn small variant="ghost" label={previewOff[entry.key] ? 'Preview' : 'Hide'} onPress={() => setPreviewOff(current => ({ ...current, [entry.key]: !current[entry.key] }))} />
             {entry.source === 'Added' && <Btn small variant="ghost" label="Remove" onPress={() => patch({ manualCameras: manualCameras.filter(camera => camera.url !== entry.url) })} />}
@@ -179,16 +182,18 @@ function StudioHostPanel() {
             camera={manualCameras.find(camera => camera.url === entry.url)!} />}
         </Card>
       ))}
+      </View>
 
       <Card>
-        <H2>Connect camera</H2>
+        <H2>Connect camera / RTMP feed</H2>
         <Btn label="Scan connector QR" variant="primary" onPress={() => void scan()} />
-        <Field label="Connection URL" value={urlInput} onChangeText={setUrlInput} keyboardType="url" />
+        <Field label="Source name" value={sourceName} onChangeText={value => setSourceName(value.slice(0, 40))} placeholder="Wide / Close / Boundary" />
+        <Field label="Connection URL" value={urlInput} onChangeText={setUrlInput} keyboardType="url" placeholder="rtmp://relay/live/camera-1" />
         <Btn label="Connect camera" onPress={() => {
           const camera = parseCameraLink(urlInput);
           if (!camera) return;
           if (camera.control) saveCameraPairing(camera);
-          else addCamera(camera.name, camera.url);
+          else addCamera(sourceName.trim() || camera.name, camera.url);
         }} disabled={!parseCameraLink(urlInput.trim())} />
       </Card>
     </View>

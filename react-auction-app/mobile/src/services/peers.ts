@@ -6,7 +6,7 @@
 // ============================================================================
 
 import { StudioEngine, StudioNetwork, onStudioEvent } from '../native';
-import { isValidRtspUrl, type StudioCameraLink, type StudioGameType } from '../shared/studioProfile';
+import { isValidCameraSourceUrl, type StudioCameraLink, type StudioGameType } from '../shared/studioProfile';
 import { effectiveMatchId, studioContext } from './streamController';
 import { setProgram, subscribeProgram, subscribeSources } from './liveCam';
 import { log } from './logger';
@@ -16,7 +16,7 @@ import { useStudio, type LanCamera, type ProgramSource } from '../store/studioSt
 const lanKey = (service: { host: string; port: number }) => `${service.host}:${service.port}`;
 
 export function saveCameraPairing(camera: StudioCameraLink): void {
-  if (!isValidRtspUrl(camera.url)) throw new Error('Invalid camera address.');
+  if (!isValidCameraSourceUrl(camera.url)) throw new Error('Invalid RTSP or RTMP source address.');
   const settings = useSettings.getState();
   settings.patch({ manualCameras: [...settings.manualCameras.filter(item => item.url !== camera.url), {
     url: camera.url, name: camera.name, ...(camera.control ? { control: camera.control } : {}),
@@ -40,7 +40,7 @@ export function startPeerDiscovery(): () => void {
 
 /** Switches what the encoder streams. `local` is this phone's own camera. */
 export async function selectProgram(source: ProgramSource, remoteId?: string | null): Promise<void> {
-  if (source.kind === 'peer' && !isValidRtspUrl(source.url)) throw new Error('That camera link is not a valid RTSP address.');
+  if (source.kind === 'peer' && !isValidCameraSourceUrl(source.url)) throw new Error('That source is not a valid RTSP or RTMP playback address.');
   if (source.kind === 'local') await StudioEngine.selectLocalSource();
   else await StudioEngine.selectPeerSource(source.url);
   useStudio.getState().patch({ programSource: source });

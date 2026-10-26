@@ -7,6 +7,7 @@ import { redactEndpoint } from '../src/services/logger';
 import { StudioSecure } from '../src/native';
 import { storage } from '../src/services/storage';
 import { adjacentSceneId, createScene, defaultScenes, MAX_STUDIO_SCENES, normalizeScenes, SCENE_ANIMATION_PRESETS, sceneMatchPath } from '../src/shared/scenes';
+import { isValidCameraSourceUrl, parseCameraLink } from '../src/shared/studioProfile';
 
 const local = (patch: Partial<LocalDestination>): LocalDestination => ({ ...newLocalDestination('youtube'), ...patch });
 
@@ -92,6 +93,16 @@ describe('settings defaults', () => {
 });
 
 describe('scene settings', () => {
+  it('accepts multiple RTMP relay sources while rejecting unsafe source URLs', () => {
+    expect(isValidCameraSourceUrl('rtmp://relay.example/live/camera-1')).toBe(true);
+    expect(isValidCameraSourceUrl('rtmp://relay.example:1935/live/camera-2')).toBe(true);
+    expect(isValidCameraSourceUrl('https://example.com')).toBe(false);
+    expect(isValidCameraSourceUrl('rtmp://relay:99999/live/key')).toBe(false);
+    expect(isValidCameraSourceUrl('rtmp://user:secret@relay/live/key')).toBe(false);
+    expect(parseCameraLink('rtmp://relay.example/live/camera-1')).toMatchObject({ url: 'rtmp://relay.example/live/camera-1' });
+    const scenes = normalizeScenes([createScene('RTMP wide', { kind: 'peer', url: 'rtmp://relay/live/wide', name: 'Wide' }), createScene('RTMP close', { kind: 'peer', url: 'rtmp://relay/live/close', name: 'Close' })]);
+    expect(scenes.every(scene => scene.camera.kind === 'peer')).toBe(true);
+  });
   it('migrates older settings to two local camera scenes', () => {
     const scenes = normalizeScenes(undefined, 'front');
     expect(scenes.map(scene => scene.camera)).toEqual([{ kind: 'local', facing: 'front' }, { kind: 'local', facing: 'back' }]);

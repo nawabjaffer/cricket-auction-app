@@ -18,6 +18,7 @@ jest.mock('../src/services/streamController', () => ({
 }));
 jest.mock('../src/services/permissions', () => ({ requestGalleryPermission: jest.fn(async () => true), requestMediaPermissions: jest.fn(async () => ({ granted: true })) }));
 jest.mock('../src/services/tournament', () => ({ subscribeProfile: jest.fn(() => jest.fn()), subscribeActiveMatch: jest.fn(() => jest.fn()) }));
+jest.mock('../src/services/cameraHighlights', () => ({ startBoundaryHighlights: jest.fn(() => jest.fn()), retryCameraHighlights: jest.fn(async () => undefined) }));
 jest.mock('../src/native/views', () => ({ StudioPreview: 'StudioPreview' }));
 jest.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ top: 24, bottom: 16, left: 0, right: 0 }) }));
 jest.mock('lucide-react-native', () => Object.fromEntries(['ArrowLeft', 'Download', 'FlipHorizontal2', 'Grid3X3', 'Image', 'Layers', 'Mic', 'MicOff', 'Pause', 'Play', 'RefreshCw', 'Settings2', 'SlidersHorizontal', 'Zap', 'ZapOff', 'X'].map(name => [name, name])));

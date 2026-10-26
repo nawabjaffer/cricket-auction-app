@@ -126,6 +126,11 @@ interface StudioEngineNative {
   pauseRecording(): Promise<void>;
   resumeRecording(): Promise<void>;
   finishCameraRecording(): Promise<string>;
+  configureReplay(seconds: number): Promise<void>;
+  captureHighlight(seconds: number, ageMs: number, id: string): Promise<string>;
+  saveHighlightToGallery(path: string): Promise<string>;
+  uploadHighlight(path: string, storagePath: string): Promise<string>;
+  discardHighlight(path: string): Promise<void>;
   captureRawStill(): Promise<string>;
   saveRecordingToGallery(path: string): Promise<string>;
   getPendingCameraMedia(): Promise<string[]>;
@@ -224,6 +229,7 @@ interface StudioSystemNative {
   getBattery(): Promise<BatterySnapshot>;
   getThermalStatus(): Promise<number>;
   getFreeStorageMb(): Promise<number>;
+  shareInstalledApp(): Promise<void>;
   setKeepScreenOn(enabled: boolean): Promise<void>;
   copyText(text: string): Promise<void>;
   createWorkspaceToken(): Promise<string>;

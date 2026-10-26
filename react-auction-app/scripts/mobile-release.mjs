@@ -26,6 +26,7 @@ export async function mobileInputFingerprint(mobileRoot) {
       if (entry.isDirectory()) {
         if (!EXCLUDED_DIRECTORIES.has(entry.name) && (name === 'src' || name.startsWith('src/') || name === 'android' || name.startsWith('android/'))) await visit(path);
       } else if ((ROOT_FILES.has(name) || name.startsWith('src/') || name.startsWith('android/'))
+        && !name.startsWith('android/app/src/androidTest/') && !name.startsWith('android/app/src/test/')
         && !/\.(test|spec)\.[^.]+$/.test(name) && !/(?:^|\/)(local\.properties|keystore\.properties|\.DS_Store)$/.test(name)
         && !/\.(jks|keystore|pem|p12|pfx)$/.test(name)) files.push(name);
     }
@@ -260,7 +261,7 @@ async function main() {
     } else {
       qualityChecks(root);
       if (plan.action === 'release' && plan.version !== pkg.version) { await setVersion(root, plan.version); versionChanged = true; }
-      const gradle = ['-p', join(root, 'mobile/android'), ':app:assembleRelease', '-Porg.gradle.java.installations.auto-download=false', '--console=plain'];
+      const gradle = ['-p', join(root, 'mobile/android'), ':app:assembleRelease', '--build-cache', '-Porg.gradle.java.installations.auto-download=false', '--console=plain'];
       if (channel === 'testing') gradle.push('-PallowDebugSigning=true');
       execute(join(root, 'mobile/android/gradlew'), gradle, root, mobileEnvironment());
       const rebuilt = await mobileInputFingerprint(join(root, 'mobile'));

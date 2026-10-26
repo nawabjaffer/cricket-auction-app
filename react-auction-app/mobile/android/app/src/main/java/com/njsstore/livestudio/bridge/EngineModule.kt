@@ -9,6 +9,7 @@ import com.njsstore.livestudio.studio.Engine
 import com.njsstore.livestudio.studio.Events
 import com.njsstore.livestudio.studio.GalleryMedia
 import com.njsstore.livestudio.studio.OverlayAssets
+import com.njsstore.livestudio.studio.HighlightMedia
 import android.content.Intent
 import android.net.Uri
 import java.io.File
@@ -17,6 +18,7 @@ import java.util.concurrent.Executors
 /** JS surface of the encoder engine; every method is asynchronous and runs on the engine thread. */
 class EngineModule(private val context: ReactApplicationContext) : ReactContextBaseJavaModule(context) {
     private val mediaWriter = Executors.newSingleThreadExecutor()
+    private val mediaUploader = Executors.newSingleThreadExecutor()
     override fun getName() = NAME
 
     override fun initialize() {
@@ -26,6 +28,7 @@ class EngineModule(private val context: ReactApplicationContext) : ReactContextB
 
     override fun invalidate() {
         mediaWriter.shutdown()
+        mediaUploader.shutdown()
         Events.detach(context)
         Engine.submit { Engine.release(force = true) }
         super.invalidate()
@@ -58,6 +61,58 @@ class EngineModule(private val context: ReactApplicationContext) : ReactContextB
     @ReactMethod fun resumeRecording(promise: Promise) = promise.runVoid { Engine.resumeRecording() }
 
     @ReactMethod fun finishCameraRecording(promise: Promise) = promise.runValue { Engine.finishCameraRecording() }
+
+    @ReactMethod fun configureReplay(seconds: Int, promise: Promise) = promise.runVoid { Engine.configureReplay(seconds) }
+
+    @ReactMethod
+    fun captureHighlight(seconds: Int, ageMs: Double, id: String, promise: Promise) {
+        Engine.submit(onError = { promise.reject("highlight", it.message, it) }) {
+            try {
+                require(id.matches(Regex("[a-zA-Z0-9_-]{1,64}"))) { "Invalid highlight id" }
+                val snapshot = Engine.captureHighlight(seconds, ageMs.toLong())
+                mediaWriter.execute {
+                    try {
+                        val folder = File(context.getExternalFilesDir(android.os.Environment.DIRECTORY_MOVIES), "NJSLiveStudio/Highlights").apply { mkdirs() }
+                        require(android.os.StatFs(folder.absolutePath).availableBytes > 150L * 1024 * 1024) { "Not enough free storage for a highlight" }
+                        val output = File(folder, "${id}.mp4")
+                        require(!output.exists()) { "This boundary highlight is already saved" }
+                        promise.resolve(snapshot.write(output))
+                    } catch (error: Exception) { promise.reject("highlight", error.message, error) }
+                }
+            } catch (error: Exception) { promise.reject("highlight", error.message, error) }
+        }
+    }
+
+    @ReactMethod
+    fun saveHighlightToGallery(path: String, promise: Promise) {
+        mediaWriter.execute {
+            try {
+                val file = File(path).canonicalFile
+                val folder = File(context.getExternalFilesDir(android.os.Environment.DIRECTORY_MOVIES), "NJSLiveStudio/Highlights").canonicalFile
+                require(file.parentFile == folder && file.extension == "mp4") { "Invalid highlight file" }
+                promise.resolve(GalleryMedia.publish(context, file, "video/mp4"))
+            } catch (error: Exception) { promise.reject("highlight", error.message, error) }
+        }
+    }
+
+    @ReactMethod
+    fun uploadHighlight(path: String, storagePath: String, promise: Promise) {
+        mediaUploader.execute {
+            try { promise.resolve(HighlightMedia.upload(context, path, storagePath)) }
+            catch (error: Exception) { promise.reject("highlight_upload", error.message, error) }
+        }
+    }
+
+    @ReactMethod
+    fun discardHighlight(path: String, promise: Promise) {
+        mediaWriter.execute {
+            try {
+                val file = HighlightMedia.file(context, path)
+                require(!file.exists() || file.delete()) { "Could not remove the private highlight copy" }
+                promise.resolve(null)
+            } catch (error: Exception) { promise.reject("highlight", error.message, error) }
+        }
+    }
 
     @ReactMethod
     fun captureRawStill(promise: Promise) {

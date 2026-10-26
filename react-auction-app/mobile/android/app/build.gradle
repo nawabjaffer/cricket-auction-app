@@ -41,6 +41,7 @@ android {
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode resolvedVersionCode
         versionName appPackage.version
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }
 
     signingConfigs {
@@ -103,6 +104,8 @@ configurations.configureEach {
 }
 
 dependencies {
+    androidTestImplementation("androidx.test.ext:junit:1.2.1")
+    androidTestImplementation("androidx.test:runner:1.6.2")
     implementation("com.facebook.react:react-android")
     implementation("com.facebook.react:hermes-android")
 
@@ -115,6 +118,7 @@ dependencies {
     // LAN camera preview and the "program" source (RTSP from another phone)
     implementation("androidx.media3:media3-exoplayer:1.11.1")
     implementation("androidx.media3:media3-exoplayer-rtsp:1.11.1")
+    implementation("androidx.media3:media3-datasource-rtmp:1.11.1")
 
     // QR scanning (no in-app camera permission) and Google authorization for the YouTube API
     implementation("com.google.android.gms:play-services-code-scanner:16.1.0")

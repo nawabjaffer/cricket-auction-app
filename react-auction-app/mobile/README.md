@@ -19,6 +19,58 @@ on the camera, encoder, network and thermal limits. Hardware-dependent features 
 
 ## Operator Quick Start
 
+### Boundary Highlights
+
+In the cricket scorer admin, open **Android Live Studio > Mobile scoring options > Camera boundary
+highlights**. Enable capture, select the last 5-60 seconds (12 by default), choose a per-match cap,
+and save. Cloud upload is a separate opt-in setting and is off by default.
+
+- In Camera settings, select the same cricket tournament, follow its on-air match and enable
+	**Allow boundary highlights on this phone**. Cloud capture additionally requires **Allow highlight
+	cloud uploads** on this phone. Both local permissions default off; remote admin settings alone cannot
+	authorize footage capture/upload on a publicly writable database. Start recording.
+	Scored fours and sixes trigger highlights automatically; wickets, old events and duplicate notifications
+	are ignored. Camera does not change the score or consume the OBS replay trigger.
+- The recorder keeps at most 40 MB of recent encoded video/audio while enabled, alongside the complete
+	MP4 recording. Highlights are remuxed without pausing that recording. Export starts at a keyframe:
+	actual clips may be shorter than X seconds at startup or high bitrates. Admin displays actual duration.
+- Clips save to Gallery; cloud-enabled clips stream to Firebase Storage, never into RTDB as video/base64.
+	RTDB holds only bounded highlight metadata. Admin reserves a slot before upload, shows interrupted
+	uploads, and provides playback, download and deletion. Cloud uploads are capped at 48 MB/clip.
+- Up to eight unfinished clips are retained privately for retry. Open Camera settings and choose
+	**Retry saving highlights** after a network/Storage failure. Storage rules and App Check apply:
+	no Firebase Auth session or rule bypass is added. Review existing project access rules before uploading
+	private footage. The existing public RTDB rules are not tenant authorization.
+- Per-match capture/cloud caps stop new clips instead of silently deleting footage. Delete old cloud
+	highlights from admin to reclaim Storage; Gallery copies remain under the phone owner's control.
+- The generated-frame Android instrumentation test validates keyframe export, MP4 timestamps and Gallery
+	deduplication without a camera. Real camera/audio, pause/resume, network interruption and thermal tests
+	on a physical phone remain required before relying on this at a match.
+
+### RTMP Host Sources
+
+Host > Cameras accepts several named RTSP cameras or **RTMP relay playback URLs**, such as
+`rtmp://relay.example/live/wide` and `rtmp://relay.example/live/close`. Publish each source to your
+own RTMP relay, then enter its playback address on the Host. Use **Take to air** or save it in a scene.
+Source previews are bounded to four; one selected source is encoded as program, and the Host microphone
+remains program audio. Existing multiple outgoing RTMP/SRT destinations continue to receive that program.
+This is switching, not simultaneous split-screen compositing or an RTMP ingest server running on the phone.
+RTMP here is unencrypted; use a trusted venue network/relay. Relay URLs/keys stay in encrypted phone settings.
+
+### Download And Share
+
+Firebase Hosting provides the existing direct APK download and update catalogs. **Tournament > App >
+Share installed APK** opens Android sharing; choose Google Drive if installed and signed in, or another
+file destination. No Drive credentials are requested or stored by this app. Split APK installs must use
+the public Firebase download instead of sharing their base APK alone.
+
+Release builds reuse Gradle task outputs and skip unchanged app inputs. Publishing retains the current
+and previous managed APK per channel, removing older managed copies from subsequent Hosting deploys;
+use the current catalog/help download rather than an old hardcoded APK URL. Mobile match lists query
+a bounded 40-item id index (120 maximum) plus the on-air match, rather than every historical setup.
+These are targeted bandwidth/storage reductions, not a Firebase billing/security audit or authorization
+migration. Database permissions and lifecycle deletion of match data are unchanged.
+
 ### Camera recording
 
 Home has **Camera**, **Streaming** and **Scoring**. Camera is a separate recording workspace,

@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Alert, Modal, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { ArrowDown, ArrowUp, Camera, Copy, Eye, EyeOff, Globe, Image as ImageIcon, Pencil, Play, Plus, Radio, Sparkles, Trash2, X } from 'lucide-react-native';
 import { MAX_STUDIO_SCENES, SCENE_ANIMATION_PRESETS, createScene, type SceneCamera, type StudioScene } from '../shared/scenes';
-import { MAX_STUDIO_WIDGETS, isValidRtspUrl, sanitizeWidgetUrl, type StudioWidget } from '../shared/studioProfile';
+import { MAX_STUDIO_WIDGETS, isValidCameraSourceUrl, sanitizeWidgetUrl, type StudioWidget } from '../shared/studioProfile';
 import { activateScene } from '../services/scenes';
 import { triggerSceneAnimation } from '../services/sceneAnimations';
 import { startPeerDiscovery } from '../services/peers';
@@ -144,8 +144,8 @@ export function ScenesScreen() {
           </Row>
         ))}
       </View>
-      <Field label="RTSP camera address" value={lanUrl} onChangeText={setLanUrl} keyboardType="url" placeholder="rtsp://192.168.1.20:8554/" />
-      <Btn small label="Use camera address" disabled={!isValidRtspUrl(lanUrl)} onPress={() => {
+      <Field label="RTSP / RTMP playback address" value={lanUrl} onChangeText={setLanUrl} keyboardType="url" placeholder="rtmp://relay/live/camera-1" />
+      <Btn small label="Use camera address" disabled={!isValidCameraSourceUrl(lanUrl)} onPress={() => {
         const url = lanUrl.trim();
         chooseCamera({ kind: 'peer', url, name: 'LAN camera' });
         if (!manualCameras.some(item => item.url === url)) patch({ manualCameras: [...manualCameras, { name: 'LAN camera', url }].slice(-8) });

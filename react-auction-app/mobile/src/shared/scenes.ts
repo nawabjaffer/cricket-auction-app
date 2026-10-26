@@ -1,4 +1,4 @@
-import { isSafeStudioId, isValidRtspUrl, normalizeStudioProfile, studioSportNamespace, type StudioGameType, type StudioWidget } from './studioProfile';
+import { isSafeStudioId, isValidCameraSourceUrl, normalizeStudioProfile, studioSportNamespace, type StudioGameType, type StudioWidget } from './studioProfile';
 
 export const MAX_STUDIO_SCENES = 12;
 
@@ -61,7 +61,7 @@ export function normalizeScenes(raw: unknown, facing: 'back' | 'front' = 'back')
     const item = value as Record<string, unknown>;
     const camera = item.camera && typeof item.camera === 'object' ? item.camera as Record<string, unknown> : {};
     let source: SceneCamera = { kind: 'local', facing: camera.facing === 'front' ? 'front' : facing };
-    if (camera.kind === 'peer' && typeof camera.url === 'string' && isValidRtspUrl(camera.url)) {
+    if (camera.kind === 'peer' && typeof camera.url === 'string' && isValidCameraSourceUrl(camera.url)) {
       source = {
         kind: 'peer', url: camera.url, name: typeof camera.name === 'string' ? camera.name.slice(0, 40) : 'LAN camera',
         ...(typeof camera.remoteId === 'string' ? { remoteId: camera.remoteId } : {}),

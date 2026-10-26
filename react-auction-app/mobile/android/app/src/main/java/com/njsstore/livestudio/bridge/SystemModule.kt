@@ -34,6 +34,8 @@ import java.security.cert.CertificateFactory
 import java.security.cert.X509Certificate
 import java.util.UUID
 import java.util.concurrent.Executors
+import java.io.File
+import androidx.core.content.FileProvider
 
 /** Device facts the pre-flight and health reporting need, plus small OS helpers. */
 class SystemModule(private val context: ReactApplicationContext) : ReactContextBaseJavaModule(context) {
@@ -127,6 +129,32 @@ class SystemModule(private val context: ReactApplicationContext) : ReactContextB
             putBoolean("charging", status == BatteryManager.BATTERY_STATUS_CHARGING || status == BatteryManager.BATTERY_STATUS_FULL)
             putDouble("temperatureC", temperature / 10.0)
         })
+    }
+
+    @ReactMethod
+    fun shareInstalledApp(promise: Promise) {
+        documents.execute {
+            try {
+                val source = File(context.applicationInfo.sourceDir)
+                require(context.applicationInfo.splitSourceDirs.isNullOrEmpty()) { "This split install cannot be shared as one APK. Use the Firebase download link instead." }
+                val folder = File(context.cacheDir, "apk-share").apply { mkdirs() }
+                val destination = File(folder, "njs-live-studio.apk")
+                source.copyTo(destination, overwrite = true)
+                val uri = FileProvider.getUriForFile(context, "${context.packageName}.apkshare", destination)
+                val send = Intent(Intent.ACTION_SEND).setType("application/vnd.android.package-archive")
+                    .putExtra(Intent.EXTRA_STREAM, uri).putExtra(Intent.EXTRA_SUBJECT, "NJS Live Studio Android app")
+                    .apply {
+                        clipData = ClipData.newUri(context.contentResolver, "NJS Live Studio", uri)
+                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    }
+                Threads.main.post {
+                    try {
+                        context.startActivity(Intent.createChooser(send, "Share APK").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                        promise.resolve(null)
+                    } catch (error: Exception) { promise.reject("share", "No app could receive the APK", error) }
+                }
+            } catch (error: Exception) { promise.reject("share", error.message, error) }
+        }
     }
 
     @ReactMethod

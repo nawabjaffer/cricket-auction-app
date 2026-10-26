@@ -26,6 +26,8 @@ describe('change-aware mobile release planning', () => {
     await writeFile(join(root, 'README.md'), 'Documentation changed');
     await writeFile(join(root, 'src/App.test.ts'), 'test fixture');
     await writeFile(join(root, 'android/app/build/generated.txt'), 'Build timestamp');
+    await mkdir(join(root, 'android/app/src/androidTest'), { recursive: true });
+    await writeFile(join(root, 'android/app/src/androidTest/ReplayTest.kt'), 'test-only instrumentation');
     await writeFile(join(root, 'android/keystore.properties'), 'private local signing configuration');
     await writeFile(join(root, 'package.json'), JSON.stringify({ name: 'studio', version: '1.3.1', dependencies: { react: '19.2.3' } }));
     expect((await mobileInputFingerprint(root)).fingerprint).toBe(original.fingerprint);

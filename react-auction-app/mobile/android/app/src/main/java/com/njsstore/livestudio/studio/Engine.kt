@@ -79,6 +79,8 @@ object Engine {
     private var needsPrepare = false
     private var peerSource: PeerRtspVideoSource? = null
     private var recordingPath: String? = null
+    private var replayRecorder: ReplayRecorder? = null
+    private var replaySeconds = 0
     private var recordingPaused = false
     private var proControls = "{}"
     @Volatile private var recordStatus: RecordController.Status? = null
@@ -134,6 +136,8 @@ object Engine {
         if (cfg.video.facing == "front") camera.switchCamera()
         val microphone = MicrophoneSource()
         val created = StudioStream(app, camera, microphone, sinkListener)
+        val replay = ReplayRecorder().apply { configure(replaySeconds) }
+        created.setRecordController(replay)
         try {
             created.setVideoCodec(if (cfg.video.codec == "h265") VideoCodec.H265 else VideoCodec.H264)
             val video = cfg.video
@@ -165,6 +169,7 @@ object Engine {
         preferredAudioDevice?.let { microphone.setPreferredDevice(it) }
 
         stream = created
+        replayRecorder = replay
         cameraRef = camera
         mic = microphone
         config = cfg
@@ -205,6 +210,7 @@ object Engine {
             runCatching { current.release() }
         }
         stream = null
+        replayRecorder = null
         cameraRef = null
         mic = null
         peerSource = null
@@ -537,6 +543,17 @@ object Engine {
         return path
     }
 
+    fun configureReplay(seconds: Int) {
+        replaySeconds = if (seconds == 0) 0 else seconds.coerceIn(5, 60)
+        replayRecorder?.configure(replaySeconds)
+    }
+
+    fun captureHighlight(seconds: Int, ageMs: Long): ReplayRecorder.Snapshot {
+        require(stream?.isRecording == true && !recordingPaused) { "Record video before saving a boundary highlight" }
+        require(replaySeconds > 0) { "Enable boundary highlights in scorer admin before recording" }
+        return replayRecorder?.snapshot(seconds, ageMs) ?: throw IllegalStateException("Replay buffer is not ready")
+    }
+
     fun stopRecording() {
         val current = stream ?: return
         if (!current.isRecording) return
@@ -811,7 +828,7 @@ object Engine {
 
     fun selectPeerSource(url: String) {
         val current = stream ?: throw StudioException("not_prepared", "The camera is not ready")
-        if (!url.startsWith("rtsp://", true) || url.length > 300) throw StudioException("invalid_argument", "That is not an RTSP camera address")
+        if (!PeerMedia.valid(url)) throw StudioException("invalid_argument", "Use a valid RTSP camera or RTMP relay playback URL")
         var created: PeerRtspVideoSource? = null
         val source = PeerRtspVideoSource(app, url) { reason ->
             submit {

@@ -34,6 +34,8 @@ export interface CameraRecordingSettings {
   widgets: StudioWidget[];
   packageUrl: string;
   captureMode: 'video' | 'raw';
+  highlightCapture: boolean;
+  highlightCloudUpload: boolean;
   assetSync?: { files: number; bytes: number; syncedAt: number };
   lastGalleryUri?: string;
   overlayScalePct: number;
@@ -46,6 +48,7 @@ export const DEFAULT_CAMERA_SETTINGS: CameraRecordingSettings = {
   orientationConfigured: true,
   facing: 'back', stabilization: true, workspace: null, widgets: [], packageUrl: '',
   captureMode: 'video',
+  highlightCapture: false, highlightCloudUpload: false,
   overlayScalePct: 45, overlayRotation: 'auto', overlayOffsetXPct: 0, overlayOffsetYPct: 0,
 };
 export function emptyRecordingSession(): CameraRecordingSession {
